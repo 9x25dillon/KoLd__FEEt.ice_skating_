@@ -1,0 +1,567 @@
+<title>Production</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --ground:#f1f3f2; --surface:#ffffff; --sunk:#e7ebe9;
+  --ink:#10161a; --ink-soft:#4a585e; --ink-faint:#7e8c92;
+  --line:#d2dad8; --line-soft:#e3e8e6;
+  --accent:#9c6b12; --accent-warm:#c98a20; --accent-wash:#f6efdf;
+  --steel:#2c6773; --steel-wash:#e3edee;
+  --risk:#a33f34; --risk-wash:#f8eae8;
+  --good:#2f6b53; --good-wash:#e6f0eb;
+  --shadow:0 1px 2px rgba(16,22,26,.05),0 8px 24px -12px rgba(16,22,26,.14);
+  --code-bg:#0f1417; --code-ink:#d9e2e0;
+  --kw:#e0a355; --str:#8fc0a9; --num:#c9a6d8; --com:#6b7d81; --fn:#7ec8d8;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+    --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+    --line:#263236; --line-soft:#1c2629;
+    --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+    --steel:#6fbccb; --steel-wash:#14252a;
+    --risk:#e08579; --risk-wash:#271513;
+    --good:#6fbb97; --good-wash:#122019;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+    --code-bg:#080c0e; --code-ink:#cfd9d7;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+  --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+  --line:#263236; --line-soft:#1c2629;
+  --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+  --steel:#6fbccb; --steel-wash:#14252a;
+  --risk:#e08579; --risk-wash:#271513;
+  --good:#6fbb97; --good-wash:#122019;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+    --code-bg:#080c0e; --code-ink:#cfd9d7;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:2rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16.5px;line-height:1.65;margin:0;-webkit-font-smoothing:antialiased}
+
+.shell{max-width:1240px;margin:0 auto;padding:0 clamp(1.1rem,3vw,2.5rem);
+  display:grid;grid-template-columns:236px minmax(0,1fr);gap:clamp(2rem,5vw,4.5rem);align-items:start}
+@media (max-width:940px){.shell{grid-template-columns:minmax(0,1fr);gap:0}}
+
+.nav{position:sticky;top:0;max-height:100vh;overflow-y:auto;padding:2.6rem 0 3rem;
+  border-right:1px solid var(--line-soft);margin-right:-1px}
+.nav-mark{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.35rem;margin:0 0 .1rem}
+.nav-sub{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.16em;color:var(--ink-faint);margin:0 0 1.8rem}
+.nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.08rem}
+.nav a{display:grid;grid-template-columns:1.6rem 1fr;align-items:baseline;text-decoration:none;
+  color:var(--ink-soft);font-size:.83rem;line-height:1.35;padding:.34rem .5rem .34rem .7rem;
+  border-left:2px solid transparent;transition:color .15s,border-color .15s}
+.nav a .n{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink-faint);
+  font-variant-numeric:tabular-nums}
+.nav a:hover{color:var(--ink)}
+.nav a.on{color:var(--accent);border-left-color:var(--accent);font-weight:500}
+.nav a.on .n{color:var(--accent)}
+.nav a:focus-visible{outline:2px solid var(--steel);outline-offset:2px;border-radius:2px}
+.nav-foot{margin-top:1.6rem;padding-top:1.2rem;border-top:1px solid var(--line-soft);
+  font-family:"IBM Plex Mono",monospace;font-size:.62rem;line-height:1.7;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.1em}
+@media (max-width:940px){
+  .nav{position:static;max-height:none;border-right:0;padding:1.6rem 0 0;margin-right:0}
+  .nav details{border:1px solid var(--line);border-radius:3px;padding:.7rem .9rem;background:var(--surface)}
+  .nav details ol{padding-top:.6rem}
+  .nav summary{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.14em;cursor:pointer;color:var(--ink-soft)}
+}
+
+main{padding:2.4rem 0 6rem;min-width:0}
+.mast{padding-bottom:2.4rem;margin-bottom:2.6rem;position:relative}
+.mast::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;
+  border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);opacity:.85}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.2em;color:var(--accent);margin:0 0 1.1rem}
+h1{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(2.4rem,6vw,4rem);line-height:.98;margin:0 0 1.6rem;text-wrap:balance}
+.thesis{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;margin:0 0 1.6rem}
+.thesis .q{font-family:"Bodoni Moda",Didot,Georgia,serif;font-style:italic;font-weight:400;
+  font-size:clamp(1.5rem,3.6vw,2.15rem);line-height:1.22;margin:0;color:var(--accent);
+  text-wrap:balance}
+.standfirst{font-size:1.06rem;color:var(--ink-soft);max-width:64ch;margin:0}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:2.2rem 0 0}
+.fact{background:var(--surface);padding:.85rem 1rem}
+.fact dt{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--ink-faint);margin:0 0 .3rem}
+.fact dd{margin:0;font-size:.86rem;font-weight:500;line-height:1.4}
+
+section{margin:0 0 3.8rem;scroll-margin-top:1.5rem}
+.sec-head{display:grid;grid-template-columns:auto 1fr;gap:1.1rem;align-items:baseline;
+  padding-top:1.6rem;margin-bottom:1.5rem;position:relative}
+.sec-head::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.sec-num{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:2rem;line-height:1;
+  color:var(--accent);font-variant-numeric:tabular-nums}
+h2{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(1.65rem,3.4vw,2.3rem);line-height:1.1;margin:0;text-wrap:balance}
+h3{font-size:1.1rem;font-weight:600;margin:2.4rem 0 .7rem;text-wrap:balance}
+h4{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--ink-faint);font-weight:600;margin:1.8rem 0 .6rem}
+p{margin:0 0 1rem;max-width:70ch}
+ul,ol{margin:0 0 1.1rem;padding-left:1.15rem;max-width:70ch}
+li{margin:0 0 .42rem}
+li::marker{color:var(--ink-faint)}
+a{color:var(--accent);text-underline-offset:2px}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--sunk);
+  padding:.09em .34em;border-radius:2px}
+
+.note{border-left:2px solid var(--accent);background:var(--accent-wash);
+  padding:.95rem 1.15rem;margin:1.5rem 0;max-width:70ch}
+.note p:last-child{margin-bottom:0}
+.note .lbl{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--accent);display:block;margin-bottom:.35rem}
+
+.tw{overflow-x:auto;margin:1.4rem 0;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.84rem;min-width:460px}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-soft);
+  vertical-align:top;line-height:1.45}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--ink-faint);font-weight:600;
+  border-bottom:1px solid var(--line);white-space:nowrap;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:"IBM Plex Mono",monospace;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+td.k{font-weight:600}
+td.w{font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--accent);white-space:nowrap}
+caption{caption-side:bottom;text-align:left;padding:.6rem .8rem;font-size:.74rem;
+  color:var(--ink-faint);border-top:1px solid var(--line-soft)}
+tfoot td{border-top:1px solid var(--line);font-weight:600;background:var(--sunk)}
+
+.pill{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.62rem;
+  text-transform:uppercase;letter-spacing:.08em;padding:.13em .45em;border-radius:2px;
+  border:1px solid currentColor;line-height:1.5}
+.pill.go{color:var(--good)}.pill.hold{color:var(--accent)}.pill.stop{color:var(--risk)}
+.pill.st{color:var(--steel)}
+
+/* build / refuse split */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line-soft);
+  border:1px solid var(--line-soft);margin:1.5rem 0}
+@media (max-width:720px){.split{grid-template-columns:1fr}}
+.split>div{background:var(--surface);padding:1.1rem 1.2rem}
+.split h5{margin:0 0 .7rem;font-family:"IBM Plex Mono",monospace;font-size:.64rem;
+  text-transform:uppercase;letter-spacing:.14em;font-weight:600}
+.split .yes h5{color:var(--good)}
+.split .no h5{color:var(--risk)}
+.split p{font-size:.85rem;color:var(--ink-soft);margin:0;max-width:none}
+
+/* scheme cards */
+.schemes{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:1.5rem 0}
+.scheme{background:var(--surface);padding:1.1rem 1.2rem}
+.scheme .tag{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--accent);display:block;margin-bottom:.4rem}
+.scheme h5{margin:0 0 .5rem;font-size:.98rem;font-weight:600}
+.scheme h5 em{font-style:italic;font-weight:400;color:var(--ink-soft)}
+.scheme p{font-size:.83rem;color:var(--ink-soft);margin:0 0 .6rem;max-width:none}
+.scheme p:last-child{margin-bottom:0}
+
+/* week spine */
+.spine{margin:1.5rem 0;border-left:2px solid var(--line);padding-left:0}
+.mo{margin:0 0 1.6rem}
+.mo-h{font-family:"IBM Plex Mono",monospace;font-size:.63rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--ink-faint);font-weight:600;
+  margin:0 0 .5rem;padding-left:1.2rem;position:relative}
+.mo-h::before{content:"";position:absolute;left:-6px;top:.42em;width:9px;height:9px;
+  background:var(--ground);border:2px solid var(--line);border-radius:50%}
+.wk{display:grid;grid-template-columns:3.6rem 1fr;gap:.9rem;padding:.5rem 0 .5rem 1.2rem;
+  border-bottom:1px solid var(--line-soft)}
+.wk:last-child{border-bottom:0}
+.wk .n{font-family:"IBM Plex Mono",monospace;font-size:.72rem;font-weight:600;
+  color:var(--ink-faint);padding-top:.1em}
+.wk p{font-size:.87rem;margin:0;max-width:62ch}
+.wk.ms{background:var(--accent-wash);margin-left:-2px;border-left:2px solid var(--accent);
+  padding-left:calc(1.2rem - 2px)}
+.wk.ms .n{color:var(--accent)}
+.wk.gate{background:var(--risk-wash);margin-left:-2px;border-left:2px solid var(--risk);
+  padding-left:calc(1.2rem - 2px)}
+.wk.gate .n{color:var(--risk)}
+
+/* gate criteria */
+.crit{display:grid;grid-template-columns:auto 1fr;gap:1.1rem;padding:1rem 1.2rem;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--steel);
+  margin:0 0 1px}
+.crit .cn{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.7rem;line-height:1;
+  color:var(--steel);font-variant-numeric:tabular-nums}
+.crit h5{margin:0 0 .25rem;font-size:.98rem;font-weight:600}
+.crit .th{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--steel);
+  font-weight:500;margin:0 0 .45rem}
+.crit p{font-size:.85rem;color:var(--ink-soft);margin:0;max-width:none}
+
+.outcome{border:1px solid var(--line);border-left:4px solid var(--ink);
+  background:var(--surface);padding:1rem 1.2rem;margin:0 0 1px}
+.outcome.go{border-left-color:var(--good);background:var(--good-wash)}
+.outcome.hold{border-left-color:var(--accent);background:var(--accent-wash)}
+.outcome.stop{border-left-color:var(--risk);background:var(--risk-wash)}
+.outcome h5{margin:0 0 .3rem;font-family:"IBM Plex Mono",monospace;font-size:.74rem;
+  text-transform:uppercase;letter-spacing:.15em;font-weight:600}
+.outcome.go h5{color:var(--good)}
+.outcome.hold h5{color:var(--accent)}
+.outcome.stop h5{color:var(--risk)}
+.outcome .cond{font-size:.8rem;color:var(--ink-faint);margin:0 0 .5rem;
+  font-family:"IBM Plex Mono",monospace}
+.outcome p{font-size:.87rem;margin:0;max-width:none}
+
+hr.trace{border:0;height:3px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  margin:2.4rem 0}
+.end{margin-top:3.4rem;padding-top:1.4rem;border-top:1px solid var(--line);
+  font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.13em;color:var(--ink-faint);line-height:1.8}
+td.mono,th.mono{font-family:"IBM Plex Mono",monospace;font-size:.94em;white-space:nowrap}
+.pill.md{color:var(--accent)}
+figure.code{margin:1.6rem 0;border:1px solid var(--line);background:var(--code-bg);
+  box-shadow:var(--shadow)}
+figure.code figcaption{font-family:"IBM Plex Mono",monospace;font-size:.63rem;
+  text-transform:uppercase;letter-spacing:.13em;color:#8fa3a7;
+  padding:.6rem .95rem;border-bottom:1px solid rgba(255,255,255,.08);
+  display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+figure.code figcaption .lang{color:var(--accent-warm)}
+figure.code pre{margin:0;overflow-x:auto;padding:1.05rem 1.1rem;background:var(--code-bg)}
+figure.code pre code{background:none;padding:0;font-size:12.6px;line-height:1.62;
+  color:var(--code-ink);font-family:"IBM Plex Mono",monospace}
+@media print{.nav{display:none}.shell{grid-template-columns:1fr}body{background:#fff;color:#000}}
+</style>
+
+<nav class="nav" aria-label="Contents">
+  <details open>
+    <summary>Contents</summary>
+    <p class="nav-mark">Production</p>
+    <p class="nav-sub">Edgework · Phase 3</p>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span><span>Shape of the phase</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>The cut list</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>Content trains</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span>Risk-first ordering</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span>Four milestones</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>Mocap block 3</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span>Cadence</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span>W40 recalculation</span></a></li>
+      <li><a href="#s9"><span class="n">09</span><span>The alpha gate</span></a></li>
+      <li><a href="#s10"><span class="n">10</span><span>Risks</span></a></li>
+      <li><a href="#s11"><span class="n">11</span><span>Budget</span></a></li>
+    </ol>
+    <p class="nav-foot">48 weeks · 38 FTE<br>~$6.47M<br>Alpha: week 88</p>
+  </details>
+</nav>
+
+<div class="shell">
+<div></div>
+<main>
+
+<header class="mast">
+  <p class="eyebrow">Edgework · Production Plan</p>
+  <h1>Production</h1>
+  <div class="thesis"><p class="q">Content at a measured rate — because the characteristic failure
+  is twelve months of invisible progress ending in a panicked alpha.</p></div>
+  <p class="standfirst">Pre-production proved the verb. The slice proved the bar and produced a cost
+  model. Production is where the game gets built. Everything here is structured against one failure
+  mode: quarterly playable builds instead of a single distant alpha, content shipping on a published
+  cadence instead of "when it's done," and a cut list written and signed on day one instead of a
+  scope argument in month 20.</p>
+  <dl class="facts">
+    <div class="fact"><dt>Duration</dt><dd>48 weeks (W41–88)</dd></div>
+    <div class="fact"><dt>Team</dt><dd>38 FTE</dd></div>
+    <div class="fact"><dt>Budget</dt><dd>~$6.47M</dd></div>
+    <div class="fact"><dt>Milestones</dt><dd>4 playable</dd></div>
+    <div class="fact"><dt>Content</dt><dd>11 rinks · 40 costumes</dd></div>
+    <div class="fact"><dt>Exit</dt><dd>Alpha, week 88</dd></div>
+  </dl>
+</header>
+
+<div class="note" style="border-left-width:3px;margin-bottom:2.6rem"><span class="lbl">Read this first — the volumes here are provisional</span>
+<p>This plan is <strong>complete in structure and provisional in volume.</strong> Every cadence,
+milestone, ritual, gate and risk below is final. Every <em>content quantity</em> — how many rinks,
+how many costumes, how long each takes — is a placeholder derived from the bible's target scope,
+not from measurement.</p>
+<p>The real numbers arrive at the vertical slice green-light gate, where Gate C produces measured
+per-asset costs. <strong>§08 is the recalculation you run that week</strong>, and it is the only
+part of this document that should change.</p>
+<p>Writing it this way round is deliberate: the structure is what takes thought, and it does not
+depend on the numbers. The numbers are arithmetic and take an afternoon once you have measurements.
+What you must not do is treat the placeholders as commitments.</p></div>
+
+<section id="s1">
+<div class="sec-head"><span class="sec-num">01</span><h2>Shape of the phase</h2></div>
+<p>Production is not one phase. It is three things running simultaneously, and confusing them is
+how schedules rot.</p>
+<div class="tw"><table>
+<thead><tr><th>Track</th><th>What it is</th><th>Rate</th></tr></thead>
+<tbody>
+<tr><td class="k">Content trains</td><td>Rinks, costumes, music, elements, skaters. Repeatable units with a definition of done, produced at a measured cadence.</td><td>Fixed, measured, published</td></tr>
+<tr><td class="k">Feature completions</td><td>Career, Composer v1, The Patch, netcode, Gala, Free Skate. One-off systems that finish and stop.</td><td>Risk-ordered, front-loaded</td></tr>
+<tr><td class="k">Continuous quality</td><td>Performance, determinism, balance, the first hour. Never "done," always tracked.</td><td>Weekly</td></tr>
+</tbody></table></div>
+<p>The organising principle across all three: <strong>vertical first, then horizontal.</strong> Each
+mode is taken to <em>playable and complete</em> one at a time, rather than eight modes all sitting
+at 60%. A mode at 60% cannot be tested, teaches you nothing, and hides its remaining cost.</p>
+</section>
+
+<section id="s2">
+<div class="sec-head"><span class="sec-num">02</span><h2>The cut list</h2></div>
+<div class="note"><span class="lbl">The single most valuable artefact in this document</span>
+<p>Written in week 41, ordered, and signed by the same person who signs the gates. When — not if —
+production is behind at month 18, there is no scope argument. There is a list, and you cut from the
+bottom of it.</p></div>
+<div class="tw"><table>
+<thead><tr><th class="num">Order</th><th>Cut</th><th>Saves</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td class="k">Rinks 12, 11, 10</td><td class="num">~27 artist-wk</td><td>Summer Camp, The Old Hall, Harbour Rink — the least narratively load-bearing. Career never requires them.</td></tr>
+<tr><td class="num">2</td><td class="k">Music beyond 30 tracks</td><td class="num">~17 days</td><td>The commissioned core stays; the tail goes.</td></tr>
+<tr><td class="num">3</td><td class="k">Costumes beyond 28</td><td class="num">~12 artist-wk</td><td>The modular system means fewer base garments still combine widely.</td></tr>
+<tr><td class="num">4</td><td class="k">Gala mode</td><td class="num">~8 person-wk</td><td>Painful — it is where the fandom lives — but additive, not structural. First candidate for a post-launch drop.</td></tr>
+<tr><td class="num">5</td><td class="k">Rinks 9, 8</td><td class="num">~18 artist-wk</td><td>Now it starts to hurt.</td></tr>
+<tr><td class="num">6</td><td class="k">Live Events</td><td class="num">~10 person-wk</td><td>Backend scope. Async ghosts survive; scheduled events do not.</td></tr>
+<tr><td class="num">7</td><td class="k">The second discipline</td><td class="num">~30 person-wk</td><td><strong>The line.</strong> Below this you are making a different, smaller game and should say so out loud.</td></tr>
+</tbody></table></div>
+<p><strong>Never on the list:</strong> the sim core, the judging pipeline, tracings, The Patch, Free
+Skate, the Composer, the assist ladder, accessibility. Systems are not cut in production. If systems
+must be cut, the slice gate got Gate C wrong and the honest response is a re-plan, not a salami
+slice.</p>
+</section>
+
+<section id="s3">
+<div class="sec-head"><span class="sec-num">03</span><h2>Content trains</h2></div>
+<p>Each train has a <strong>definition of done</strong>, an <strong>owner</strong>, and a
+<strong>published rate</strong>. The rate is measured in the slice and re-measured every four weeks;
+it is a fact about the team, not a target to be exhorted.</p>
+<div class="tw"><table>
+<thead><tr><th>Train</th><th>Definition of done</th><th>Placeholder rate</th><th class="num">Total</th></tr></thead>
+<tbody>
+<tr><td class="k">Rinks</td><td>Blockout → art → lighting → perf-passed → audio IR captured → signed off in a lit review</td><td class="mono">4 wk / artist pair</td><td class="num">11</td></tr>
+<tr><td class="k">Costumes</td><td>Modelled → textured → crystals placed → cloth-simulating → LOD'd → passes the Spin Test</td><td class="mono">1.5 wk / artist</td><td class="num">~40</td></tr>
+<tr><td class="k">Music</td><td>Commissioned → recorded → mastered → beat grid authored → hand-corrected</td><td class="mono">2 days / designer</td><td class="num">47</td></tr>
+<tr><td class="k">Elements</td><td>Resolver → judged → animated → audio → tested against the protocol corpus</td><td class="mono">1.5 wk</td><td class="num">~25</td></tr>
+<tr><td class="k">Spin positions</td><td>Authored → tolerance-tuned → inertia-tuned → groom-safe</td><td class="mono">2 days</td><td class="num">19</td></tr>
+<tr><td class="k">Skaters</td><td>Model → groom → persona tuned → signature elements → career arc</td><td class="mono">1 wk</td><td class="num">24</td></tr>
+</tbody></table></div>
+<div class="note"><span class="lbl">The rate goes on a wall</span>
+<p>Every train's actual versus planned is visible to everyone, every week. Not to apply pressure — to
+make a slipping train <strong>visible in week 3</strong> rather than in month 8, when the only
+remaining response is to cut.</p></div>
+<p><strong>Definition of done matters more than the rate.</strong> A rink that is "done except
+lighting" is not done, and counting it as done is how a project discovers in month 20 that it has
+eleven rinks at 85% and no way to finish any of them. Each definition of done above ends in a
+<em>signed review</em>, not a checked box.</p>
+</section>
+
+<section id="s4">
+<div class="sec-head"><span class="sec-num">04</span><h2>Risk-first ordering</h2></div>
+<p>The riskiest remaining work lands in the <strong>first quarter</strong>, not the last. Each of
+these can still fail, and failing in month 12 is recoverable in a way that failing in month 21 is not.</p>
+<div class="tw"><table>
+<thead><tr><th>System</th><th>Why it is risky</th><th>Lands</th></tr></thead>
+<tbody>
+<tr><td class="k">Career loop</td><td>The bible deliberately deferred career economy — training weeks, cost curves, pacing — until the moment-to-moment game was proven. <strong>That debt comes due now</strong>, and it is real design work, not tuning.</td><td><span class="pill st">P1</span></td></tr>
+<tr><td class="k">Composer v1 UI</td><td>A timeline editor with live rule validation is a genuine product, not a screen. Tools risk is underestimated on every project that has ever shipped.</td><td><span class="pill st">P1</span></td></tr>
+<tr><td class="k">Netcode determinism at scale</td><td>The harness proved determinism on 10,000 replays in a controlled build. Proving it across 12 rinks, 40 costumes and every element is a different problem.</td><td><span class="pill st">P1</span></td></tr>
+<tr><td class="k">The Patch</td><td>A tutorial for a hard control scheme is the highest-stakes content in the game, and must be built early enough to be <em>tested repeatedly</em> rather than shipped on faith.</td><td><span class="pill st">P1</span></td></tr>
+<tr><td class="k">The first hour</td><td>Related but distinct. The classic failure is building it last and badly.</td><td><span class="pill st">P1, retested P2–P4</span></td></tr>
+<tr><td class="k">Warm-up lobby netcode</td><td>Six players, real-time, client-authoritative. Lower risk than pairs, but the first live multiplayer.</td><td><span class="pill hold">P2</span></td></tr>
+<tr><td class="k">Five-tier balance</td><td>Five times the balance surface, and nobody schedules it.</td><td><span class="pill hold">P2+</span></td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s5">
+<div class="sec-head"><span class="sec-num">05</span><h2>The four playable milestones</h2></div>
+<p>Every quarter produces a build somebody outside the team plays. This is the antidote to invisible
+progress.</p>
+<div class="spine">
+  <div class="mo">
+    <p class="mo-h">P1 · The Season Slice · W41–52</p>
+    <div class="wk"><span class="n">Play</span><p>One complete career season, start to finish — club competition through nationals, with training weeks between events, on three rinks.</p></div>
+    <div class="wk"><span class="n">Build</span><p>Career loop v1 · Composer v1 timeline with live rule validation · The Patch v1 <strong>and the adaptive tier router it feeds</strong> · async netcode with server re-simulation · rinks 2–4, 8 costumes, 10 tracks · the first hour, playtested with 12 fresh testers including router-accuracy capture.</p></div>
+    <div class="wk ms"><span class="n">Exit</span><p>A tester with no prior exposure completes a season unaided.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">P2 · All Modes · W53–64</p>
+    <div class="wk"><span class="n">Play</span><p>Every shipping mode reachable and functional, half the content in.</p></div>
+    <div class="wk"><span class="n">Build</span><p>Free Skate, Gala, Competition, Warm-Up Group all playable · six-player lobby live · assist ladder tuned across all five tiers · rinks 5–7, 20 costumes, 24 tracks, 12 rivals · men's singles end to end.</p></div>
+    <div class="wk ms"><span class="n">Exit</span><p>No mode is a stub. Anything not finishable is cut <em>here</em>, per §02, not later.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">P3 · Content Complete Candidate · W65–76</p>
+    <div class="wk"><span class="n">Play</span><p>The whole game, all content present, quality uneven.</p></div>
+    <div class="wk"><span class="n">Build</span><p>Rinks 8–12 (or as cut) · all costumes, all tracks, all 24 skaters · Composer v2 accents and Gala lighting cues · full element coverage validated against the 50-element protocol corpus · within 30% of performance target.</p></div>
+    <div class="wk ms"><span class="n">Exit</span><p>Content complete. <strong>The cut list is exercised here if it is going to be exercised at all.</strong></p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">P4 · Alpha · W77–88</p>
+    <div class="wk"><span class="n">Play</span><p>Feature complete, start to finish, no blockers.</p></div>
+    <div class="wk"><span class="n">Build</span><p>Every shipping feature present and functional · 40-hour play-through clean · determinism green 30 consecutive nights · within 20% of performance target on every SKU · text lock candidate prepared.</p></div>
+    <div class="wk gate"><span class="n">Exit</span><p><strong>THE ALPHA GATE</strong> (§09).</p></div>
+  </div>
+</div>
+</section>
+
+<section id="s6">
+<div class="sec-head"><span class="sec-num">06</span><h2>Mocap block 3</h2></div>
+<div class="note"><span class="lbl">This corrects the bible</span>
+<p>The bible's roadmap places both mocap blocks in production. The vertical slice plan moved them to
+W20 and W30, because a slice at ship quality cannot be animated from placeholder data. Production
+therefore needs a <strong>third, smaller block</strong> rather than the first two.</p></div>
+<div class="tw"><table>
+<thead><tr><th></th><th>Block 3 · W56</th></tr></thead>
+<tbody>
+<tr><td class="k">Content</td><td>Gala and choreographic movements, career cinematics, Kiss &amp; Cry performances, additional spin variations, pickups from blocks 1 and 2</td></tr>
+<tr><td class="k">Method</td><td>Optical volume, three days</td></tr>
+<tr><td class="k">Clips</td><td class="num">~350</td></tr>
+<tr><td class="k">Why W56</td><td>Late enough that blocks 1 and 2 have revealed their gaps; early enough that integration finishes before P3 content lock.</td></tr>
+</tbody></table></div>
+<p>Budget a pickup day in W70 for anything blocks 1–3 missed. It is always needed, and holding the
+slot is cheaper than negotiating for one.</p>
+</section>
+
+<section id="s7">
+<div class="sec-head"><span class="sec-num">07</span><h2>Cadence</h2></div>
+<div class="tw"><table>
+<thead><tr><th>When</th><th>Ritual</th></tr></thead>
+<tbody>
+<tr><td class="k">Daily</td><td>Automated build, determinism harness, performance capture on every SKU. Red build blocks merges.</td></tr>
+<tr><td class="k">Wednesday</td><td><strong>The Session</strong> continues from pre-production — the whole team plays the current build, in silence, then discusses. At 38 people this splits into four rooms of ten with rotating membership. Non-negotiable.</td></tr>
+<tr><td class="k">Weekly</td><td>Content train review. Actual versus planned, on the wall, fifteen minutes.</td></tr>
+<tr><td class="k">Monthly</td><td>Playable build to an external group of 8–12. Different people every time.</td></tr>
+<tr><td class="k">Quarterly</td><td>Milestone review against P1–P4 exit criteria, plus a cut-list check: are we on rate, and if not, what comes off?</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s8">
+<div class="sec-head"><span class="sec-num">08</span><h2>The W40 recalculation</h2></div>
+<p><strong>Run this in the green-light week, before production starts.</strong> It replaces every
+placeholder in §03 and re-derives the cut line.</p>
+<figure class="code">
+<figcaption><span>The only arithmetic that matters</span><span class="lang">pseudocode</span></figcaption>
+<pre><code>For each content train:
+
+    measured_rate  = slice actual (person-weeks per unit, Gate C1)
+    variance       = spread across repeated units
+    planning_rate  = measured_rate × (1 + variance)   ← plan on the pessimistic figure
+
+    demand         = units_remaining × planning_rate
+    supply         = assigned_headcount × 48 weeks × 0.75
+                                                      ← 0.75 for meetings, sickness,
+                                                        support work
+
+    if demand &gt; supply × 0.85:                        ← 15% contingency
+        cut from the bottom of §02 until it fits</code></pre>
+</figure>
+<p>Three things this arithmetic must be allowed to say:</p>
+<ol>
+  <li><strong>Plan on measured × (1 + variance), never the mean.</strong> A rink that took 9 weeks
+    once and 13 the second time is a 13-week rink for planning purposes.</li>
+  <li><strong>The 0.75 utilisation factor is not pessimism, it is observation.</strong> Nobody
+    delivers 40 hours of train work in a 40-hour week.</li>
+  <li><strong>If the answer is "cut to discipline-level," say so in week 40.</strong> That is a
+    different, smaller game, and it is a legitimate one — but it must be decided at the gate, with
+    the publisher in the room, not discovered in month 20.</li>
+</ol>
+</section>
+
+<section id="s9">
+<div class="sec-head"><span class="sec-num">09</span><h2>The alpha gate</h2></div>
+<p>Alpha is the most abused word in game production. Here it means exactly six things, all measured,
+signed in W84 before the data exists.</p>
+<div class="crit"><span class="cn">1</span><div><h5>Feature complete</h5>
+  <p class="th">Zero stubs</p>
+  <p>Every shipping feature present and functional. A feature that is "in but disabled" is not in.</p></div></div>
+<div class="crit"><span class="cn">2</span><div><h5>Playable start to finish</h5>
+  <p class="th">3 testers complete a full career, unaided</p>
+  <p>With no blocking defect.</p></div></div>
+<div class="crit"><span class="cn">3</span><div><h5>Content complete at first pass or better</h5>
+  <p class="th">No grey boxes, no placeholder audio</p>
+  <p>Nothing untextured in shipping content.</p></div></div>
+<div class="crit"><span class="cn">4</span><div><h5>Determinism</h5>
+  <p class="th">Green 30 consecutive nights, every platform</p>
+  <p>The harness from pre-production, now at content scale.</p></div></div>
+<div class="crit"><span class="cn">5</span><div><h5>Performance</h5>
+  <p class="th">Within 20% of target, every SKU</p>
+  <p>Worst-case scene.</p></div></div>
+<div class="crit"><span class="cn">6</span><div><h5>Endurance</h5>
+  <p class="th">40 aggregate hours, zero crashes, zero blockers</p>
+  <p>Progression must survive long play.</p></div></div>
+
+<h3>Decision rule</h3>
+<div class="outcome go"><h5>Green</h5><p class="cond">all six</p>
+  <p>Enter beta W89. Text lock scheduled.</p></div>
+<div class="outcome hold"><h5>Amber</h5><p class="cond">4–5 of six, and not criterion 1 or 2</p>
+  <p>Four-week alpha extension, pre-authorised, once. Beta compresses by four weeks and the launch
+  date holds — <strong>this is what beta's float is for.</strong></p></div>
+<div class="outcome stop"><h5>Red</h5><p class="cond">criterion 1 or 2 fails · or three or more fail</p>
+  <p>Feature complete is not negotiable. Cut features until criterion 1 is true, using §02. Re-gate
+  in six weeks. <strong>A project that enters beta without being feature complete does not have a
+  beta; it has a longer production wearing beta's name.</strong></p></div>
+</section>
+
+<section id="s10">
+<div class="sec-head"><span class="sec-num">10</span><h2>Risks</h2></div>
+<div class="tw"><table>
+<thead><tr><th class="num">#</th><th>Risk</th><th>P</th><th>Impact</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td><strong>Invisible progress.</strong> Twelve months with no external eyes, ending in an alpha nobody can play.</td><td><span class="pill stop">High</span></td><td><span class="pill stop">Fatal</span></td><td>Quarterly playable milestones with external testers. Monthly builds to fresh groups. The content wall.</td></tr>
+<tr><td class="num">2</td><td><strong>Content trains slip quietly.</strong> A four-week rink becomes six and nobody notices for four months.</td><td><span class="pill stop">High</span></td><td><span class="pill hold">Major</span></td><td>Published rates, weekly actual-versus-planned, re-measurement every four weeks. Definition of done ends in a signed review.</td></tr>
+<tr><td class="num">3</td><td><strong>The cut list is never used.</strong> Everyone agrees it exists and nobody invokes it, so the cut happens by panic in month 21.</td><td><span class="pill stop">High</span></td><td><span class="pill hold">Major</span></td><td>Quarterly cut-list check is a formal agenda item with a yes/no answer. P3 is the last honest moment to cut.</td></tr>
+<tr><td class="num">4</td><td><strong>Career economy underestimated.</strong> Deliberately deferred, now real design work with no prior art in the project.</td><td><span class="pill hold">Med</span></td><td><span class="pill hold">Major</span></td><td>Lands in P1, not P3. Two designers, twelve weeks, with an explicit second-pass allowance.</td></tr>
+<tr><td class="num">5</td><td><strong>The first hour is built last.</strong> A hard simulation with a bad first hour reviews badly regardless of its depth.</td><td><span class="pill hold">Med</span></td><td><span class="pill stop">Major</span></td><td>Built in P1, retested with fresh testers every quarter. Treated as a content train, not a task.</td></tr>
+<tr><td class="num">6</td><td><strong>Tools debt.</strong> The Composer's editor is a product; treating it as a screen produces something the team cannot build content with.</td><td><span class="pill hold">Med</span></td><td><span class="pill hold">Major</span></td><td>Dedicated tools engineer from W41. The content team are its first users and their throughput is the acceptance test.</td></tr>
+<tr><td class="num">7</td><td><strong>Five assist tiers, five balance problems.</strong></td><td><span class="pill hold">Med</span></td><td><span class="pill md">Moderate</span></td><td>Balance starts P2, not P4. Each tier gets its own playtest cohort.</td></tr>
+<tr><td class="num">8</td><td><strong>Attrition.</strong> Twelve months is long enough to lose people, and the sim core has a bus factor of two.</td><td><span class="pill hold">Med</span></td><td><span class="pill hold">Major</span></td><td>Documented architecture, pairing on the sim core, no single-owner systems by P2.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s11">
+<div class="sec-head"><span class="sec-num">11</span><h2>Budget</h2></div>
+<div class="tw"><table>
+<thead><tr><th>Line</th><th class="num">Cost</th></tr></thead>
+<tbody>
+<tr><td>38 FTE × 12 months, loaded</td><td class="num">$5,472,000</td></tr>
+<tr><td>Mocap block 3 + W70 pickup day</td><td class="num">$75,000</td></tr>
+<tr><td>Music: remaining commissions, orchestra, recording</td><td class="num">$210,000</td></tr>
+<tr><td>Outsourced art (environment and costume support)</td><td class="num">$340,000</td></tr>
+<tr><td>Licensed music (4 tracks, sync + master)</td><td class="num">$180,000</td></tr>
+<tr><td>Playtesting: 4 quarterly waves + 12 monthly builds</td><td class="num">$52,000</td></tr>
+<tr><td>Backend infrastructure (async ghosts, leaderboards)</td><td class="num">$60,000</td></tr>
+<tr><td>Hardware, dev kits, licences</td><td class="num">$80,000</td></tr>
+</tbody>
+<tfoot><tr><td>Total</td><td class="num">~$6,469,000</td></tr>
+<tr><td style="font-weight:400;color:var(--ink-faint)">Cumulative through alpha</td><td class="num" style="font-weight:400;color:var(--ink-faint)">~$8.9M</td></tr></tfoot>
+</table></div>
+<div class="note"><span class="lbl">The one deletable line</span>
+<p>Licensed music can be removed entirely without touching the game, and is deliberately the last
+thing committed. If the budget tightens, four licensed tracks are <strong>$180k of pure marketing
+spend with an expiry date attached.</strong></p></div>
+
+<p class="end">Edgework · Production Plan v1.0<br>
+Content volumes are provisional until the W40 recalculation. The structure is not.<br>
+Next phase: Beta.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  if (!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (!en.isIntersecting) return;
+      links.forEach(function(a){ a.classList.remove('on'); });
+      var a = map[en.target.id];
+      if (a) a.classList.add('on');
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  document.querySelectorAll('section[id]').forEach(function(s){ io.observe(s); });
+})();
+</script>

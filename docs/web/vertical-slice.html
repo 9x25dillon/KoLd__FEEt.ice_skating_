@@ -1,0 +1,616 @@
+<title>The Vertical Slice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --ground:#f1f3f2; --surface:#ffffff; --sunk:#e7ebe9;
+  --ink:#10161a; --ink-soft:#4a585e; --ink-faint:#7e8c92;
+  --line:#d2dad8; --line-soft:#e3e8e6;
+  --accent:#9c6b12; --accent-warm:#c98a20; --accent-wash:#f6efdf;
+  --steel:#2c6773; --steel-wash:#e3edee;
+  --risk:#a33f34; --risk-wash:#f8eae8;
+  --good:#2f6b53; --good-wash:#e6f0eb;
+  --shadow:0 1px 2px rgba(16,22,26,.05),0 8px 24px -12px rgba(16,22,26,.14);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+    --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+    --line:#263236; --line-soft:#1c2629;
+    --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+    --steel:#6fbccb; --steel-wash:#14252a;
+    --risk:#e08579; --risk-wash:#271513;
+    --good:#6fbb97; --good-wash:#122019;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+  --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+  --line:#263236; --line-soft:#1c2629;
+  --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+  --steel:#6fbccb; --steel-wash:#14252a;
+  --risk:#e08579; --risk-wash:#271513;
+  --good:#6fbb97; --good-wash:#122019;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:2rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16.5px;line-height:1.65;margin:0;-webkit-font-smoothing:antialiased}
+
+.shell{max-width:1240px;margin:0 auto;padding:0 clamp(1.1rem,3vw,2.5rem);
+  display:grid;grid-template-columns:236px minmax(0,1fr);gap:clamp(2rem,5vw,4.5rem);align-items:start}
+@media (max-width:940px){.shell{grid-template-columns:minmax(0,1fr);gap:0}}
+
+.nav{position:sticky;top:0;max-height:100vh;overflow-y:auto;padding:2.6rem 0 3rem;
+  border-right:1px solid var(--line-soft);margin-right:-1px}
+.nav-mark{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.35rem;margin:0 0 .1rem}
+.nav-sub{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.16em;color:var(--ink-faint);margin:0 0 1.8rem}
+.nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.08rem}
+.nav a{display:grid;grid-template-columns:1.6rem 1fr;align-items:baseline;text-decoration:none;
+  color:var(--ink-soft);font-size:.83rem;line-height:1.35;padding:.34rem .5rem .34rem .7rem;
+  border-left:2px solid transparent;transition:color .15s,border-color .15s}
+.nav a .n{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink-faint);
+  font-variant-numeric:tabular-nums}
+.nav a:hover{color:var(--ink)}
+.nav a.on{color:var(--accent);border-left-color:var(--accent);font-weight:500}
+.nav a.on .n{color:var(--accent)}
+.nav a:focus-visible{outline:2px solid var(--steel);outline-offset:2px;border-radius:2px}
+.nav-foot{margin-top:1.6rem;padding-top:1.2rem;border-top:1px solid var(--line-soft);
+  font-family:"IBM Plex Mono",monospace;font-size:.62rem;line-height:1.7;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.1em}
+@media (max-width:940px){
+  .nav{position:static;max-height:none;border-right:0;padding:1.6rem 0 0;margin-right:0}
+  .nav details{border:1px solid var(--line);border-radius:3px;padding:.7rem .9rem;background:var(--surface)}
+  .nav details ol{padding-top:.6rem}
+  .nav summary{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.14em;cursor:pointer;color:var(--ink-soft)}
+}
+
+main{padding:2.4rem 0 6rem;min-width:0}
+.mast{padding-bottom:2.4rem;margin-bottom:2.6rem;position:relative}
+.mast::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;
+  border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);opacity:.85}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.2em;color:var(--accent);margin:0 0 1.1rem}
+h1{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(2.4rem,6vw,4rem);line-height:.98;margin:0 0 1.6rem;text-wrap:balance}
+.thesis{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;margin:0 0 1.6rem}
+.thesis .q{font-family:"Bodoni Moda",Didot,Georgia,serif;font-style:italic;font-weight:400;
+  font-size:clamp(1.5rem,3.6vw,2.15rem);line-height:1.22;margin:0;color:var(--accent);
+  text-wrap:balance}
+.standfirst{font-size:1.06rem;color:var(--ink-soft);max-width:64ch;margin:0}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:2.2rem 0 0}
+.fact{background:var(--surface);padding:.85rem 1rem}
+.fact dt{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--ink-faint);margin:0 0 .3rem}
+.fact dd{margin:0;font-size:.86rem;font-weight:500;line-height:1.4}
+
+section{margin:0 0 3.8rem;scroll-margin-top:1.5rem}
+.sec-head{display:grid;grid-template-columns:auto 1fr;gap:1.1rem;align-items:baseline;
+  padding-top:1.6rem;margin-bottom:1.5rem;position:relative}
+.sec-head::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.sec-num{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:2rem;line-height:1;
+  color:var(--accent);font-variant-numeric:tabular-nums}
+h2{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(1.65rem,3.4vw,2.3rem);line-height:1.1;margin:0;text-wrap:balance}
+h3{font-size:1.1rem;font-weight:600;margin:2.4rem 0 .7rem;text-wrap:balance}
+h4{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--ink-faint);font-weight:600;margin:1.8rem 0 .6rem}
+p{margin:0 0 1rem;max-width:70ch}
+ul,ol{margin:0 0 1.1rem;padding-left:1.15rem;max-width:70ch}
+li{margin:0 0 .42rem}
+li::marker{color:var(--ink-faint)}
+a{color:var(--accent);text-underline-offset:2px}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--sunk);
+  padding:.09em .34em;border-radius:2px}
+
+.note{border-left:2px solid var(--accent);background:var(--accent-wash);
+  padding:.95rem 1.15rem;margin:1.5rem 0;max-width:70ch}
+.note p:last-child{margin-bottom:0}
+.note .lbl{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--accent);display:block;margin-bottom:.35rem}
+
+.tw{overflow-x:auto;margin:1.4rem 0;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.84rem;min-width:460px}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-soft);
+  vertical-align:top;line-height:1.45}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--ink-faint);font-weight:600;
+  border-bottom:1px solid var(--line);white-space:nowrap;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:"IBM Plex Mono",monospace;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+td.k{font-weight:600}
+td.w{font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--accent);white-space:nowrap}
+caption{caption-side:bottom;text-align:left;padding:.6rem .8rem;font-size:.74rem;
+  color:var(--ink-faint);border-top:1px solid var(--line-soft)}
+tfoot td{border-top:1px solid var(--line);font-weight:600;background:var(--sunk)}
+
+.pill{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.62rem;
+  text-transform:uppercase;letter-spacing:.08em;padding:.13em .45em;border-radius:2px;
+  border:1px solid currentColor;line-height:1.5}
+.pill.go{color:var(--good)}.pill.hold{color:var(--accent)}.pill.stop{color:var(--risk)}
+.pill.st{color:var(--steel)}
+
+/* build / refuse split */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line-soft);
+  border:1px solid var(--line-soft);margin:1.5rem 0}
+@media (max-width:720px){.split{grid-template-columns:1fr}}
+.split>div{background:var(--surface);padding:1.1rem 1.2rem}
+.split h5{margin:0 0 .7rem;font-family:"IBM Plex Mono",monospace;font-size:.64rem;
+  text-transform:uppercase;letter-spacing:.14em;font-weight:600}
+.split .yes h5{color:var(--good)}
+.split .no h5{color:var(--risk)}
+.split p{font-size:.85rem;color:var(--ink-soft);margin:0;max-width:none}
+
+/* scheme cards */
+.schemes{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:1.5rem 0}
+.scheme{background:var(--surface);padding:1.1rem 1.2rem}
+.scheme .tag{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--accent);display:block;margin-bottom:.4rem}
+.scheme h5{margin:0 0 .5rem;font-size:.98rem;font-weight:600}
+.scheme h5 em{font-style:italic;font-weight:400;color:var(--ink-soft)}
+.scheme p{font-size:.83rem;color:var(--ink-soft);margin:0 0 .6rem;max-width:none}
+.scheme p:last-child{margin-bottom:0}
+
+/* week spine */
+.spine{margin:1.5rem 0;border-left:2px solid var(--line);padding-left:0}
+.mo{margin:0 0 1.6rem}
+.mo-h{font-family:"IBM Plex Mono",monospace;font-size:.63rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--ink-faint);font-weight:600;
+  margin:0 0 .5rem;padding-left:1.2rem;position:relative}
+.mo-h::before{content:"";position:absolute;left:-6px;top:.42em;width:9px;height:9px;
+  background:var(--ground);border:2px solid var(--line);border-radius:50%}
+.wk{display:grid;grid-template-columns:3.6rem 1fr;gap:.9rem;padding:.5rem 0 .5rem 1.2rem;
+  border-bottom:1px solid var(--line-soft)}
+.wk:last-child{border-bottom:0}
+.wk .n{font-family:"IBM Plex Mono",monospace;font-size:.72rem;font-weight:600;
+  color:var(--ink-faint);padding-top:.1em}
+.wk p{font-size:.87rem;margin:0;max-width:62ch}
+.wk.ms{background:var(--accent-wash);margin-left:-2px;border-left:2px solid var(--accent);
+  padding-left:calc(1.2rem - 2px)}
+.wk.ms .n{color:var(--accent)}
+.wk.gate{background:var(--risk-wash);margin-left:-2px;border-left:2px solid var(--risk);
+  padding-left:calc(1.2rem - 2px)}
+.wk.gate .n{color:var(--risk)}
+
+/* gate criteria */
+.crit{display:grid;grid-template-columns:auto 1fr;gap:1.1rem;padding:1rem 1.2rem;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--steel);
+  margin:0 0 1px}
+.crit .cn{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.7rem;line-height:1;
+  color:var(--steel);font-variant-numeric:tabular-nums}
+.crit h5{margin:0 0 .25rem;font-size:.98rem;font-weight:600}
+.crit .th{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--steel);
+  font-weight:500;margin:0 0 .45rem}
+.crit p{font-size:.85rem;color:var(--ink-soft);margin:0;max-width:none}
+
+.outcome{border:1px solid var(--line);border-left:4px solid var(--ink);
+  background:var(--surface);padding:1rem 1.2rem;margin:0 0 1px}
+.outcome.go{border-left-color:var(--good);background:var(--good-wash)}
+.outcome.hold{border-left-color:var(--accent);background:var(--accent-wash)}
+.outcome.stop{border-left-color:var(--risk);background:var(--risk-wash)}
+.outcome h5{margin:0 0 .3rem;font-family:"IBM Plex Mono",monospace;font-size:.74rem;
+  text-transform:uppercase;letter-spacing:.15em;font-weight:600}
+.outcome.go h5{color:var(--good)}
+.outcome.hold h5{color:var(--accent)}
+.outcome.stop h5{color:var(--risk)}
+.outcome .cond{font-size:.8rem;color:var(--ink-faint);margin:0 0 .5rem;
+  font-family:"IBM Plex Mono",monospace}
+.outcome p{font-size:.87rem;margin:0;max-width:none}
+
+hr.trace{border:0;height:3px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  margin:2.4rem 0}
+.end{margin-top:3.4rem;padding-top:1.4rem;border-top:1px solid var(--line);
+  font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.13em;color:var(--ink-faint);line-height:1.8}
+@media print{.nav{display:none}.shell{grid-template-columns:1fr}body{background:#fff;color:#000}}
+</style>
+
+<nav class="nav" aria-label="Contents">
+  <details open>
+    <summary>Contents</summary>
+    <p class="nav-mark">Vertical Slice</p>
+    <p class="nav-sub">Edgework · Phase 2</p>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span><span>What a slice is</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>Scope</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>Keep or rewrite</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span>The ramp</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span>Week by week</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>Mocap blocks</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span>Measurement</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span>Green-light gate</span></a></li>
+      <li><a href="#s9"><span class="n">09</span><span>Risks</span></a></li>
+      <li><a href="#s10"><span class="n">10</span><span>Budget</span></a></li>
+    </ol>
+    <p class="nav-foot">24 weeks · 8→22 FTE<br>~$1.95M<br>Gate: week 40</p>
+  </details>
+</nav>
+
+<div class="shell">
+<div></div>
+<main>
+
+<header class="mast">
+  <p class="eyebrow">Edgework · Vertical Slice Plan</p>
+  <h1>The Vertical Slice</h1>
+  <div class="thesis">
+    <p class="q">Is this game worth making at this quality bar — and do we now know what the rest of it costs?</p>
+  </div>
+  <p class="standfirst">Pre-production asked whether the verb was fun. The slice asks something
+  different, and it asks it twice. The second question is the one teams forget, and it is arguably
+  worth more: a vertical slice is not only a proof of quality, it is a
+  <strong>measuring instrument for production</strong>. Every asset built here is timed, and those
+  times become the production schedule. A slice that looks magnificent but produces no cost model
+  has done half its job.</p>
+  <dl class="facts">
+    <div class="fact"><dt>Duration</dt><dd>24 weeks (W17–40)</dd></div>
+    <div class="fact"><dt>Team</dt><dd>8 → 22 FTE</dd></div>
+    <div class="fact"><dt>Budget</dt><dd>~$1.95M</dd></div>
+    <div class="fact"><dt>Scope</dt><dd>1 rink · 1 skater · 1 program</dd></div>
+    <div class="fact"><dt>Mocap</dt><dd>2 blocks, ~1,500 clips</dd></div>
+    <div class="fact"><dt>Decision</dt><dd>Production green-light</dd></div>
+  </dl>
+</header>
+
+<section id="s1">
+<div class="sec-head"><span class="sec-num">01</span><h2>What a slice is, and is not</h2></div>
+<div class="tw"><table>
+<thead><tr><th></th><th>Pre-production</th><th>Vertical slice</th></tr></thead>
+<tbody>
+<tr><td class="k">Shape</td><td><strong>Broad and ugly</strong></td><td><strong>Narrow and beautiful</strong></td></tr>
+<tr><td class="k">Question</td><td>Is the verb fun?</td><td>Is the loop compelling, at the bar, at a knowable cost?</td></tr>
+<tr><td class="k">Duration tested</td><td>10 seconds of carving</td><td>2 minutes 40 seconds of judged program</td></tr>
+<tr><td class="k">Art</td><td>Refused</td><td>Ship quality, no exceptions</td></tr>
+<tr><td class="k">Failure mode</td><td>Stop the project</td><td>Cut content scope</td></tr>
+</tbody></table></div>
+<p>The slice is a thin cut through the <strong>entire</strong> game at final quality: one rink,
+one skater, one complete short program, judged, with the camera, audio and score reveal a shipped
+build would have. Nothing is placeholder. If a system is in the slice it is in at ship quality,
+and if it cannot be at ship quality it is out.</p>
+<div class="note"><span class="lbl">Pre-production deliberately did not test this</span>
+<p>The kill gate tested the verb in isolation, and said so explicitly. A four-minute judged
+program with stakes, music, a crowd and a score is a genuinely different question — the
+connective tissue, the pacing, the tension of a program that is going well. <strong>That question
+is this gate's, and it is the reason a slice exists at all.</strong></p></div>
+</section>
+
+<section id="s2">
+<div class="sec-head"><span class="sec-num">02</span><h2>Scope</h2></div>
+
+<div class="schemes">
+  <div class="scheme"><span class="tag">The one rink</span><h5>Nationals Coliseum</h5>
+    <p>Rideau Arena is drab by design and would not prove the visual bar. The Olympic Arena is the
+    most expensive thing in the game — eighteen thousand spectators — and building it first would
+    confuse "can we hit the bar" with "can we afford the crowd."</p>
+    <p>Six thousand seats, warm wood, broadcast lighting, real atmosphere: <strong>every hard
+    problem, at a representative cost.</strong></p></div>
+  <div class="scheme"><span class="tag">The one skater</span><h5>Women's singles</h5>
+    <p>Chosen for difficulty, not convenience. The costume brings the skirt — the cloth problem
+    the bible says must be solved here and not in beta — and the discipline includes layback and
+    Biellmann, the worst cases for groom simulation and flexibility gating.</p>
+    <p><strong>Take the hard case first; the easy case never teaches you anything.</strong></p></div>
+  <div class="scheme"><span class="tag">The one program</span><h5>A complete 2:40 short</h5>
+    <p>Every element category, because the judging pipeline is only proven once it has seen one of
+    each — a combination, an edge-callable jump, the forward-takeoff axel, a flying spin, a
+    layback, a change-foot combination spin, and a step sequence.</p></div>
+</div>
+
+<div class="tw"><table>
+<thead><tr><th>Element</th><th>Why it is in</th></tr></thead>
+<tbody>
+<tr><td class="k mono">3Lz+3T</td><td>A combination, and the longest, most curvature-constrained entry template in the game</td></tr>
+<tr><td class="k mono">3F</td><td>Edge-callable, so the <code>e</code> and <code>!</code> calls get exercised</td></tr>
+<tr><td class="k mono">2A</td><td>The only forward takeoff — proves direction-change docking in the transition solver</td></tr>
+<tr><td class="k mono">FCSp4</td><td>A flying entry</td></tr>
+<tr><td class="k mono">LSp4</td><td>Layback — the groom and cloth worst case</td></tr>
+<tr><td class="k mono">CCoSp4</td><td>Change-foot combination spin — <strong>the Spin Test</strong> (§08)</td></tr>
+<tr><td class="k mono">StSq3</td><td>Level detection, the variety ladder, full ice coverage</td></tr>
+</tbody></table></div>
+
+<div class="split">
+  <div class="yes"><h5>In scope</h5>
+    <p>Sim core at production architecture · the full judging pipeline (technical panel, nine
+    judges, PCS, deductions) · Composer v0 · one AI rival skating one program · Broadcast Director
+    · Wwise blade layer and arena states · one commissioned track with a hand-authored beat grid ·
+    tracings at ship quality · costume with crystals, cloth and groom · Kiss &amp; Cry ·
+    determinism harness · <strong>the cost measurement rig</strong>.</p></div>
+  <div class="no"><h5>Out of scope</h5>
+    <p>Career · other rinks · other skaters · other disciplines · Free Skate · Gala · The Patch ·
+    the player-facing Composer UI · menus beyond what the slice needs · netcode · multiplayer ·
+    pairs · VR · commentary · the remaining 29 music tracks.</p></div>
+</div>
+
+<div class="note"><span class="lbl">One AI rival, and that is not padding</span>
+<p>A score with nowhere to land is not a score. The rival gives the Kiss &amp; Cry a standings
+context, and it proves the claim that matters most in the AI design — that rivals feed inputs
+into the same solver and fail for the same physical reasons the player does.
+<strong>One rival. Not two.</strong></p></div>
+</section>
+
+<section id="s3">
+<div class="sec-head"><span class="sec-num">03</span><h2>Keep, rewrite, formalise</h2></div>
+<p>The prototype was built to answer a question, not to be a foundation. Deciding this explicitly
+in week 17 prevents the most common way slices rot: prototype code silently becoming production
+code and carrying its shortcuts to ship.</p>
+<div class="tw"><table>
+<thead><tr><th>Prototype asset</th><th>Disposition</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td class="k">The carve solver</td><td><span class="pill go">Keep</span></td><td>It is the answer to the kill gate. Changing it invalidates the thing you just proved. Wrap it, do not rewrite it.</td></tr>
+<tr><td class="k">Balance model, stamina</td><td><span class="pill go">Keep</span></td><td>Constants come from prototype telemetry; the structure holds.</td></tr>
+<tr><td class="k">Telemetry / replay recorder</td><td><span class="pill go">Promote</span></td><td>Already the replay system. Now becomes the determinism harness too.</td></tr>
+<tr><td class="k">Data model, primitives</td><td><span class="pill go">Keep</span></td><td>Already data-driven.</td></tr>
+<tr><td class="k">Input layer</td><td><span class="pill stop">Rewrite</span></td><td>Three schemes collapse to one; the toggle scaffolding goes.</td></tr>
+<tr><td class="k">Everything presentational</td><td><span class="pill stop">Rewrite</span></td><td>Debug cameras, capsule rigs, the grey plane. None of it survives contact with art.</td></tr>
+<tr><td class="k">Figure Eight / Slalom courses</td><td><span class="pill go">Repurpose</span></td><td>They become The Patch's foundation later, and stay as regression fixtures now.</td></tr>
+<tr><td class="k">Layered architecture</td><td><span class="pill hold">Formalise</span></td><td>The prototype will not have it. Presentation/gameplay/sim/data separation is imposed W17–19, before there is enough code for it to hurt.</td></tr>
+</tbody></table></div>
+<p>Doing the architecture split in week 17 costs about two engineer-weeks. Doing it in month 20
+costs about three months and will not happen.</p>
+</section>
+
+<section id="s4">
+<div class="sec-head"><span class="sec-num">04</span><h2>The ramp: 8 to 22</h2></div>
+<p>You cannot add fourteen people in week 17. Attempting it is how slices lose their first month.</p>
+<div class="tw"><table>
+<thead><tr><th>Week</th><th class="num">Headcount</th><th>Joining</th></tr></thead>
+<tbody>
+<tr><td class="w">W17</td><td class="num">8</td><td>The pre-production team, continuous</td></tr>
+<tr><td class="w">W18–20</td><td class="num">14</td><td>+2 character art, +2 environment art, +1 animation, +1 tech art</td></tr>
+<tr><td class="w">W21–24</td><td class="num">19</td><td>+2 animation, +1 rendering, +1 design, +1 audio</td></tr>
+<tr><td class="w">W25–26</td><td class="num">22</td><td>+1 gameplay, +1 UI/UX, +1 QA</td></tr>
+</tbody></table></div>
+<ul>
+  <li><strong>Every hire costs two to three weeks of an existing person's time.</strong> Budget it
+    explicitly. Do not pretend a new starter is productive on day one, and do not pretend their
+    onboarding is free to the person doing it.</li>
+  <li><strong>Nobody joins in the last eight weeks.</strong> A hire in week 33 costs more than they
+    contribute before the gate.</li>
+  <li><strong>The pre-production eight are the onboarding capacity.</strong> That caps the ramp
+    rate more than the recruiting pipeline does, and it is why the curve is shaped this way.</li>
+</ul>
+</section>
+
+<section id="s5">
+<div class="sec-head"><span class="sec-num">05</span><h2>Week by week</h2></div>
+<div class="spine">
+  <div class="mo">
+    <p class="mo-h">Month 5 · Foundations</p>
+    <div class="wk ms"><span class="n">W17</span><p><strong>Pin the quality bar.</strong> Not a discussion — a wall of eight reference frames, chosen and signed, defining what "ship quality" means for ice, costume, lighting and crowd. Until this exists the term is undefined and every later argument about it is unresolvable. Architecture split begins.</p></div>
+    <div class="wk"><span class="n">W18</span><p>Layered architecture imposed. Input collapsed to the winning scheme. Rink blockout at true scale with real light rig positions. Ramp begins.</p></div>
+    <div class="wk"><span class="n">W19</span><p>Ice material v1 with planar reflection. Tracings promoted to the RVT pipeline. Character base mesh and rig.</p></div>
+    <div class="wk ms"><span class="n">W20</span><p><strong>Mocap block 1 shoots</strong> (§06). Composer v0 online — the transition solver's lattice and primitive library, no UI.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Month 6 · First playable</p>
+    <div class="wk"><span class="n">W21</span><p>Mocap block 1 ingestion. Motion matching database first pass. Costume base garment.</p></div>
+    <div class="wk"><span class="n">W22</span><p>Orientation and stride warping online — the moment the skater stops sliding like furniture. Crowd system first pass.</p></div>
+    <div class="wk ms"><span class="n">W23</span><p><strong>M6 — First playable slice.</strong> Skate the rink, real animation, real ice, no elements yet. Internally, the first time it looks like the game.</p></div>
+    <div class="wk"><span class="n">W24</span><p>Jump and spin resolvers to production. Groom first pass. Wwise blade layer.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Month 7 · Systems</p>
+    <div class="wk"><span class="n">W25</span><p>Judging pipeline: technical panel calls, nine-judge GOE, PCS, deductions. Protocol sheet data flowing.</p></div>
+    <div class="wk"><span class="n">W26</span><p>Level-feature detection wired to the spin resolver. Ramp completes at 22.</p></div>
+    <div class="wk"><span class="n">W27</span><p>Broadcast Director with four camera operators and the never-cut-during-a-jump rule. AI rival skating a solved program.</p></div>
+    <div class="wk ms"><span class="n">W28</span><p><strong>M7 — The program runs end to end.</strong> All seven elements, scored, on camera. Ugly in places, complete throughout.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Month 8 · Quality</p>
+    <div class="wk"><span class="n">W29</span><p>Costume crystals with GPU instancing and the sparkle pass. Arena lighting final.</p></div>
+    <div class="wk"><span class="n">W30</span><p><strong>Mocap block 2 shoots</strong> — jumps, spins, air phases.</p></div>
+    <div class="wk ms"><span class="n">W31</span><p><strong>M8.1 — The Spin Test.</strong> A <code>CCoSp4</code> at 6 rev/s with full costume, cloth and groom, zero artifacts, at frame rate. The bible's cloth risk discharged, on a date, in the phase the bible says it must be.</p></div>
+    <div class="wk"><span class="n">W32</span><p>Audio: arena states, crowd anticipation and reaction, the interiority mix during jumps. Music track delivered with beat grid.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Month 9 · Integration</p>
+    <div class="wk"><span class="n">W33</span><p>Mocap block 2 integrated. Kiss &amp; Cry scene.</p></div>
+    <div class="wk"><span class="n">W34</span><p>Performance pass to target: 60 fps at the performance tier on console hardware.</p></div>
+    <div class="wk"><span class="n">W35</span><p>Determinism harness green across all target platforms. Full art polish pass.</p></div>
+    <div class="wk ms"><span class="n">W36</span><p><strong>M9 — Content complete for the slice.</strong> Feature freeze. Gate criteria signed. Only bug fixes and tuning after this.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Month 10 · Measure and gate</p>
+    <div class="wk"><span class="n">W37</span><p>Build lock. Playtest protocol pilot with four testers.</p></div>
+    <div class="wk"><span class="n">W38–39</span><p><strong>20 testers.</strong> Blind quality comparison with 10 external artists. Cost model assembled from the measurement rig.</p></div>
+    <div class="wk gate"><span class="n">W40</span><p><strong>THE GREEN-LIGHT GATE.</strong> Analysis, production forecast, decision, postmortem.</p></div>
+  </div>
+</div>
+</section>
+
+<section id="s6">
+<div class="sec-head"><span class="sec-num">06</span><h2>The mocap blocks</h2></div>
+<p>Two blocks, deliberately separated, and the separation is the point.</p>
+<div class="tw"><table>
+<thead><tr><th></th><th>Block 1 · W20</th><th>Block 2 · W30</th></tr></thead>
+<tbody>
+<tr><td class="k">Content</td><td>Locomotion, strokes, crossovers, all turns, step sequences, element entries and exits, carriage, transitions</td><td>Jump air phases, spin positions, flying entries, falls, get-ups</td></tr>
+<tr><td class="k">Method</td><td>IMU suits on real ice — an optical volume cannot cover a rink</td><td>Optical volume with a rotating harness rig</td></tr>
+<tr><td class="k">Clips</td><td class="num">~900</td><td class="num">~600</td></tr>
+<tr><td class="k">Why this order</td><td>The easier capture and the larger volume. Shoot it first, learn from it.</td><td>Ten weeks later, informed by everything block 1 taught about drift, occlusion and what the warping layer actually needs.</td></tr>
+</tbody></table></div>
+<p>Most teams shoot both blocks at once and repeat all their mistakes twice at full scale.</p>
+<div class="note"><span class="lbl">Contingency</span>
+<p>If block 1 returns unusable data — IMU drift is a High-rated risk in the bible — the schedule
+absorbs a reshoot in W24 without moving the gate, because block 1's integration carries four weeks
+of float. <strong>Block 2 has no such float, which is another reason it goes second.</strong>
+Cast competitive skaters; the skating consultant runs the shot list.</p></div>
+</section>
+
+<section id="s7">
+<div class="sec-head"><span class="sec-num">07</span><h2>The measurement discipline</h2></div>
+<div class="note"><span class="lbl">This is the half teams skip</span>
+<p>Every asset built here is timed, and those times become the production forecast. Instrument it
+from <strong>week 17</strong>, not from week 37.</p></div>
+<div class="tw"><table>
+<thead><tr><th>Asset class</th><th class="num">In slice</th><th class="num">× remaining</th><th>Forecast basis</th></tr></thead>
+<tbody>
+<tr><td class="k">Rink, blockout → ship</td><td class="num">1</td><td class="num">11</td><td>Environment artist-weeks</td></tr>
+<tr><td class="k">Costume, modelled → simulating</td><td class="num">1</td><td class="num">~40</td><td>Character artist-weeks</td></tr>
+<tr><td class="k">Spin position, authored → tuned</td><td class="num">7</td><td class="num">19</td><td>Animator-days</td></tr>
+<tr><td class="k">Mocap clip, captured → integrated</td><td class="num">~1,500</td><td class="num">0</td><td>Cleanup hours per clip</td></tr>
+<tr><td class="k">Music track with beat grid</td><td class="num">1</td><td class="num">47</td><td>Composer + designer days</td></tr>
+<tr><td class="k">Element, resolver → judged → animated</td><td class="num">7</td><td class="num">~25</td><td>Engineer + animator weeks</td></tr>
+<tr><td class="k">Rink light rig, authored → optimised</td><td class="num">1</td><td class="num">11</td><td>Tech artist-days</td></tr>
+</tbody></table></div>
+<div class="eq" style="background:var(--surface);border:1px solid var(--line);padding:1rem 1.2rem;margin:1.3rem 0;max-width:70ch;box-shadow:var(--shadow)">
+<p style="margin:0;font-size:.9rem">If a rink takes <strong>9</strong> environment artist-weeks
+and production has 4 environment artists for 12 months, then 11 rinks × 9 = 99 artist-weeks ÷ 4 =
+<strong>25 weeks. That fits.</strong><br><br>
+If a rink takes <strong>16</strong> weeks, it is 44 weeks against a 48-week phase with no
+contingency, and the honest answer is to <strong>cut to eight rinks at the gate</strong> rather
+than discover it in month 20.</p></div>
+<p>Record <strong>variance</strong>, not just means. Build two costumes if you can — the second one
+tells you how much of the first was learning. A cost model with no variance estimate is a guess
+wearing a number.</p>
+</section>
+
+<section id="s8">
+<div class="sec-head"><span class="sec-num">08</span><h2>The green-light gate</h2></div>
+<div class="note"><span class="lbl">Signed in week 36</span>
+<p>Criteria are agreed before the playtest data exists — the same pre-commitment discipline as the
+kill gate, for the same reason.</p></div>
+
+<h3>Gate A · Quality</h3>
+<div class="crit"><span class="cn">A1</span><div>
+  <h5>Blind bar comparison</h5>
+  <p class="th">Within 0.7 of the reference mean, 5-point scale</p>
+  <p>Ten external artists rate slice captures against the week-17 reference frames, unlabelled and
+  interleaved with them.</p></div></div>
+<div class="crit"><span class="cn">A2</span><div>
+  <h5>The Spin Test</h5>
+  <p class="th">Zero artifacts, at frame rate, three consecutive runs</p>
+  <p>A <code>CCoSp4</code> at 6 rev/s with full costume, cloth and groom. The bible's cloth-and-hair
+  risk, discharged.</p></div></div>
+<div class="crit"><span class="cn">A3</span><div>
+  <h5>Performance</h5>
+  <p class="th">60 fps performance tier · 30 fps quality tier</p>
+  <p>On console hardware, worst-case camera.</p></div></div>
+
+<h3>Gate B · The loop</h3>
+<div class="crit"><span class="cn">B1</span><div>
+  <h5>Voluntary repetition</h5>
+  <p class="th">Median ≥ 3 full attempts, unprompted</p>
+  <p>Twenty testers, one 2:40 program available.</p></div></div>
+<div class="crit"><span class="cn">B2</span><div>
+  <h5>The stranger test, made countable</h5>
+  <p class="th">≥ 60% ask when it ships</p>
+  <p>Unsolicited requests for a build or a release date.</p></div></div>
+<div class="crit"><span class="cn">B3</span><div>
+  <h5>Session length</h5>
+  <p class="th">Median ≥ 25 minutes</p>
+  <p>With one program and one rink available — the number is low precisely because the content is.</p></div></div>
+
+<h3>Gate C · Cost</h3>
+<div class="crit"><span class="cn">C1</span><div>
+  <h5>The model exists and is stable</h5>
+  <p class="th">Repeated-asset variance ≤ 25%</p>
+  <p>Per-asset costs measured throughout, not reconstructed at the end.</p></div></div>
+<div class="crit"><span class="cn">C2</span><div>
+  <h5>The remaining scope fits</h5>
+  <p class="th">12 months × 38 FTE with ≥ 15% contingency</p>
+  <p>The forecast, done honestly, from C1's numbers.</p></div></div>
+
+<h3>Decision rule</h3>
+<div class="outcome go"><h5>Green</h5>
+  <p class="cond">all three gates pass</p>
+  <p>Green-light production at planned scope. Week 41 begins.</p></div>
+<div class="outcome hold"><h5>Amber</h5>
+  <p class="cond">A and B pass · C fails</p>
+  <p><strong>Green-light at reduced content scope.</strong> Cut rinks, garments and music tracks —
+  <em>never</em> systems — until the forecast fits with contingency. Re-forecast and proceed. This
+  is the expected outcome, and planning for it is not pessimism.</p></div>
+<div class="outcome stop"><h5>Red</h5>
+  <p class="cond">A or B fails</p>
+  <p>The quality bar is not reachable at this budget, or 2:40 of judged skating is not compelling.
+  Stop, or rescope fundamentally — a smaller game built around Free Skate and the Composer.</p></div>
+
+<div class="note"><span class="lbl">Note the asymmetry with the kill gate</span>
+<p>There, AMBER bought <em>time</em>. Here, AMBER cuts <em>content</em>. At this stage schedule is
+the expensive lever and content is the cheap one, and a team that reaches for more time when it
+should reach for less content is how a two-year project becomes a four-year one.</p></div>
+
+<h4>What this gate does not test</h4>
+<p>Career progression · content fatigue over twenty hours · multiplayer · the Composer as a
+creative tool · whether twelve rinks are more fun than six. Those belong to production and to the
+beta, and reaching for them here reopens exactly the scope discipline the slice depends on.</p>
+</section>
+
+<section id="s9">
+<div class="sec-head"><span class="sec-num">09</span><h2>Risks</h2></div>
+<div class="tw"><table>
+<thead><tr><th class="num">#</th><th>Risk</th><th>P</th><th>Impact</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td><strong>Slice creep.</strong> "Just one more rink." "The men's skater is nearly free." Classic and fatal — the slice stops being narrow and stops being finishable.</td><td><span class="pill stop">High</span></td><td><span class="pill stop">Fatal</span></td><td>The scope list is signed in W17 and changes only by <em>removal</em>. The producer owns the no. Every addition must name what it displaces.</td></tr>
+<tr><td class="num">2</td><td><strong>The ramp destroys velocity.</strong> Fourteen new people, no onboarding budget, four weeks of chaos.</td><td><span class="pill stop">High</span></td><td><span class="pill hold">Major</span></td><td>Staged ramp, onboarding time explicitly budgeted, hard stop on hiring after W26.</td></tr>
+<tr><td class="num">3</td><td><strong>Mocap block 1 unusable.</strong> IMU drift on ice.</td><td><span class="pill hold">Med</span></td><td><span class="pill hold">Major</span></td><td>Four weeks of float before integration; a W24 reshoot slot held. Video reference on every take regardless.</td></tr>
+<tr><td class="num">4</td><td><strong>Cloth and hair fail at spin speed.</strong></td><td><span class="pill stop">High</span></td><td><span class="pill md">Moderate</span></td><td>A dated milestone (W31), with the procedural conical deformer fallback already specified. Not solved by W31 means escalated, not deferred.</td></tr>
+<tr><td class="num">5</td><td><strong>Prototype code becomes production code.</strong> Shortcuts made to answer a question get load-bearing.</td><td><span class="pill stop">High</span></td><td><span class="pill hold">Major</span></td><td>The keep/rewrite/formalise table, decided W17 and executed W17–19 while the codebase is still small.</td></tr>
+<tr><td class="num">6</td><td><strong>Nobody agreed what "ship quality" means.</strong> The argument surfaces in W35 when it cannot be settled.</td><td><span class="pill hold">Med</span></td><td><span class="pill hold">Major</span></td><td>W17's pinned reference wall. Eight frames, signed. Gate A1 measures against exactly those frames.</td></tr>
+<tr><td class="num">7</td><td><strong>No cost model at the gate.</strong> The slice looks great and nobody can say what production costs.</td><td><span class="pill hold">Med</span></td><td><span class="pill hold">Major</span></td><td>The measurement rig is instrumented from W17. Gate C fails without it, which makes it un-skippable.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s10">
+<div class="sec-head"><span class="sec-num">10</span><h2>Budget</h2></div>
+<div class="tw"><table>
+<thead><tr><th>Line</th><th class="num">Cost</th></tr></thead>
+<tbody>
+<tr><td>Staff, ramped 8 → 22 over 6 months (≈108 person-months, loaded)</td><td class="num">$1,296,000</td></tr>
+<tr><td>Mocap block 1 — IMU, on-ice, talent, ~900 clips</td><td class="num">$95,000</td></tr>
+<tr><td>Mocap block 2 — optical volume, harness rig, talent, ~600 clips</td><td class="num">$110,000</td></tr>
+<tr><td>Animation cleanup outsourcing</td><td class="num">$120,000</td></tr>
+<tr><td>Music: one track commissioned and recorded, plus first payment on the full commission</td><td class="num">$85,000</td></tr>
+<tr><td>Concept and outsourced art support</td><td class="num">$80,000</td></tr>
+<tr><td>Playtesting and the blind artist panel</td><td class="num">$18,000</td></tr>
+<tr><td>Hardware, dev kits, licences, build infrastructure</td><td class="num">$60,000</td></tr>
+</tbody>
+<tfoot>
+<tr><td>Subtotal</td><td class="num">~$1,864,000</td></tr>
+<tr><td style="font-weight:400;color:var(--ink-faint)">With 5% contingency — the ask</td><td class="num">~$1,950,000</td></tr>
+</tfoot>
+</table>
+<caption>Loaded cost at ~$12k per person-month, consistent with the pre-production budget.</caption></div>
+
+<hr class="trace">
+
+<p><strong>Cumulative through the green-light gate, including pre-production: ~$2.42M</strong> —
+roughly 12% of the projected $18–25M full production, spent to retire the two largest risks in the
+project before the expensive phase begins.</p>
+
+<p class="end">Edgework · Vertical Slice Plan v1.0<br>
+Gate criteria are pre-commitments and must be signed in week 36.<br>
+The scope list is signed in week 17 and changes only by removal.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  if (!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (!en.isIntersecting) return;
+      links.forEach(function(a){ a.classList.remove('on'); });
+      var a = map[en.target.id];
+      if (a) a.classList.add('on');
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  document.querySelectorAll('section[id]').forEach(function(s){ io.observe(s); });
+})();
+</script>

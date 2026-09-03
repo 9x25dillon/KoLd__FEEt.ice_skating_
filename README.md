@@ -8,6 +8,10 @@ you take is written permanently into the ice beneath you. There is no jump butto
 
 ---
 
+> **New here, or picking this up in a later session?** Start with
+> [`Hand_off.md`](Hand_off.md) — current state, conventions, artifact URLs, and the three
+> things most likely to trip you up.
+
 ## Read the design bible
 
 | | |

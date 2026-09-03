@@ -1,0 +1,637 @@
+<title>The Feel Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --ground:#f1f3f2; --surface:#ffffff; --sunk:#e7ebe9;
+  --ink:#10161a; --ink-soft:#4a585e; --ink-faint:#7e8c92;
+  --line:#d2dad8; --line-soft:#e3e8e6;
+  --accent:#9c6b12; --accent-warm:#c98a20; --accent-wash:#f6efdf;
+  --steel:#2c6773; --steel-wash:#e3edee;
+  --risk:#a33f34; --risk-wash:#f8eae8;
+  --good:#2f6b53; --good-wash:#e6f0eb;
+  --shadow:0 1px 2px rgba(16,22,26,.05),0 8px 24px -12px rgba(16,22,26,.14);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+    --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+    --line:#263236; --line-soft:#1c2629;
+    --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+    --steel:#6fbccb; --steel-wash:#14252a;
+    --risk:#e08579; --risk-wash:#271513;
+    --good:#6fbb97; --good-wash:#122019;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+  --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+  --line:#263236; --line-soft:#1c2629;
+  --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+  --steel:#6fbccb; --steel-wash:#14252a;
+  --risk:#e08579; --risk-wash:#271513;
+  --good:#6fbb97; --good-wash:#122019;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:2rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16.5px;line-height:1.65;margin:0;-webkit-font-smoothing:antialiased}
+
+.shell{max-width:1240px;margin:0 auto;padding:0 clamp(1.1rem,3vw,2.5rem);
+  display:grid;grid-template-columns:236px minmax(0,1fr);gap:clamp(2rem,5vw,4.5rem);align-items:start}
+@media (max-width:940px){.shell{grid-template-columns:minmax(0,1fr);gap:0}}
+
+.nav{position:sticky;top:0;max-height:100vh;overflow-y:auto;padding:2.6rem 0 3rem;
+  border-right:1px solid var(--line-soft);margin-right:-1px}
+.nav-mark{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.35rem;margin:0 0 .1rem}
+.nav-sub{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.16em;color:var(--ink-faint);margin:0 0 1.8rem}
+.nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.08rem}
+.nav a{display:grid;grid-template-columns:1.6rem 1fr;align-items:baseline;text-decoration:none;
+  color:var(--ink-soft);font-size:.83rem;line-height:1.35;padding:.34rem .5rem .34rem .7rem;
+  border-left:2px solid transparent;transition:color .15s,border-color .15s}
+.nav a .n{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink-faint);
+  font-variant-numeric:tabular-nums}
+.nav a:hover{color:var(--ink)}
+.nav a.on{color:var(--accent);border-left-color:var(--accent);font-weight:500}
+.nav a.on .n{color:var(--accent)}
+.nav a:focus-visible{outline:2px solid var(--steel);outline-offset:2px;border-radius:2px}
+.nav-foot{margin-top:1.6rem;padding-top:1.2rem;border-top:1px solid var(--line-soft);
+  font-family:"IBM Plex Mono",monospace;font-size:.62rem;line-height:1.7;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.1em}
+@media (max-width:940px){
+  .nav{position:static;max-height:none;border-right:0;padding:1.6rem 0 0;margin-right:0}
+  .nav details{border:1px solid var(--line);border-radius:3px;padding:.7rem .9rem;background:var(--surface)}
+  .nav details ol{padding-top:.6rem}
+  .nav summary{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.14em;cursor:pointer;color:var(--ink-soft)}
+}
+
+main{padding:2.4rem 0 6rem;min-width:0}
+.mast{padding-bottom:2.4rem;margin-bottom:2.6rem;position:relative}
+.mast::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;
+  border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);opacity:.85}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.2em;color:var(--accent);margin:0 0 1.1rem}
+h1{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(2.4rem,6vw,4rem);line-height:.98;margin:0 0 1.6rem;text-wrap:balance}
+.thesis{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;margin:0 0 1.6rem}
+.thesis .q{font-family:"Bodoni Moda",Didot,Georgia,serif;font-style:italic;font-weight:400;
+  font-size:clamp(1.5rem,3.6vw,2.15rem);line-height:1.22;margin:0;color:var(--accent);
+  text-wrap:balance}
+.standfirst{font-size:1.06rem;color:var(--ink-soft);max-width:64ch;margin:0}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:2.2rem 0 0}
+.fact{background:var(--surface);padding:.85rem 1rem}
+.fact dt{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--ink-faint);margin:0 0 .3rem}
+.fact dd{margin:0;font-size:.86rem;font-weight:500;line-height:1.4}
+
+section{margin:0 0 3.8rem;scroll-margin-top:1.5rem}
+.sec-head{display:grid;grid-template-columns:auto 1fr;gap:1.1rem;align-items:baseline;
+  padding-top:1.6rem;margin-bottom:1.5rem;position:relative}
+.sec-head::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.sec-num{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:2rem;line-height:1;
+  color:var(--accent);font-variant-numeric:tabular-nums}
+h2{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(1.65rem,3.4vw,2.3rem);line-height:1.1;margin:0;text-wrap:balance}
+h3{font-size:1.1rem;font-weight:600;margin:2.4rem 0 .7rem;text-wrap:balance}
+h4{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--ink-faint);font-weight:600;margin:1.8rem 0 .6rem}
+p{margin:0 0 1rem;max-width:70ch}
+ul,ol{margin:0 0 1.1rem;padding-left:1.15rem;max-width:70ch}
+li{margin:0 0 .42rem}
+li::marker{color:var(--ink-faint)}
+a{color:var(--accent);text-underline-offset:2px}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--sunk);
+  padding:.09em .34em;border-radius:2px}
+
+.note{border-left:2px solid var(--accent);background:var(--accent-wash);
+  padding:.95rem 1.15rem;margin:1.5rem 0;max-width:70ch}
+.note p:last-child{margin-bottom:0}
+.note .lbl{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--accent);display:block;margin-bottom:.35rem}
+
+.tw{overflow-x:auto;margin:1.4rem 0;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.84rem;min-width:460px}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-soft);
+  vertical-align:top;line-height:1.45}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--ink-faint);font-weight:600;
+  border-bottom:1px solid var(--line);white-space:nowrap;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:"IBM Plex Mono",monospace;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+td.k{font-weight:600}
+td.w{font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--accent);white-space:nowrap}
+caption{caption-side:bottom;text-align:left;padding:.6rem .8rem;font-size:.74rem;
+  color:var(--ink-faint);border-top:1px solid var(--line-soft)}
+tfoot td{border-top:1px solid var(--line);font-weight:600;background:var(--sunk)}
+
+.pill{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.62rem;
+  text-transform:uppercase;letter-spacing:.08em;padding:.13em .45em;border-radius:2px;
+  border:1px solid currentColor;line-height:1.5}
+.pill.go{color:var(--good)}.pill.hold{color:var(--accent)}.pill.stop{color:var(--risk)}
+.pill.st{color:var(--steel)}
+
+/* build / refuse split */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line-soft);
+  border:1px solid var(--line-soft);margin:1.5rem 0}
+@media (max-width:720px){.split{grid-template-columns:1fr}}
+.split>div{background:var(--surface);padding:1.1rem 1.2rem}
+.split h5{margin:0 0 .7rem;font-family:"IBM Plex Mono",monospace;font-size:.64rem;
+  text-transform:uppercase;letter-spacing:.14em;font-weight:600}
+.split .yes h5{color:var(--good)}
+.split .no h5{color:var(--risk)}
+.split p{font-size:.85rem;color:var(--ink-soft);margin:0;max-width:none}
+
+/* scheme cards */
+.schemes{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:1.5rem 0}
+.scheme{background:var(--surface);padding:1.1rem 1.2rem}
+.scheme .tag{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--accent);display:block;margin-bottom:.4rem}
+.scheme h5{margin:0 0 .5rem;font-size:.98rem;font-weight:600}
+.scheme h5 em{font-style:italic;font-weight:400;color:var(--ink-soft)}
+.scheme p{font-size:.83rem;color:var(--ink-soft);margin:0 0 .6rem;max-width:none}
+.scheme p:last-child{margin-bottom:0}
+
+/* week spine */
+.spine{margin:1.5rem 0;border-left:2px solid var(--line);padding-left:0}
+.mo{margin:0 0 1.6rem}
+.mo-h{font-family:"IBM Plex Mono",monospace;font-size:.63rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--ink-faint);font-weight:600;
+  margin:0 0 .5rem;padding-left:1.2rem;position:relative}
+.mo-h::before{content:"";position:absolute;left:-6px;top:.42em;width:9px;height:9px;
+  background:var(--ground);border:2px solid var(--line);border-radius:50%}
+.wk{display:grid;grid-template-columns:3.6rem 1fr;gap:.9rem;padding:.5rem 0 .5rem 1.2rem;
+  border-bottom:1px solid var(--line-soft)}
+.wk:last-child{border-bottom:0}
+.wk .n{font-family:"IBM Plex Mono",monospace;font-size:.72rem;font-weight:600;
+  color:var(--ink-faint);padding-top:.1em}
+.wk p{font-size:.87rem;margin:0;max-width:62ch}
+.wk.ms{background:var(--accent-wash);margin-left:-2px;border-left:2px solid var(--accent);
+  padding-left:calc(1.2rem - 2px)}
+.wk.ms .n{color:var(--accent)}
+.wk.gate{background:var(--risk-wash);margin-left:-2px;border-left:2px solid var(--risk);
+  padding-left:calc(1.2rem - 2px)}
+.wk.gate .n{color:var(--risk)}
+
+/* gate criteria */
+.crit{display:grid;grid-template-columns:auto 1fr;gap:1.1rem;padding:1rem 1.2rem;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--steel);
+  margin:0 0 1px}
+.crit .cn{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.7rem;line-height:1;
+  color:var(--steel);font-variant-numeric:tabular-nums}
+.crit h5{margin:0 0 .25rem;font-size:.98rem;font-weight:600}
+.crit .th{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--steel);
+  font-weight:500;margin:0 0 .45rem}
+.crit p{font-size:.85rem;color:var(--ink-soft);margin:0;max-width:none}
+
+.outcome{border:1px solid var(--line);border-left:4px solid var(--ink);
+  background:var(--surface);padding:1rem 1.2rem;margin:0 0 1px}
+.outcome.go{border-left-color:var(--good);background:var(--good-wash)}
+.outcome.hold{border-left-color:var(--accent);background:var(--accent-wash)}
+.outcome.stop{border-left-color:var(--risk);background:var(--risk-wash)}
+.outcome h5{margin:0 0 .3rem;font-family:"IBM Plex Mono",monospace;font-size:.74rem;
+  text-transform:uppercase;letter-spacing:.15em;font-weight:600}
+.outcome.go h5{color:var(--good)}
+.outcome.hold h5{color:var(--accent)}
+.outcome.stop h5{color:var(--risk)}
+.outcome .cond{font-size:.8rem;color:var(--ink-faint);margin:0 0 .5rem;
+  font-family:"IBM Plex Mono",monospace}
+.outcome p{font-size:.87rem;margin:0;max-width:none}
+
+hr.trace{border:0;height:3px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  margin:2.4rem 0}
+.end{margin-top:3.4rem;padding-top:1.4rem;border-top:1px solid var(--line);
+  font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.13em;color:var(--ink-faint);line-height:1.8}
+@media print{.nav{display:none}.shell{grid-template-columns:1fr}body{background:#fff;color:#000}}
+</style>
+
+<nav class="nav" aria-label="Contents">
+  <details open>
+    <summary>Contents</summary>
+    <p class="nav-mark">Feel Prototype</p>
+    <p class="nav-sub">Edgework · Pre-production</p>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span><span>Scope discipline</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>The team</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>Three schemes</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span>Week by week</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span>Parallel tracks</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>Telemetry</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span>Playtest protocol</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span>The kill gate</span></a></li>
+      <li><a href="#s9"><span class="n">09</span><span>Wrong answers</span></a></li>
+      <li><a href="#s10"><span class="n">10</span><span>Budget</span></a></li>
+      <li><a href="#s11"><span class="n">11</span><span>Weekly cadence</span></a></li>
+    </ol>
+    <p class="nav-foot">16 weeks · 8 FTE<br>~$468k<br>Gate: week 16</p>
+  </details>
+</nav>
+
+<div class="shell">
+<div></div>
+<main>
+
+<header class="mast">
+  <p class="eyebrow">Edgework · Pre-production Plan</p>
+  <h1>The Feel Prototype</h1>
+  <div class="thesis"><p class="q">Is carving fun with no jumps, no score and no art?</p></div>
+  <p class="standfirst">Pre-production is not a small version of the game. It exists to answer one
+  question that the entire project rests on, and to answer it cheaply enough that a
+  <em>no</em> is survivable. No shipped game has used analog lean plus analog knee pressure as its
+  primary verb. If the answer is no, no amount of costume rendering, judging fidelity or career
+  structure rescues it. This plan delivers that answer in <strong>week 16 for about $468,000</strong>,
+  rather than in month 22 for eight million.</p>
+  <dl class="facts">
+    <div class="fact"><dt>Duration</dt><dd>16 weeks</dd></div>
+    <div class="fact"><dt>Team</dt><dd>8 FTE</dd></div>
+    <div class="fact"><dt>Budget</dt><dd>~$468,000</dd></div>
+    <div class="fact"><dt>Testers</dt><dd>20 × 2 sessions</dd></div>
+    <div class="fact"><dt>Schemes</dt><dd>3 → 2 → 1</dd></div>
+    <div class="fact"><dt>Decision</dt><dd>Week 16, binding</dd></div>
+  </dl>
+</header>
+
+<section id="s1">
+<div class="sec-head"><span class="sec-num">01</span><h2>Scope discipline</h2></div>
+<p>Most pre-productions fail by building a small version of everything. This one builds the
+<strong>feedback channels and nothing else</strong> — because the question is about how the verb
+<em>feels</em>, and feel is what the player perceives, not what the simulation computes.</p>
+
+<div class="split">
+  <div class="yes"><h5>We build</h5>
+    <p><strong>The carve solver</strong> — the thing under test.<br><br>
+    <strong>Balance, stumble, fall</strong> — failure is half of feel. A verb you cannot fail is not being tested.<br><br>
+    <strong>Blade tracings</strong> — one week of work, and the primary visual channel for edge quality.<br><br>
+    <strong>Edge tone audio</strong> — the bible calls this the primary <em>audible</em> channel for edge quality. Testing feel in silence tests the wrong thing. Three days for a crude version.<br><br>
+    <strong>Procedural lean</strong> — a capsule that stacks over its edge feels different from one that tips. Feel engineering, not art.<br><br>
+    <strong>The Edge Ribbon</strong> — the only HUD element, and it is under test too.<br><br>
+    <strong>Telemetry</strong> — because the gate is decided on data.</p></div>
+  <div class="no"><h5>We refuse to build</h5>
+    <p>Jumps as elements · rotation · scoring · judges · any named element · music · characters
+    (a capsule with a blade) · costumes · cloth · hair · an arena (a plane, a boards ring, a grid)
+    · menus · AI · netcode · career · the Composer · mocap.<br><br>
+    Every one of these has an advocate who will make a reasonable case during week 6. The answer
+    is no. The list exists so that saying no costs nothing.</p></div>
+</div>
+
+<div class="note"><span class="lbl">The hop is not a jump</span>
+<p>From week 9 the prototype gets a load-release vertical hop with no rotation, no element identity
+and no scoring. The load/release trigger shares its input channel with carving, so it has to be
+tested — but it arrives <em>after</em> carving has been evaluated alone, so that an exciting jump
+cannot rescue a boring foundation. <strong>If carving only works because jumping is exciting, the
+shipped game is 90% tedious connective tissue.</strong></p></div>
+
+<p>One system pulls double duty and should be built properly rather than as a throwaway: the
+<strong>telemetry recorder is the replay recorder</strong> from the bible's netcode section — a
+deterministic input stream plus periodic state keyframes. In pre-production it is the measuring
+instrument. In production it is ghost opponents, server-side verification and the Composer. Built
+once.</p>
+</section>
+
+<section id="s2">
+<div class="sec-head"><span class="sec-num">02</span><h2>The team</h2></div>
+<p>Eight people. Every one of them plays the build every week, including the producer.</p>
+<div class="tw"><table>
+<thead><tr><th>Role</th><th class="num">FTE</th><th>Owns</th></tr></thead>
+<tbody>
+<tr><td class="k">Creative lead / director</td><td class="num">1</td><td>The question. Runs the daily play session. <strong>Recused from the gate vote</strong> (§08).</td></tr>
+<tr><td class="k">Gameplay engineer — solver</td><td class="num">1</td><td>The carve solver, blade contact, ice grid, friction and bite curves.</td></tr>
+<tr><td class="k">Gameplay engineer — input &amp; feel</td><td class="num">1</td><td>The three control schemes, the balance model, the hop, the telemetry pipeline.</td></tr>
+<tr><td class="k">Rendering / technical artist</td><td class="num">1</td><td>Engine spike: ice material, tracing render target, planar reflection cost. Answers the engine question with evidence rather than preference.</td></tr>
+<tr><td class="k">Animation engineer</td><td class="num">1</td><td>Placeholder rig, procedural lean layer, blade IK, powered-ragdoll falls. No authored animation.</td></tr>
+<tr><td class="k">Designer</td><td class="num">1</td><td>Control scheme specification, test tasks, the playtest protocol, the scoring data model.</td></tr>
+<tr><td class="k">Producer</td><td class="num">1</td><td>Hiring, mocap vendor and volume booking, schedule, budget, tester recruitment.</td></tr>
+<tr><td class="k">Skating consultant</td><td class="num">1</td><td>Permanent hire from week 1. Holds an <strong>authenticity veto</strong>: if the consultant says "that is not what that feels like," it is a bug, not a preference.</td></tr>
+</tbody></table>
+<caption>Contracted: audio designer (~3 weeks, the edge-tone layer), concept artist (~4 weeks, style pillars, weeks 9–16).</caption></div>
+</section>
+
+<section id="s3">
+<div class="sec-head"><span class="sec-num">03</span><h2>Three control schemes</h2></div>
+<p>The project's primary risk requires <em>two</em> fallbacks prototyped, not one. These deliberately
+<strong>span the space</strong> rather than clustering around variations of the same idea — one is the
+bible's proposal, one is safer and conventional, one is stranger with a higher ceiling. All three sit
+behind a runtime toggle and are labelled <strong>A / B / C</strong> in every test, never "the real one."</p>
+
+<div class="schemes">
+  <div class="scheme"><span class="tag">Scheme A · the hypothesis</span>
+    <h5>Lean &amp; Load</h5>
+    <p>Left stick is a lean vector — direction and magnitude, 0–65°. RT is knee pressure. Right stick
+    is carriage. LT is the free leg and toe pick.</p>
+    <p>Highest ceiling, highest risk. Three simultaneous continuous analog channels is more than most
+    players carry. <strong>This is what is actually under test.</strong></p></div>
+  <div class="scheme"><span class="tag">Scheme B · the safe fallback</span>
+    <h5>Steer &amp; Load</h5>
+    <p>Left stick becomes intended travel direction, as in any third-person game. The solver picks
+    whichever edge curves that way; lean magnitude is derived from turn demand and speed. RT unchanged.</p>
+    <p>Keeps the carve physics, the emergent radius and the load-release takeoff. Loses deliberate
+    inside/outside edge choice — the sport's actual alphabet. <strong>If B beats A the game is still
+    viable</strong>, just less expressive, and three sections of the bible need rewriting.</p></div>
+  <div class="scheme"><span class="tag">Scheme C · the strange one</span>
+    <h5>Two-Foot</h5>
+    <p>Left stick controls the left blade's edge, right stick the right blade's. Maps directly onto
+    crossovers, mohawks and choctaws, which are inherently two-foot actions.</p>
+    <p>Possibly unlearnable. Possibly the most distinctive control scheme in any sports game. Worth
+    four weeks of an engineer to find out, because if it works the game becomes much harder to copy.</p></div>
+</div>
+
+<div class="note"><span class="lbl">Down-select</span>
+<p>Three to two at <strong>week 8</strong>, two to one at <strong>week 12</strong>. Only one scheme
+enters the gate build — but the runner-up stays compiled and playable, so that an AMBER outcome has
+somewhere to go on day one rather than after a month of rebuilding.</p></div>
+</section>
+
+<section id="s4">
+<div class="sec-head"><span class="sec-num">04</span><h2>Week by week</h2></div>
+<p>Weeks are relative to project start. Calendar anchoring is the producer's.</p>
+
+<div class="spine">
+  <div class="mo">
+    <p class="mo-h">Month 1 · The blade on ice</p>
+    <div class="wk"><span class="n">W1</span><p>Repo, CI, build farm. Skating consultant starts. <strong>UE5 validation spike</strong> — a carve on a plane, an ice material, a tracing render target. One engine, not two: the engine decision closed ahead of week 1.</p></div>
+    <div class="wk ms"><span class="n">W2</span><p><strong>M1.1 — The ice renders.</strong> Planar reflection cost measured, tracing render target writing at simulation rate, and a custom skate movement component scaffolded in place of Unreal’s built-in character movement.</p></div>
+    <div class="wk"><span class="n">W3</span><p>Solver v0: one foot, lean → carve, longitudinal friction. Capsule with a blade on an infinite plane. Debug camera. No balance, no second foot.</p></div>
+    <div class="wk ms"><span class="n">W4</span><p><strong>M1.2 — You can carve a circle, and its radius changes with lean.</strong> Internal only; nobody outside the room sees this. First telemetry logging per tick.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Month 2 · Three schemes, one question</p>
+    <div class="wk"><span class="n">W5</span><p>Solver v1: two feet, edge switching, stroking, crossovers, the skid threshold. Ice grid with damage and snow.</p></div>
+    <div class="wk"><span class="n">W6</span><p>Tracings v0 — contact points accumulating into a render target that drives the ice material. Edge tone audio v0 from the contracted designer.</p></div>
+    <div class="wk"><span class="n">W7</span><p>All three control schemes implemented behind a runtime toggle. Procedural lean layer online.</p></div>
+    <div class="wk ms"><span class="n">W8</span><p><strong>M2 — Internal Feel Review.</strong> Eight team members plus eight friendly externals, blind A/B/C, ranked. <strong>Soft gate: down-select 3 → 2.</strong> A scheme selection, not a kill gate.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Month 3 · Depth and the hop</p>
+    <div class="wk"><span class="n">W9</span><p>Balance model, stumble, fall, powered-ragdoll v0. The load-release hop — no rotation, no element identity, no score.</p></div>
+    <div class="wk"><span class="n">W10</span><p>The <strong>Figure Eight</strong> and <strong>Slalom</strong> courses built as instrumented, repeatable tasks. Telemetry pipeline complete and dashboarded.</p></div>
+    <div class="wk"><span class="n">W11</span><p>Both surviving schemes refined against internal telemetry. Edge Ribbon v1. Tuning pass on the bite curves with the consultant.</p></div>
+    <div class="wk ms"><span class="n">W12</span><p><strong>M3 — Learning curve demonstrated internally</strong>, then <strong>down-select 2 → 1 and freeze the gate build.</strong> No code changes after this point except crash fixes. Gate thresholds signed (§08).</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Month 4 · The gate</p>
+    <div class="wk"><span class="n">W13</span><p><strong>Protocol pilot</strong> with four testers. The purpose is to debug the <em>protocol</em>, not the game — script timing, task legibility, telemetry capture, facilitator consistency. Pilot data is discarded.</p></div>
+    <div class="wk"><span class="n">W14–15</span><p><strong>20 testers × 2 sessions.</strong> Ten testers per week, sessions three to seven days apart.</p></div>
+    <div class="wk gate"><span class="n">W16</span><p><strong>THE KILL GATE.</strong> Analysis, written report, binding decision, and a postmortem regardless of outcome.</p></div>
+  </div>
+</div>
+</section>
+
+<section id="s5">
+<div class="sec-head"><span class="sec-num">05</span><h2>Parallel tracks</h2></div>
+<p>These run independently of the gate answer, and mostly belong to the producer. They exist so that a
+GREEN decision in week 16 means the vertical slice starts in <em>week 17</em>, not week 25.</p>
+<div class="tw"><table>
+<thead><tr><th>Track</th><th class="mono">Weeks</th><th>Output</th></tr></thead>
+<tbody>
+<tr><td class="k">Mocap planning</td><td class="w">W5–16</td><td>Vendor selected, IMU and optical volume quoted, harness rig designed, skaters cast and auditioned, ~1,500-clip shot list drafted, <strong>volume provisionally booked for W20</strong>.</td></tr>
+<tr><td class="k">Scoring data model</td><td class="w">W5–10</td><td>Already begun. Complete the spin and step <strong>level-feature</strong> enumeration — the one gap blocking the judging pipeline.</td></tr>
+<tr><td class="k">Style pillars</td><td class="w">W9–16</td><td>Contracted concept artist, eight images. Not for the gate build, which stays untextured. For the funding conversation that follows a GREEN.</td></tr>
+<tr><td class="k">Vertical slice plan</td><td class="w">W13–16</td><td>Written <em>before</em> the gate result is known, so that it is not motivated reasoning. Staffing, the 22-person ramp, one-rink scope.</td></tr>
+</tbody></table></div>
+<div class="note"><span class="lbl">The one irreversible commitment</span>
+<p>The mocap booking is the only genuinely irreversible parallel spend. Book it with a cancellation
+clause and accept losing the deposit on a RED. <strong>Losing a deposit is much cheaper than losing
+eight weeks waiting for a volume after a GREEN.</strong></p></div>
+</section>
+
+<section id="s6">
+<div class="sec-head"><span class="sec-num">06</span><h2>Telemetry</h2></div>
+<p>Captured per tick: input state, full skater state, edge sign, lean, skid flag, contact point.
+Roughly 4 KB/s, so a full session is a few megabytes.</p>
+<div class="tw"><table>
+<thead><tr><th>Metric</th><th>Definition</th><th>What it tells you</th></tr></thead>
+<tbody>
+<tr><td class="k">Free-play duration</td><td>Seconds of voluntary play after "stop whenever you like"</td><td><strong>The headline. Nothing else is close.</strong></td></tr>
+<tr><td class="k">Figure-eight deviation</td><td>RMS distance of the tracing from the reference curve, in metres</td><td>The skill metric. Repeatable, objective, and it is also the shipping tutorial.</td></tr>
+<tr><td class="k">Skid ratio</td><td>Fraction of ticks where the edge let go</td><td>Falls as skill rises. A flat line means no learning is happening.</td></tr>
+<tr><td class="k">Mean lean depth</td><td>Mean absolute lean while moving</td><td>Rises with confidence. The best single proxy for "they trust the physics."</td></tr>
+<tr><td class="k">Edge changes / minute</td><td>Signed edge transitions</td><td>Rises with vocabulary. Distinguishes exploring from surviving.</td></tr>
+<tr><td class="k">Time-to-retry</td><td>Seconds from fall to next input</td><td>Under three seconds means the failure felt fair.</td></tr>
+<tr><td class="k">Unprompted actions</td><td>Behaviours nobody asked for, coded from video</td><td>The mastery signal.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s7">
+<div class="sec-head"><span class="sec-num">07</span><h2>The playtest protocol</h2></div>
+
+<h3>Recruitment</h3>
+<p>Twenty external testers, screened into four segments so that a wrong-audience result is
+<em>visible</em> rather than hidden inside an average.</p>
+<div class="tw"><table>
+<thead><tr><th>Segment</th><th class="num">n</th><th>Profile</th></tr></thead>
+<tbody>
+<tr><td class="k">Sim-curious</td><td class="num">8</td><td>Plays <em>Trials</em>, <em>Skate</em>, soulslikes. The primary audience.</td></tr>
+<tr><td class="k">General gamers</td><td class="num">6</td><td>No particular affinity. The breadth check.</td></tr>
+<tr><td class="k">Skating fans</td><td class="num">4</td><td>Watches or skates. Any gaming level.</td></tr>
+<tr><td class="k">Skaters who barely game</td><td class="num">2</td><td>The authenticity check. Their verbatims matter more than their scores.</td></tr>
+</tbody></table>
+<caption>Excluded: game developers, anyone who knows the team, anyone who has heard the pitch. Both
+sessions are paid <strong>up front</strong>, so that returning is not a financial decision and
+attendance is never mistaken for enthusiasm.</caption></div>
+
+<h3>Session 1 — 60 minutes</h3>
+<div class="tw"><table>
+<thead><tr><th class="num">Min</th><th>Block</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td class="num">0–5</td><td class="k">Consent, framing</td><td>Described only as "an ice skating prototype." No pitch, no pillars, no mention of what it is trying to be.</td></tr>
+<tr><td class="num">5–10</td><td class="k">Cold hands</td><td>Controller handed over, facilitator says nothing. Record what they try first and how long before they ask a question.</td></tr>
+<tr><td class="num">10–20</td><td class="k">Scripted tutorial</td><td>Read verbatim from a card so all twenty get identical words.</td></tr>
+<tr><td class="num">20–35</td><td class="k">Figure Eight ×10</td><td>Instrumented: deviation, time, skids per attempt.</td></tr>
+<tr><td class="num">35–45</td><td class="k">Slalom ×5</td><td>Alternating lobes under time pressure.</td></tr>
+<tr><td class="num">45–55</td><td class="k">Free play</td><td><em>"The rink is yours. Stop whenever you like."</em> Timer runs; they are not told it is measured.</td></tr>
+<tr><td class="num">55–60</td><td class="k">Exit questions</td><td>Below.</td></tr>
+</tbody></table></div>
+
+<h3>Session 2 — 60 minutes, 3–7 days later</h3>
+<div class="tw"><table>
+<thead><tr><th class="num">Min</th><th>Block</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td class="num">0–5</td><td class="k">Cold retention</td><td>No re-tutorial, no reminders. Can they still do it? This separates a scheme that is <em>learnable</em> from one that is merely <em>followable while being told</em>.</td></tr>
+<tr><td class="num">5–20</td><td class="k">Figure Eight ×10</td><td>Compared against session 1.</td></tr>
+<tr><td class="num">20–30</td><td class="k">Slalom ×5</td><td></td></tr>
+<tr><td class="num">30–50</td><td class="k">Free play — 20 min available</td><td>Same instruction. <strong>The headline metric</strong>, now that novelty has worn off.</td></tr>
+<tr><td class="num">50–60</td><td class="k">Exit interview</td><td></td></tr>
+</tbody></table></div>
+
+<h3>Exit questions</h3>
+<p>Only five, forced-choice where possible, because Likert scales invite politeness.</p>
+<ol>
+  <li><strong>"When you fell, was that you or the game?"</strong> — attribution. A good hard game
+    makes players blame themselves.</li>
+  <li>"What were you trying to do that you could not?" — reveals whether the ceiling reads as depth
+    or as obstruction.</li>
+  <li>"Describe the feeling of a good turn to someone who has not played it." — if they can, the verb
+    is legible. Verbatims here are the best marketing copy you will ever get.</li>
+  <li>"Would you rather play this again next week, or [named comparable game]?" — forced choice.</li>
+  <li>"Is there anything you want to ask us?" — unprompted requests for a build are logged, never
+    solicited.</li>
+</ol>
+
+<h4>Facilitator rules</h4>
+<ul>
+  <li>Never say the word "fun."</li>
+  <li>Never explain a failure during a measured block. Not once.</li>
+  <li>Never defend the prototype.</li>
+  <li>Log every unprompted utterance verbatim, including swearing — sworn delight and sworn
+    frustration are the two most informative data points you will collect.</li>
+  <li>Two observers minimum: one on video and verbatims, one on telemetry.</li>
+  <li>Schemes are labelled A/B/C to the testers <strong>and to the observers</strong>.</li>
+</ul>
+</section>
+
+<section id="s8">
+<div class="sec-head"><span class="sec-num">08</span><h2>The kill gate</h2></div>
+<div class="note"><span class="lbl">Signed in week 12</span>
+<p>These thresholds are agreed and signed by the decision-maker <strong>before any external data
+exists</strong>. Writing thresholds after seeing results is how kill gates become theatre.</p></div>
+
+<h3>Must pass — all three</h3>
+<div class="crit"><span class="cn">1</span><div>
+  <h5>Voluntary free play, session 2</h5>
+  <p class="th">Median ≥ 8 minutes of the 20 available</p>
+  <p>Eight minutes of self-directed play with no goals, no score, no art and no remaining novelty is
+  a strong signal that the verb carries itself.</p></div></div>
+<div class="crit"><span class="cn">2</span><div>
+  <h5>Skill improves</h5>
+  <p class="th">Median figure-eight deviation improves ≥ 35% from attempt 1 to attempt 20</p>
+  <p>A verb with no measurable learning curve has no mastery ladder — and mastery is the entire
+  product.</p></div></div>
+<div class="crit"><span class="cn">3</span><div>
+  <h5>Failure feels fair</h5>
+  <p class="th">≥ 70% answer "me" to attribution, and median time-to-retry &lt; 3 s</p>
+  <p>If falling feels like the game's fault, every hard element in the shipped game will feel
+  unfair.</p></div></div>
+
+<h4>Signal — informative, not fatal</h4>
+<div class="tw"><table>
+<thead><tr><th class="num">#</th><th>Criterion</th><th>Target</th></tr></thead>
+<tbody>
+<tr><td class="num">4</td><td>Unprompted experimentation in free play</td><td>≥ 50% attempt something nobody asked for</td></tr>
+<tr><td class="num">5</td><td>Unprompted requests for a build or release date</td><td>≥ 6 of 20</td></tr>
+<tr><td class="num">6</td><td>Ceiling not reached</td><td>The strongest tester is still improving at the end of session 2</td></tr>
+<tr><td class="num">7</td><td>Cross-segment consistency</td><td>No segment's median free-play under 4 minutes</td></tr>
+</tbody></table></div>
+
+<h3>Decision rule</h3>
+<div class="outcome go"><h5>Green</h5>
+  <p class="cond">all three must-pass met</p>
+  <p>Proceed to the vertical slice on the winning scheme. Week 17 starts. Confirm the mocap booking.</p></div>
+<div class="outcome hold"><h5>Amber</h5>
+  <p class="cond">two of three met · or all three met on a fallback scheme but not on A</p>
+  <p><strong>One</strong> six-week extension, single scheme, re-tested with 12 testers against the
+  same thresholds. If A failed and B passed, the bible's control scheme, turn matrix and assist ladder
+  are rewritten around B <em>before</em> the slice begins.</p></div>
+<div class="outcome stop"><h5>Red</h5>
+  <p class="cond">one or fewer met</p>
+  <p><strong>Stop.</strong> Do not proceed to the vertical slice. Write the postmortem, publish the
+  data, and either pivot the concept or return the remaining money.</p></div>
+
+<h4>Two rules that make this real</h4>
+<ul>
+  <li><strong>The extension can be taken once.</strong> Its ~$150k is approved in week 12 as part of
+    the gate sign-off, so that invoking it is a pre-authorised branch rather than a political act.</li>
+  <li><strong>The decision-maker is not the person who invented the control scheme.</strong> The
+    creative lead presents nothing and does not vote. The designer presents the data; the studio head
+    or an external advisor decides. Sunk cost beats judgement every time it is allowed to.</li>
+</ul>
+</section>
+
+<section id="s9">
+<div class="sec-head"><span class="sec-num">09</span><h2>How this gate could give a wrong answer</h2></div>
+<p>A gate you have not tried to break is a ritual. Four failure modes, each with a mitigation already
+built into the protocol above.</p>
+<div class="tw"><table>
+<thead><tr><th>Failure mode</th><th>Mechanism</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr><td class="k">False positive — novelty</td><td>Tracings are genuinely novel and pretty. Testers enjoy <em>drawing on ice</em>, not <em>carving</em>, and the team ships a game with one good screenshot.</td><td>Session-2 free play is the headline metric precisely because novelty has decayed. Criterion 2 requires demonstrated skill growth, which novelty cannot fake.</td></tr>
+<tr><td class="k">False positive — politeness</td><td>Testers are in a room with the people who made it and want to be kind.</td><td>Forced-choice exit questions. Behavioural metrics outrank every stated preference. Facilitators never signal what a good answer looks like.</td></tr>
+<tr><td class="k">False negative — jank</td><td>Testers reject an untextured capsule on a grey plane, and the team reads it as rejecting the verb.</td><td>All three feedback channels ship. Exit question 2 separates "how it looked" from "how it responded," and any tester citing presentation is flagged in the analysis.</td></tr>
+<tr><td class="k">False negative — wrong twenty people</td><td>The sample simply is not the audience.</td><td>Four screened segments, reported separately. Criterion 7 exists to make a segment split visible rather than averaged away.</td></tr>
+</tbody></table></div>
+<div class="note"><span class="lbl">What this gate deliberately does not test</span>
+<p>Whether a <em>four-minute judged program</em> is compelling. That needs elements, scoring, music and
+stakes, and it belongs to the vertical slice's exit gate. Pre-production tests the verb. Do not let
+scope creep in under the argument that "we should check the whole loop" — that is a twelve-month
+prototype, and the entire point here is to fail cheaply.</p></div>
+</section>
+
+<section id="s10">
+<div class="sec-head"><span class="sec-num">10</span><h2>Budget</h2></div>
+<div class="tw"><table>
+<thead><tr><th>Line</th><th class="num">Cost</th></tr></thead>
+<tbody>
+<tr><td>8 FTE × 4 months (loaded, mid-cost market)</td><td class="num">$384,000</td></tr>
+<tr><td>Contract audio designer (~3 weeks)</td><td class="num">$15,000</td></tr>
+<tr><td>Contract concept artist (~4 weeks)</td><td class="num">$20,000</td></tr>
+<tr><td>Playtesting — 20 testers × 2 sessions, facility, video</td><td class="num">$9,000</td></tr>
+<tr><td>Mocap planning, casting, refundable volume deposit</td><td class="num">$15,000</td></tr>
+<tr><td>Hardware, licences, build infrastructure</td><td class="num">$25,000</td></tr>
+</tbody>
+<tfoot>
+<tr><td>Total</td><td class="num">~$468,000</td></tr>
+<tr><td style="font-weight:400;color:var(--ink-faint)">Pre-authorised AMBER extension (6 weeks, conditional)</td><td class="num" style="font-weight:400;color:var(--ink-faint)">~$150,000</td></tr>
+</tfoot>
+</table>
+<caption>Loaded cost assumed at ~$12k per person-month. Scale to your market; the ratios hold, and the
+FTE line dominates everywhere.</caption></div>
+</section>
+
+<section id="s11">
+<div class="sec-head"><span class="sec-num">11</span><h2>Weekly cadence</h2></div>
+<div class="tw"><table>
+<thead><tr><th>When</th><th>Ritual</th></tr></thead>
+<tbody>
+<tr><td class="k">Monday</td><td>Build lock for the week. Whatever is in at 10:00 is what gets played.</td></tr>
+<tr><td class="k">Wednesday</td><td><strong>The Session.</strong> All eight play the current build for 30 minutes in the same room, in silence. Then 30 minutes of discussion. The producer and the consultant play too — no exceptions, no observers.</td></tr>
+<tr><td class="k">Thursday</td><td>Consultant review: one authenticity note per week, escalated as a bug.</td></tr>
+<tr><td class="k">Friday</td><td>Telemetry review against the internal learning-curve trend. Fifteen minutes, dashboard only, no slides.</td></tr>
+</tbody></table></div>
+<p>The silence during play matters. The moment someone narrates what the build is <em>supposed</em> to
+do, you stop measuring the build and start measuring the explanation — which is the same reason the
+facilitator script exists in §07.</p>
+
+<hr class="trace">
+
+<h3>What green unlocks</h3>
+<p>Week 17 begins the vertical slice: one rink at ship quality, one skater with full costume, cloth and
+groom, one complete 2:40 short program containing every element category, the nine-judge panel, the
+Broadcast Director, the Wwise blade layer, and the Kiss &amp; Cry. Twenty-two people, six months, and an
+exit gate of its own — <em>a stranger plays for twenty minutes and asks when it ships.</em></p>
+
+<p class="end">Edgework · Pre-production Plan v1.0<br>
+Thresholds in §08 are pre-commitments and must be signed before week 13.<br>
+Engine: Unreal 5.4+, decided ahead of week 1 — the bake-off is cancelled.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  if (!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (!en.isIntersecting) return;
+      links.forEach(function(a){ a.classList.remove('on'); });
+      var a = map[en.target.id];
+      if (a) a.classList.add('on');
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  document.querySelectorAll('section[id]').forEach(function(s){ io.observe(s); });
+})();
+</script>

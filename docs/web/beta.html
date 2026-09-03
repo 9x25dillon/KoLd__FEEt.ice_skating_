@@ -1,0 +1,631 @@
+<title>Beta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --ground:#f1f3f2; --surface:#ffffff; --sunk:#e7ebe9;
+  --ink:#10161a; --ink-soft:#4a585e; --ink-faint:#7e8c92;
+  --line:#d2dad8; --line-soft:#e3e8e6;
+  --accent:#9c6b12; --accent-warm:#c98a20; --accent-wash:#f6efdf;
+  --steel:#2c6773; --steel-wash:#e3edee;
+  --risk:#a33f34; --risk-wash:#f8eae8;
+  --good:#2f6b53; --good-wash:#e6f0eb;
+  --shadow:0 1px 2px rgba(16,22,26,.05),0 8px 24px -12px rgba(16,22,26,.14);
+  --code-bg:#0f1417; --code-ink:#d9e2e0;
+  --kw:#e0a355; --str:#8fc0a9; --num:#c9a6d8; --com:#6b7d81; --fn:#7ec8d8;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+    --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+    --line:#263236; --line-soft:#1c2629;
+    --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+    --steel:#6fbccb; --steel-wash:#14252a;
+    --risk:#e08579; --risk-wash:#271513;
+    --good:#6fbb97; --good-wash:#122019;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+    --code-bg:#080c0e; --code-ink:#cfd9d7;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+  --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+  --line:#263236; --line-soft:#1c2629;
+  --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+  --steel:#6fbccb; --steel-wash:#14252a;
+  --risk:#e08579; --risk-wash:#271513;
+  --good:#6fbb97; --good-wash:#122019;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+    --code-bg:#080c0e; --code-ink:#cfd9d7;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:2rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16.5px;line-height:1.65;margin:0;-webkit-font-smoothing:antialiased}
+
+.shell{max-width:1240px;margin:0 auto;padding:0 clamp(1.1rem,3vw,2.5rem);
+  display:grid;grid-template-columns:236px minmax(0,1fr);gap:clamp(2rem,5vw,4.5rem);align-items:start}
+@media (max-width:940px){.shell{grid-template-columns:minmax(0,1fr);gap:0}}
+
+.nav{position:sticky;top:0;max-height:100vh;overflow-y:auto;padding:2.6rem 0 3rem;
+  border-right:1px solid var(--line-soft);margin-right:-1px}
+.nav-mark{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.35rem;margin:0 0 .1rem}
+.nav-sub{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.16em;color:var(--ink-faint);margin:0 0 1.8rem}
+.nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.08rem}
+.nav a{display:grid;grid-template-columns:1.6rem 1fr;align-items:baseline;text-decoration:none;
+  color:var(--ink-soft);font-size:.83rem;line-height:1.35;padding:.34rem .5rem .34rem .7rem;
+  border-left:2px solid transparent;transition:color .15s,border-color .15s}
+.nav a .n{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink-faint);
+  font-variant-numeric:tabular-nums}
+.nav a:hover{color:var(--ink)}
+.nav a.on{color:var(--accent);border-left-color:var(--accent);font-weight:500}
+.nav a.on .n{color:var(--accent)}
+.nav a:focus-visible{outline:2px solid var(--steel);outline-offset:2px;border-radius:2px}
+.nav-foot{margin-top:1.6rem;padding-top:1.2rem;border-top:1px solid var(--line-soft);
+  font-family:"IBM Plex Mono",monospace;font-size:.62rem;line-height:1.7;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.1em}
+@media (max-width:940px){
+  .nav{position:static;max-height:none;border-right:0;padding:1.6rem 0 0;margin-right:0}
+  .nav details{border:1px solid var(--line);border-radius:3px;padding:.7rem .9rem;background:var(--surface)}
+  .nav details ol{padding-top:.6rem}
+  .nav summary{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.14em;cursor:pointer;color:var(--ink-soft)}
+}
+
+main{padding:2.4rem 0 6rem;min-width:0}
+.mast{padding-bottom:2.4rem;margin-bottom:2.6rem;position:relative}
+.mast::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;
+  border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);opacity:.85}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.2em;color:var(--accent);margin:0 0 1.1rem}
+h1{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(2.4rem,6vw,4rem);line-height:.98;margin:0 0 1.6rem;text-wrap:balance}
+.thesis{border-left:3px solid var(--accent);padding:.4rem 0 .4rem 1.4rem;margin:0 0 1.6rem}
+.thesis .q{font-family:"Bodoni Moda",Didot,Georgia,serif;font-style:italic;font-weight:400;
+  font-size:clamp(1.5rem,3.6vw,2.15rem);line-height:1.22;margin:0;color:var(--accent);
+  text-wrap:balance}
+.standfirst{font-size:1.06rem;color:var(--ink-soft);max-width:64ch;margin:0}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:2.2rem 0 0}
+.fact{background:var(--surface);padding:.85rem 1rem}
+.fact dt{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--ink-faint);margin:0 0 .3rem}
+.fact dd{margin:0;font-size:.86rem;font-weight:500;line-height:1.4}
+
+section{margin:0 0 3.8rem;scroll-margin-top:1.5rem}
+.sec-head{display:grid;grid-template-columns:auto 1fr;gap:1.1rem;align-items:baseline;
+  padding-top:1.6rem;margin-bottom:1.5rem;position:relative}
+.sec-head::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.sec-num{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:2rem;line-height:1;
+  color:var(--accent);font-variant-numeric:tabular-nums}
+h2{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(1.65rem,3.4vw,2.3rem);line-height:1.1;margin:0;text-wrap:balance}
+h3{font-size:1.1rem;font-weight:600;margin:2.4rem 0 .7rem;text-wrap:balance}
+h4{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--ink-faint);font-weight:600;margin:1.8rem 0 .6rem}
+p{margin:0 0 1rem;max-width:70ch}
+ul,ol{margin:0 0 1.1rem;padding-left:1.15rem;max-width:70ch}
+li{margin:0 0 .42rem}
+li::marker{color:var(--ink-faint)}
+a{color:var(--accent);text-underline-offset:2px}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--sunk);
+  padding:.09em .34em;border-radius:2px}
+
+.note{border-left:2px solid var(--accent);background:var(--accent-wash);
+  padding:.95rem 1.15rem;margin:1.5rem 0;max-width:70ch}
+.note p:last-child{margin-bottom:0}
+.note .lbl{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--accent);display:block;margin-bottom:.35rem}
+
+.tw{overflow-x:auto;margin:1.4rem 0;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.84rem;min-width:460px}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-soft);
+  vertical-align:top;line-height:1.45}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--ink-faint);font-weight:600;
+  border-bottom:1px solid var(--line);white-space:nowrap;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:"IBM Plex Mono",monospace;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+td.k{font-weight:600}
+td.w{font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--accent);white-space:nowrap}
+caption{caption-side:bottom;text-align:left;padding:.6rem .8rem;font-size:.74rem;
+  color:var(--ink-faint);border-top:1px solid var(--line-soft)}
+tfoot td{border-top:1px solid var(--line);font-weight:600;background:var(--sunk)}
+
+.pill{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.62rem;
+  text-transform:uppercase;letter-spacing:.08em;padding:.13em .45em;border-radius:2px;
+  border:1px solid currentColor;line-height:1.5}
+.pill.go{color:var(--good)}.pill.hold{color:var(--accent)}.pill.stop{color:var(--risk)}
+.pill.st{color:var(--steel)}
+
+/* build / refuse split */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line-soft);
+  border:1px solid var(--line-soft);margin:1.5rem 0}
+@media (max-width:720px){.split{grid-template-columns:1fr}}
+.split>div{background:var(--surface);padding:1.1rem 1.2rem}
+.split h5{margin:0 0 .7rem;font-family:"IBM Plex Mono",monospace;font-size:.64rem;
+  text-transform:uppercase;letter-spacing:.14em;font-weight:600}
+.split .yes h5{color:var(--good)}
+.split .no h5{color:var(--risk)}
+.split p{font-size:.85rem;color:var(--ink-soft);margin:0;max-width:none}
+
+/* scheme cards */
+.schemes{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:1.5rem 0}
+.scheme{background:var(--surface);padding:1.1rem 1.2rem}
+.scheme .tag{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--accent);display:block;margin-bottom:.4rem}
+.scheme h5{margin:0 0 .5rem;font-size:.98rem;font-weight:600}
+.scheme h5 em{font-style:italic;font-weight:400;color:var(--ink-soft)}
+.scheme p{font-size:.83rem;color:var(--ink-soft);margin:0 0 .6rem;max-width:none}
+.scheme p:last-child{margin-bottom:0}
+
+/* week spine */
+.spine{margin:1.5rem 0;border-left:2px solid var(--line);padding-left:0}
+.mo{margin:0 0 1.6rem}
+.mo-h{font-family:"IBM Plex Mono",monospace;font-size:.63rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--ink-faint);font-weight:600;
+  margin:0 0 .5rem;padding-left:1.2rem;position:relative}
+.mo-h::before{content:"";position:absolute;left:-6px;top:.42em;width:9px;height:9px;
+  background:var(--ground);border:2px solid var(--line);border-radius:50%}
+.wk{display:grid;grid-template-columns:3.6rem 1fr;gap:.9rem;padding:.5rem 0 .5rem 1.2rem;
+  border-bottom:1px solid var(--line-soft)}
+.wk:last-child{border-bottom:0}
+.wk .n{font-family:"IBM Plex Mono",monospace;font-size:.72rem;font-weight:600;
+  color:var(--ink-faint);padding-top:.1em}
+.wk p{font-size:.87rem;margin:0;max-width:62ch}
+.wk.ms{background:var(--accent-wash);margin-left:-2px;border-left:2px solid var(--accent);
+  padding-left:calc(1.2rem - 2px)}
+.wk.ms .n{color:var(--accent)}
+.wk.gate{background:var(--risk-wash);margin-left:-2px;border-left:2px solid var(--risk);
+  padding-left:calc(1.2rem - 2px)}
+.wk.gate .n{color:var(--risk)}
+
+/* gate criteria */
+.crit{display:grid;grid-template-columns:auto 1fr;gap:1.1rem;padding:1rem 1.2rem;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--steel);
+  margin:0 0 1px}
+.crit .cn{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.7rem;line-height:1;
+  color:var(--steel);font-variant-numeric:tabular-nums}
+.crit h5{margin:0 0 .25rem;font-size:.98rem;font-weight:600}
+.crit .th{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--steel);
+  font-weight:500;margin:0 0 .45rem}
+.crit p{font-size:.85rem;color:var(--ink-soft);margin:0;max-width:none}
+
+.outcome{border:1px solid var(--line);border-left:4px solid var(--ink);
+  background:var(--surface);padding:1rem 1.2rem;margin:0 0 1px}
+.outcome.go{border-left-color:var(--good);background:var(--good-wash)}
+.outcome.hold{border-left-color:var(--accent);background:var(--accent-wash)}
+.outcome.stop{border-left-color:var(--risk);background:var(--risk-wash)}
+.outcome h5{margin:0 0 .3rem;font-family:"IBM Plex Mono",monospace;font-size:.74rem;
+  text-transform:uppercase;letter-spacing:.15em;font-weight:600}
+.outcome.go h5{color:var(--good)}
+.outcome.hold h5{color:var(--accent)}
+.outcome.stop h5{color:var(--risk)}
+.outcome .cond{font-size:.8rem;color:var(--ink-faint);margin:0 0 .5rem;
+  font-family:"IBM Plex Mono",monospace}
+.outcome p{font-size:.87rem;margin:0;max-width:none}
+
+hr.trace{border:0;height:3px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  margin:2.4rem 0}
+.end{margin-top:3.4rem;padding-top:1.4rem;border-top:1px solid var(--line);
+  font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.13em;color:var(--ink-faint);line-height:1.8}
+td.mono,th.mono{font-family:"IBM Plex Mono",monospace;font-size:.94em;white-space:nowrap}
+.pill.md{color:var(--accent)}
+figure.code{margin:1.6rem 0;border:1px solid var(--line);background:var(--code-bg);
+  box-shadow:var(--shadow)}
+figure.code figcaption{font-family:"IBM Plex Mono",monospace;font-size:.63rem;
+  text-transform:uppercase;letter-spacing:.13em;color:#8fa3a7;
+  padding:.6rem .95rem;border-bottom:1px solid rgba(255,255,255,.08);
+  display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+figure.code figcaption .lang{color:var(--accent-warm)}
+figure.code pre{margin:0;overflow-x:auto;padding:1.05rem 1.1rem;background:var(--code-bg)}
+figure.code pre code{background:none;padding:0;font-size:12.6px;line-height:1.62;
+  color:var(--code-ink);font-family:"IBM Plex Mono",monospace}
+@media print{.nav{display:none}.shell{grid-template-columns:1fr}body{background:#fff;color:#000}}
+</style>
+
+<nav class="nav" aria-label="Contents">
+  <details open>
+    <summary>Contents</summary>
+    <p class="nav-mark">Beta</p>
+    <p class="nav-sub">Edgework · Phase 4</p>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span><span>The immovable date</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>Launch timing</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>Text lock cascade</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span>The bug curve</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span>Three waves</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>Five-tier balance</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span>Certification</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span>Accessibility</span></a></li>
+      <li><a href="#s9"><span class="n">09</span><span>Week by week</span></a></li>
+      <li><a href="#s10"><span class="n">10</span><span>The ship gate</span></a></li>
+      <li><a href="#s11"><span class="n">11</span><span>Risks</span></a></li>
+      <li><a href="#s12"><span class="n">12</span><span>Cumulative cost</span></a></li>
+    </ol>
+    <p class="nav-foot">20 weeks · 40 FTE<br>~$3.01M<br>Text lock: week 94</p>
+  </details>
+</nav>
+
+<div class="shell">
+<div></div>
+<main>
+
+<header class="mast">
+  <p class="eyebrow">Edgework · Beta Plan</p>
+  <h1>Beta</h1>
+  <div class="thesis"><p class="q">Four campaigns, not one polish pass — and they cannot be traded
+  against each other.</p></div>
+  <p class="standfirst">Beta is routinely misdescribed as "polish." It is four largely independent
+  campaigns running in parallel: <strong>stability</strong> is a burn-down, <strong>balance</strong>
+  is a design problem, <strong>compliance</strong> is an external dependency on a fixed clock, and
+  <strong>launch readiness</strong> is marketing's calendar. Treating them as one activity is why
+  betas slip.</p>
+  <dl class="facts">
+    <div class="fact"><dt>Duration</dt><dd>20 weeks (W89–108)</dd></div>
+    <div class="fact"><dt>Team</dt><dd>40 FTE</dd></div>
+    <div class="fact"><dt>Budget</dt><dd>~$3.01M</dd></div>
+    <div class="fact"><dt>Languages</dt><dd>10</dd></div>
+    <div class="fact"><dt>Playtest waves</dt><dd>3, distinct jobs</dd></div>
+    <div class="fact"><dt>Launch</dt><dd>~Feb 2029</dd></div>
+  </dl>
+</header>
+
+<section id="s1">
+<div class="sec-head"><span class="sec-num">01</span><h2>The immovable date</h2></div>
+<p>Everything in beta is scheduled <strong>backwards from launch</strong>, because three of the four
+campaigns have external dependencies with fixed lead times that no amount of effort compresses.
+Taking launch as <strong>L</strong>:</p>
+<div class="tw"><table>
+<thead><tr><th>Milestone</th><th class="mono">When</th><th>Why that lead time</th></tr></thead>
+<tbody>
+<tr><td class="k">Launch</td><td class="w">L</td><td></td></tr>
+<tr><td class="k">Gold master / final deploy</td><td class="w">L − 4 wk</td><td>Digital deployment and any physical manufacturing</td></tr>
+<tr><td class="k">Certification pass</td><td class="w">L − 5 wk</td><td></td></tr>
+<tr><td class="k">Cert submission, attempt 2</td><td class="w">L − 8 wk</td><td><strong>Budget two attempts. First-pass cert failure is the default assumption, not the pessimistic one.</strong></td></tr>
+<tr><td class="k">Cert submission, attempt 1</td><td class="w">L − 12 wk</td><td>Platform holders take 2–4 weeks to respond</td></tr>
+<tr><td class="k">Code lock / release candidate</td><td class="w">L − 13 wk</td><td></td></tr>
+<tr><td class="k">Content lock</td><td class="w">L − 16 wk</td><td></td></tr>
+<tr><td class="k">Text lock</td><td class="w">L − 22 wk</td><td>8 weeks translation × 10 languages, 4 weeks integration, 4 weeks LQA, then it must be in the RC</td></tr>
+<tr><td class="k">Beta begins</td><td class="w">L − 27 wk</td><td></td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s2">
+<div class="sec-head"><span class="sec-num">02</span><h2>Launch timing</h2></div>
+<p>Figure skating is a <strong>seasonal sport</strong>, and its audience is seasonal with it. The
+competitive calendar runs Grand Prix from October, national championships in December and January,
+and World Championships in March. Outside that window the fandom's attention is measurably elsewhere.</p>
+<p><strong>Launch in the November–February window.</strong> A figure skating game released in June is
+fighting for attention from an audience that is not currently thinking about figure skating.</p>
+<div class="tw"><table>
+<thead><tr><th>Phase</th><th>Ends</th></tr></thead>
+<tbody>
+<tr><td class="k">Pre-production (16 weeks)</td><td class="mono">Jan 2027</td></tr>
+<tr><td class="k">Vertical slice (24 weeks)</td><td class="mono">Jul 2027</td></tr>
+<tr><td class="k">Production (48 weeks)</td><td class="mono">Jul 2028</td></tr>
+<tr><td class="k">Beta (20 weeks)</td><td class="mono">Dec 2028</td></tr>
+<tr><td class="k"><strong>Launch</strong></td><td class="mono"><strong>Feb 2029</strong></td></tr>
+</tbody></table>
+<caption>Assuming pre-production begins late 2026.</caption></div>
+<p>That lands inside the competitive season, ahead of Worlds. And it puts the <strong>pairs and ice
+dance expansion</strong> — already scoped as the year-one drop — at roughly November 2029, directly
+into the build-up to the <strong>2030 Winter Olympics</strong>.</p>
+<div class="note"><span class="lbl">Two marketing beats, not one delay</span>
+<p>The instinct will be to hold launch to ride the Olympics directly. Resist it: an eight-month hold
+costs roughly <strong>$4M in burn</strong> and stales the build. Launching into the 2029 season and
+landing the expansion into the Olympic build-up gets both peaks for the price of neither.</p></div>
+</section>
+
+<section id="s3">
+<div class="sec-head"><span class="sec-num">03</span><h2>The text lock cascade</h2></div>
+<p>The most under-planned date in any game project, and the reason it sits near the front of this
+document rather than buried in a localisation appendix. Text lock falls in <strong>week 6 of
+beta</strong>. Which means:</p>
+<div class="note" style="border-left-width:3px"><span class="lbl">The consequence</span>
+<p style="font-size:1.05rem"><strong>For the last 14 weeks of beta, not one word of text can
+change.</strong></p>
+<p>Not a tooltip. Not a tutorial line. Not an error message. Not a commentary line. Not a menu label.
+A single string changed in week 100 invalidates ten translations, their integration and their LQA —
+and either misses cert or ships untranslated.</p></div>
+<div class="tw"><table>
+<thead><tr><th>Week</th><th>Localisation milestone</th></tr></thead>
+<tbody>
+<tr><td class="w">W94</td><td><strong>TEXT LOCK.</strong> All UI strings, tutorial copy, commentary lines, subtitles, achievement text, legal text final.</td></tr>
+<tr><td class="w">W94–102</td><td>Translation, 9 target languages</td></tr>
+<tr><td class="w">W102–106</td><td>Integration and linguistic QA</td></tr>
+<tr><td class="w">W106</td><td>Loc-complete build feeds the release candidate</td></tr>
+</tbody></table></div>
+<p><strong>Languages:</strong> Japanese and Korean first, then Simplified Chinese, French, German,
+Spanish (LatAm), Italian, Russian, Brazilian Portuguese. Japanese and Korean are prioritised because
+they are the sport's two largest and most engaged audiences — this is not the usual default ordering
+and it should not be allowed to drift back to one.</p>
+<h4>Practical consequences</h4>
+<ul>
+  <li>Every string must be in the string table from production P3. A hard-coded string found in week
+    95 is a crisis.</li>
+  <li><strong>Commentary is the risk.</strong> An authored line bank is large, and every line is text.
+    The bible specifies generating that bank <em>offline at content-build time</em> precisely so it
+    exists early enough to lock.</li>
+  <li>Budget a <strong>hotfix string allowance</strong>: ~50 strings for post-lock legal or
+    cert-mandated changes, agreed with vendors in advance and priced as a rush.</li>
+</ul>
+</section>
+
+<section id="s4">
+<div class="sec-head"><span class="sec-num">04</span><h2>The bug curve</h2></div>
+<p>The ship criterion is not "zero bugs." It is a <strong>rate relationship</strong>.</p>
+<figure class="code">
+<figcaption><span>The real ship signal</span><span class="lang">criterion</span></figcaption>
+<pre><code>find_rate = new defects opened per week
+fix_rate  = defects verified closed per week
+
+Not shippable while  find_rate &gt;= fix_rate
+
+Shippable when       find_rate &lt; fix_rate for 3 consecutive weeks
+                AND  A-bugs == 0
+                AND  B-bugs &lt;= 25</code></pre>
+</figure>
+<p>Crossing over is the real signal that the game has stopped moving underneath the team. A project
+where find rate is still climbing in week 100 is not in beta, whatever the schedule says.</p>
+<div class="tw"><table>
+<thead><tr><th>Severity</th><th>Definition</th><th>At ship</th></tr></thead>
+<tbody>
+<tr><td class="k">A</td><td>Crash, progression blocker, data loss, cert violation, save corruption</td><td><span class="pill stop">Zero</span></td></tr>
+<tr><td class="k">B</td><td>A system does not work as designed; major visual or audio break</td><td><span class="pill hold">≤ 25, each triaged and accepted</span></td></tr>
+<tr><td class="k">C</td><td>Minor functional or cosmetic</td><td><span class="pill st">Tracked, no gate</span></td></tr>
+<tr><td class="k">D</td><td>Polish and improvement requests</td><td><span class="pill go">Deferred by default</span></td></tr>
+</tbody></table>
+<caption>Promoting a D-bug is a decision someone signs, not a drift.</caption></div>
+<p>Expect the find rate to <em>rise</em> through waves 1 and 2 — that is the playtests working. The
+curve should peak around W99 and decline. <strong>A find rate that never peaks means the content is
+still changing</strong>, which means content lock did not really happen.</p>
+</section>
+
+<section id="s5">
+<div class="sec-head"><span class="sec-num">05</span><h2>Three playtest waves</h2></div>
+<p>Three waves with three genuinely different jobs. Running three of the same test is a common and
+expensive mistake.</p>
+<div class="schemes">
+  <div class="scheme"><span class="tag">Wave 1 · W90–92</span><h5>The first hour and the assist ladder</h5>
+    <p><strong>40 testers, 8 per assist tier.</strong> Does the ladder work at both ends? Can someone
+    who has never played a sim get through The Patch at Show tier — and does Senior satisfy the
+    audience it was built for rather than just frustrating them?</p>
+    <p>Measured: Patch completion, time to first clean program, first-hour drop-off points, and
+    <strong>tier switching — who moves up, who moves down, and when.</strong> A ladder nobody climbs
+    is a ladder with the wrong rungs.</p>
+    <p><strong>Plus the question this wave now exists to answer: is the router right?</strong> Router accuracy
+    is <code>1 − override rate within the first hour</code>, target <strong>≥ 0.75</strong>. A router overridden
+    by half its players is <em>worse than a fixed default</em> — it has spent the player’s trust to arrive at
+    the same place. If wave 1 shows that, cut the router and ship Novice; the fallback path already exists.</p></div>
+  <div class="scheme"><span class="tag">Wave 2 · W96–99</span><h5>Content fatigue</h5>
+    <p><strong>24 testers, 15+ hours each over three weeks, at home.</strong> The first test of
+    anything longer than a session.</p>
+    <p>Measured: session count and length over time, career pacing, which rinks and modes get
+    revisited, whether the Composer retains anyone past novelty. <strong>The vertical slice
+    explicitly did not test this</strong>, and this is the last chance to find out that hour twelve
+    is boring.</p></div>
+  <div class="scheme"><span class="tag">Wave 3 · W103–105</span><h5>Fresh-eyes blocker sweep</h5>
+    <p><strong>30 testers, unguided, four hours each, on the release candidate.</strong> What breaks
+    that the team has stopped being able to see?</p>
+    <p>No tasks, no facilitation, full telemetry and crash reporting. The purpose is A-bugs and
+    first-impression damage, not opinions. Anyone who has played the game before is excluded.</p></div>
+</div>
+</section>
+
+<section id="s6">
+<div class="sec-head"><span class="sec-num">06</span><h2>Balance across five tiers</h2></div>
+<p><strong>Five assist tiers is five times the balance surface</strong>, and it is routinely
+scheduled as though it were one. Each tier gets its own cohort in wave 1 and its own tuning pass.</p>
+<div class="tw"><table>
+<thead><tr><th>Tier</th><th>Balance question</th><th>Owner metric</th></tr></thead>
+<tbody>
+<tr><td class="k">Show</td><td>Can it be completed without frustration by someone who does not play games?</td><td class="mono">First-hour completion ≥ 90%</td></tr>
+<tr><td class="k"><em>Router</em></td><td><em>Does the recommendation match where players settle?</em></td><td class="mono"><em>Accuracy ≥ 0.75</em></td></tr>
+<tr><td class="k">Club</td><td>Does it teach, or does it carry?</td><td class="mono">Tier-up within 5 h ≥ 35%</td></tr>
+<tr><td class="k">Novice</td><td>Is this the right default?</td><td class="mono">Retention at hour 5 ≥ 60%</td></tr>
+<tr><td class="k">Senior</td><td>Does mastery feel earned rather than arbitrary?</td><td class="mono">Clean-program rate rising</td></tr>
+<tr><td class="k">Patch</td><td>Is the ceiling real?</td><td class="mono">No plateau in the top decile</td></tr>
+</tbody></table></div>
+<p>The assist ladder is also the game's central accessibility feature, and it was designed in from
+the start rather than bolted on in beta. <strong>Beta's job is to verify that claim, not to invent
+it.</strong></p>
+</section>
+
+<section id="s7">
+<div class="sec-head"><span class="sec-num">07</span><h2>Certification</h2></div>
+<p>An external dependency on a fixed clock. Plan for failure. Likely failure causes
+<em>for this game specifically</em> — worth testing explicitly rather than discovering:</p>
+<ul>
+  <li>Suspend and resume <strong>mid-program</strong>, mid-jump, mid-spin</li>
+  <li>Controller disconnect during an element, and reconnect to the correct state</li>
+  <li>Network loss during an async ghost download or a leaderboard submission</li>
+  <li>Save corruption across a career spanning many sessions</li>
+  <li>Achievement and trophy triggers firing exactly once, including on a repeated element</li>
+  <li>Storage-full handling during replay capture</li>
+  <li>Accessibility mandates, which vary by platform and are tightening</li>
+  <li>Age rating text and legal screens per territory</li>
+</ul>
+<p><strong>Ratings:</strong> ESRB, PEGI, USK, CERO and territory-specific boards. CERO matters more
+than usual here given the Japanese audience priority, and its lead time is longer than PEGI's.
+Submit ratings material at <em>content</em> lock, not code lock.</p>
+<p>Budget <strong>two submission attempts per platform</strong> and treat a first-pass success as a
+pleasant surprise that buys back three weeks.</p>
+</section>
+
+<section id="s8">
+<div class="sec-head"><span class="sec-num">08</span><h2>Accessibility</h2></div>
+<p>Audited in W95 by an external specialist, not self-assessed.</p>
+<div class="tw"><table>
+<thead><tr><th>Area</th><th>Commitment</th></tr></thead>
+<tbody>
+<tr><td class="k">Difficulty</td><td>The five-tier assist ladder, available from the title screen, changeable mid-career, no content gated behind any tier</td></tr>
+<tr><td class="k">Controls</td><td>Full remapping including analog-to-digital substitution for the trigger channels, adjustable dead zones, hold-to-toggle for every hold input</td></tr>
+<tr><td class="k">Visual</td><td>Edge state coded by <strong>shape as well as colour</strong> on the Edge Ribbon (designed that way from the start), scalable UI, high-contrast mode</td></tr>
+<tr><td class="k">Motion</td><td>Camera shake, motion blur and spin-orbit intensity separately disableable — a game about rotation needs this more than most</td></tr>
+<tr><td class="k">Audio</td><td>Full subtitles including commentary, visual indicators for the edge-tone channel, independent mix sliders</td></tr>
+<tr><td class="k">Cognitive</td><td>Element callouts, slower tutorial pacing option, no time pressure in Free Skate or the Composer</td></tr>
+</tbody></table></div>
+<div class="note"><span class="lbl">The one easiest to get wrong</span>
+<p><strong>The edge-tone audio channel is the primary feedback for edge quality.</strong> A deaf or
+hard-of-hearing player must have an equivalent visual channel — and that is an Edge Ribbon feature,
+not a subtitle.</p></div>
+</section>
+
+<section id="s9">
+<div class="sec-head"><span class="sec-num">09</span><h2>Week by week</h2></div>
+<div class="spine">
+  <div class="mo">
+    <p class="mo-h">Stability and the ladder</p>
+    <div class="wk"><span class="n">W89</span><p>Beta begins. Bug triage process live. Wave 1 recruitment. Loc kit prepared.</p></div>
+    <div class="wk"><span class="n">W90–92</span><p><strong>Wave 1</strong> — first hour and assist ladder. Ratings material submitted.</p></div>
+    <div class="wk"><span class="n">W93</span><p>Wave 1 findings actioned. Final tutorial and first-hour revisions — the last window for them.</p></div>
+    <div class="wk gate"><span class="n">W94</span><p><strong>TEXT LOCK.</strong> Translation begins. No word of text changes after this point.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Compliance and fatigue</p>
+    <div class="wk"><span class="n">W95</span><p>External accessibility audit. Cert pre-submission technical checklist run internally.</p></div>
+    <div class="wk"><span class="n">W96–99</span><p><strong>Wave 2</strong> — content fatigue. Career pacing tuning. Performance lock work.</p></div>
+    <div class="wk ms"><span class="n">W100</span><p><strong>CONTENT LOCK.</strong> No new assets. Demo build branches. Ship gate criteria signed.</p></div>
+    <div class="wk"><span class="n">W101–102</span><p>Demo polished and shipped for the marketing beat. Loc integration begins.</p></div>
+  </div>
+  <div class="mo">
+    <p class="mo-h">Candidate and cert</p>
+    <div class="wk"><span class="n">W103–105</span><p><strong>Wave 3</strong> — fresh-eyes sweep on the release candidate.</p></div>
+    <div class="wk ms"><span class="n">W104</span><p><strong>CODE LOCK.</strong> Release candidate.</p></div>
+    <div class="wk ms"><span class="n">W105</span><p><strong>Cert submission, attempt 1</strong>, all platforms.</p></div>
+    <div class="wk"><span class="n">W106</span><p>Loc-complete build. LQA.</p></div>
+    <div class="wk gate"><span class="n">W107–108</span><p>Cert response window. Fix and resubmit if required. <strong>Beta formally ends W108.</strong></p></div>
+    <div class="wk"><span class="n">W109+</span><p><em>Cert attempt 2 if needed → gold → manufacturing → launch.</em></p></div>
+  </div>
+</div>
+</section>
+
+<section id="s10">
+<div class="sec-head"><span class="sec-num">10</span><h2>The ship gate</h2></div>
+<p>Signed in W100, before wave 3 data exists.</p>
+<div class="tw"><table>
+<thead><tr><th class="num">#</th><th>Criterion</th><th>Threshold</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td class="k">A-bugs</td><td class="mono">Zero, verified closed</td></tr>
+<tr><td class="num">2</td><td class="k">B-bugs</td><td class="mono">≤ 25, each triaged and accepted by name</td></tr>
+<tr><td class="num">3</td><td class="k">Bug curve</td><td class="mono">Find &lt; fix for 3 consecutive weeks</td></tr>
+<tr><td class="num">4</td><td class="k">Performance</td><td class="mono">At target, every SKU, sustained 30 min</td></tr>
+<tr><td class="num">5</td><td class="k">Certification</td><td class="mono">Passed, every platform</td></tr>
+<tr><td class="num">6</td><td class="k">Localisation</td><td class="mono">10 languages integrated and LQA-signed</td></tr>
+<tr><td class="num">7</td><td class="k">Accessibility</td><td class="mono">Audit findings closed or formally accepted</td></tr>
+<tr><td class="num">8</td><td class="k">Endurance</td><td class="mono">100 aggregate hours, zero crashes, zero blockers</td></tr>
+<tr><td class="num">9</td><td class="k">Balance</td><td class="mono">All five tiers pass their wave 1 metric</td></tr>
+</tbody></table></div>
+<h3>Decision rule</h3>
+<div class="outcome go"><h5>Ship</h5><p class="cond">all nine</p>
+  <p>Gold. Day-one patch scoped for the accepted B-bugs.</p></div>
+<div class="outcome stop"><h5>Slip</h5><p class="cond">1, 3, 5 or 8 fails</p>
+  <p><strong>Slip the date.</strong> These four are not negotiable, and shipping through them
+  produces a launch-week reputation problem that outlives any schedule saving. Six-week slip
+  granularity, because anything shorter re-collides with cert lead times.</p></div>
+<div class="outcome hold"><h5>Ship with patch</h5><p class="cond">2, 4, 7 or 9 fails narrowly</p>
+  <p>Ship, with the gap named publicly and a dated patch commitment. Acceptable exactly once — and
+  <strong>never for accessibility.</strong></p></div>
+</section>
+
+<section id="s11">
+<div class="sec-head"><span class="sec-num">11</span><h2>Risks</h2></div>
+<div class="tw"><table>
+<thead><tr><th class="num">#</th><th>Risk</th><th>P</th><th>Impact</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td><strong>Text changes after lock.</strong> One tooltip rewrite in W99 cascades through ten languages.</td><td><span class="pill stop">High</span></td><td><span class="pill hold">Major</span></td><td>Text lock is a build-breaking constraint, not a convention: string table frozen in source control with required sign-off to modify. 50-string hotfix allowance pre-negotiated.</td></tr>
+<tr><td class="num">2</td><td><strong>Cert fails twice.</strong></td><td><span class="pill hold">Med</span></td><td><span class="pill hold">Major</span></td><td>Two attempts budgeted; internal pre-cert checklist run at W95, six weeks before submission, against the specific failure list in §07.</td></tr>
+<tr><td class="num">3</td><td><strong>Find rate never peaks</strong>, meaning content is still moving.</td><td><span class="pill hold">Med</span></td><td><span class="pill stop">Fatal to the date</span></td><td>Content lock enforced at W100, no exceptions. If the curve has not peaked by W102 the date slips — the curve is the honest signal and the schedule is not.</td></tr>
+<tr><td class="num">4</td><td><strong>Wave 2 reveals the game is boring at hour twelve.</strong></td><td><span class="pill hold">Med</span></td><td><span class="pill hold">Major</span></td><td>It runs at W96, deliberately early enough that career pacing and unlock ordering can still be retuned. Data, not assets, is the lever — which is why scoring and progression are data-driven throughout.</td></tr>
+<tr><td class="num">5</td><td><strong>Five-tier balance under-resourced</strong> and Show tier ships unplayable for its audience.</td><td><span class="pill hold">Med</span></td><td><span class="pill hold">Major</span></td><td>Dedicated cohort and metric per tier from wave 1. Show and Club get equal weight to Senior — which is not the instinct of a team that loves the hard version.</td></tr>
+<tr><td class="num">6</td><td><strong>Team burnout.</strong> Twenty weeks of triage after twelve months of production.</td><td><span class="pill stop">High</span></td><td><span class="pill hold">Major</span></td><td>No crunch mandate. QA surge staffing rather than overtime. The Wednesday Session continues as the one non-triage ritual. Post-launch leave scheduled <em>before</em> launch, not after.</td></tr>
+<tr><td class="num">7</td><td><strong>The demo eats three weeks</strong> it was not budgeted.</td><td><span class="pill hold">Med</span></td><td><span class="pill md">Moderate</span></td><td>Branches at content lock, scoped as one week of one team, not a parallel product. If it needs more, it does not ship.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s12">
+<div class="sec-head"><span class="sec-num">12</span><h2>Budget and cumulative cost</h2></div>
+<div class="tw"><table>
+<thead><tr><th>Line</th><th class="num">Cost</th></tr></thead>
+<tbody>
+<tr><td>40 FTE × 5 months, loaded (includes 10 surge QA)</td><td class="num">$2,400,000</td></tr>
+<tr><td>Localisation: 9 languages, translation + integration + LQA</td><td class="num">$260,000</td></tr>
+<tr><td>Compatibility lab and additional device testing</td><td class="num">$120,000</td></tr>
+<tr><td>Certification fees and ratings boards</td><td class="num">$60,000</td></tr>
+<tr><td>Demo build and marketing beat support</td><td class="num">$90,000</td></tr>
+<tr><td>Wave 1–3 playtesting</td><td class="num">$40,000</td></tr>
+<tr><td>Hardware, infrastructure</td><td class="num">$40,000</td></tr>
+</tbody>
+<tfoot><tr><td>Total</td><td class="num">~$3,010,000</td></tr></tfoot>
+</table></div>
+
+<h3>Cumulative development cost</h3>
+<div class="tw"><table>
+<thead><tr><th>Phase</th><th class="num">Cost</th></tr></thead>
+<tbody>
+<tr><td>Pre-production</td><td class="num">$0.47M</td></tr>
+<tr><td>Vertical slice</td><td class="num">$1.95M</td></tr>
+<tr><td>Production</td><td class="num">$6.47M</td></tr>
+<tr><td>Beta</td><td class="num">$3.01M</td></tr>
+</tbody>
+<tfoot><tr><td><strong>Total to launch</strong></td><td class="num"><strong>~$11.9M</strong></td></tr></tfoot>
+</table></div>
+
+<div class="note"><span class="lbl">Reconciling with the budget decision</span>
+<p>The open-decisions register quotes <strong>$18–25M</strong> for the project. This document set
+totals <strong>$11.9M of development</strong>. The difference is launch marketing, year-one live
+operations and the pairs expansion — which is the right way to hold those numbers, since development
+cost is knowable from a plan and marketing spend is a decision made against a finished game.</p>
+<p>If the $18–25M envelope is being treated as <em>development-only</em>, the project has roughly
+$6M of headroom, and the honest place to spend it is a <strong>second discipline at launch</strong>.</p></div>
+
+<hr class="trace">
+
+<h3>After launch</h3>
+<p>Out of scope for this plan, and named only so it is not forgotten in the schedule:</p>
+<ul>
+  <li><strong>Day one:</strong> the patch is already scoped from the accepted B-bugs. Ship it on day
+    one, not week two.</li>
+  <li><strong>Weeks 1–4:</strong> live incident response, server scaling for Composer sharing, first
+    balance hotfix.</li>
+  <li><strong>Season 1</strong> (~month 3): the first content drop. Rinks cut in production return
+    here first.</li>
+  <li><strong>Year one</strong> (~Nov 2029): <strong>pairs and ice dance</strong>, timed into the
+    Olympic build-up.</li>
+</ul>
+
+<p class="end">Edgework · Beta Plan v1.0<br>
+Completes the phase series: pre-production → vertical slice → production → beta.<br>
+Ship gate criteria are pre-commitments and must be signed in week 100.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  if (!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (!en.isIntersecting) return;
+      links.forEach(function(a){ a.classList.remove('on'); });
+      var a = map[en.target.id];
+      if (a) a.classList.add('on');
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  document.querySelectorAll('section[id]').forEach(function(s){ io.observe(s); });
+})();
+</script>
