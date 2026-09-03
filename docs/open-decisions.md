@@ -28,7 +28,10 @@ is the only part of the bible that scales cleanly, and it scales well.
 
 **Default:** Unreal Engine 5.4+.
 
-**Status:** OPEN
+**Status:** OPEN — **must close by week 2 of pre-production.** This is the only decision here
+with a hard deadline. A two-week spike in both engines (carve on a plane, ice material, tracing
+RVT) runs in week 1; the call is made on that evidence plus team fluency in week 2 and is not
+revisited. See [pre-production-plan.md](pre-production-plan.md#month-1--the-blade-on-ice).
 
 The recommendation rests on MetaHuman, Chaos Cloth, Groom, Pose Search and Sequencer — the
 character, costume, animation and cinematic pipeline, which is most of this game. Unity wins

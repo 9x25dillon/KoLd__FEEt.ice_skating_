@@ -14,6 +14,7 @@ you take is written permanently into the ice beneath you. There is no jump butto
 | --- | --- |
 | **📖 Rendered** | [Published document](https://claude.ai/code/artifact/58f6234d-6ece-4f55-8fc5-2b7a7ce86da9) — with diagrams, syntax-highlighted code, light/dark |
 | **📄 Markdown** | [`docs/design-bible.md`](docs/design-bible.md) — the reviewable, diffable copy |
+| **🧪 Pre-production** | [`docs/pre-production-plan.md`](docs/pre-production-plan.md) — 16 weeks, 8 people, and the kill gate |
 | **❓ Open calls** | [`docs/open-decisions.md`](docs/open-decisions.md) — six decisions that change the shape of the project |
 
 ---
@@ -22,9 +23,10 @@ you take is written permanently into the ice beneath you. There is no jump butto
 
 ```
 docs/
-  design-bible.md      The full specification — 10 sections, ~16k words
-  open-decisions.md    Unresolved calls + known specification gaps
-  web/index.html       The rendered document (self-contained, opens in any browser)
+  design-bible.md        The full specification — 10 sections, ~16k words
+  pre-production-plan.md 16-week feel prototype, playtest protocol, kill gate
+  open-decisions.md      Unresolved calls + known specification gaps
+  web/index.html         The rendered design bible (opens in any browser)
 data/
   scale-of-values.csv      Jump base values and GOE steps
   jump-definitions.csv     Takeoff edge, foot, toe assist, edge-callability per jump
@@ -88,12 +90,15 @@ implemented yet.
 
 **Next artefacts**, in the order they are most useful:
 
-1. A month-by-month pre-production plan for the feel prototype, with the playtest protocol for
-   the month-four kill gate.
+1. ~~Pre-production plan for the feel prototype~~ → [`docs/pre-production-plan.md`](docs/pre-production-plan.md)
 2. The spin and step **level-feature** enumeration, in a structured format (the one gap that
    blocks completing the judging pipeline).
 3. The **Composer transition solver** specified properly — the piece with the most hidden
    complexity in the design.
+
+**The nearest deadline is not a build.** [D2 — engine choice](docs/open-decisions.md#d2--engine)
+must close in **week 2** of pre-production. Every week it stays open costs two engineers half
+their throughput.
 
 ---
 
