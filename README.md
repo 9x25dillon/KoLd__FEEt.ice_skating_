@@ -14,7 +14,7 @@ you take is written permanently into the ice beneath you. There is no jump butto
 | --- | --- |
 | **📖 Rendered** | [Published document](https://claude.ai/code/artifact/58f6234d-6ece-4f55-8fc5-2b7a7ce86da9) — with diagrams, syntax-highlighted code, light/dark |
 | **📄 Markdown** | [`docs/design-bible.md`](docs/design-bible.md) — the reviewable, diffable copy |
-| **🧪 Pre-production** | [`docs/pre-production-plan.md`](docs/pre-production-plan.md) — 16 weeks, 8 people, and the kill gate |
+| **🧪 Pre-production** | [`docs/pre-production-plan.md`](docs/pre-production-plan.md) · [rendered](https://claude.ai/code/artifact/531a5952-fcfd-44bf-966a-ae31ce3562c9) — 16 weeks, 8 people, and the kill gate |
 | **❓ Open calls** | [`docs/open-decisions.md`](docs/open-decisions.md) — six decisions that change the shape of the project |
 
 ---
