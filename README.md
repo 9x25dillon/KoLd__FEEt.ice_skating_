@@ -17,6 +17,7 @@ you take is written permanently into the ice beneath you. There is no jump butto
 | **🧪 Pre-production** | [`docs/pre-production-plan.md`](docs/pre-production-plan.md) · [rendered](https://claude.ai/code/artifact/531a5952-fcfd-44bf-966a-ae31ce3562c9) — 16 weeks, 8 people, and the kill gate |
 | **🌀 Level features** | [`docs/level-features.md`](docs/level-features.md) — how spins and step sequences earn levels 1–4 |
 | **🧭 Composer solver** | [`docs/composer-solver.md`](docs/composer-solver.md) — planning the skating between elements |
+| **🏗 Vertical slice** | [`docs/vertical-slice-plan.md`](docs/vertical-slice-plan.md) · [rendered](https://claude.ai/code/artifact/dde9b2ad-4d31-412f-a15e-6edbb6cc305a) — 24 weeks to the production green-light |
 | **❓ Open calls** | [`docs/open-decisions.md`](docs/open-decisions.md) — six decisions that change the shape of the project |
 
 ---
@@ -27,6 +28,7 @@ you take is written permanently into the ice beneath you. There is no jump butto
 docs/
   design-bible.md        The full specification — 10 sections, ~16k words
   pre-production-plan.md 16-week feel prototype, playtest protocol, kill gate
+  vertical-slice-plan.md 24-week slice, cost model, production green-light gate
   level-features.md      Spin and step level detection: declared vs observed
   composer-solver.md     Transition planning: lattice search, time fit, chaining
   open-decisions.md      Unresolved calls + known specification gaps
@@ -105,7 +107,8 @@ implemented yet.
 2. ~~The spin and step level-feature enumeration~~ → [`docs/level-features.md`](docs/level-features.md)
 3. ~~The Composer transition solver~~ → [`docs/composer-solver.md`](docs/composer-solver.md)
 
-All three are now written. The specification is complete; the next artefact is a build.
+All three are written, plus both phase plans. The specification is complete through the
+production green-light; the next artefact is a build.
 
 **The nearest deadline is not a build.** [D2 — engine choice](docs/open-decisions.md#d2--engine)
 must close in **week 2** of pre-production. Every week it stays open costs two engineers half

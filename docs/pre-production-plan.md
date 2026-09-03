@@ -387,7 +387,8 @@ nine-judge panel, the Broadcast Director, the Wwise blade layer, and the Kiss & 
 people, six months, and an exit gate of its own — *a stranger plays for twenty minutes and asks
 when it ships.*
 
-See [bible §08](design-bible.md#08--development-roadmap--risk).
+Planned in full in [vertical-slice-plan.md](vertical-slice-plan.md); summarised in
+[bible §08](design-bible.md#08--development-roadmap--risk).
 
 ---
 
