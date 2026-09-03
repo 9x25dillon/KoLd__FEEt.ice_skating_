@@ -144,10 +144,10 @@ with training weeks between events, on three rinks.
 | --- | --- |
 | Career loop v1 | Season structure, training allocation, event calendar, coach relationship |
 | Composer v1 | Player-facing timeline with live well-balanced-program and Zayak validation |
-| The Patch v1 | School figures tutorial, tracing-scored |
+| The Patch v1 | School figures tutorial, tracing-scored — **and the adaptive tier router** it feeds ([D4](open-decisions.md#d4--where-the-difficulty-default-sits)) |
 | Netcode | Async competition, server re-simulation, determinism at content scale |
 | Content | Rinks 2–4 shipped. 8 costumes. 10 tracks. Men's skater rigged. |
-| First hour | Built and playtested with 12 fresh testers |
+| First hour | Built and playtested with 12 fresh testers, including router-accuracy capture |
 
 **Exit:** a tester with no prior exposure completes a season unaided.
 

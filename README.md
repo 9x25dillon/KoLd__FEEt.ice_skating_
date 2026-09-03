@@ -121,7 +121,11 @@ measurements from the slice.
 
 **Engine: Unreal Engine 5.4+** — [D2 closed](docs/open-decisions.md#d2--engine) on 2026-09-03,
 ahead of its week-2 deadline. That cancels the two-engine bake-off in pre-production weeks 1–2 and
-hands the time back to the carve solver. Four decisions remain open; none of them now carry a date.
+hands the time back to the carve solver.
+
+**Difficulty default: adaptive** — [D4 closed](docs/open-decisions.md#d4--where-the-difficulty-default-sits)
+the same day. The Patch recommends an assist tier from the tracing score it already computes, with
+Novice as the fallback. Three decisions remain open; none carries a date.
 
 ---
 

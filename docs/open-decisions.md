@@ -77,16 +77,56 @@ exploiting it.
 
 ## D4 · Where the difficulty default sits
 
-**Default:** Novice tier is the out-of-box default; Senior is the intended experience.
+**Default was:** Novice tier is the out-of-box default; Senior is the intended experience.
 
-**Status:** OPEN
+**Status:** RESOLVED — **adaptive routing, sim-first positioning (2026-09-03).**
 
-If the target is broad and casual, invert it — Club becomes the default and the Edge Ribbon
-needs a much louder, more prescriptive design. This changes the tutorial, the camera, and the
-entire first hour of the game. It is a positioning decision more than a design one, and it
-should be made before the vertical slice, not after.
+Neither of the two options this entry originally offered. **The Patch recommends a tier from the
+player's own tracing score**, with Novice as the fallback when the tutorial is skipped.
+Positioning stays sim-first and unambiguous — the game is still balanced, marketed and reviewed
+around Senior — but the onboarding adapts instead of guessing.
 
-**Affects:** §02.1 assist ladder, §04.6 UI, §01 target audience.
+### Why this beats a fixed default
+
+The Patch already scores the player's figure-eight tracing against a reference curve by distance
+transform. **That number was being thrown away after grading.** Using it costs roughly two weeks
+of design and directly attacks the failure mode a hard simulation is most exposed to: the wrong
+player bouncing in hour one, never having found the tier list at all.
+
+### The design, and its four guardrails
+
+Parameters live in [`data/assist-tiers.json`](../data/assist-tiers.json).
+
+| Tracing RMS deviation | Recommends |
+| --- | --- |
+| under 0.35 m | Senior |
+| 0.35 – 0.90 m | Novice |
+| over 0.90 m | Club |
+
+1. **It only spans the middle three tiers.** Show is never auto-assigned — it is a deliberate
+   accessibility choice a player makes for themselves, and routing someone there on the strength
+   of one tutorial reads as a verdict rather than a suggestion. Patch tier is chosen, never
+   assigned.
+2. **It recommends; it never imposes.** Override is one input, always available, never buried.
+3. **It must explain itself, using the player's own line.** *"Your edges held clean but the lobes
+   drifted wide."* The recommendation overlays their tracing on the reference, which turns a
+   judgement into a teaching moment — and is only possible because the tracing exists.
+4. **It is allowed to be wrong once, and to say so.** Six falls in the first program offers a step
+   down; three clean programs offers a step up. Offered, never applied. Once per career, so it
+   cannot nag.
+
+### Consequences
+
+- **Lands in production P1**, alongside The Patch v1 and the first-hour work — not in the vertical
+  slice, which does not build a tutorial. The slice's Gate B playtest runs at the **Novice**
+  fallback.
+- **New beta metric: router accuracy**, measured in wave 1 as `1 − override rate within the first
+  hour`, target ≥ 0.75. A router overridden by half its players is *worse* than a fixed default,
+  because it has spent the player's trust to arrive at the same place.
+- Assist tier parameters move out of the bible's table and into data, where they can be tuned
+  across five cohorts in beta.
+
+**Affects:** §02.1 assist ladder, §04.6 UI, §01 The Patch, production P1, beta wave 1.
 
 ---
 

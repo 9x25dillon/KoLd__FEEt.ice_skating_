@@ -159,6 +159,8 @@ only ever *request* something the physics has to permit.
 
 Full content is available at every tier — assists change the challenge, never the
 progression. Leaderboard entries carry a visible assist factor rather than being excluded.
+Parameters are data ([`data/assist-tiers.json`](../data/assist-tiers.json)), because every number
+here is a balance lever tuned across five separate cohorts in beta.
 
 | Tier | Edges | Timing | Rotation | Balance | Score × |
 | --- | --- | --- | --- | --- | --- |
@@ -167,6 +169,19 @@ progression. Leaderboard entries carry a visible assist factor rather than being
 | Novice | Manual, forgiving entry | Subtle HUD cue | Manual | 40% nulled | 0.92 |
 | Senior | Manual | None | Manual | None | 1.00 |
 | Patch | Manual + ice and blade variance | None, no HUD | Manual | None | 1.06 |
+
+**The Patch picks your rung.** Rather than dropping every player on a fixed default, the tutorial
+recommends a tier from the tracing score it already computes — under 0.35 m RMS deviation suggests
+Senior, over 0.90 m suggests Club, and Novice is the fallback if the tutorial is skipped. It
+recommends and never imposes; it explains itself using the player's own line overlaid on the
+reference (*"your edges held clean but the lobes drifted wide"*); it never auto-assigns Show or
+Patch, which are chosen rather than given; and it is allowed to be wrong exactly once, offering a
+step down after six falls in a first program or a step up after three clean ones.
+
+The measurement already exists and was previously discarded after grading. This directly attacks
+the failure mode a hard simulation is most exposed to — the wrong player bouncing in hour one,
+never having found the tier list at all. Decided as
+[D4](open-decisions.md#d4--where-the-difficulty-default-sits).
 
 ## 2.2 Skating movement — the physical model
 

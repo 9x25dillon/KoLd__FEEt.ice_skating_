@@ -173,6 +173,13 @@ Measured: completion of The Patch, time to first clean program, drop-off points 
 and tier switching — **who moves up, who moves down, and when**. A ladder nobody climbs is a ladder
 with the wrong rungs.
 
+**Plus one question this wave exists to answer: is the router right?**
+[D4](open-decisions.md#d4--where-the-difficulty-default-sits) has The Patch recommend a tier from
+the player's tracing score. Router accuracy is `1 − (override rate within the first hour)`, target
+**≥ 0.75**. A router overridden by half its players is *worse than a fixed default*, because it has
+spent the player's trust to arrive at the same place. If wave 1 shows that, cut the router and ship
+Novice — the fallback path already exists and costs nothing to fall back to.
+
 ### Wave 2 · Content fatigue — W96–99
 
 **24 testers, 15+ hours each over three weeks, at home.** The question: does it hold?
@@ -200,6 +207,7 @@ were one. Each tier gets its own cohort in wave 1 and its own tuning pass.
 | Tier | Balance question | Owner metric |
 | --- | --- | --- |
 | Show | Can it be completed without frustration by someone who does not play games? | First-hour completion ≥ 90% |
+| *Router* | *Does the recommendation match where players settle?* | *Accuracy ≥ 0.75* |
 | Club | Does it teach, or does it carry? | Tier-up rate within 5 hours ≥ 35% |
 | Novice | Is this the right default? | Retention at hour 5 ≥ 60% |
 | Senior | Does mastery feel earned rather than arbitrary? | Clean-program rate rising over sessions |
