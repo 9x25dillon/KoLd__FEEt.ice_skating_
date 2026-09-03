@@ -1,0 +1,57 @@
+# ── Unreal Engine ────────────────────────────────────────────────
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+.vs/
+.vscode/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+# Keep .uproject and Config/ — they are source.
+
+# ── Unity (in case §11's engine decision goes the other way) ─────
+Library/
+Temp/
+Obj/
+Logs/
+UserSettings/
+MemoryCaptures/
+*.csproj
+*.unityproj
+*.pidb
+*.booproj
+
+# ── Large binary source assets ───────────────────────────────────
+# Mocap takes, raw audio stems and source art belong in LFS or an
+# asset server, not in git. Add tracked types to .gitattributes.
+*.fbx
+*.bvh
+*.c3d
+*.wav
+*.aiff
+*.psd
+*.blend1
+RawMocap/
+AudioStems/
+
+# ── OS and editor noise ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
+.idea/
+
+# ── Local ────────────────────────────────────────────────────────
+*.log
+.env
+.env.local
+node_modules/
+__pycache__/

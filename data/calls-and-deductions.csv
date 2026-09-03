@@ -1,0 +1,15 @@
+kind,code,name,sim_trigger,base_value_effect,goe_effect,notes
+rotation,,Clean,rotation short by less than 0.125 rev,1.00,none,
+rotation,q,Quarter,rotation short by 0.125 to 0.250 rev,1.00,mandatory -1 to -2,Full base value; punished only through GOE
+rotation,<,Under-rotated,rotation short by 0.250 to 0.500 rev,0.80,mandatory -2 to -3,
+rotation,<<,Downgraded,rotation short by more than 0.500 rev,value of jump with one fewer revolution,mandatory -3 to -4,
+edge,!,Unclear edge,entry edge error 0.25 to 0.55,1.00,mandatory -1 to -2,Flip and lutz only
+edge,e,Wrong edge,entry edge error above 0.55,reduced band,mandatory -3 to -4,Flutz or lip
+validity,*,Invalid element,violates well-balanced program requirements or the repetition rule,0.00,n/a,Zayak rule violations score zero
+deduction,,Fall (1st and 2nd),landing quality below 0.18 or contact with the ice,n/a,GOE forced to -5,-1.00 each
+deduction,,Fall (3rd and 4th),,n/a,GOE forced to -5,-2.00 each
+deduction,,Fall (5th onward),,n/a,GOE forced to -5,-3.00 each
+deduction,,Time violation,duration outside target plus tolerance,n/a,n/a,-1.00 per 5 seconds over or under
+deduction,,Costume or prop,,n/a,n/a,-1.00
+deduction,,Illegal element,,n/a,n/a,-2.00
+deduction,,Interruption,,n/a,n/a,-1.00 rising with delay

@@ -1,0 +1,38 @@
+code,name,category,level,base_value,goe_step
+USp,Upright spin,spin,1,1.00,0.25
+USp,Upright spin,spin,2,1.20,0.25
+USp,Upright spin,spin,3,1.50,0.25
+USp,Upright spin,spin,4,1.70,0.25
+SSp,Sit spin,spin,1,1.10,0.25
+SSp,Sit spin,spin,2,1.60,0.25
+SSp,Sit spin,spin,3,2.10,0.25
+SSp,Sit spin,spin,4,2.50,0.25
+CSp,Camel spin,spin,1,1.10,0.25
+CSp,Camel spin,spin,2,1.60,0.25
+CSp,Camel spin,spin,3,2.30,0.25
+CSp,Camel spin,spin,4,2.60,0.25
+LSp,Layback spin,spin,1,1.20,0.25
+LSp,Layback spin,spin,2,1.90,0.25
+LSp,Layback spin,spin,3,2.40,0.25
+LSp,Layback spin,spin,4,2.70,0.25
+FCSp,Flying camel spin,spin,1,1.60,0.25
+FCSp,Flying camel spin,spin,2,2.30,0.25
+FCSp,Flying camel spin,spin,3,2.80,0.25
+FCSp,Flying camel spin,spin,4,3.20,0.25
+FSSp,Flying sit spin,spin,1,1.70,0.25
+FSSp,Flying sit spin,spin,2,2.30,0.25
+FSSp,Flying sit spin,spin,3,2.60,0.25
+FSSp,Flying sit spin,spin,4,3.00,0.25
+CoSp,Combination spin,spin,1,1.50,0.30
+CoSp,Combination spin,spin,2,2.00,0.30
+CoSp,Combination spin,spin,3,2.50,0.30
+CoSp,Combination spin,spin,4,3.00,0.30
+CCoSp,Change-foot combination spin,spin,1,1.70,0.30
+CCoSp,Change-foot combination spin,spin,2,2.00,0.30
+CCoSp,Change-foot combination spin,spin,3,3.00,0.30
+CCoSp,Change-foot combination spin,spin,4,3.50,0.30
+StSq,Step sequence,step,1,1.80,0.50
+StSq,Step sequence,step,2,2.60,0.50
+StSq,Step sequence,step,3,3.30,0.50
+StSq,Step sequence,step,4,3.90,0.50
+ChSq,Choreographic sequence,step,0,3.00,0.50

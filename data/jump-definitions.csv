@@ -1,0 +1,7 @@
+code,name,takeoff_foot,takeoff_edge,takeoff_direction,toe_assisted,toe_foot,landing_edge,edge_callable,rel_difficulty,signature_error,notes
+T,Toeloop,right,outside,backward,true,left,RBO,false,1.00,pre-rotation on the pick,Easiest jump; most common second jump in a combination because it takes off from the landing edge
+S,Salchow,left,inside,backward,false,,RBO,false,1.02,illegal toe assist at takeoff,Edge jump; usually entered from a back inside three turn
+Lo,Loop,right,outside,backward,false,,RBO,false,1.17,pre-rotation,Takes off and lands on the same foot and same edge with no assistance; the other legal second jump in a combination
+F,Flip,left,inside,backward,true,right,RBO,true,1.26,lip (drifts to an outside edge),Edge-callable: an unclear or wrong edge draws ! or e
+Lz,Lutz,left,outside,backward,true,right,RBO,true,1.40,flutz (drifts to an inside edge),Counter-rotated - the entry curve runs opposite to the rotation direction
+A,Axel,left,outside,forward,false,,RBO,false,1.90,under-rotation,The only forward takeoff; carries an extra half revolution so a triple axel is 3.5 rotations

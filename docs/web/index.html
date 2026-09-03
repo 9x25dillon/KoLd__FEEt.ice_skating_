@@ -1,0 +1,1984 @@
+<title>Edgework</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root{
+  --ground:#f1f3f2; --surface:#ffffff; --sunk:#e7ebe9;
+  --ink:#10161a; --ink-soft:#4a585e; --ink-faint:#7e8c92;
+  --line:#d2dad8; --line-soft:#e3e8e6;
+  --accent:#9c6b12; --accent-warm:#c98a20; --accent-wash:#f6efdf;
+  --steel:#2c6773; --steel-wash:#e3edee;
+  --risk:#a33f34; --good:#2f6b53;
+  --code-bg:#0f1417; --code-ink:#d9e2e0;
+  --kw:#e0a355; --str:#8fc0a9; --num:#c9a6d8; --com:#6b7d81; --fn:#7ec8d8; --ty:#e3b98a;
+  --shadow:0 1px 2px rgba(16,22,26,.05),0 8px 24px -12px rgba(16,22,26,.14);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+    --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+    --line:#263236; --line-soft:#1c2629;
+    --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+    --steel:#6fbccb; --steel-wash:#14252a;
+    --risk:#e08579; --good:#6fbb97;
+    --code-bg:#080c0e; --code-ink:#cfd9d7;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0c1113; --surface:#141b1e; --sunk:#101719;
+  --ink:#e6ecea; --ink-soft:#a2b1b4; --ink-faint:#6e8085;
+  --line:#263236; --line-soft:#1c2629;
+  --accent:#e2a94e; --accent-warm:#f0be6d; --accent-wash:#241d10;
+  --steel:#6fbccb; --steel-wash:#14252a;
+  --risk:#e08579; --good:#6fbb97;
+  --code-bg:#080c0e; --code-ink:#cfd9d7;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:2rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16.5px; line-height:1.65; margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── shell ─────────────────────────────────────────── */
+.shell{max-width:1240px;margin:0 auto;padding:0 clamp(1.1rem,3vw,2.5rem);
+  display:grid;grid-template-columns:236px minmax(0,1fr);gap:clamp(2rem,5vw,4.5rem);align-items:start}
+@media (max-width:940px){.shell{grid-template-columns:minmax(0,1fr);gap:0}}
+
+/* ── nav ───────────────────────────────────────────── */
+.nav{position:sticky;top:0;max-height:100vh;overflow-y:auto;padding:2.6rem 0 3rem;
+  border-right:1px solid var(--line-soft);margin-right:-1px}
+.nav-mark{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:1.35rem;letter-spacing:.02em;
+  margin:0 0 .1rem}
+.nav-sub{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.16em;color:var(--ink-faint);margin:0 0 1.8rem}
+.nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.08rem}
+.nav a{display:grid;grid-template-columns:1.9rem 1fr;gap:.1rem;align-items:baseline;
+  text-decoration:none;color:var(--ink-soft);font-size:.83rem;line-height:1.35;
+  padding:.34rem .5rem .34rem 0;border-left:2px solid transparent;padding-left:.7rem;
+  transition:color .15s,border-color .15s}
+.nav a .n{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink-faint);
+  font-variant-numeric:tabular-nums}
+.nav a:hover{color:var(--ink)}
+.nav a.on{color:var(--accent);border-left-color:var(--accent);font-weight:500}
+.nav a.on .n{color:var(--accent)}
+.nav a:focus-visible{outline:2px solid var(--steel);outline-offset:2px;border-radius:2px}
+.nav-foot{margin-top:1.6rem;padding-top:1.2rem;border-top:1px solid var(--line-soft);
+  font-family:"IBM Plex Mono",monospace;font-size:.62rem;line-height:1.7;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.1em}
+@media (max-width:940px){
+  .nav{position:static;max-height:none;border-right:0;padding:1.6rem 0 0;margin-right:0}
+  .nav ol{display:none}
+  .nav[open] ol{display:flex}
+  .nav details{border:1px solid var(--line);border-radius:3px;padding:.7rem .9rem;background:var(--surface)}
+  .nav details ol{display:flex;padding-top:.6rem}
+  .nav summary{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.14em;cursor:pointer;color:var(--ink-soft)}
+}
+
+/* ── masthead ──────────────────────────────────────── */
+main{padding:2.4rem 0 6rem;min-width:0}
+.mast{padding-bottom:2.4rem;margin-bottom:2.8rem;position:relative}
+.mast::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;
+  border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);opacity:.85}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.2em;color:var(--accent);margin:0 0 1.1rem}
+h1{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(3rem,8vw,5.6rem);line-height:.94;letter-spacing:-.005em;
+  margin:0 0 .5rem;text-wrap:balance}
+.tagline{font-family:"Bodoni Moda",Didot,Georgia,serif;font-style:italic;font-weight:400;
+  font-size:clamp(1.15rem,2.6vw,1.5rem);color:var(--accent);margin:0 0 1.5rem;line-height:1.35}
+.standfirst{font-size:1.06rem;color:var(--ink-soft);max-width:62ch;margin:0}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:2.2rem 0 0}
+.fact{background:var(--surface);padding:.85rem 1rem}
+.fact dt{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--ink-faint);margin:0 0 .3rem}
+.fact dd{margin:0;font-size:.86rem;font-weight:500;line-height:1.4}
+
+/* ── sections ──────────────────────────────────────── */
+section{margin:0 0 4.2rem;scroll-margin-top:1.5rem}
+.sec-head{display:grid;grid-template-columns:auto 1fr;gap:1.1rem;align-items:baseline;
+  padding-top:1.6rem;margin-bottom:1.6rem;position:relative}
+.sec-head::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.sec-num{font-family:"Bodoni Moda",Didot,Georgia,serif;font-size:2.1rem;line-height:1;
+  color:var(--accent);font-variant-numeric:tabular-nums}
+h2{font-family:"Bodoni Moda",Didot,Georgia,serif;font-weight:500;
+  font-size:clamp(1.75rem,3.6vw,2.5rem);line-height:1.1;margin:0;text-wrap:balance}
+h3{font-size:1.12rem;font-weight:600;line-height:1.35;margin:2.6rem 0 .7rem;
+  letter-spacing:-.005em;text-wrap:balance}
+h4{font-family:"IBM Plex Mono",monospace;font-size:.68rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--ink-faint);font-weight:600;margin:1.9rem 0 .6rem}
+p{margin:0 0 1rem;max-width:70ch}
+ul,ol{margin:0 0 1.1rem;padding-left:1.15rem;max-width:70ch}
+li{margin:0 0 .42rem;padding-left:.15rem}
+li::marker{color:var(--ink-faint)}
+ul.tight li,ol.tight li{margin-bottom:.2rem}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
+strong{font-weight:600}
+em{font-style:italic}
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--sunk);
+  padding:.09em .34em;border-radius:2px;color:var(--ink)}
+.term{font-style:italic;color:var(--steel);font-weight:500}
+
+/* ── callouts ──────────────────────────────────────── */
+.note{border-left:2px solid var(--accent);background:var(--accent-wash);
+  padding:.95rem 1.15rem;margin:1.5rem 0;max-width:70ch}
+.note p:last-child{margin-bottom:0}
+.note .lbl{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--accent);display:block;margin-bottom:.35rem}
+.eq{background:var(--surface);border:1px solid var(--line);padding:1rem 1.2rem;margin:1.3rem 0;
+  max-width:70ch;box-shadow:var(--shadow)}
+.eq .f{font-family:"IBM Plex Mono",monospace;font-size:.95rem;color:var(--steel);
+  font-weight:500;display:block;margin-bottom:.4rem}
+.eq .d{font-size:.85rem;color:var(--ink-soft);margin:0}
+
+/* ── tables ────────────────────────────────────────── */
+.tw{overflow-x:auto;margin:1.4rem 0;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.84rem;min-width:460px}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-soft);
+  vertical-align:top;line-height:1.45}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:.62rem;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--ink-faint);font-weight:600;
+  border-bottom:1px solid var(--line);white-space:nowrap;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:"IBM Plex Mono",monospace;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+td.mono,th.mono{font-family:"IBM Plex Mono",monospace;font-size:.94em;white-space:nowrap}
+td.k{font-weight:600;white-space:nowrap}
+caption{caption-side:bottom;text-align:left;padding:.6rem .8rem;font-size:.74rem;
+  color:var(--ink-faint);border-top:1px solid var(--line-soft)}
+.pill{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.62rem;
+  text-transform:uppercase;letter-spacing:.08em;padding:.13em .45em;border-radius:2px;
+  border:1px solid currentColor;line-height:1.5}
+.pill.hi{color:var(--risk)}.pill.md{color:var(--accent)}.pill.lo{color:var(--good)}
+.pill.st{color:var(--steel)}
+
+/* ── code ──────────────────────────────────────────── */
+figure.code{margin:1.6rem 0;border:1px solid var(--line);background:var(--code-bg);
+  box-shadow:var(--shadow)}
+figure.code figcaption{font-family:"IBM Plex Mono",monospace;font-size:.63rem;
+  text-transform:uppercase;letter-spacing:.13em;color:#8fa3a7;
+  padding:.6rem .95rem;border-bottom:1px solid rgba(255,255,255,.08);
+  display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+figure.code figcaption .lang{color:var(--accent-warm)}
+pre{margin:0;overflow-x:auto;padding:1.05rem 1.1rem;background:var(--code-bg)}
+pre code{background:none;padding:0;font-size:12.6px;line-height:1.62;color:var(--code-ink);
+  font-family:"IBM Plex Mono",monospace}
+pre.diagram{border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;line-height:1.5;margin:1.5rem 0}
+.hljs-keyword,.hljs-built_in{color:var(--kw)}
+.hljs-string,.hljs-meta-string{color:var(--str)}
+.hljs-number,.hljs-literal{color:var(--num)}
+.hljs-comment,.hljs-quote{color:var(--com);font-style:italic}
+.hljs-title,.hljs-title.function_{color:var(--fn)}
+.hljs-type,.hljs-class .hljs-title,.hljs-title.class_{color:var(--ty)}
+.hljs-meta{color:#7a8f93}
+.hljs-attr,.hljs-property{color:#b9c9c6}
+.hljs-params{color:var(--code-ink)}
+
+/* ── grids ─────────────────────────────────────────── */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:1.5rem 0}
+.card{background:var(--surface);padding:1.05rem 1.15rem}
+.card h5{margin:0 0 .4rem;font-size:.92rem;font-weight:600;line-height:1.3}
+.card .tag{font-family:"IBM Plex Mono",monospace;font-size:.6rem;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--accent);display:block;margin-bottom:.4rem}
+.card p{font-size:.83rem;color:var(--ink-soft);margin:0;max-width:none}
+figure.dia{margin:1.7rem 0;padding:0}
+figure.dia svg{display:block;width:100%;height:auto;max-width:640px}
+figure.dia figcaption{font-size:.76rem;color:var(--ink-faint);margin-top:.6rem;max-width:66ch}
+.dia-l{fill:var(--ink);font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.04em}
+.dia-m{fill:var(--ink-faint);font-family:"IBM Plex Mono",monospace;font-size:9px}
+.dia-s{stroke:var(--ink);fill:none;stroke-width:1.25}
+.dia-a{stroke:var(--accent);fill:none;stroke-width:1.6}
+.dia-t{stroke:var(--steel);fill:none;stroke-width:1.4}
+.dia-f{fill:var(--line-soft)}
+
+hr.trace{border:0;height:3px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  margin:2.6rem 0}
+.end{margin-top:4rem;padding-top:1.6rem;border-top:1px solid var(--line);
+  font-family:"IBM Plex Mono",monospace;font-size:.66rem;text-transform:uppercase;
+  letter-spacing:.13em;color:var(--ink-faint)}
+
+@media print{
+  .nav{display:none} .shell{grid-template-columns:1fr;max-width:none}
+  figure.code{break-inside:avoid} section{break-before:page}
+  body{background:#fff;color:#000;font-size:10pt}
+}
+</style>
+
+<nav class="nav" aria-label="Contents">
+  <details open>
+    <summary>Contents</summary>
+    <p class="nav-mark">Edgework</p>
+    <p class="nav-sub">Design &amp; Technical Bible · v1.0</p>
+    <ol>
+      <li><a href="#s1"><span class="n">01</span><span>Concept &amp; Vision</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>Core Gameplay</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>Physics &amp; Animation</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span>Art Direction</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span>Audio Design</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>Technical Architecture</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span>AI &amp; Judging</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span>Roadmap &amp; Risk</span></a></li>
+      <li><a href="#s9"><span class="n">09</span><span>Innovation</span></a></li>
+      <li><a href="#s10"><span class="n">10</span><span>Reference Code</span></a></li>
+      <li><a href="#s11"><span class="n">—</span><span>Open Decisions</span></a></li>
+    </ol>
+    <p class="nav-foot">Lead platform PC · PS5 · XSX<br>Engine Unreal 5<br>~30 months</p>
+  </details>
+</nav>
+
+<div class="shell">
+<div></div>
+<main>
+
+<header class="mast">
+  <p class="eyebrow">Production Bible · Figure Skating Simulation</p>
+  <h1>Edgework</h1>
+  <p class="tagline">The ice remembers every line.</p>
+  <p class="standfirst">A physics-first figure skating simulation in which every metre of travel is the
+  consequence of lean, pressure and edge choice — and every edge you take is written permanently into
+  the ice beneath you. This document is the buildable specification: mechanics, maths, architecture,
+  content scope, schedule and risk.</p>
+  <dl class="facts">
+    <div class="fact"><dt>Genre</dt><dd>Sports simulation / creative sandbox</dd></div>
+    <div class="fact"><dt>Engine</dt><dd>Unreal Engine 5.4+</dd></div>
+    <div class="fact"><dt>Platforms</dt><dd>PC, PS5, Xbox Series, Switch 2</dd></div>
+    <div class="fact"><dt>Team peak</dt><dd>40 FTE</dd></div>
+    <div class="fact"><dt>Schedule</dt><dd>30 months to launch</dd></div>
+    <div class="fact"><dt>Sim rate</dt><dd>120 Hz fixed, deterministic</dd></div>
+  </dl>
+</header>
+
+<!-- ═══════════════════════════ 01 ═══════════════════════════ -->
+<section id="s1">
+<div class="sec-head"><span class="sec-num">01</span><h2>Game Concept &amp; Vision</h2></div>
+
+<h3>The core fantasy</h3>
+<p>Most sports games sell you <em>power</em>. This one sells <em>balance</em>. You are not pressing buttons
+that make a skater skate; you are the skater's balance, and the skating is what falls out of it. The
+felt experience the whole game is built to deliver is a single one: <strong>the moment you drop onto a deep
+outside edge at speed and the ice takes your weight.</strong> Everything else — the jumps, the scores, the
+costumes — is scaffolding around that sensation.</p>
+<p>Three pillars govern every decision below. If a feature does not serve one of them, it does not ship.</p>
+
+<div class="cards">
+  <div class="card"><span class="tag">Pillar 1</span><h5>Edges, not buttons</h5>
+    <p>There is no jump button and no turn button. Analog lean and analog knee pressure drive a real
+    contact model; elements emerge from physical state. The control scheme <em>is</em> the domain model.</p></div>
+  <div class="card"><span class="tag">Pillar 2</span><h5>Programs are authored</h5>
+    <p>You do not pick a routine from a list. You compose one — to your own music, on your own ice —
+    and then you have to go and skate it.</p></div>
+  <div class="card"><span class="tag">Pillar 3</span><h5>The ice keeps the record</h5>
+    <p>Blade tracings accumulate on the surface, alter its friction, and are readable afterwards as a
+    drawing of everything you did. Evidence, not a scoreboard.</p></div>
+</div>
+
+<h3>Unique selling points</h3>
+<ul>
+  <li><strong>Carve-first movement.</strong> Turn radius is emergent from speed and lean via
+    <code>tan θ = v²/(g·r)</code>, not a designer-tuned turn rate. Nobody has shipped this for skating.</li>
+  <li><strong>Persistent ice tracings.</strong> One system, three payoffs: a signature visual, a live
+    friction model, and the scoring mechanism for the school-figures tutorial.</li>
+  <li><strong>The Composer.</strong> A choreography editor with a transition solver, sharing
+    <em>choreography rather than audio</em> — which sidesteps music licensing entirely (§09).</li>
+  <li><strong>Nine simulated judges.</strong> Scores are a trimmed mean of nine opinionated humans, so the
+    same run twice never scores identically. Judging feels earned rather than computed.</li>
+  <li><strong>Fatigue as strategy.</strong> Real skating awards a 1.1× bonus for jumps in the second half of
+    a program. That bonus versus your own stamina curve is the game's central risk/reward decision, and it
+    is lifted directly from the sport.</li>
+  <li><strong>Adaptive triggers.</strong> On DualSense, the knee-load trigger has real resistance that rises
+    with compression and releases at takeoff. The most direct haptic mapping in any sports title.</li>
+</ul>
+
+<h3>Title &amp; positioning</h3>
+<p><strong>Edgework</strong> is a real term of art: the quality and variety of a skater's edges, the thing
+judges actually assess under Skating Skills. It is short, it reads as craft rather than spectacle, and it
+puts the mechanic in the name.</p>
+<p>Primary tagline: <em>The ice remembers every line.</em> Alternate for trailers and store copy:
+<em>Grace is physics, held.</em></p>
+
+<h3>Audience &amp; platforms</h3>
+<div class="tw"><table>
+<thead><tr><th>Segment</th><th>Size &amp; motivation</th><th>What serves them</th></tr></thead>
+<tbody>
+<tr><td class="k">Mastery / sim players</td><td>Primary. The <em>Trials</em> / <em>Skate</em> / soulslike audience — people who want a hard, legible, physical skill.</td><td>Simulation assist tier, leaderboards, deterministic ghosts, tight execution windows.</td></tr>
+<tr><td class="k">Figure skating fandom</td><td>Large, intensely engaged, and genuinely underserved — no serious title since the licensed tie-ins of the late 2000s. Skews female, strongest in Japan, Korea, North America and Europe.</td><td>Authentic ISU scoring, real element vocabulary, career mode, costume depth, Kiss &amp; Cry.</td></tr>
+<tr><td class="k">Creative / expressive players</td><td>Tertiary but the retention engine. The photo-mode, Sims, and Dreams crowd.</td><td>The Composer, Free Skate, Gala mode, costume design, shareable tracings.</td></tr>
+</tbody></table></div>
+
+<div class="tw"><table>
+<thead><tr><th>Platform</th><th>Status</th><th>Rationale</th></tr></thead>
+<tbody>
+<tr><td class="k">PC (Steam)</td><td><span class="pill lo">Lead</span></td><td>Lead SKU. Mod support for costumes and music. Gamepad strongly recommended — analog triggers are load-bearing.</td></tr>
+<tr><td class="k">PS5</td><td><span class="pill lo">Lead</span></td><td>Adaptive triggers are close to a bespoke feature for this game. Haptics carry blade texture.</td></tr>
+<tr><td class="k">Xbox Series X|S</td><td><span class="pill lo">Lead</span></td><td>Series S needs a scoped crowd and reflection budget (§06).</td></tr>
+<tr><td class="k">Switch 2</td><td><span class="pill md">Post-launch</span></td><td>+4 months. Halve crowd, bake GI, cut planar reflections to SSR, 1080p30/60.</td></tr>
+<tr><td class="k">VR</td><td><span class="pill md">Free DLC, year 1</span></td><td><strong>Not a mode of the main game.</strong> Locomotion on a carve at 9 m/s is a nausea generator and you have no legs. What <em>does</em> work: seated/standing <em>Ice Level</em> spectating, and a hand-tracked spin &amp; carriage studio where your arms drive the moment of inertia directly. Ship that, nothing more.</td></tr>
+<tr><td class="k">Mobile</td><td><span class="pill hi">Not planned</span></td><td>The control scheme is analog-continuous in three axes. There is no honest touch mapping, and a compromised one would undercut Pillar 1.</td></tr>
+</tbody></table></div>
+
+<h3>Game modes</h3>
+<div class="tw"><table>
+<thead><tr><th>Mode</th><th>What it is</th><th>Session</th><th>Priority</th></tr></thead>
+<tbody>
+<tr><td class="k">The Patch</td><td>Tutorial, framed as compulsory school figures — which were a real, judged discipline until 1990. You trace a figure eight and are scored on the tracing itself. Teaches edges, lobes and control before it teaches a single element. The best tutorial framing available and it is historically true.</td><td>3–8 min</td><td><span class="pill hi">Ship</span></td></tr>
+<tr><td class="k">The Season (Career)</td><td>4–6 seasons: club → regionals → nationals → Grand Prix → Worlds/Olympics. Between events you allocate training weeks (technique / stamina / artistry / new element), choose music and costume, and plan program layouts. Coach relationship, injury and form arcs. Rival skaters progress independently.</td><td>20–45 min/event</td><td><span class="pill hi">Ship</span></td></tr>
+<tr><td class="k">Competition</td><td>Single event, any skater, any level, any rink. The quick-play entry point.</td><td>8–15 min</td><td><span class="pill hi">Ship</span></td></tr>
+<tr><td class="k">Free Skate</td><td>No judging, no clock, no HUD. An empty rink at dawn and your music. The retention mode and the emotional centre of the game — this is what people will post.</td><td>Open</td><td><span class="pill hi">Ship</span></td></tr>
+<tr><td class="k">The Composer</td><td>Choreography editor over a music beat grid (§09).</td><td>Open</td><td><span class="pill hi">Ship</span></td></tr>
+<tr><td class="k">Gala / Exhibition</td><td>No rules, no required elements, props and player-authored lighting cues. Where the fandom lives.</td><td>4 min</td><td><span class="pill md">Ship</span></td></tr>
+<tr><td class="k">Warm-Up Group</td><td>Six players, six minutes, one sheet of ice, no judging. The real warm-up group turned into a social lobby. Low stakes, cheap netcode, high charm.</td><td>6 min</td><td><span class="pill md">Ship</span></td></tr>
+<tr><td class="k">Live Events</td><td>Scheduled asynchronous competitions with a real draw order, shared leaderboards and server-validated runs.</td><td>15 min</td><td><span class="pill md">Ship</span></td></tr>
+<tr><td class="k">Pairs &amp; Ice Dance</td><td>Two-player coupled skating: lifts, throws, twizzles in unison. Genuinely hard netcode and animation (§06). Cut from launch scope on day one and shipped as the year-one expansion.</td><td>—</td><td><span class="pill hi">Post-launch</span></td></tr>
+</tbody></table></div>
+
+<h4>Launch content scope</h4>
+<p>12 rinks · 2 disciplines (men's and women's singles) · 24 pre-authored skaters plus full creation ·
+~40 base garments across a modular costume system · 30 commissioned score tracks + 14 fresh recordings of
+public-domain repertoire + 4 licensed contemporary tracks · ~1,500 mocap clips.</p>
+
+<h4>Anti-goals</h4>
+<ul class="tight">
+  <li>No combo counters, no score multipliers on screen, no "TRICK!" popups.</li>
+  <li>No exaggerated physics. If it cannot happen on real ice it does not happen here.</li>
+  <li>No failure shaming. Falls are ordinary in this sport; the game frames them as narrative, and the
+    crowd's sympathetic silence is the punishment.</li>
+  <li>No real-athlete or federation licensing at launch — it adds a legal dependency, constrains the
+    career fiction, and buys almost nothing (§08 risk 9).</li>
+</ul>
+</section>
+
+<!-- ═══════════════════════════ 02 ═══════════════════════════ -->
+<section id="s2">
+<div class="sec-head"><span class="sec-num">02</span><h2>Core Gameplay Mechanics</h2></div>
+
+<h3>2.1 Control mapping</h3>
+<p>Two analog sticks and two analog triggers carry the whole game. The design rule: <strong>sticks control
+where the body is, triggers control how hard the legs are working.</strong> Face buttons only ever
+<em>request</em> something the physics has to permit.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Input</th><th>Function</th><th>Detail</th></tr></thead>
+<tbody>
+<tr><td class="k mono">Left stick</td><td>Lean vector</td><td>Direction = lean direction in the skater's frame; magnitude = lean angle, 0–65°. This selects <em>which edge</em> is engaged and <em>how deep</em>. It is the single most important input in the game.</td></tr>
+<tr><td class="k mono">Right stick</td><td>Carriage</td><td>Upper body, arms and free-leg line. Radial magnitude = how far the mass is from the spin axis (this literally drives moment of inertia). Angle = arm/torso pose. Also used to <em>check</em> — counter-rotate the shoulders — which is how skating stops rotation.</td></tr>
+<tr><td class="k mono">RT (analog)</td><td>Knee pressure</td><td>0 = straight leg, 1 = deep bend. Deep knee = more push power, more edge bite, more jump impulse, higher stamina cost. Release rate at takeoff determines vertical impulse. Adaptive-trigger resistance rises with compression.</td></tr>
+<tr><td class="k mono">LT (analog)</td><td>Free leg / toe</td><td>Tap = toe-pick strike (required for toe loop, flip, lutz, toe steps). Hold = free-leg extension for spirals and arabesques.</td></tr>
+<tr><td class="k mono">A / ✕</td><td>Push</td><td>Contextual: a straight stroke on a flat, a crossover on a curve. Power scales with RT at the moment of push.</td></tr>
+<tr><td class="k mono">B / ○ + stick</td><td>Turn</td><td>Selects from the turn matrix below. Only physically valid turns from the current edge state are offered — invalid ones grey out on the Edge Ribbon. This is the game's core teaching device.</td></tr>
+<tr><td class="k mono">X / □</td><td>Twizzle</td><td>Traveling rotation on one foot; hold to sustain, stick to steer.</td></tr>
+<tr><td class="k mono">Y / △ + stick</td><td>Spin entry</td><td>Stick at entry chooses upright / sit / camel; hold to sustain.</td></tr>
+<tr><td class="k mono">LB / RB</td><td>Accent</td><td>Choreographic flourish — arm sweep, head snap, épaulement. Landing one within ±80 ms of a musical accent earns Presentation credit (§2.6).</td></tr>
+<tr><td class="k mono">D-pad</td><td>Program</td><td>Next-element callout, assist toggle, camera cycle.</td></tr>
+</tbody></table></div>
+
+<div class="note"><span class="lbl">Design keystone</span>
+<p><strong>There is no jump button.</strong> A jump is: get on the correct entry edge → compress the knee (RT)
+→ release it. The release <em>is</em> the takeoff. For toe jumps you also plant the pick (LT) inside a 90 ms
+window. This single decision is what separates the game from every skating title that has shipped, and it
+is also the biggest risk in the project (§08 risk 1).</p></div>
+
+<h4>The assist ladder</h4>
+<p>Full content is available at every tier — assists change the challenge, never the progression. Leaderboard
+entries carry a visible assist factor rather than being excluded.</p>
+<div class="tw"><table>
+<thead><tr><th>Tier</th><th>Edges</th><th>Timing</th><th>Rotation</th><th>Balance</th><th>Score ×</th></tr></thead>
+<tbody>
+<tr><td class="k">Show</td><td>Automatic</td><td>On-screen prompts, 3× windows</td><td>Automatic check-out</td><td>Fully assisted</td><td class="num">0.60</td></tr>
+<tr><td class="k">Club</td><td>Snaps to nearest valid edge</td><td>Prompts, 2× windows</td><td>Assisted</td><td>80% nulled</td><td class="num">0.78</td></tr>
+<tr><td class="k">Novice</td><td>Manual, forgiving entry</td><td>Subtle HUD cue</td><td>Manual</td><td>40% nulled</td><td class="num">0.92</td></tr>
+<tr><td class="k">Senior</td><td>Manual</td><td>None</td><td>Manual</td><td>None</td><td class="num">1.00</td></tr>
+<tr><td class="k">Patch</td><td>Manual + ice and blade variance</td><td>None, no HUD at all</td><td>Manual</td><td>None</td><td class="num">1.06</td></tr>
+</tbody></table></div>
+
+<h3>2.2 Skating movement — the physical model</h3>
+<p>Two facts about ice skating drive the entire model, and both are counter-intuitive to anyone who has
+not skated:</p>
+<ol>
+  <li><strong>You cannot push backwards.</strong> A blade offers almost no resistance along its length
+    (μ ≈ 0.006 — roughly a hundredth of a running shoe on tarmac) and enormous resistance across it.
+    All propulsion comes from pushing <em>sideways</em> against an engaged edge.</li>
+  <li><strong>You do not steer, you lean.</strong> A tilted blade traces an arc because of its rocker — the
+    gentle front-to-back curvature of the blade's bottom. Turn radius is a consequence of lean angle and
+    speed, never a direct input.</li>
+</ol>
+
+<h4>The three radii</h4>
+<p>The solver computes two turn radii each tick and reconciles them. The difference between them is the
+balance problem the player is actually solving.</p>
+
+<div class="eq"><span class="f">r_geo = R_rocker / sin θ</span>
+<p class="d"><strong>Geometric radius.</strong> A blade with rocker radius <code>R_rocker</code> (≈ 2.05 m on a
+figure blade) tilted θ from vertical traces an arc of this radius on the ice. At θ = 0 the blade is upright and
+the arc is a straight line; as θ grows the arc tightens. The player's fore/aft weight also matters: the front
+third of the blade has a much tighter rocker, which is why turns happen "on the rocker."</p></div>
+
+<div class="eq"><span class="f">r_dyn = v² / (g · tan θ)</span>
+<p class="d"><strong>Dynamic radius.</strong> The radius at which a body leaning θ from vertical is in balance at
+speed v. Faster means you can lean further; leaning further at low speed means falling over.</p></div>
+
+<div class="eq"><span class="f">F_lat = m·v² / r_geo &nbsp;&nbsp;vs.&nbsp;&nbsp; F_bite = μ_edge(θ, sharpness, ice) · N</span>
+<p class="d"><strong>The edge test.</strong> The blade must generate the lateral force to hold the geometric arc.
+If it cannot, the edge lets go: the arc widens, speed bleeds off through <code>μ_skid ≈ 0.35</code>, and snow
+sprays. μ_edge rises steeply with θ up to about 60° and then collapses — the blade washes out. Shipped as a
+tuning curve asset, not a formula.</p></div>
+
+<figure class="dia">
+<svg viewBox="0 0 620 210" role="img" aria-label="Force diagram of a leaning skater on a carved arc, and a cross-section of a hollow-ground blade showing inside and outside edges.">
+  <line x1="40" y1="170" x2="290" y2="170" class="dia-s"/>
+  <text x="40" y="188" class="dia-m">ICE</text>
+  <line x1="150" y1="170" x2="205" y2="62" class="dia-s"/>
+  <circle cx="205" cy="62" r="7" class="dia-f" stroke="var(--ink)" stroke-width="1.25"/>
+  <line x1="205" y1="62" x2="205" y2="170" stroke="var(--ink-faint)" stroke-width="1" stroke-dasharray="3 3"/>
+  <path d="M 205 140 A 30 30 0 0 0 187 143" class="dia-a"/>
+  <text x="212" y="136" class="dia-l" fill="var(--accent)">θ</text>
+  <line x1="205" y1="62" x2="205" y2="118" class="dia-t"/>
+  <path d="M 205 118 l -4 -8 l 8 0 z" fill="var(--steel)"/>
+  <text x="211" y="100" class="dia-m" fill="var(--steel)">mg</text>
+  <line x1="205" y1="62" x2="262" y2="62" class="dia-t"/>
+  <path d="M 262 62 l -8 -4 l 0 8 z" fill="var(--steel)"/>
+  <text x="266" y="59" class="dia-m" fill="var(--steel)">mv²/r</text>
+  <text x="52" y="46" class="dia-l">tan θ = v² / g r</text>
+  <text x="52" y="62" class="dia-m">lean is the only steering input</text>
+
+  <line x1="340" y1="30" x2="340" y2="185" stroke="var(--line)" stroke-width="1"/>
+  <path d="M 400 60 L 400 132 M 470 60 L 470 132" class="dia-s"/>
+  <path d="M 400 132 Q 435 108 470 132" class="dia-a"/>
+  <text x="378" y="150" class="dia-l" fill="var(--accent)">edge</text>
+  <text x="452" y="150" class="dia-l" fill="var(--accent)">edge</text>
+  <text x="416" y="122" class="dia-m">hollow</text>
+  <text x="380" y="48" class="dia-m">1.1 mm</text>
+  <text x="500" y="80" class="dia-l">INSIDE</text>
+  <text x="500" y="96" class="dia-m">toward the body</text>
+  <text x="500" y="120" class="dia-l">OUTSIDE</text>
+  <text x="500" y="136" class="dia-m">away from the body</text>
+  <text x="340" y="185" class="dia-m">blade cross-section, ~½″ hollow</text>
+</svg>
+<figcaption>Left: the lean/radius relation the solver integrates each tick. Right: a hollow-ground blade
+has two edges, not one. Which edge is engaged, on which foot, travelling forwards or backwards, gives the
+eight fundamental edges — the alphabet of the entire sport.</figcaption>
+</figure>
+
+<h4>Movement vocabulary</h4>
+<div class="tw"><table>
+<thead><tr><th>Action</th><th>Input</th><th>Model</th></tr></thead>
+<tbody>
+<tr><td class="k">Stroke</td><td>A on a flat</td><td>Lateral impulse along the pushing blade's normal. <code>J = m·k·knee·stamina·dt</code>. Two-beat alternation.</td></tr>
+<tr><td class="k">Crossover</td><td>A while carving</td><td>The propulsion engine on curves and the most common thing you do. Two pushes per cycle — the outside foot pushes under, the inside foot pushes out. Each push has a beat window; hitting it gives full impulse, missing it gives 45% and an audible chop.</td></tr>
+<tr><td class="k">Glide</td><td>Nothing</td><td>Deceleration ≈ 0.06–0.14 m/s² from blade friction alone, plus quadratic air drag. At 8 m/s drag and friction are comparable — this is why speed feels expensive to build and cheap to keep.</td></tr>
+<tr><td class="k">Spiral</td><td>LT held on an edge</td><td>Free leg above hip height. Slows you, costs Wind, but regenerates Legs and reads as PCS-bearing choreography. Skaters really do build these in as rest.</td></tr>
+<tr><td class="k">Snowplow stop</td><td>Both triggers, flat</td><td>Low deceleration, wide spray, easiest.</td></tr>
+<tr><td class="k">T-stop</td><td>LT drag</td><td>Drag the free blade perpendicular behind. Controlled, quiet, moderate.</td></tr>
+<tr><td class="k">Hockey stop</td><td>Sharp lean across travel</td><td>Both blades skid perpendicular. Fastest stop, biggest spray, most ice damage — visible in the tracing for the rest of the program.</td></tr>
+</tbody></table></div>
+<p>Working speed range: 5–7 m/s cruising, 8–10 m/s entering a big jump. The rink is the ISU standard
+60 × 30 m. These numbers are the tuning anchor for animation, camera and audio alike.</p>
+
+<h4>Balance</h4>
+<p>A 2D <span class="term">balance error</span> vector (fore/aft, lateral) accumulates from the torque mismatch
+between the geometric and dynamic radii, from landing impacts, from mistimed pushes, and from a
+fatigue-scaled noise term. The right stick and the knee null it. Cross 0.55 and the skater visibly fights;
+cross 0.85 and it becomes a stumble; fail to recover and it becomes a fall. This one scalar is the
+connective tissue between physics, animation and drama.</p>
+
+<h3>2.3 Turns and transitions</h3>
+<p>Skating turns are classified by three questions: does the foot change, does the edge change, and does the
+body rotate <em>with</em> the curve or <em>against</em> it. That taxonomy is the whole input scheme —
+hold <code>B</code> and the left stick answers questions two and three.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Turn</th><th>Foot</th><th>Edge</th><th>Rotation</th><th>Leaves</th><th>Difficulty</th></tr></thead>
+<tbody>
+<tr><td class="k">Three turn</td><td>Same</td><td>Changes</td><td>Into the curve</td><td>A "3" on the ice</td><td><span class="pill lo">★</span></td></tr>
+<tr><td class="k">Mohawk</td><td>Changes</td><td>Same character</td><td>Into</td><td>Two arcs meeting</td><td><span class="pill lo">★★</span></td></tr>
+<tr><td class="k">Bracket</td><td>Same</td><td>Changes</td><td><em>Against</em> the curve</td><td>A "}" cusp</td><td><span class="pill md">★★★</span></td></tr>
+<tr><td class="k">Choctaw</td><td>Changes</td><td>Changes</td><td>Either</td><td>Cusp across the lobe</td><td><span class="pill md">★★★</span></td></tr>
+<tr><td class="k">Rocker</td><td>Same</td><td>Same</td><td>Into, curve reverses</td><td>Lobe change</td><td><span class="pill md">★★★</span></td></tr>
+<tr><td class="k">Loop turn</td><td>Same</td><td>Same</td><td>Into</td><td>A small closed loop</td><td><span class="pill md">★★★</span></td></tr>
+<tr><td class="k">Counter</td><td>Same</td><td>Same</td><td><em>Against</em>, curve reverses</td><td>Lobe change with cusp</td><td><span class="pill hi">★★★★</span></td></tr>
+<tr><td class="k">Twizzle</td><td>Same</td><td>Travels</td><td>Continuous multi-rev</td><td>A traveling coil</td><td><span class="pill hi">★★★★</span></td></tr>
+</tbody></table></div>
+<p>The Edge Ribbon shows the four turns currently available from your edge state and greys the rest. A
+player learns the taxonomy without a single tutorial screen, because the illegal options simply are not
+there. Turns cost speed proportional to how much they fight the current arc — counters and brackets are
+expensive, which is exactly why they score higher.</p>
+
+<h3>2.4 The jump system</h3>
+<p>Six jumps exist in figure skating. They are distinguished entirely by <em>how you leave the ice</em>:
+which foot, which edge, forwards or backwards, and whether the free foot's toe pick assists. All six land
+identically — right back outside edge, gliding backwards. Table assumes a counter-clockwise rotator
+(about 85% of skaters); the player picks a rotation direction at creation and it mirrors everything.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Jump</th><th class="mono">Code</th><th>Takeoff</th><th>Toe pick</th><th>Landing</th><th class="num">Rel. diff.</th><th>Signature error</th></tr></thead>
+<tbody>
+<tr><td class="k">Toe loop</td><td class="mono">T</td><td>Right back outside</td><td>Yes, left toe</td><td class="mono">RBO</td><td class="num">1.00</td><td>Pre-rotation on the pick</td></tr>
+<tr><td class="k">Salchow</td><td class="mono">S</td><td>Left back inside</td><td>No — edge jump</td><td class="mono">RBO</td><td class="num">1.02</td><td>Toe-assisted takeoff (illegal help)</td></tr>
+<tr><td class="k">Loop</td><td class="mono">Lo</td><td>Right back outside</td><td>No</td><td class="mono">RBO</td><td class="num">1.17</td><td>Takes off and lands on the same foot and edge — no help at all</td></tr>
+<tr><td class="k">Flip</td><td class="mono">F</td><td>Left back inside</td><td>Yes, right toe</td><td class="mono">RBO</td><td class="num">1.26</td><td><span class="term">Lip</span> — drifting to an outside edge</td></tr>
+<tr><td class="k">Lutz</td><td class="mono">Lz</td><td>Left back <em>outside</em></td><td>Yes, right toe</td><td class="mono">RBO</td><td class="num">1.40</td><td><span class="term">Flutz</span> — drifting to an inside edge. Counter-rotated: you curve one way and rotate the other.</td></tr>
+<tr><td class="k">Axel</td><td class="mono">A</td><td>Left <em>forward</em> outside</td><td>No</td><td class="mono">RBO</td><td class="num">1.90</td><td>The only forward takeoff, so it carries an extra half rotation. A "triple axel" is 3½ revolutions.</td></tr>
+</tbody></table>
+<caption>Relative difficulty is the ratio of triple base values against 3T. It falls out of the ISU Scale of Values and matches the sport's own ordering exactly.</caption></div>
+
+<div class="note"><span class="lbl">Why combinations work the way they do</span>
+<p>A jump <em>combination</em> requires the second jump to take off from the landing foot and edge of the
+first. Since every jump lands RBO, only the two jumps that take off from RBO can follow: the toe loop and
+the loop. That is why virtually every combination in the sport ends in <code>+3T</code> or <code>+3Lo</code>.
+The player discovers this from the physics rather than a rules screen. A jump <em>sequence</em>
+(<code>SEQ</code>) links jumps by steps or turns instead and scores 80% of the sum.</p></div>
+
+<h4>The five-beat jump loop</h4>
+<figure class="dia">
+<svg viewBox="0 0 620 128" role="img" aria-label="Timeline of the five jump phases with typical durations.">
+  <rect x="20"  y="34" width="150" height="30" class="dia-f" stroke="var(--line)"/>
+  <rect x="170" y="34" width="78"  height="30" fill="var(--accent-wash)" stroke="var(--accent)"/>
+  <rect x="248" y="34" width="26"  height="30" fill="var(--accent)" stroke="var(--accent)"/>
+  <rect x="274" y="34" width="200" height="30" fill="var(--steel-wash)" stroke="var(--steel)"/>
+  <rect x="474" y="34" width="52"  height="30" fill="var(--accent-wash)" stroke="var(--accent)"/>
+  <rect x="526" y="34" width="60"  height="30" class="dia-f" stroke="var(--line)"/>
+  <text x="22"  y="28" class="dia-l">APPROACH</text>
+  <text x="172" y="28" class="dia-l">LOAD</text>
+  <text x="240" y="20" class="dia-l" fill="var(--accent)">TAKEOFF</text>
+  <text x="276" y="28" class="dia-l" fill="var(--steel)">AIR</text>
+  <text x="450" y="28" class="dia-l" fill="var(--accent)">CHECK</text>
+  <text x="528" y="28" class="dia-l">EXIT</text>
+  <text x="22"  y="80" class="dia-m">1.5–3.0 s · build speed, hold entry edge</text>
+  <text x="172" y="80" class="dia-m">0.30 s</text>
+  <text x="276" y="80" class="dia-m">0.55–0.75 s · ballistic. L is fixed; only I is controllable</text>
+  <text x="474" y="80" class="dia-m">0.20 s</text>
+  <line x1="261" y1="68" x2="261" y2="104" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 3"/>
+  <text x="150" y="116" class="dia-l" fill="var(--accent)">everything after this instant is already decided</text>
+</svg>
+<figcaption>Height, air time and angular momentum are all set at takeoff. In flight the only lever is the
+moment of inertia — exactly as in reality, where no external torque acts on an airborne skater.</figcaption>
+</figure>
+
+<ol>
+  <li><strong>Approach (1.5–3.0 s).</strong> Build speed, arrive on the correct entry edge. Land on the wrong
+    edge for a lutz and the technical panel calls <code>e</code> before you have even left the ice.</li>
+  <li><strong>Load (≈0.30 s).</strong> Pull RT into the compression window. Depth sets impulse; duration sets
+    quality. Hold too long and the edge rotates under you — <span class="term">pre-rotation</span>, a real and
+    heavily penalised cheat.</li>
+  <li><strong>Takeoff (≈0.12 s).</strong> Release RT. Toe jumps also need the LT pick strike within 90 ms.
+    A right-stick flick sets the angular impulse. This instant fixes <code>v_y</code>, <code>t_air</code>
+    and <code>L</code> permanently.</li>
+  <li><strong>Air (0.55–0.75 s).</strong> Pull the right stick to centre to draw arms and free leg to the axis.
+    Since <code>L = Iω</code> is conserved, halving I doubles ω. You must accumulate the revolutions before the
+    ice arrives.</li>
+  <li><strong>Check-out &amp; landing (≈0.20 s).</strong> Open the carriage at the right rotational phase to kill
+    the spin, present the landing edge with the left stick, and absorb with RT. Open early and you
+    <span class="term">pop</span> the jump; open late and you over-rotate into a step-out.</li>
+</ol>
+
+<div class="eq"><span class="f">t_air = 2·v_y/g &nbsp;·&nbsp; ω_required = 2πn / t_air &nbsp;·&nbsp; ω = L / I(pose)</span>
+<p class="d">A clean triple: v_y ≈ 2.94 m/s, apex 0.44 m, air time 0.60 s, so 3 revolutions demand 5.0 rev/s.
+A quad needs about 5.9 rev/s in 0.68 s. Moment of inertia about the vertical axis runs from roughly
+4.0 kg·m² open to 0.95 kg·m² fully drawn in — a factor of four, which is exactly the factor by which a
+skater's rotation visibly accelerates. Fatigue raises the achievable floor, so a tired skater physically
+cannot rotate as fast. That is the whole stamina system in one line of maths.</p></div>
+
+<h4>How the technical panel calls a jump</h4>
+<div class="tw"><table>
+<thead><tr><th class="mono">Call</th><th>Meaning</th><th>Trigger in sim</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td class="k mono">q</td><td>Quarter short</td><td>Rotation short by ⅛–¼ turn</td><td>Full base value, mandatory GOE reduction</td></tr>
+<tr><td class="k mono">&lt;</td><td>Under-rotated</td><td>Short by ¼–½ turn</td><td>Base value × 0.80</td></tr>
+<tr><td class="k mono">&lt;&lt;</td><td>Downgraded</td><td>Short by more than ½ turn</td><td>Scored as the jump with one fewer revolution</td></tr>
+<tr><td class="k mono">!</td><td>Unclear edge</td><td>Edge error 0.25–0.55</td><td>GOE reduction</td></tr>
+<tr><td class="k mono">e</td><td>Wrong edge</td><td>Edge error &gt; 0.55 (flutz / lip)</td><td>Reduced base value band and heavy GOE penalty</td></tr>
+<tr><td class="k mono">*</td><td>Invalid</td><td>Element outside the well-balanced program requirements</td><td>No value</td></tr>
+</tbody></table></div>
+<p>Also modelled: two-foot landings, step-outs, hand-down, falls, and popping (opening early so a planned
+triple becomes a single). Each is a distinct state in the resolver rather than a probability roll.</p>
+
+<h3>2.5 The spin system</h3>
+<p>Spins are the other half of the sport and mechanically the opposite of jumps: instead of one explosive
+decision followed by ballistics, they are a continuous negotiation between speed, position and centering,
+under a slowly draining angular momentum.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Family</th><th class="mono">Code</th><th>Position</th><th>Variations</th></tr></thead>
+<tbody>
+<tr><td class="k">Upright</td><td class="mono">USp</td><td>Body vertical over the spinning foot</td><td>Layback (<code>LSp</code>, back arched, head dropped), Biellmann (free foot pulled overhead), crossfoot</td></tr>
+<tr><td class="k">Sit</td><td class="mono">SSp</td><td>Skating thigh at or below horizontal</td><td>Pancake, broken leg, cannonball, tuck behind</td></tr>
+<tr><td class="k">Camel</td><td class="mono">CSp</td><td>Free leg extended back at hip height, torso horizontal — an arabesque, spinning</td><td>Catch-foot, donut, layover</td></tr>
+<tr><td class="k">Combination</td><td class="mono">CoSp / CCoSp</td><td>Two or more basic positions, optionally with a change of foot</td><td>Any ordering; <code>CCoSp</code> is the change-foot version</td></tr>
+<tr><td class="k">Flying entry</td><td class="mono">FCSp / FSSp</td><td>Airborne entry landing directly into the position</td><td>Flying camel, flying sit, death drop, butterfly</td></tr>
+</tbody></table></div>
+
+<h4>Mechanics</h4>
+<ul>
+  <li><strong>Entry.</strong> Hook a tight back-inside edge, then <em>check</em> the upper body with the right
+    stick. The counter-rotation transfers the entry curve's angular momentum into rotation about a vertical
+    axis. Entry speed and check timing set the initial <code>L</code>; you never get more.</li>
+  <li><strong>Centering.</strong> A real spin stays on one spot; a bad one <span class="term">travels</span>,
+    scrawling across the ice. Model a 2D centering error driven by axis tilt and fore/aft pressure imbalance,
+    nulled by small left-stick corrections. The tracing system draws the result live — a tight coil or an
+    embarrassing scribble — which makes it the most legible feedback in the game.</li>
+  <li><strong>Speed.</strong> <code>ω = L / I(pose)</code>. Right-stick radial magnitude sets I directly.
+    Blade friction bleeds L at a rate that rises with contact patch and centering error, so a wobbling spin
+    dies fast.</li>
+  <li><strong>Revolutions.</strong> Eight minimum for a basic spin; more for combinations. A live counter
+    appears only in the Novice tier and below.</li>
+  <li><strong>Levels 1–4</strong> come from <em>features</em>, not revolutions: a difficult variation in each
+    basic position, change of foot, difficult entry, a clear increase of speed, eight revolutions in one
+    position without change, difficult exit. The HUD shows a live feature checklist as a column of hairlines
+    that fill in.</li>
+  <li><strong>Exit.</strong> A check-out into a controlled glide. Fumbling it costs GOE and flow.</li>
+</ul>
+<p>The tension: pulling tighter buys revolutions fast but makes centering harder and drains Legs. The
+skill ceiling is holding a hard position, dead centred, while ω decays and your quadriceps burn.</p>
+
+<h3>2.6 Step sequences, transitions and flow</h3>
+<p>A step sequence (<code>StSq</code>) must cover the ice surface and use turns in both rotational directions;
+a choreographic sequence (<code>ChSq</code>) has a fixed base value and is scored purely on GOE. Between the
+listed elements sits everything else — the transitions — which are a third of the Program Component Score
+and, in most skating games, completely absent.</p>
+
+<h4>The flow scalar</h4>
+<p>A single value in [0,1], integrated continuously:</p>
+<div class="tw"><table>
+<thead><tr><th>Rises with</th><th>Falls with</th></tr></thead>
+<tbody>
+<tr><td>Clean unskidded edges · deep lean held through an arc · alternating lobes · turns executed on the beat grid · continuous motion without pauses · covering fresh ice</td><td>Skids and chops · skating on flat feet · stopping or coasting straight · repeated lobes in the same direction · dead air between elements · re-crossing damaged ice</td></tr>
+</tbody></table></div>
+<p>Flow feeds four systems: Skating Skills and Composition in PCS; stamina efficiency (high flow means you
+carry speed and push less, so it is literally cheaper to skate well); a subtle bloom and depth-of-field
+response in the camera; and the crowd's willingness to start clapping along.</p>
+
+<h4>The rhythm layer</h4>
+<p>Every track carries a beat grid: beats, downbeats, phrase boundaries, accent markers, and swell/silence
+regions. Executing an accent, a turn, or a jump landing within ±80 ms of a marked accent earns
+<span class="term">musical credit</span>, which feeds Presentation and adds a small GOE bonus to the
+element it lands on. Phrase-aware: a big jump landing on a phrase climax is worth roughly three times an
+arbitrary beat.</p>
+<div class="note"><span class="lbl">Guardrail</span>
+<p><strong>This is a modifier, never a gate.</strong> Missing the beat costs you a few tenths; it never fails
+an element. The instant timing windows become pass/fail, Edgework stops being a skating game and becomes a
+rhythm game with skating art. Playtest this boundary specifically.</p></div>
+
+<h3>2.7 Scoring — a faithful ISU implementation</h3>
+<p>The real system is intimidating from outside and quite simple once decomposed. Every score is:</p>
+<div class="eq"><span class="f">Total Segment Score = TES + PCS − Deductions</span>
+<p class="d"><strong>TES</strong> (Technical Element Score) is the sum of what you did.
+<strong>PCS</strong> (Program Component Score) is how well you skated overall. Deductions are falls, time
+violations and rule breaches.</p></div>
+
+<h4>Technical Element Score</h4>
+<p>Each element has a <strong>base value</strong> from the Scale of Values, adjusted for rotation calls and
+the second-half bonus, plus a <strong>Grade of Execution</strong> contribution:</p>
+<div class="eq"><span class="f">Element = BV × (1.10 if bonus-eligible &amp; second half) + GOE_avg × step</span>
+<p class="d">Nine judges each award an integer GOE from −5 to +5. The highest and lowest are discarded and the
+remaining seven averaged. For jumps, one GOE step is worth 10% of base value; spins and step sequences use a
+fixed increment per level. Under the current rules only the <em>last</em> jump element started in the second
+half of a free skate receives the 1.1× multiplier.</p></div>
+
+<div class="tw"><table>
+<thead><tr><th>Jump</th><th class="num">Single</th><th class="num">Double</th><th class="num">Triple</th><th class="num">Quad</th></tr></thead>
+<tbody>
+<tr><td class="k">Toe loop</td><td class="num">0.40</td><td class="num">1.30</td><td class="num">4.20</td><td class="num">9.50</td></tr>
+<tr><td class="k">Salchow</td><td class="num">0.40</td><td class="num">1.30</td><td class="num">4.30</td><td class="num">9.70</td></tr>
+<tr><td class="k">Loop</td><td class="num">0.50</td><td class="num">1.70</td><td class="num">4.90</td><td class="num">10.50</td></tr>
+<tr><td class="k">Flip</td><td class="num">0.50</td><td class="num">1.80</td><td class="num">5.30</td><td class="num">11.00</td></tr>
+<tr><td class="k">Lutz</td><td class="num">0.60</td><td class="num">2.10</td><td class="num">5.90</td><td class="num">11.50</td></tr>
+<tr><td class="k">Axel</td><td class="num">1.10</td><td class="num">3.30</td><td class="num">8.00</td><td class="num">12.50</td></tr>
+</tbody></table>
+<caption>Indicative Scale of Values. Note the axel column is offset by a half rotation — a "single" axel is
+1½ revolutions. <strong>Ship this as a DataTable, never as code:</strong> the ISU revises the SOV most
+seasons, and a live game needs to follow. Verify against the current published SOV before launch.</caption></div>
+
+<div class="tw"><table>
+<thead><tr><th>Element</th><th class="num">L1</th><th class="num">L2</th><th class="num">L3</th><th class="num">L4</th><th class="num">GOE step</th></tr></thead>
+<tbody>
+<tr><td class="k">Camel spin (CSp)</td><td class="num">1.10</td><td class="num">1.60</td><td class="num">2.30</td><td class="num">2.60</td><td class="num">0.25</td></tr>
+<tr><td class="k">Sit spin (SSp)</td><td class="num">1.10</td><td class="num">1.60</td><td class="num">2.10</td><td class="num">2.50</td><td class="num">0.25</td></tr>
+<tr><td class="k">Layback (LSp)</td><td class="num">1.20</td><td class="num">1.90</td><td class="num">2.40</td><td class="num">2.70</td><td class="num">0.25</td></tr>
+<tr><td class="k">Change-foot combo (CCoSp)</td><td class="num">1.70</td><td class="num">2.00</td><td class="num">3.00</td><td class="num">3.50</td><td class="num">0.30</td></tr>
+<tr><td class="k">Step sequence (StSq)</td><td class="num">1.80</td><td class="num">2.60</td><td class="num">3.30</td><td class="num">3.90</td><td class="num">0.50</td></tr>
+<tr><td class="k">Choreo sequence (ChSq)</td><td class="num" colspan="4" style="text-align:center">3.00 — fixed, GOE only</td><td class="num">0.50</td></tr>
+</tbody></table></div>
+
+<h4>Program Component Score</h4>
+<p>Since the 2022–23 season there are three components rather than five. Each judge scores each component
+0.25–10.00 in quarter-point steps; the panel is trimmed the same way, then multiplied by a factor that
+scales short and free programs to comparable magnitudes.</p>
+<div class="tw"><table>
+<thead><tr><th>Component</th><th>What it measures</th><th>Driven in-game by</th></tr></thead>
+<tbody>
+<tr><td class="k">Composition</td><td>Pattern, purposeful use of the whole ice sheet, structure, phrasing</td><td>Ice-coverage map from the tracing buffer, lobe variety, element distribution, Composer layout</td></tr>
+<tr><td class="k">Presentation</td><td>Projection, carriage, musicality, variety, engagement</td><td>Musical credit accumulation, accent usage, carriage-stick activity, gaze behaviour, posture under fatigue</td></tr>
+<tr><td class="k">Skating Skills</td><td>Edge quality, flow, power, glide, multi-directional skating</td><td>Mean flow, mean lean depth, skid ratio, speed retained through transitions, both-direction turn usage</td></tr>
+</tbody></table>
+<caption>Segment factors: short program — men 1.67, women 1.33; free skate — men 3.33, women 2.67. Verify
+against current regulations; these are data, not code.</caption></div>
+
+<h4>Deductions and program requirements</h4>
+<ul class="tight">
+  <li>Fall: −1.00 for each of the first two, −2.00 for the third and fourth, −3.00 for the fifth onward.</li>
+  <li>Time violation: −1.00 per five seconds over or under the permitted duration.</li>
+  <li>Costume or prop violation: −1.00. Illegal element: −2.00. Interruption: −1.00 rising with delay.</li>
+</ul>
+<div class="tw"><table>
+<thead><tr><th>Segment</th><th>Duration</th><th>Jumps</th><th>Spins</th><th>Steps</th></tr></thead>
+<tbody>
+<tr><td class="k">Short program</td><td>2:40 ± 10 s</td><td>3 elements: one axel-type, one solo, one combination</td><td>3, all different types</td><td>1 step sequence</td></tr>
+<tr><td class="k">Free skate (senior)</td><td>4:00 ± 10 s</td><td>7 elements, max 3 of them combinations or sequences, one of which may be three jumps</td><td>3, different types, one a combination spin</td><td>1 step + 1 choreographic sequence</td></tr>
+</tbody></table>
+<caption>The <strong>Zayak rule</strong> also applies: no triple or quad may be attempted more than twice, and
+any jump repeated must appear in a combination or sequence. A violated repeat is marked <code>*</code> and
+scores zero — a real and frequently decisive mistake, and one the Composer will warn you about while you plan.</caption></div>
+
+<h3>2.8 Stamina and fatigue</h3>
+<p>Two pools, because real exertion has two mechanisms and they recover differently.</p>
+<div class="tw"><table>
+<thead><tr><th>Pool</th><th>Drains from</th><th>Recovers</th><th>Feel</th></tr></thead>
+<tbody>
+<tr><td class="k">Wind (aerobic)</td><td>Elapsed time and speed², continuously. Over a four-minute free skate it declines steadily and never fully recovers mid-program.</td><td>Only during genuinely low-effort gliding, and slowly</td><td>Breath in the mix, vapour in cold rinks, chest rise in the animation</td></tr>
+<tr><td class="k">Legs (anaerobic)</td><td>Jumps (large), low spin positions, deep edges, every crossover push</td><td>Partially during glide, but gated by Wind — once Wind is low, Legs stop coming back</td><td>Posture collapse, slower pull-in, jump height loss</td></tr>
+</tbody></table></div>
+
+<div class="tw"><table>
+<thead><tr><th>Effect at low stamina</th><th>Mechanism</th><th>Range</th></tr></thead>
+<tbody>
+<tr><td>Jump height falls</td><td>Vertical impulse multiplier</td><td class="num">1.00 → 0.82</td></tr>
+<tr><td>Rotation slows</td><td>Minimum achievable moment of inertia rises — you cannot pull in as tight</td><td class="num">0.95 → 1.55 kg·m²</td></tr>
+<tr><td>Balance noise grows</td><td>Perturbation amplitude on the balance error</td><td class="num">×1.0 → ×2.4</td></tr>
+<tr><td>Landing window narrows</td><td>Check-out tolerance</td><td class="num">−25%</td></tr>
+<tr><td>Edge bite drops</td><td>Maximum sustainable lean</td><td class="num">−8°</td></tr>
+<tr><td>Posture degrades</td><td>Additive animation layer weighted by (1 − Legs) — shoulders drop, free leg sinks, arms lower</td><td>Visible tell, no number</td></tr>
+</tbody></table></div>
+
+<p>Management is where the strategy lives: <strong>front-load</strong> the hard jumps and skate them fresh, or
+<strong>back-load</strong> them into the second half to claim the 1.1× bonus and gamble on your conditioning.
+Build a spiral or an ina bauer in as a breathing bar — which is exactly what real choreographers do. Skate
+with high flow so you push less. And in career, train the pools upward. The stamina system is not a
+resource bar; it is the reason program design is a game.</p>
+</section>
+
+<!-- ═══════════════════════════ 03 ═══════════════════════════ -->
+<section id="s3">
+<div class="sec-head"><span class="sec-num">03</span><h2>Physics Simulation &amp; Animation</h2></div>
+
+<h3>3.1 The character model: three layers, one truth</h3>
+<div class="note"><span class="lbl">Do not ragdoll a skater</span>
+<p>The instinct to simulate a figure skater as an articulated rigid body with joint constraints is the
+single most expensive wrong turn available on this project. Balance on a 1.1 mm blade is a stiff, poorly
+conditioned control problem; a full-body physical controller will spend your entire schedule and still look
+drunk. Simulate a <em>reduced-order model</em> of about fifteen state variables, animate over it, and blend
+to physics only when the skater is already falling.</p></div>
+
+<div class="tw"><table>
+<thead><tr><th>Layer</th><th>Rate</th><th>Contents</th><th>Authority</th></tr></thead>
+<tbody>
+<tr><td class="k">Sim core</td><td>120 Hz fixed</td><td>Centre-of-mass rigid body, lean angle and axis, per-blade contact constraints, balance error, stamina, moment of inertia. Plain structs, no engine objects.</td><td><strong>Authoritative.</strong> Deterministic, recordable, replayable, server-verifiable.</td></tr>
+<tr><td class="k">Animation</td><td>Frame rate</td><td>Full skeleton via motion matching + warping, IK'd to the solved blade contact points.</td><td>Presentational. Reads sim state, never writes it.</td></tr>
+<tr><td class="k">Secondary physics</td><td>Frame rate, substepped</td><td>Rigid-body chains on arms for reactive motion, Chaos Cloth on skirts, strand physics on hair.</td><td>Cosmetic. Blends to full ragdoll only on a fall.</td></tr>
+</tbody></table></div>
+
+<p>Falls are the exception and deserve care, because they are frequent, they are dramatic, and canned fall
+animations are the fastest way to make a sports game feel cheap. Use a <strong>powered ragdoll</strong>: at
+the fall trigger, blend from animation to a physically simulated body whose joint motors start at full
+strength and decay to near-zero over about 0.4 s. The body genuinely gives way, in the direction and with
+the momentum it actually had. Then blend back into one of six to eight get-up animations selected by final
+pose and remaining speed. Total cost: a few days, and it will show up in every trailer.</p>
+
+<h3>3.2 The blade and the ice</h3>
+<ul>
+  <li><strong>Blade geometry.</strong> 1.1 mm wide, hollow-ground to a radius of about ½ inch, producing two
+    distinct edges. Longitudinal rocker radius 1.8–2.4 m, tighter toward the front. A toe pick at the front
+    with several serrated teeth.</li>
+  <li><strong>Contact.</strong> Resolves to a single point on the rocker, parameterised by
+    <code>contactS ∈ [0,1]</code> from heel to pick. Fore/aft balance moves it, and moving it changes the
+    effective rocker radius, which changes the arc — this is the mechanism behind turns "on the rocker."</li>
+  <li><strong>Anisotropic friction.</strong> Longitudinal μ ≈ 0.006 on fresh, hard ice at −5.5 °C, rising
+    toward 0.015 on soft or chewed ice. Lateral resistance is modelled as a hard constraint up to the bite
+    limit, then Coulomb sliding at μ ≈ 0.35.</li>
+  <li><strong>Ice state grid.</strong> A 2D grid over the rink at roughly 12 cm resolution storing
+    <code>damage</code> and <code>snow</code>. Every blade pass writes to it; damage raises local friction
+    and lowers bite, and snow accumulates in ridges at stops. Resurfaced between skaters, which is why the
+    last skater in a warm-up group is genuinely at a disadvantage — as in reality.</li>
+</ul>
+<p>The same grid is the tracing buffer (§04, §09). One system, two payoffs, and it means the visual and the
+simulation can never disagree.</p>
+
+<h3>3.3 Animation approach</h3>
+<p>Hybrid, in strict priority order. Each technique is used only where it is genuinely the best tool.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Technique</th><th>Used for</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td class="k">Motion capture</td><td>All locomotion, turns, step sequences, spin positions, element entries and exits, carriage</td><td>The base layer. Capture with <strong>IMU suits on real ice</strong> — an optical volume cannot cover a rink, and skating carriage cannot be faked by a stunt performer. Hire competitive skaters. Supplement with an optical volume plus a rotating harness rig for jump air phases, where IMU drift is worst and precision matters most.</td></tr>
+<tr><td class="k">Motion matching</td><td>Locomotion and transition selection</td><td>UE5 Pose Search. The space of edge × speed × curvature × knee is far too large for hand-built blend spaces. Query on velocity, signed carve radius, edge sign, lean and predicted root trajectory.</td></tr>
+<tr><td class="k">Warping</td><td>Making clips fit the solved physics</td><td><strong>Orientation warping</strong> bends a straight-line stride onto the arc the solver produced; <strong>stride warping</strong> matches blade contact speed to ground speed and eliminates foot sliding. Without these you cannot ship — every clip would need capturing at every radius.</td></tr>
+<tr><td class="k">Keyframe</td><td>Jump takeoffs, check-outs, signature spin positions, gala flourishes</td><td>Mocap gives truth; hand animation gives <em>readability</em>. A takeoff needs to be legible in 0.12 s and captured data rarely is.</td></tr>
+<tr><td class="k">Procedural</td><td>Lean, arms, gaze, free leg, breathing, fatigue</td><td>Control Rig, layered on top of everything above. Detailed below.</td></tr>
+</tbody></table></div>
+
+<h4>The hard transition: stride into takeoff</h4>
+<p>Sports games snap here, and everyone notices. The fix is <strong>intent broadcast</strong>: the moment the
+player begins loading the knee, the jump resolver predicts the takeoff instant (roughly 0.30 s out) and
+publishes it to the animation layer. Motion matching then constrains its pose search to candidates whose
+takeoff-foot plant phase aligns with that instant. The skater visibly gathers into the jump instead of
+teleporting into a takeoff pose. The same mechanism handles spin entries and step-sequence turn chains.</p>
+
+<h4>Procedural layer</h4>
+<ul>
+  <li><strong>Lean.</strong> Spine and hip counter-rotation solved from the sim's lean angle and axis. Critically,
+    the upper body stays several degrees more vertical than the legs — skaters "stack" over an edge rather than
+    tipping like a motorcycle. Weighting this wrong is the difference between elegant and comical.</li>
+  <li><strong>Arms.</strong> Spring-damper toward a pose target from the carriage stick, plus an outward
+    displacement term proportional to balance error, so a skater visibly reaches for balance without any
+    authored animation.</li>
+  <li><strong>Gaze.</strong> Look-at that leads the travel direction by about 0.4 s along the predicted carve,
+    snapping to the judges' panel or the audience on musical accents. Gaze that leads the body is the single
+    strongest cue that a character is alive rather than driven.</li>
+  <li><strong>Free leg.</strong> IK target from LT and the choreography track, with a soft constraint keeping the
+    blade off the ice and the toe pointed.</li>
+  <li><strong>Breathing.</strong> Rate and depth from Wind; visible vapour in cold rinks.</li>
+  <li><strong>Fatigue.</strong> An additive pose weighted by (1 − Legs). The audience should be able to see
+    a skater tiring before the stamina system tells them.</li>
+</ul>
+
+<h3>3.4 Animation state machine</h3>
+<p>Four layers with strict priority. Locomotion is deliberately <em>not</em> a state machine — it is a pose
+search — which is why the diagram has a hole in the middle where a dozen blend states would otherwise be.</p>
+
+<pre class="diagram">
+ ADDITIVE  (weights only — these never cause a transition)
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │  Fatigue(1−Legs)   Carriage(RStick)   Breath(Wind)   Accent(bumper, 0.3 s)   │
+ └──────────────────────────────────────────────────────────────────────────────┘
+                                    ▲ applied last, over everything below
+
+ RECOVERY  (priority 0 — pre-empts all)
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │            |balanceErr| &gt; 0.55                |balanceErr| &gt; 0.85            │
+ │  ANY ──────────────────────────▶ Stumble ─────────────────────────▶ Fall     │
+ │   ▲                                 │                                 │      │
+ │   │        nulled &lt; 0.35            │            grounded 0.4 s       ▼      │
+ │   └─────────────────────────────────┴──────────── GetUp ◀───── PoweredRagdoll│
+ └──────────────────────────────────────────────────────────────────────────────┘
+
+ ELEMENT  (priority 1 — overrides locomotion while active)
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │  JUMP                                                                        │
+ │   Approach ──RT &gt; 0.2──▶ Load ──RT released──▶ Takeoff ──leaves ice──▶ Air    │
+ │                           │                      │                      │    │
+ │                    hold &gt; 0.48 s          toe window miss       remaining rot │
+ │                           ▼                      ▼               &lt; opening    │
+ │                     PreRotated ─────────────▶ (quality penalty)         ▼     │
+ │                                                                     CheckOut  │
+ │                                                                         │     │
+ │                       Land ◀── contact ──────────────────────────────────┘    │
+ │                        ├── quality &gt; 0.34 ──▶ Exit ──▶ [locomotion]           │
+ │                        ├── quality 0.18–0.34 ──▶ StepOut ──▶ [locomotion]     │
+ │                        └── quality &lt; 0.18 ──▶ [RECOVERY: Fall]                │
+ │                                                                              │
+ │  SPIN                                                                        │
+ │   Entry(hook BI edge) ──check──▶ Hold(pos) ⇄ ChangePosition ⇄ ChangeFoot      │
+ │                                     │                              │         │
+ │                            ω &lt; 1.8 rad/s or input           free foot down    │
+ │                                     ▼                              ▼         │
+ │                                   Exit ────────────────────▶ [locomotion]     │
+ │                                                                              │
+ │  STEP SEQUENCE                                                               │
+ │   TurnRequest ──valid from edge state?──▶ Turn(kind) ──▶ [locomotion]         │
+ │                └── invalid ──▶ (rejected, Edge Ribbon flashes)               │
+ └──────────────────────────────────────────────────────────────────────────────┘
+
+ LOCOMOTION  (priority 2 — motion matching, not a state machine)
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │  Pose Search query each tick:                                                │
+ │     velocity · signed carve radius · edge sign · lean · knee axis            │
+ │     · 0.35 s predicted root trajectory from the solver                       │
+ │  Database tags: glide / stroke / crossover / spiral / skid / stop / backward  │
+ │  → returns a pose, then: OrientationWarp → StrideWarp → LeanRig → BladeIK    │
+ └──────────────────────────────────────────────────────────────────────────────┘
+</pre>
+<p>Implementation of the transition selector and the post-selection warping chain is in §10.4.</p>
+
+<h3>3.5 Collision and environment interaction</h3>
+<ul class="tight">
+  <li><strong>Skater–skater.</strong> Non-existent in competition — only one skater is ever on the ice. In the
+    six-player Warm-Up Group, soft avoidance capsules plus a near-miss reaction animation, with genuine
+    collision retained as a comedic event rather than being prevented.</li>
+  <li><strong>Boards.</strong> Elastic response plus a hand-on-boards recovery animation. Hitting them at speed
+    triggers the fall path.</li>
+  <li><strong>Boundaries.</strong> Soft repulsion steers AI skaters; the player gets a peripheral HUD hint when
+    running out of ice, because misjudging the rink is a real and unglamorous way to ruin a jump.</li>
+  <li><strong>Debris.</strong> Niagara ice chips from pick strikes and skids, with snow accumulating in visible
+    ridges at stop points and feeding back into the friction grid.</li>
+</ul>
+</section>
+
+<!-- ═══════════════════════════ 04 ═══════════════════════════ -->
+<section id="s4">
+<div class="sec-head"><span class="sec-num">04</span><h2>Art Direction &amp; Visual Design</h2></div>
+
+<h3>4.1 Visual style: photographic realism, theatrical lighting</h3>
+<p><strong>Realistic, not stylised</strong> — but lit like a stage, not a documentary. Three arguments, in order
+of weight:</p>
+<ol>
+  <li><strong>The beauty is already real.</strong> Ice reflecting arena lights, spray backlit in a spotlight,
+    crystals on a costume catching a key light — this sport hands you free visual spectacle that only exists at
+    photographic fidelity. Stylising it means paying to throw that away.</li>
+  <li><strong>The budget maths works here and almost nowhere else.</strong> The scene is one flat 60 × 30 m
+    surface, one hero character, and a stadium of distant low-detail crowd. There is no streaming world, no
+    vegetation, no vehicle fleet. Essentially the entire art and rendering budget concentrates on one character
+    and one material. Realism is affordable in this game specifically <em>because</em> the scene is so small.</li>
+  <li><strong>Stylisation would fight the fiction.</strong> The career mode is about judged performance under
+    pressure. Cartoon proportions undercut it.</li>
+</ol>
+<p>The lighting reference is not sports broadcast but <em>ballet photography</em>: high-contrast key against a
+dark house, heavy rim light through suspended ice mist, shallow depth of field on close coverage. Anti-reference:
+saturated extreme-sports palettes, lens flares, speed lines.</p>
+
+<h3>4.2 The ice is the hero material</h3>
+<p>More engineering goes into this one shader than into any character.</p>
+<div class="tw"><table>
+<thead><tr><th>Layer</th><th>Source</th><th>Contribution</th></tr></thead>
+<tbody>
+<tr><td class="k">Base ice</td><td>Authored</td><td>Very low roughness, slight subsurface scatter, subtle internal cracking and frozen bubbles at close range</td></tr>
+<tr><td class="k">Painted lines</td><td>Texture per rink</td><td>Hockey markings, sponsor logos, seams — under the surface, so they read as embedded</td></tr>
+<tr><td class="k">Tracings</td><td>Runtime virtual texture, written by the sim</td><td>Normal and roughness perturbation from every blade pass. The signature feature (§09B)</td></tr>
+<tr><td class="k">Snow</td><td>Same buffer, separate channel</td><td>Accumulated shavings; scatters light, kills reflection locally, ridges at stops</td></tr>
+<tr><td class="k">Wetness</td><td>Time since resurface</td><td>Fresh ice is glassier; it dulls measurably over a warm-up group</td></tr>
+</tbody></table></div>
+<p><strong>Reflections.</strong> Ice is a near-mirror at grazing angles, and grazing angles are exactly what a
+low broadcast camera sees. Use a <strong>planar reflection</strong> for the ice plane — the rink is a single
+perfect plane, which is the one case where planar reflection is both exact and cheap — culled to the skater,
+the boards and the light fixtures, rendered at half resolution, and enabled only when the camera sits below
+about 25° elevation. Lumen handles everything else. This is the highest-value rendering decision in the project.</p>
+
+<h3>4.3 Character customisation</h3>
+<h4>Body</h4>
+<p>A morph rig spanning height 1.45–1.90 m, limb proportion, musculature, and a skating-specific set covering
+turnout, back arch and shoulder line. <strong>Body type is not cosmetic.</strong> It feeds mass, open and closed
+moment of inertia, jump impulse and stamina capacity, producing a genuine trade-off that mirrors the sport:</p>
+<div class="tw"><table>
+<thead><tr><th>Build</th><th>Advantage</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td class="k">Small, light</td><td>Lower moment of inertia — rotates faster, quads land more readily</td><td>Less power, lower Wind ceiling, shallower edges</td></tr>
+<tr><td class="k">Tall, long-limbed</td><td>Line and extension modifiers to Presentation and Skating Skills; more power</td><td>High moment of inertia — must pull far tighter for the same rotation speed</td></tr>
+<tr><td class="k">Muscular</td><td>Highest jump impulse and edge bite</td><td>Fastest Legs drain; fatigue arrives early</td></tr>
+</tbody></table></div>
+
+<h4>Costume</h4>
+<p>Modular: bodice, skirt or trousers, sleeve, neckline, collar, plus a layered fabric system — base fabric
+(velvet, lycra, satin, mesh), overlay (lace, illusion mesh, appliqué), and <strong>crystal placement</strong>.
+Crystals are the visual signature of the sport and no game has done them properly.</p>
+<ul>
+  <li><strong>Crystal rendering.</strong> Paint a density map with a brush, then GPU-instance low-poly cut gems
+    from it — 2,000 to 6,000 instances at LOD0. Clearcoat plus high-specular material, with a screen-space
+    sparkle pass that pulses each crystal on the alignment of the half-vector with each key light. LOD to a
+    sparkle-only texture beyond a few metres.</li>
+  <li><strong>Skirt.</strong> Chaos Cloth with a spin-safe path: above roughly 4 rev/s, raise substeps and air
+    drag, and above 6 rev/s swap to a procedural conical deformer driven by ω. Real cloth solvers explode at
+    spin speeds; solve this in the vertical slice, not in beta (§08 risk 4).</li>
+  <li><strong>Hair.</strong> Strand-based groom with three simulation LODs and a bound "spin mode" that
+    constrains root motion. Buns, slicked ponytails and braided styles are both authentic and cheap.</li>
+  <li><strong>Boots and blades.</strong> Boot colour and covers, lace colour, ankle support profile, blade
+    finish. Blade sharpness is a career resource: sharp blades bite harder and skid less, and dull over a season.</li>
+</ul>
+
+<h3>4.4 Arenas</h3>
+<div class="tw"><table>
+<thead><tr><th>Rink</th><th>Character</th><th>Light</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td class="k">Rideau Arena</td><td>Worn municipal rink; hockey lines showing through, plastic seats, a vending machine</td><td>Flat greenish fluorescent</td><td>Career home; where The Patch is taught</td></tr>
+<tr><td class="k">Practice Ice, 6 a.m.</td><td>Empty, one fire door open, dust in a single shaft of light</td><td>One raking sunbeam</td><td>The emotional centre. Free Skate default.</td></tr>
+<tr><td class="k">Nationals Coliseum</td><td>Mid-size, warm wood, six thousand seats, actual atmosphere</td><td>Broadcast key + house</td><td>Career mid-game</td></tr>
+<tr><td class="k">Grand Prix Hall</td><td>Modern, LED ribbon boards, federation banners</td><td>Saturated coloured gels</td><td>International circuit</td></tr>
+<tr><td class="k">Olympic Arena</td><td>Eighteen thousand seats, rings of flags, the whole apparatus</td><td>Full broadcast rig</td><td>Career climax</td></tr>
+<tr><td class="k">Kristallhalle</td><td>Outdoor alpine ice, mountains behind, natural surface</td><td>Golden hour into blue hour, real sun</td><td>Weather affects ice hardness</td></tr>
+<tr><td class="k">The Frozen Canal</td><td>Outdoor, night, string lights, falling snow, bystanders</td><td>Warm practicals</td><td>Free Skate favourite</td></tr>
+<tr><td class="k">Harbour Rink</td><td>Winter market, city skyline, uneven ice</td><td>Mixed practical</td><td>Seasonal event venue</td></tr>
+<tr><td class="k">The Old Hall</td><td>1930s barn, exposed timber trusses, single-glazed clerestory</td><td>Cold daylight from above</td><td>Nostalgia / photo mode</td></tr>
+<tr><td class="k">Summer Camp</td><td>Open-sided roof, hot air, soft ice, insects in the lights</td><td>Harsh daylight</td><td>Career training montage</td></tr>
+<tr><td class="k">The Gala</td><td>Dark house, theatrical moving lights, atmospheric haze</td><td>Fully player-authored cues</td><td>Exhibition and Composer showcase</td></tr>
+<tr><td class="k">Studio Black</td><td>Featureless void, one spot, infinite floor</td><td>Single controllable key</td><td>Composer workspace and marketing capture</td></tr>
+</tbody></table></div>
+<p><strong>Particles (Niagara, GPU).</strong> Ice spray with spawn rate proportional to skid velocity × blade
+pressure, strongly forward-scattering when backlit — this is the money shot of the entire game and deserves a
+dedicated week. Plus suspended crystalline mist over the surface, breath vapour, pick debris, and costume
+crystal glints.</p>
+
+<h3>4.5 Camera</h3>
+<h4>The Broadcast Director (default)</h4>
+<p>A virtual camera crew of four operators — <strong>Hard Cam</strong> (high, wide, always keeps the skater
+framed), <strong>Follow</strong> (low, orbiting, medium), <strong>Ice Cam</strong> (ground level, spray in
+frame), <strong>Overhead</strong> (pattern and centering) — with a director choosing between them.</p>
+<div class="tw"><table>
+<thead><tr><th>Situation</th><th>Shot</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Jump approach</td><td>Cut to Follow, widen 0.8 s before takeoff</td><td>Height must be readable against a horizon</td></tr>
+<tr><td>Jump in flight</td><td class="k">Hold. Never cut.</td><td>The player needs continuous rotational reference to time the check-out. This is a hard rule, not a preference.</td></tr>
+<tr><td>Landing</td><td>Ice Cam, slight slow-motion ramp in replays only</td><td>Spray and edge</td></tr>
+<tr><td>Spin</td><td>Slow orbit against the rotation, or Overhead on level-4 attempts</td><td>Orbiting <em>with</em> a spin is nauseating; against it reads as speed. Overhead makes centering legible.</td></tr>
+<tr><td>Step sequence</td><td>Medium Follow, tracking with the lobes</td><td>Footwork must be visible</td></tr>
+<tr><td>Choreo sequence / spiral</td><td>Hard Cam wide</td><td>Pattern and use of ice</td></tr>
+<tr><td>Program end</td><td>Push in to close, then pull to overhead revealing the full tracing</td><td>The signature closing shot of every run</td></tr>
+</tbody></table></div>
+<p>The camera never rolls with the skater during spins — dampened yaw follow with a slight lead only.
+Player-selectable modes: Broadcast, Follow, <strong>Skater's Line</strong> (low and near-first-person, genuinely
+disorienting and a cult favourite), and Free. Replays are Sequencer-driven with automatic multi-angle cuts per
+element, plus a photo mode with focal length, aperture, exposure and a time scrub.</p>
+
+<h3>4.6 UI and UX</h3>
+<p>The HUD's job during skating is to disappear. Thin strokes, no panels, no boxes, no drop shadows.</p>
+<div class="cards">
+  <div class="card"><span class="tag">Always visible</span><h5>The Edge Ribbon</h5>
+    <p>A thin arc at the lower edge of the screen. Its curvature shows the current carve, its side shows inside
+    or outside edge, its thickness shows lean depth, and a small marker shows knee pressure. Shape-coded so it
+    reads peripherally without being looked at. The only permanent element.</p></div>
+  <div class="card"><span class="tag">Contextual</span><h5>Element callout</h5>
+    <p>Small type upper-left: the next planned element and its required entry edge. Fades out at Senior tier.</p></div>
+  <div class="card"><span class="tag">Diegetic first</span><h5>Flow &amp; stamina</h5>
+    <p>Flow is a hairline that thickens and brightens — no bar, no number. Stamina appears only below 60%,
+    as slight desaturation, louder breathing and visible posture change. The body is the gauge.</p></div>
+  <div class="card"><span class="tag">Scene, not menu</span><h5>The Kiss &amp; Cry</h5>
+    <p>Scores are revealed in the Kiss &amp; Cry with your coach beside you, the protocol sheet building
+    element by element, the crowd audible through the wall. A beloved ritual of the sport, and the correct
+    home for a results screen.</p></div>
+</div>
+<p>Menus use the visual language of real ISU protocol sheets: monospaced tabular figures, hairline rules,
+generous margins, ice-white on near-black. Full remapping, colourblind-safe edge coding by shape as well as
+colour, subtitle and audio-description support, and every assist tier available from the title screen.</p>
+</section>
+
+<!-- ═══════════════════════════ 05 ═══════════════════════════ -->
+<section id="s5">
+<div class="sec-head"><span class="sec-num">05</span><h2>Audio Design</h2></div>
+
+<h3>5.1 Middleware</h3>
+<p><strong>Wwise.</strong> The deciding factor is interactive music: the beat grid, phrase markers and
+synchronised transitions map directly onto Wwise Music Segments and Playlist Containers, and the game needs
+per-venue convolution reverb on complex aux routing. FMOD would work; pick one on day one and do not
+re-litigate.</p>
+
+<h3>5.2 Music</h3>
+<div class="tw"><table>
+<thead><tr><th>Source</th><th>Count</th><th>Cost</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td class="k">Commissioned original score</td><td>~30</td><td>Moderate</td><td>Written <em>for skating</em>: clear phrase structure, defined accent points, built-in 2:40 and 4:00 edits. Commission stems so the Gala can remix and the mix can duck instruments independently. You own it outright, forever.</td></tr>
+<tr><td class="k">Fresh recordings of public-domain works</td><td>~14</td><td>Moderate</td><td><strong>The key insight.</strong> Swan Lake, Carmen, The Four Seasons, Moonlight Sonata, Tosca — the actual repertoire the sport is built on — are public domain <em>as compositions</em>, but every existing recording is separately copyrighted. Commission your own recordings and you own the masters outright, with no expiry and no territory problems. This is how you get the classical canon affordably.</td></tr>
+<tr><td class="k">Licensed contemporary</td><td>4</td><td class="k">High</td><td>Sync + master licensing for marketing punch. <strong>Licences expire.</strong> Architect so that removing a track cannot break a saved program — every program stores a fallback score reference.</td></tr>
+<tr><td class="k">Player's own music</td><td>Unlimited</td><td>Zero</td><td>Local analysis only; the audio never leaves the device.</td></tr>
+</tbody></table></div>
+
+<div class="note"><span class="lbl">The licensing architecture that makes UGC possible</span>
+<p>Because imported audio can never be transmitted, <strong>share the choreography, not the audio.</strong> A
+shared program is a list of elements and accents anchored to a normalised timeline plus an acoustic
+fingerprint of the source track. If the recipient owns the same track, it syncs perfectly. If not, it plays
+against the nearest-tempo commissioned score, or a metronome. This single decision converts music from the
+project's largest legal liability into a non-issue, and it is what makes the Composer shippable at all.</p></div>
+
+<p><strong>Beat grids</strong> are authored by hand for shipped tracks — beats, downbeats, phrase boundaries,
+accent markers, swell and silence regions. For imported tracks, run on-device onset detection and tempo
+estimation (spectral flux plus a tempogram is entirely sufficient), then let the player correct the grid by
+hand in the Composer. Correcting a beat grid turns out to be quietly satisfying.</p>
+
+<h3>5.3 Sound effects — the blade is the lead instrument</h3>
+<p>Everything the player needs to know about edge quality should be audible with the screen off. This is the
+most important sound design goal on the project.</p>
+<div class="tw"><table>
+<thead><tr><th>Layer</th><th>Behaviour</th><th>Drives</th></tr></thead>
+<tbody>
+<tr><td class="k">Glide bed</td><td>Filtered noise plus a resonant band. Centre frequency tracks speed; gain tracks blade pressure. Two independent instances, one per foot.</td><td>Speed awareness</td></tr>
+<tr><td class="k">Edge tone</td><td>A pitched, singing partial that emerges above roughly 25° of lean and rises in pitch with depth. Deep edges genuinely sing on good ice. <strong>This is the player's primary feedback channel for edge quality</strong> and should be mixed prominently.</td><td>Edge depth and cleanliness</td></tr>
+<tr><td class="k">Skid</td><td>Broadband noise burst, gain proportional to lateral slip velocity. Ugly on purpose.</td><td>Failure feedback</td></tr>
+<tr><td class="k">Toe pick</td><td>Sharp transient: pick strike plus ice fracture, eight-way round robin, pitch-varied by ice hardness.</td><td>Toe jump timing</td></tr>
+<tr><td class="k">Landing</td><td>Two-part — the blade's "chk" then body absorption. A <em>clean</em> landing is markedly quieter and purer than a scraped one, so the game teaches quality through timbre rather than a score popup.</td><td>Landing quality</td></tr>
+<tr><td class="k">Takeoff</td><td>Cloth rush, sharp exhale, and a low sub swell that resolves at apex.</td><td>Drama</td></tr>
+<tr><td class="k">Breath</td><td>Rate and depth from Wind. Becomes conspicuous in the last minute of a free skate.</td><td>Fatigue</td></tr>
+</tbody></table></div>
+
+<h3>5.4 Crowd and arena</h3>
+<ul>
+  <li><strong>Space.</strong> Per-venue convolution impulse response. The <em>hush</em> before a program starts
+    matters as much as the noise — Rideau Arena's flat slap and the Olympic Arena's four-second tail should be
+    unmistakably different rooms.</li>
+  <li><strong>Arena state machine.</strong> Hush → Building → Roar → Ovation → the specific, awful silence
+    after a fall. Crowd goes quiet in the 1.2 s before a big jump; this anticipation window is the most
+    effective tension device available and costs nothing.</li>
+  <li><strong>Clap-along.</strong> When flow and musical credit are both high during a step sequence, the crowd
+    begins clapping on the beat grid — exactly as real audiences do. It is earned, it is diegetic, and it is
+    the best possible reward for skating well.</li>
+  <li><strong>Home bias.</strong> Venue-specific crowd warmth in career, audible before it is scoreable.</li>
+</ul>
+
+<h3>5.5 The mix</h3>
+<p>One signature move: <strong>interiority during a jump.</strong> From takeoff to landing, duck music and crowd
+by 9 dB, high-pass the room, and bring cloth, breath and blade to the front. For three-quarters of a second the
+player is inside the skater's head. At landing everything returns 2 dB hot and the crowd lands on top. Used
+sparingly — only on triples and above — it will be the thing people describe when they describe the game.</p>
+</section>
+
+<!-- ═══════════════════════════ 06 ═══════════════════════════ -->
+<section id="s6">
+<div class="sec-head"><span class="sec-num">06</span><h2>Technical Architecture</h2></div>
+
+<h3>6.1 Engine recommendation: Unreal Engine 5.4+</h3>
+<div class="tw"><table>
+<thead><tr><th>Requirement</th><th>Unreal 5</th><th>Unity 6</th></tr></thead>
+<tbody>
+<tr><td class="k">Hero character fidelity</td><td>MetaHuman gives production-grade bodies, faces and grooms on day one — roughly eighteen months of head start on the single most important asset class</td><td>Requires building or licensing an equivalent pipeline</td></tr>
+<tr><td class="k">Costume cloth and hair</td><td>Chaos Cloth and the Groom system are in-engine and battle-tested</td><td>Cloth is weaker; strand hair needs third-party</td></tr>
+<tr><td class="k">Skating locomotion</td><td>Pose Search (motion matching) and Motion Warping ship in-engine — precisely the tools this problem needs</td><td>Motion matching requires Kinemation or a bespoke system</td></tr>
+<tr><td class="k">Ice rendering</td><td>Lumen, planar reflections, Nanite for arena geometry, RVT for tracings</td><td>HDRP is capable; more assembly required</td></tr>
+<tr><td class="k">Replays and Kiss &amp; Cry</td><td>Sequencer is an entire feature you would otherwise build</td><td>Timeline is thinner</td></tr>
+<tr><td class="k">Iteration speed</td><td>Slower; C++ compile times are a real daily tax</td><td class="k">Faster — Unity's genuine advantage</td></tr>
+<tr><td class="k">Crowd</td><td>Mass + Niagara instancing</td><td class="k">DOTS is excellent here</td></tr>
+</tbody></table>
+<caption>Unity wins iteration speed and crowd performance. Unreal wins the character, costume, animation and
+cinematic pipeline — which is most of this game. If the team is Unity-native and senior, that changes the
+calculus; the retraining cost is real and should be weighed honestly rather than dismissed.</caption></div>
+
+<div class="note"><span class="lbl">Do not use CharacterMovementComponent</span>
+<p>UE's built-in character movement is a capsule-and-ground-plane walker with hard-coded acceleration and
+braking. Every one of its assumptions is wrong here. Write a <code>USkateMovementComponent</code> deriving from
+<code>UPawnMovementComponent</code>, ticking your own fixed-step solver. Attempting to bend CMC into a carve
+model is the second most expensive wrong turn available on this project.</p></div>
+
+<h3>6.2 Code architecture</h3>
+<p>Not full ECS. The requirement that actually shapes the architecture is <strong>determinism</strong> — replays,
+ghost opponents, server-side verification and the Composer's transition solver all need to reproduce a run
+bit-for-bit. UObject-heavy gameplay code fights that. So:</p>
+
+<pre class="diagram">
+┌─ PRESENTATION ────────────────────────────────────────────────────────────────┐
+│  Actors · AnimBP + Control Rig · Niagara · Wwise · UMG · CameraDirector        │
+│  Reads simulation state. Never writes it. Fully removable for headless runs.  │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                      ▲ state snapshot each frame
+┌─ GAMEPLAY (UObject) ──────────────────────────────────────────────────────────┐
+│  ProgramDirector · JudgePanel · TechnicalPanel · CareerState · MusicDirector   │
+│  ReplayRecorder · ComposerSolver · RivalAI                                    │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                      ▲ FElementResult events
+┌─ SIM CORE (POD structs · 120 Hz fixed · no engine types · no allocation) ──────┐
+│  FSkateSolver · FJumpResolver · FSpinResolver · FIceSurface                    │
+│  FStaminaModel · FElementRecognizer · FBalanceModel                            │
+└───────────────────────────────────────────────────────────────────────────────┘
+                                      ▲ FSkaterInput (recordable, 12 bytes/tick)
+┌─ DATA (DataAssets, hot-reloadable, no logic) ─────────────────────────────────┐
+│  ScaleOfValues · JumpDefs · SpinFeatures · RinkDefs · MusicGrids · JudgeProfiles│
+└───────────────────────────────────────────────────────────────────────────────┘
+</pre>
+
+<div class="tw"><table>
+<thead><tr><th>Type</th><th>Responsibility</th></tr></thead>
+<tbody>
+<tr><td class="k mono">FSkaterState</td><td>The complete ~15-variable authoritative state of one skater. POD.</td></tr>
+<tr><td class="k mono">FSkaterInput</td><td>One tick of player or AI intent. POD, 12 bytes, the unit of recording and replay.</td></tr>
+<tr><td class="k mono">FSkateSolver</td><td>Advances one skater one tick. A pure function of (state, input, ice). No side effects.</td></tr>
+<tr><td class="k mono">FIceSurface</td><td>The damage/snow/tracing grid. Queried for friction and bite; written by every blade pass.</td></tr>
+<tr><td class="k mono">FJumpResolver</td><td>Load → takeoff → air → check → land, with full rotation accounting.</td></tr>
+<tr><td class="k mono">FSpinResolver</td><td>Angular momentum integration, centering error, live feature detection for levels.</td></tr>
+<tr><td class="k mono">FElementRecognizer</td><td><strong>The architectural keystone.</strong> Watches physical state and classifies what was actually done, the way a technical specialist does. It does not know what button you pressed.</td></tr>
+<tr><td class="k mono">FTechnicalPanel</td><td>Turns a recognised element into a called element with rotation and edge calls. Deterministic.</td></tr>
+<tr><td class="k mono">FJudgePanel</td><td>Nine judge models producing GOE and component scores. Stochastic, seeded.</td></tr>
+<tr><td class="k mono">FScoreCalculator</td><td>Base values, GOE aggregation, PCS factors, deductions, segment totals.</td></tr>
+<tr><td class="k mono">UProgramDirector</td><td>Holds the planned program; compares intent against what the recognizer observed.</td></tr>
+<tr><td class="k mono">UMusicDirector</td><td>Beat grid, accent windows, Wwise transport sync, clap-along gating.</td></tr>
+</tbody></table></div>
+
+<div class="note"><span class="lbl">Why the recognizer matters more than it looks</span>
+<p>Because the game observes physics rather than reading input intent, <em>one</em> truth source serves
+Competition, Free Skate, the Composer, replay verification and the AI. A player who accidentally produces a
+clean double axel while messing about in Free Skate gets told they did. An AI that under-rotates is judged by
+exactly the code that judges the player. And a cheated program cannot be constructed by faking an event stream,
+because the server re-simulates and re-recognises from raw input.</p></div>
+
+<h3>6.3 Networking</h3>
+<p>The load-bearing observation: <strong>singles figure skating has no simultaneous play.</strong> One skater is
+on the ice at a time. This removes the hardest problem in sports netcode before it starts, and the architecture
+should exploit it rather than ignoring it.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Mode</th><th>Model</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td class="k">Async Competition<br><span class="pill st">primary</span></td><td>A run is recorded as an input stream plus periodic state keyframes for drift correction. Opponents are replayed deterministically on the client. The server re-simulates headlessly to verify — which also eliminates cheating, since the only way to fake a score is to produce inputs that genuinely earn it.</td><td>~200–500 KB per 4-minute program compressed. Trivial.</td></tr>
+<tr><td class="k">Live Events</td><td>Scheduled windows; each entrant skates locally with a real draw order, results stream to a shared leaderboard, and a genuine six-minute warm-up lobby precedes the group.</td><td>Leaderboard traffic only</td></tr>
+<tr><td class="k">Warm-Up Group<br><span class="pill st">real-time</span></td><td>Six players sharing ice with nothing contested. <strong>Client-authoritative movement</strong> with server-side rate limiting, remotes interpolated at ~100 ms, soft collision only. No prediction, no reconciliation, no rollback. Saying this out loud saves months: nothing here is worth defending against.</td><td>~4 KB/s per client</td></tr>
+<tr><td class="k">Pairs / Ice Dance<br><span class="pill hi">hard</span></td><td>The only genuinely contested case — holds, lifts and throws couple two bodies. Use <strong>authority handoff</strong>: while partners are linked, the lifting partner's client owns the two-body constraint; the other client predicts and rolls back <em>only the shared constraint</em>, typically three to five frames. Two clients and a tiny state make rollback cheap. Cross-fade authority over 250 ms on link and unlink.</td><td>Post-launch; budget four months of a senior network engineer</td></tr>
+</tbody></table></div>
+
+<h4>Determinism discipline</h4>
+<ul class="tight">
+  <li>Fixed 120 Hz simulation step, decoupled from render.</li>
+  <li>No <code>float</code> ordering dependence: strict evaluation order, no fast-math, FMA contraction disabled, one blessed transcendental library shared across platforms.</li>
+  <li>All randomness from a seeded, explicitly-advanced PRNG stored in the replay header.</li>
+  <li><strong>CI determinism harness from month five:</strong> replay ten thousand recorded programs nightly on
+    every target platform and assert bit-identical final scores. Determinism bugs found in month twenty are
+    catastrophic; found in month six they are an afternoon. If float parity proves unreliable across compilers,
+    the fallback is fixed-point in the sim core — plan the type abstraction now so that switch is a typedef.</li>
+</ul>
+
+<h3>6.4 Performance</h3>
+<div class="tw"><table>
+<thead><tr><th>Target</th><th>Resolution</th><th>Frame rate</th><th>GI / reflections</th></tr></thead>
+<tbody>
+<tr><td class="k">PS5 / XSX — Quality</td><td>1440p → 4K TSR</td><td class="num">30</td><td>Lumen hardware RT + planar ice</td></tr>
+<tr><td class="k">PS5 / XSX — Performance</td><td>1080p → 4K TSR</td><td class="num">60</td><td>Lumen software + planar ice at half res</td></tr>
+<tr><td class="k">Series S</td><td>1080p</td><td class="num">60</td><td>Baked GI + SSR, crowd at 40%</td></tr>
+<tr><td class="k">PC minimum (GTX 1660)</td><td>1080p</td><td class="num">60</td><td>Baked GI + SSR</td></tr>
+<tr><td class="k">PC recommended (RTX 3070)</td><td>1440p</td><td class="num">60+</td><td>Lumen + planar ice</td></tr>
+</tbody></table></div>
+
+<ul>
+  <li><strong>Baked GI is genuinely viable here</strong>, and that is unusual. The arena geometry and its light
+    rig are entirely static; only the skater and a handful of spotlights move. A lightmapped path with a few
+    movable lights looks excellent and costs almost nothing — ship it as the low-spec path rather than as a
+    degraded Lumen.</li>
+  <li><strong>Crowd:</strong> skeletal meshes for the front two rows only, vertex-animation-texture instances for
+    the middle rings, camera-facing impostors beyond. Eighteen thousand spectators in under 1.5 ms.</li>
+  <li><strong>Planar reflection</strong> is a second scene render — half resolution, aggressively culled to
+    skater, boards and fixtures, and disabled above 25° camera elevation where nobody can see it anyway.</li>
+  <li><strong>Tracings:</strong> a single 2048² render target over a 60 × 30 m rink is 3.4 cm per texel, which is
+    ample; 4096² on high settings. Accumulated by a compute shader from the sim's contact points at
+    simulation rate. Effectively free.</li>
+  <li><strong>Skater LODs:</strong> 80k triangles at LOD0 for replays and close coverage, 40k at LOD1, 15k at
+    LOD2. Three groom LODs. Cloth substeps scale with rotation speed and freeze entirely during re-simulated
+    replays.</li>
+  <li><strong>GPU instancing</strong> for costume crystals, seating, boards advertising and rink fixtures.
+    Async compute for the ice grid and Niagara.</li>
+</ul>
+</section>
+
+<!-- ═══════════════════════════ 07 ═══════════════════════════ -->
+<section id="s7">
+<div class="sec-head"><span class="sec-num">07</span><h2>AI Opponents, Judges &amp; Crowd</h2></div>
+
+<h3>7.1 The rival skaters</h3>
+<div class="note"><span class="lbl">The AI plays the game</span>
+<p>Rival skaters do not run scripted animations with rolled outcomes. They feed <code>FSkaterInput</code> into
+the same solver the player uses, with noise scaled by their consistency and current nerve. They fall for the
+same physical reasons you do — a shallow load, a late check-out, a wrong edge — and the technical panel calls
+them with the same code. One balance pass covers both sides, mistakes are never arbitrary, and a rival's
+under-rotation is genuinely visible in their body before the call appears.</p></div>
+
+<div class="tw"><table>
+<thead><tr><th>Persona field</th><th>Range</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td class="k mono">TechnicalCeiling</td><td>0–1</td><td>Hardest element they will attempt at all</td></tr>
+<tr><td class="k mono">Consistency</td><td>0–1</td><td>Inverse of baseline input noise</td></tr>
+<tr><td class="k mono">Artistry</td><td>0–1</td><td>Carriage activity, accent hit rate, PCS ceiling</td></tr>
+<tr><td class="k mono">Nerve</td><td>0–1</td><td>Resistance to pressure. Low nerve degrades fast under a deficit</td></tr>
+<tr><td class="k mono">RiskAversion</td><td>0–1</td><td>Weight on score variance when choosing a layout</td></tr>
+<tr><td class="k mono">Signature</td><td>list</td><td>Elements they are disproportionately good at — a skater known for their layback</td></tr>
+<tr><td class="k mono">Form</td><td>−1…+1</td><td>Season-long momentum; drifts with results, decays toward zero</td></tr>
+</tbody></table></div>
+
+<h4>Strategic layer — utility selection of the program layout</h4>
+<p>Before each segment, the AI evaluates candidate layouts by expected value against variance:</p>
+<div class="eq"><span class="f">U(layout) = E[score] − riskAversion · σ[score] + ambition · max(0, deficit)</span>
+<p class="d">Per-element success probabilities are conditioned on <em>projected stamina at that point in the
+program</em> and on current nerve, so the model naturally discovers what real coaches know: a quad in the last
+minute is worth far less in expectation than the same quad at the start, unless the 1.1× bonus and a points
+deficit tip it. A skater eight points down after the short program will genuinely upgrade — adding a
+quad, back-loading jumps, accepting variance because the safe layout cannot win. That behaviour falls out of
+the formula rather than being scripted, and it is the most dramatically satisfying thing the AI does.</p></div>
+
+<h4>Tactical layer — behaviour tree during the program</h4>
+<ul>
+  <li>Navigate to the entry position for the next element, choosing a path that covers unused ice (which
+    Composition rewards) and builds the required speed.</li>
+  <li>Execute via the same five-beat loop, with load depth, check timing and pull-in rate perturbed by
+    <code>noise = (1 − Consistency) · (1 + Nerve)</code>.</li>
+  <li><strong>The wobble.</strong> Nerve rises with crowd volume, score deficit, late draw position, and sharply
+    after any mistake; it decays with each clean element. Higher nerve means noisier input and a slower
+    pull-in, so a skater who falls on their opening jump measurably skates worse for the next thirty seconds.
+    This is the emotional truth of the sport and it is four lines of code.</li>
+  <li><strong>Recovery decisions.</strong> After a mistake the tree may downgrade a planned element (popping a
+    3A to a 2A to stop the bleeding) or upgrade a later one to recover base value. Both are real, both are
+    dramatic, and the commentary system has lines for both.</li>
+</ul>
+
+<h4>Coach AI (career)</h4>
+<p>Reads your recorded programs — element quality metrics trended over sessions — and proposes training focus,
+flags the elements whose variance is costing you most, and warns about a layout's risk profile using the same
+E/σ machinery the rivals use. The coach is the diegetic wrapper on your own analytics.</p>
+
+<h3>7.2 The judging panel</h3>
+<p>Nine judges, each a small model rather than a formula. This is the highest-value juice decision in the
+entire scoring design: because judges disagree, the same run twice never scores identically, and a score
+starts to feel like an opinion you earned rather than a number you unlocked.</p>
+<div class="tw"><table>
+<thead><tr><th>Field</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td class="k mono">Strictness</td><td>Weight on visible blemishes — a strict judge punishes a hand-down harder</td></tr>
+<tr><td class="k mono">TechnicalBias</td><td>Rewards difficulty; forgives a scrappy quad more readily than a safe triple</td></tr>
+<tr><td class="k mono">ArtisticBias</td><td>Weights Presentation and Composition upward relative to the panel</td></tr>
+<tr><td class="k mono">Halo</td><td>Reputation lift — an established skater's component scores drift up. Documented and much-discussed in the real sport; modelled here as a fact of the simulation, without editorial comment</td></tr>
+<tr><td class="k mono">NoiseSigma</td><td>Per-judge random spread, 0.3–0.9 GOE</td></tr>
+<tr><td class="k mono">Federation</td><td>Small home-skater warmth at national events; disclosed to the player in the protocol view</td></tr>
+</tbody></table></div>
+<p><strong>The technical panel is separate and deterministic</strong>, exactly as in the sport. A Technical
+Specialist <em>calls</em> the element — identifies it, applies <code>q</code>, <code>&lt;</code>,
+<code>&lt;&lt;</code>, <code>e</code>, <code>!</code> — with no opinion involved, and only then do the nine
+judges award GOE against the called element. Separating these means the tech call can be surfaced live on
+screen the way a broadcast does, and it means a wrong-edge lutz is punished identically by every judge while
+its execution quality is still debated.</p>
+
+<h3>7.3 Crowd</h3>
+<p>An arena-mood scalar per seating section, driven by anticipation and result events, with per-agent reaction
+delays so a reaction visibly propagates outward from the front rows rather than firing as one block. Home-crowd
+warmth per venue in career. The crowd's most important behaviours are the two quiet ones: the 1.2-second hush
+before a big jump, and the silence after a fall.</p>
+</section>
+
+<!-- ═══════════════════════════ 08 ═══════════════════════════ -->
+<section id="s8">
+<div class="sec-head"><span class="sec-num">08</span><h2>Development Roadmap &amp; Risk</h2></div>
+
+<div class="tw"><table>
+<thead><tr><th>Phase</th><th>Months</th><th class="num">Team</th><th>Key deliverables</th><th>Exit gate</th></tr></thead>
+<tbody>
+<tr><td class="k">Pre-production</td><td class="num">1–4</td><td class="num">8</td><td>Carve solver and balance model on a programmer-art capsule · control scheme candidates · engine spike on the ice material and tracing RVT · SOV and element data model · mocap plan, volume booked, skating consultant hired as permanent staff · style pillar images</td><td><strong>"Is carving fun with no jumps, no score and no art?"</strong> Twenty external testers, two sessions each. Genuine kill-or-continue.</td></tr>
+<tr><td class="k">Vertical slice</td><td class="num">5–10</td><td class="num">22</td><td>One rink at ship quality · one skater with full costume, cloth and groom · one complete 2:40 short program containing every element category · full judging pipeline including the nine-judge panel · Broadcast Director · Wwise blade layer and arena states · Kiss &amp; Cry · determinism harness online</td><td>A stranger plays for twenty minutes and asks when it ships. Cloth and hair survive a level-4 change-foot combination spin. 60 fps on target hardware.</td></tr>
+<tr><td class="k">Production → Alpha</td><td class="num">11–22</td><td class="num">38</td><td>All twelve rinks to first pass · both mocap shoot blocks captured and integrated · all modes playable · Composer v1 · career loop with rival progression · async and warm-up netcode · full element coverage · The Patch · commissioned score delivered</td><td><strong>Alpha:</strong> feature complete and playable start to finish. All content present at least in first pass.</td></tr>
+<tr><td class="k">Beta</td><td class="num">23–27</td><td class="num">40</td><td>Content complete · balance and difficulty passes across all five assist tiers · accessibility audit · localisation (10 languages, Japanese and Korean prioritised — the sport's largest audiences) · performance lock · certification · three external playtest waves · demo build for a seasonal marketing beat</td><td>Cert submission, zero A-class bugs, perf targets met on every SKU.</td></tr>
+<tr><td class="k">Launch &amp; LiveOps</td><td class="num">28–30+</td><td class="num">24</td><td>Ship · day-one patch · Season 1 content drop · Composer sharing backend scaling · Switch 2 port · VR studio DLC · Pairs expansion pre-production</td><td>Stable retention curve; Composer sharing shows organic growth.</td></tr>
+</tbody></table></div>
+
+<h3>Team composition at production peak</h3>
+<div class="tw"><table>
+<thead><tr><th>Discipline</th><th class="num">FTE</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td class="k">Gameplay &amp; systems engineering</td><td class="num">7</td><td>Two on the sim core alone; that code is the game</td></tr>
+<tr><td class="k">Animation engineering</td><td class="num">3</td><td>Motion matching, warping, Control Rig procedural layer</td></tr>
+<tr><td class="k">Rendering engineering</td><td class="num">3</td><td>Ice material, tracings, reflections, crowd, performance</td></tr>
+<tr><td class="k">Network &amp; backend</td><td class="num">2</td><td>Rising to 3 for the pairs expansion</td></tr>
+<tr><td class="k">Tools &amp; pipeline</td><td class="num">2</td><td>The Composer's editor tooling is a real product</td></tr>
+<tr><td class="k">Character art</td><td class="num">5</td><td>Bodies, costumes, grooms, the crystal system</td></tr>
+<tr><td class="k">Environment art</td><td class="num">4</td><td>Twelve rinks</td></tr>
+<tr><td class="k">Animation</td><td class="num">5</td><td>Mocap cleanup plus hand-authored hero elements</td></tr>
+<tr><td class="k">Technical art</td><td class="num">2</td><td>Cloth, hair, shaders, Niagara</td></tr>
+<tr><td class="k">Design</td><td class="num">4</td><td>Systems, content, career, tutorial</td></tr>
+<tr><td class="k">Audio</td><td class="num">2</td><td>Plus contracted composer and orchestra</td></tr>
+<tr><td class="k">UI/UX</td><td class="num">2</td><td></td></tr>
+<tr><td class="k">QA</td><td class="num">4</td><td>Rising to 10 contracted in beta</td></tr>
+<tr><td class="k">Production &amp; leadership</td><td class="num">3</td><td></td></tr>
+<tr><td class="k">Skating consultant</td><td class="num">1</td><td><strong>Permanent, not contracted.</strong> A competitive or recently retired skater, in the building, playing builds weekly. Every authenticity decision in this document needs someone who can say "no, that is not what that feels like."</td></tr>
+</tbody></table></div>
+
+<h3>Risk register</h3>
+<div class="tw"><table>
+<thead><tr><th class="num">#</th><th>Risk</th><th>P</th><th>Impact</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td><strong>The control scheme is not fun.</strong> No shipped game has used analog lean plus analog knee as its primary verb. The entire project rests on an unproven feel.</td><td><span class="pill md">Med</span></td><td><span class="pill hi">Fatal</span></td><td>Build it in month one on programmer art. Weekly playtests with non-skaters from month two. A real kill gate at month four with the authority to stop the project. Keep two fallback schemes prototyped (single-stick carve; button-assisted edges) rather than one.</td></tr>
+<tr><td class="num">2</td><td><strong>Skating mocap is genuinely hard.</strong> Optical volumes cannot cover a rink; IMU suits drift; jumps and spins are the worst case for both.</td><td><span class="pill hi">High</span></td><td><span class="pill md">Major</span></td><td>IMU on real ice for locomotion, optical volume with a rotating harness rig for air phases, video reference throughout for cleanup. Book a <em>second</em> shoot block into the schedule and budget from day one — you will need it. Cast competitive skaters, not stunt performers.</td></tr>
+<tr><td class="num">3</td><td><strong>Music licensing cost or expiry.</strong> The sport is built on music; licences are expensive and time-limited.</td><td><span class="pill md">Med</span></td><td><span class="pill md">Major</span></td><td>Commissioned score plus fresh recordings of public-domain repertoire as the backbone (§5.2). Licensed tracks capped at four and architecturally isolated with fallback references. Share choreography, never audio.</td></tr>
+<tr><td class="num">4</td><td><strong>Cloth and hair fail at spin speeds.</strong> Solvers explode above roughly 5 rev/s and the failure is spectacular.</td><td><span class="pill hi">High</span></td><td><span class="pill md">Moderate</span></td><td>Procedural conical deformer fallback above a rotation threshold; bound-root groom mode. <strong>Solve during the vertical slice</strong>, where it is a tech-art problem, not in beta where it is a schedule crisis.</td></tr>
+<tr><td class="num">5</td><td><strong>Cross-platform determinism breaks ghosts and verification.</strong></td><td><span class="pill md">Med</span></td><td><span class="pill md">Major</span></td><td>CI harness from month five replaying ten thousand programs nightly on every platform. Abstract the sim's scalar type now so a switch to fixed-point is a typedef rather than a rewrite.</td></tr>
+<tr><td class="num">6</td><td><strong>Pairs and ice dance consume the schedule.</strong> Coupled two-body animation and netcode is a project unto itself.</td><td><span class="pill hi">High</span></td><td><span class="pill md">Major</span></td><td>Cut from launch scope in pre-production and communicate it externally early. Do not carry it as "maybe." Ship it as the year-one expansion where it can be marketed properly.</td></tr>
+<tr><td class="num">7</td><td><strong>Audience size.</strong> Skating fandom is engaged but not large, and sim depth narrows the funnel further.</td><td><span class="pill md">Med</span></td><td><span class="pill md">Major</span></td><td>Free Skate and the Composer reach past the sport's fandom into the creative-sandbox audience. The assist ladder makes the game genuinely playable at Show tier. Demo early and often; the visual hook does the marketing.</td></tr>
+<tr><td class="num">8</td><td><strong>ISU rules change annually.</strong> Base values, level features and component factors all move.</td><td><span class="pill hi">Certain</span></td><td><span class="pill lo">Minor</span></td><td>Everything scoring-related lives in hot-reloadable DataAssets. A season update is a data patch, and shipping it promptly is a visible authenticity signal to the fandom.</td></tr>
+<tr><td class="num">9</td><td><strong>Athlete and federation licensing.</strong></td><td>—</td><td>—</td><td><em>Do not pursue it at launch.</em> It costs money, adds legal dependencies, constrains the career fiction, and buys almost nothing this game needs. Original skaters let the career mode have real stakes. Revisit as optional DLC once the game exists.</td></tr>
+</tbody></table></div>
+</section>
+
+<!-- ═══════════════════════════ 09 ═══════════════════════════ -->
+<section id="s9">
+<div class="sec-head"><span class="sec-num">09</span><h2>Advanced Features &amp; Innovation</h2></div>
+
+<h3>A · The Composer</h3>
+<p><strong>Sports games let you pick a play. None let you compose the performance.</strong> The Composer is a
+timeline over your music on which you place elements, and a solver that generates the skating in between.</p>
+<p>Crucially, you author <em>intent</em>, not animation: an element, its required entry edge, a position on the
+ice, and a musical anchor. A transition solver — an A* search over the motion-matching database, constrained by
+the physics solver — finds skating that arrives at the right place, on the right edge, at the right speed, at
+the right moment, while covering fresh ice. Then you have to go and skate it yourself. The Composer never
+performs for you.</p>
+<div class="tw"><table>
+<thead><tr><th>Increment</th><th>Ships</th><th>Scope</th></tr></thead>
+<tbody>
+<tr><td class="k">v0 — internal</td><td>Vertical slice</td><td>Element list plus auto-generated connective skating. <strong>Needed anyway</strong> to give AI rivals programs, so the hardest part is paid for by a system you must build regardless.</td></tr>
+<tr><td class="k">v1 — player timeline</td><td>Launch</td><td>Drag elements onto the beat grid; live validation against well-balanced program requirements and the Zayak rule; the solver returns a skatable program and a projected stamina curve.</td></tr>
+<tr><td class="k">v2 — expression</td><td>Launch</td><td>Choreographic accent keys — arm sweeps, head snaps, épaulement — on the beat grid, plus lighting cues for Gala.</td></tr>
+<tr><td class="k">v3 — sharing</td><td>+3 months</td><td>Choreography-only payloads (§5.2), community browsing, "skate someone else's program" as a challenge with per-program leaderboards. The long tail of the whole game.</td></tr>
+<tr><td class="k">v4 — pairs</td><td>Year one</td><td>Two-skater choreography with lift and throw placement.</td></tr>
+</tbody></table></div>
+
+<h3>B · The Line — persistent ice tracings</h3>
+<p>Every edge you take is written into the ice: visible, accumulating, and physically consequential. At the end
+of a program the camera pulls up and your entire performance is revealed as a drawing on the surface. Figure
+skating is <em>named</em> for this — the figures were the tracings, and they were the judged discipline until
+1990. No game has ever put them back.</p>
+<div class="tw"><table>
+<thead><tr><th>Increment</th><th>Effort</th><th>Scope</th></tr></thead>
+<tbody>
+<tr><td class="k">v0 — visual</td><td>~1 week</td><td>Blade contact points accumulate into a render target that drives normal and roughness on the ice material. Immediately beautiful, and cheap enough to be in the first playable build.</td></tr>
+<tr><td class="k">v1 — physical</td><td>~2 weeks</td><td>The same grid feeds friction and edge bite back into the solver. Damaged ice grips less. Resurfacing between skaters becomes meaningful, and the last skater in a warm-up group is genuinely disadvantaged.</td></tr>
+<tr><td class="k">v2 — The Patch</td><td>~4 weeks</td><td>The tutorial becomes school figures: trace a figure eight, scored by a distance transform of your tracing against a reference curve. Teaches edges before elements, is historically authentic, and is a genuinely good small game.</td></tr>
+<tr><td class="k">v3 — The Line</td><td>~3 weeks</td><td>An end-of-program stylised poster of your tracing, shareable as an image, and used inside the Composer to visualise ice coverage — which is literally a Composition criterion. Free marketing: these images are inherently shareable.</td></tr>
+<tr><td class="k">v4 — analysis</td><td>Post-launch</td><td>Overlay your line against a rival's or your own previous attempt. The Coach AI reads it directly.</td></tr>
+</tbody></table></div>
+
+<h3>C · Commentary (smaller, high value)</h3>
+<p>A two-person booth generated from the element event stream: an anticipation line before an element, a call
+during it, an assessment after, and colour commentary keyed to career narrative and the score situation.
+<strong>Build it as an authored line bank with variation selection, not a runtime language model</strong> —
+latency, reliability and tone control all argue against generation at play time. If you want the breadth that
+generation offers, use it <em>offline at content-build time</em> to write and record a very large line bank with
+a licensed voice, then ship the bank. The player gets variety; the game gets determinism.</p>
+</section>
+
+<!-- ═══════════════════════════ 10 ═══════════════════════════ -->
+<section id="s10">
+<div class="sec-head"><span class="sec-num">10</span><h2>Reference Code</h2></div>
+<p>Engine-flavoured but portable. Types prefixed <code>F</code> are Unreal conventions; the C# sample is written
+so it drops into Unity with a namespace change. All four run inside the deterministic sim core and allocate
+nothing per tick.</p>
+
+<h3>10.1 The carve solver</h3>
+<p>The heart of the game: one skater, one tick, a pure function of state, input and ice.</p>
+<figure class="code">
+<figcaption><span>SkateSolver.cpp · fixed 120 Hz</span><span class="lang">C++</span></figcaption>
+<pre><code class="language-cpp">// Units SI, world +Z up. No allocation, no engine types, no side effects
+// beyond the ice grid — everything here must replay bit-identically.
+
+constexpr float kGravity      = 9.81f;
+constexpr float kRockerRadius = 2.05f;   // figure blade, metres
+constexpr float kMuGlide      = 0.006f;  // longitudinal, fresh ice at -5.5 C
+constexpr float kMuSkid       = 0.35f;   // once the edge has let go
+constexpr float kMaxLean      = 1.13f;   // ~65 deg before the blade washes out
+
+struct FFootState {
+    bool  bOnIce;
+    float EdgeSign;    // +1 outside, -1 inside, 0 flat
+    float ContactS;    // 0 = heel .. 1 = toe pick; sets effective rocker
+    float PressureN;
+};
+
+// The blade is not a single arc: its front third is far tighter, which is
+// why turns are executed "on the rocker".
+static float EffectiveRocker(float ContactS) {
+    return Lerp(kRockerRadius, 0.55f * kRockerRadius,
+                SmoothStep(0.55f, 1.0f, ContactS));
+}
+
+void FSkateSolver::Tick(FSkaterState&amp; S, const FSkaterInput&amp; In,
+                        FIceSurface&amp; Ice, float Dt)
+{
+    const float Speed   = S.Vel.Size2D();
+    const int   Support = PickSupportFoot(S);
+    FFootState&amp; F       = S.Foot[Support];
+
+    // 1 — Lean command. The left stick is a lean vector in the skater's
+    //     frame; its magnitude is how far off vertical the body is asked
+    //     to go. Fatigue slows how fast you can get there.
+    const float LeanCmd  = Min(In.LeanStick.Size(), 1.f) * kMaxLean;
+    const float LeanRate = 6.5f * (0.55f + 0.45f * S.LegPool);
+    S.Lean     = MoveTowards(S.Lean, LeanCmd, LeanRate * Dt);
+    S.LeanAxis = AngleTowards(S.LeanAxis, In.LeanStick.Angle(), 9.f * Dt);
+    F.EdgeSign = SignedEdgeFromLean(S.Yaw, S.LeanAxis, Support);
+
+    // 2 — Geometry: the radius the blade WANTS to cut.
+    //     A rocker of radius R tilted theta from vertical traces an arc of
+    //     R / sin(theta) on the ice. theta -&gt; 0 gives a straight line.
+    const float SinLean = Max(Sin(S.Lean), 1e-3f);
+    const float RGeo    = EffectiveRocker(F.ContactS) / SinLean;
+
+    // 3 — Dynamics: the radius that BALANCES at this speed.
+    //     tan(theta) = v^2 / (g r)  ->  r = v^2 / (g tan theta)
+    const float RDyn = (Speed * Speed) / (kGravity * Tan(S.Lean) + 1e-3f);
+
+    //     The skater rides the geometric arc; the mismatch with RDyn is a
+    //     torque the body has to absorb. That mismatch IS the balance problem
+    //     the player is solving, tick by tick.
+    const float TorqueErr = (1.f / RGeo - 1.f / RDyn) * Speed * Speed;
+    S.BalanceErr.X += TorqueErr * kBalanceGain * Dt;
+
+    // 4 — Can the edge hold it?
+    const float Normal  = S.Mass * kGravity / Max(Cos(S.Lean), 0.30f);
+    const float NeedLat = S.Mass * Speed * Speed / RGeo;
+    const float Bite    = Ice.BiteCoefficient(S.Pos, S.Lean, F.PressureN,
+                                              S.BladeSharpness) * Normal;
+
+    float Radius = RGeo;
+    if (NeedLat &gt; Bite) {
+        // The edge lets go: the arc widens, speed bleeds, snow flies.
+        Radius = S.Mass * Speed * Speed / Max(Bite, 1.f);
+        const float Slip = (NeedLat - Bite) / S.Mass;
+        S.Vel -= S.Vel.GetSafeNormal() * kMuSkid * Slip * Dt;
+        S.Flow = Max(0.f, S.Flow - 1.8f * Slip * Dt);
+        Ice.DepositSnow(S.Pos, Slip * Dt);
+        Events.Push({ ESkateEvent::Skid, Slip });
+    } else {
+        S.Flow = Min(1.f, S.Flow + 0.35f * (S.Lean / kMaxLean) * Dt);
+    }
+
+    // 5 — Integrate the arc. Yaw rate is emergent, never an input.
+    const float TurnSign = -F.EdgeSign * SideOf(Support);
+    S.YawRate = TurnSign * Speed / Max(Radius, 0.35f);
+    S.Yaw     = WrapPi(S.Yaw + S.YawRate * Dt);
+
+    // 6 — Propulsion. You push SIDEWAYS against an edge; a blade offers
+    //     almost nothing to push against along its length.
+    if (In.bPushPressed &amp;&amp; CanPush(S)) {
+        const float Knee    = In.KneeAxis;
+        const float Beat    = CrossoverBeatQuality(S);   // 1.0 on-beat, 0.45 off
+        const float Power   = S.Mass * 3.2f * Knee * Beat * StaminaGain(S);
+        const FVector Push  = BladeNormal(S, 1 - Support);
+        S.Vel     += Push * (Power / S.Mass) * Dt;
+        S.LegPool -= 0.011f * Knee;
+    }
+
+    // 7 — Losses. Blade friction is tiny; at 8 m/s air drag is comparable,
+    //     which is why speed is expensive to build and cheap to keep.
+    const float Mu   = Ice.GlideFriction(S.Pos);     // damaged ice is slower
+    const float Drag = 0.5f * 1.29f * 0.9f * 0.55f * Speed * Speed;
+    S.Vel -= S.Vel.GetSafeNormal() * (Mu * kGravity + Drag / S.Mass) * Dt;
+
+    S.Pos += S.Vel * Dt;
+
+    Ice.WriteTracing(S.Pos, S.Yaw, F.EdgeSign, S.Lean, F.PressureN);
+    UpdateBalance(S, In, Dt);
+    UpdateStamina(S, Speed, Dt);
+}</code></pre>
+</figure>
+
+<h3>10.2 Jump physics</h3>
+<p>Note the shape of it: <strong>everything is decided at takeoff.</strong> The air phase has exactly one lever,
+the moment of inertia, because that is the only lever a real skater has.</p>
+<figure class="code">
+<figcaption><span>JumpResolver.cpp</span><span class="lang">C++</span></figcaption>
+<pre><code class="language-cpp">enum class EJumpPhase : uint8 { None, Load, Air, Land, Fail };
+
+struct FJumpDef {
+    EJumpType Type;
+    EEdge     TakeoffEdge;   // e.g. LBO for a lutz
+    bool      bToeAssisted;
+    bool      bEdgeCallable; // only flip and lutz can draw an 'e'
+    float     BaseImpulse;   // m/s of vertical velocity at a perfect load
+    float     RotBias;       // how readily the entry generates angular momentum
+};
+
+void FJumpResolver::Tick(FSkaterState&amp; S, FJumpAttempt&amp; J,
+                         const FSkaterInput&amp; In, float Dt)
+{
+  const FJumpDef&amp; Def = Defs[(int)J.Type];
+
+  switch (J.Phase)
+  {
+  // ── LOAD ─────────────────────────────────────────────────────────────
+  // Knee compression sets the vertical impulse. Hold too long and the edge
+  // rotates underneath you before you leave the ice: pre-rotation.
+  case EJumpPhase::Load:
+  {
+      J.PhaseTime += Dt;
+      J.EntryEdgeError = EdgeMismatch(CurrentEdge(S), Def.TakeoffEdge); // 0..1
+
+      constexpr float kIdealLoad = 0.30f;
+      if (J.PhaseTime &gt; kIdealLoad * 1.6f) J.PreRotation += 2.2f * Dt;
+
+      if (In.KneeAxis &lt; 0.15f)                    // trigger released: takeoff
+      {
+          const float TimingQ = 1.f - Abs(J.PhaseTime - kIdealLoad) / kIdealLoad;
+          const float DepthQ  = Clamp(J.PeakKnee / 0.85f, 0.f, 1.f);
+          const float Fatigue = 0.82f + 0.18f * S.LegPool;
+
+          J.TakeoffQuality = Clamp(0.55f * TimingQ + 0.45f * DepthQ, 0.f, 1.f)
+                           * (1.f - 0.35f * J.EntryEdgeError)
+                           * (1.f - 0.40f * Saturate(J.PreRotation));
+
+          // Toe jumps need the pick planted inside a 90 ms window.
+          if (Def.bToeAssisted &amp;&amp; !J.bToeStruck) J.TakeoffQuality *= 0.45f;
+
+          // Ballistics are fixed HERE and cannot be changed in the air.
+          J.VertVel = Def.BaseImpulse * (0.62f + 0.38f * J.TakeoffQuality) * Fatigue;
+          J.AirTime = 2.f * J.VertVel / kGravity;
+          J.Height  = J.VertVel * J.VertVel / (2.f * kGravity);
+
+          // Angular momentum comes from the entry curve plus the check of the
+          // free side. L = I * omega, and after this instant L never changes.
+          const float Entry = S.Vel.Size2D() / Max(CarveRadius(S), 0.5f);
+          const float Whip  = Clamp(In.CarriageFlick, 0.f, 1.f);
+          J.AngMomentum = S.InertiaZ * (Entry * Def.RotBias + 9.5f * Whip)
+                        * (0.80f + 0.20f * J.TakeoffQuality);
+
+          S.Vel.Z    = J.VertVel;
+          S.LegPool -= 0.055f + 0.020f * J.Revolutions;
+          J.Phase = EJumpPhase::Air;  J.PhaseTime = 0.f;  J.Rotation = 0.f;
+      }
+      break;
+  }
+
+  // ── AIR ──────────────────────────────────────────────────────────────
+  // L is conserved. The only remaining control is the moment of inertia:
+  // pulling the arms and free leg to the axis roughly quarters I, which
+  // roughly quadruples omega. Fatigue raises the floor you can reach.
+  case EJumpPhase::Air:
+  {
+      J.PhaseTime += Dt;
+
+      const float Pull     = Clamp(1.f - In.CarriageStick.Size(), 0.f, 1.f);
+      const float IFloor   = Lerp(1.55f, 0.95f, S.LegPool);
+      const float PullRate = 11.f * (0.60f + 0.40f * S.LegPool);
+      S.InertiaZ = MoveTowards(S.InertiaZ, Lerp(4.0f, IFloor, Pull),
+                               PullRate * Dt);
+
+      const float Omega = J.AngMomentum / S.InertiaZ;    // rad/s
+      J.Rotation += Omega * Dt;
+      J.PeakOmega = Max(J.PeakOmega, Omega);
+
+      S.Vel.Z -= kGravity * Dt;
+      S.Pos   += S.Vel * Dt;
+
+      if (S.Pos.Z &lt;= IceHeight(S.Pos) || J.PhaseTime &gt;= J.AirTime)
+          J.Phase = EJumpPhase::Land;
+      break;
+  }
+
+  // ── LAND ─────────────────────────────────────────────────────────────
+  // Rotation accounting mirrors how a technical panel actually calls a jump.
+  case EJumpPhase::Land:
+  {
+      // An axel takes off forwards, so it carries an extra half revolution.
+      const float Target  = TWO_PI * (J.Revolutions
+                          + (J.Type == EJumpType::Axel ? 0.5f : 0.f));
+      const float ShortBy = (Target - J.Rotation) / TWO_PI;   // in revolutions
+
+      FElementResult R;
+      R.Called      = J.Type;
+      R.Revolutions = J.Revolutions;
+
+      if      (ShortBy &gt; 0.500f) R.Rotation = ERotationCall::Downgraded;   // &lt;&lt;
+      else if (ShortBy &gt; 0.250f) R.Rotation = ERotationCall::UnderRotated; // &lt;
+      else if (ShortBy &gt; 0.125f) R.Rotation = ERotationCall::Quarter;      // q
+      else                       R.Rotation = ERotationCall::Clean;
+
+      if (Def.bEdgeCallable)                                  // flutz / lip
+          R.EdgeCall = J.EntryEdgeError &gt; 0.55f ? EEdgeCall::Wrong
+                     : J.EntryEdgeError &gt; 0.25f ? EEdgeCall::Unclear
+                     :                            EEdgeCall::Clean;
+
+      // Landing quality: did you open on time, present the right edge,
+      // and absorb the impact with the knee?
+      const float CheckErr = Abs(WrapPi(J.Rotation - Target)) / PI;
+      const float Absorb   = In.KneeAxis;
+      const float EdgeOK   = 1.f - EdgeMismatch(CurrentEdge(S), EEdge::RBO);
+      const float Balance  = S.BalanceErr.Size();
+
+      R.LandingQuality = Clamp(1.f - 0.90f * CheckErr
+                                   - 0.50f * (1.f - Absorb)
+                                   - 0.35f * (1.f - EdgeOK)
+                                   - 0.60f * Balance, 0.f, 1.f);
+
+      R.Height    = J.Height;
+      R.Flow      = S.Vel.Size2D();
+      R.PeakOmega = J.PeakOmega;
+      R.bFall     = R.LandingQuality &lt; 0.18f || ShortBy &gt; 0.70f;
+      R.bStepOut  = !R.bFall &amp;&amp; R.LandingQuality &lt; 0.34f;
+
+      Recognizer.Submit(R);
+
+      S.Vel.Z    = 0.f;
+      S.InertiaZ = 4.0f;
+      S.BalanceErr += LandingShock(R, J);
+      J.Phase = R.bFall ? EJumpPhase::Fail : EJumpPhase::None;
+      break;
+  }
+  default: break;
+  }
+}</code></pre>
+</figure>
+
+<h3>10.3 Scoring</h3>
+<figure class="code">
+<figcaption><span>ScoreCalculator.cs · data model, element scoring, judge panel</span><span class="lang">C#</span></figcaption>
+<pre><code class="language-csharp">public enum ElementCategory { Jump, JumpCombo, JumpSequence, Spin, StepSequence,
+                              ChoreoSequence, Lift, Throw }
+public enum JumpType     { Toeloop, Salchow, Loop, Flip, Lutz, Axel }
+public enum SpinType     { Upright, Sit, Camel, Layback, Combination,
+                           FlyingCamel, FlyingSit }
+public enum RotationCall { Clean, Quarter, UnderRotated, Downgraded } // -, q, &lt;, &lt;&lt;
+public enum EdgeCall     { Clean, Unclear, Wrong }                    // -, !, e
+public enum Component    { Composition, Presentation, SkatingSkills }
+
+// Scale of Values, indexed [jump, revolutions - 1]. This lives in a DataTable
+// in the shipping game: the ISU revises it most seasons and a live title has
+// to follow within days of publication.
+static readonly float[,] JumpBV = {
+//    single  double  triple    quad
+    { 0.40f,  1.30f,  4.20f,   9.50f },  // Toeloop
+    { 0.40f,  1.30f,  4.30f,   9.70f },  // Salchow
+    { 0.50f,  1.70f,  4.90f,  10.50f },  // Loop
+    { 0.50f,  1.80f,  5.30f,  11.00f },  // Flip
+    { 0.60f,  2.10f,  5.90f,  11.50f },  // Lutz
+    { 1.10f,  3.30f,  8.00f,  12.50f },  // Axel (a "single" is 1.5 revolutions)
+};
+
+public sealed class ScoreCalculator
+{
+    const float SecondHalfBonus = 1.10f;
+
+    // ── Base value ────────────────────────────────────────────────────────
+    public float BaseValue(ElementResult e)
+    {
+        float bv = 0f;
+
+        foreach (var j in e.Jumps)
+        {
+            float b = JumpBV[(int)j.Type, j.Revolutions - 1];
+            switch (j.Rotation)
+            {
+                case RotationCall.UnderRotated: b *= 0.80f;             break;
+                case RotationCall.Downgraded:   b = DowngradeValue(j);  break;
+                // A quarter call keeps full base value and is punished only
+                // through a mandatory GOE reduction.
+            }
+            if (j.EdgeCall == EdgeCall.Wrong) b = WrongEdgeValue(j);
+            bv += b;
+        }
+
+        if (e.Category == ElementCategory.JumpSequence) bv *= 0.80f;
+
+        if (e.Category is ElementCategory.Spin or ElementCategory.StepSequence)
+            bv = LevelTable[e.Kind][(int)e.Level];
+
+        // Only the last jump element started in the second half is boosted —
+        // which is exactly why program layout is a strategic decision.
+        if (e.IsSecondHalf &amp;&amp; e.IsBonusEligible) bv *= SecondHalfBonus;
+
+        if (e.ViolatesRepetitionRule) bv = 0f;          // the Zayak rule
+
+        return Round2(bv);
+    }
+
+    // One GOE step is worth 10% of base value for jumps; spins and step
+    // sequences use a fixed increment per level.
+    public float GoeStep(ElementResult e) =&gt;
+        e.Category is ElementCategory.Jump or ElementCategory.JumpCombo
+            ? Round2(0.10f * RawBaseValue(e))
+            : LevelGoeStep[e.Kind][(int)e.Level];
+
+    public float ElementScore(ElementResult e, IReadOnlyList&lt;int&gt; panelGoe)
+        =&gt; Round2(BaseValue(e) + TrimmedMean(panelGoe) * GoeStep(e));
+
+    // Nine judges; drop the highest and lowest, average the remaining seven.
+    static float TrimmedMean(IReadOnlyList&lt;float&gt; v)
+    {
+        var s = v.OrderBy(x =&gt; x).ToArray();
+        float sum = 0f;
+        for (int i = 1; i &lt; s.Length - 1; i++) sum += s[i];
+        return sum / (s.Length - 2);
+    }
+
+    // ── Segment ───────────────────────────────────────────────────────────
+    public SegmentScore Score(Program p, JudgePanel panel, SegmentRules rules)
+    {
+        var seg = new SegmentScore();
+
+        foreach (var e in p.Elements)
+            seg.TES += ElementScore(e, panel.CollectGoe(e));
+
+        // Three components since 2022-23. Each judge scores 0.25-10.00 in
+        // quarter steps; the panel is trimmed, then scaled by a factor that
+        // brings short and free programs to comparable magnitudes.
+        foreach (Component c in Enum.GetValues&lt;Component&gt;())
+            seg.PCS += Round2(TrimmedMean(panel.CollectComponent(c, p)))
+                     * rules.ComponentFactor;   // e.g. 2.67, women's free skate
+
+        seg.Deductions = Deductions(p, rules);
+        seg.TES = Round2(seg.TES);
+        seg.PCS = Round2(seg.PCS);
+        seg.Total = Round2(seg.TES + seg.PCS - seg.Deductions);
+        return seg;
+    }
+
+    static float Deductions(Program p, SegmentRules rules)
+    {
+        float d = 0f;
+        for (int i = 0; i &lt; p.Falls; i++)          // -1, -1, -2, -2, -3, -3 ...
+            d += i &lt; 2 ? 1f : (i &lt; 4 ? 2f : 3f);
+
+        float over = Mathf.Abs(p.DurationSeconds - rules.TargetSeconds)
+                   - rules.ToleranceSeconds;
+        if (over &gt; 0f) d += Mathf.Ceil(over / 5f);          // -1.0 per 5 seconds
+
+        d += p.CostumeViolations * 1f;
+        d += p.IllegalElements   * 2f;
+        d += p.Interruptions     * 1f;
+        return d;
+    }
+}
+
+// ── A judge is a person, not a formula ───────────────────────────────────
+// Nine of them disagreeing is what makes a score feel earned rather than
+// computed. Seeded from the replay header so a run always re-scores the same.
+public static int JudgeGoe(Judge j, ElementResult e, Rng rng)
+{
+    float v = Mathf.Lerp(-5f, 5f, e.Quality);          // 0..1 from the sim
+    v += j.TechnicalBias * e.DifficultyZ;              // some reward risk
+    v -= j.Strictness    * e.BlemishCount;
+    v += j.Halo          * e.Skater.Reputation;
+    v += j.FederationWarmth(e.Skater, e.Venue);
+
+    if (e.HasFall)                       v  = -5f;                  // mandatory
+    if (e.EdgeCall  == EdgeCall.Wrong)   v  = Mathf.Min(v, -1f);
+    if (e.Rotation  == RotationCall.Quarter) v -= 1f;               // mandatory
+    if (e.MusicalCredit &gt; 0.7f)          v += 0.4f;
+
+    v += rng.Gaussian(0f, j.NoiseSigma);
+    return Mathf.Clamp(Mathf.RoundToInt(v), -5, 5);
+}</code></pre>
+</figure>
+
+<h3>10.4 Animation state resolution</h3>
+<p>The animation layer never decides anything. It reads the simulation and finds the pose that matches. The
+text diagram in §3.4 shows the states; this is the selector and the warping chain that makes clips fit
+arbitrary carve radii.</p>
+<figure class="code">
+<figcaption><span>SkaterAnimDriver.cpp · layered selection + post-selection warping</span><span class="lang">C++</span></figcaption>
+<pre><code class="language-cpp">EAnimState FSkaterAnimDriver::Resolve(const FSkaterState&amp; S,
+                                      const FJumpAttempt&amp; J,
+                                      const FSpinAttempt&amp; Sp,
+                                      FPoseSearchQuery&amp; OutQuery)
+{
+    // ── Priority 0: recovery pre-empts everything ────────────────────────
+    if (S.bGrounded)                        return EAnimState::PoweredRagdoll;
+    if (S.BalanceErr.Size() &gt; 0.85f)        return EAnimState::Fall;
+    if (S.BalanceErr.Size() &gt; 0.55f)        return EAnimState::Stumble;
+
+    // ── Priority 1: elements override locomotion ─────────────────────────
+    switch (J.Phase)
+    {
+    case EJumpPhase::Load:
+        // Intent broadcast: publish the predicted takeoff instant so the
+        // locomotion layer can pre-position the foot plant instead of
+        // snapping. This is what stops the classic sports-game pop.
+        BroadcastTakeoffIntent(J.PredictedTakeoffTime(), J.Type);
+        return EAnimState::JumpLoad;
+
+    case EJumpPhase::Air:
+        // Check-out begins when the rotation still owed fits the time left
+        // to open. Below that, the skater is committed to landing.
+        return RemainingRotation(J) &lt; OpeningWindow(J)
+             ? EAnimState::JumpCheck : EAnimState::JumpAir;
+
+    case EJumpPhase::Land: return EAnimState::JumpLand;
+    case EJumpPhase::Fail: return EAnimState::Fall;
+    default: break;
+    }
+
+    if (Sp.bActive)
+        return Sp.bChangingFoot ? EAnimState::SpinChangeFoot
+             : Sp.bExiting      ? EAnimState::SpinExit
+             : SpinStateFor(Sp.Position);
+
+    if (S.PendingTurn != ETurn::None &amp;&amp; TurnIsValidFromEdge(S, S.PendingTurn))
+        return TurnStateFor(S.PendingTurn);
+
+    // ── Priority 2: locomotion is not a state machine at all ─────────────
+    // Hand the physical context to Pose Search and let the mocap database
+    // answer. The alternative — hand-built blend spaces over
+    // edge x speed x curvature x knee — does not fit in a schedule.
+    OutQuery.Velocity     = S.Vel;
+    OutQuery.CarveRadius  = SignedCarveRadius(S);   // sign encodes which way
+    OutQuery.EdgeSign     = S.Foot[Support(S)].EdgeSign;
+    OutQuery.LeanAngle    = S.Lean;
+    OutQuery.KneeAxis     = S.LastInput.KneeAxis;
+    OutQuery.FutureRoot   = PredictRoot(S, 0.35f);  // the solver's commitment
+    OutQuery.Tags         = LocomotionTags(S);      // glide/stroke/crossover/...
+    return EAnimState::Locomotion;
+}
+
+// Post-selection: this is what stops the skater sliding across the ice like
+// furniture. Every clip was captured on some radius; almost none of them the
+// one the solver just produced.
+void FSkaterAnimDriver::PostProcess(FPoseContext&amp; Pose, const FSkaterState&amp; S)
+{
+    // Bend a straight-line stride onto the arc the physics actually solved,
+    // distributing the rotation between hips and spine so it reads as a lean
+    // into the circle rather than a waist twist.
+    OrientationWarp(Pose, S.YawRate, /*SpineWeight*/ 0.35f, /*HipWeight*/ 0.65f);
+
+    // Match the blade's animated contact speed to real ground speed. Without
+    // this the feet skate on a treadmill and the illusion dies instantly.
+    StrideWarp(Pose, S.Vel.Size2D() / Max(Pose.ClipRootSpeed, 0.1f));
+
+    // Clips are authored upright. Control Rig stacks the body over the edge,
+    // keeping the upper body several degrees more vertical than the legs —
+    // skaters stack, they do not tip like a motorcycle.
+    ControlRig_Lean(Pose, S.Lean, S.LeanAxis, /*UpperBodyBias*/ 0.72f);
+
+    // Plant both blades on the ice honouring the contact point along the
+    // rocker, then let the free leg follow its choreography target.
+    BladeIK(Pose, S.Foot[0], S.Foot[1], IceHeight(S.Pos));
+    FreeLegIK(Pose, S.FreeLegTarget, S.LastInput.ToeAxis);
+
+    // Additives last: none of these can change which pose was selected.
+    ApplyAdditive(Pose, FatiguePose,  1.f - S.LegPool);
+    ApplyAdditive(Pose, CarriagePose, S.LastInput.CarriageStick);
+    ApplyAdditive(Pose, BreathPose,   BreathPhase(S.WindPool));
+    GazeSolver(Pose, PredictTravelDirection(S, 0.4f), S.AccentTarget);
+}</code></pre>
+</figure>
+</section>
+
+<!-- ═══════════════════════════ 11 ═══════════════════════════ -->
+<section id="s11">
+<div class="sec-head"><span class="sec-num">—</span><h2>Decisions I Need From You</h2></div>
+<p>Everything above is buildable as written. These six choices would change the shape of it, and I have made
+a defensible default for each rather than leaving a hole — but they are yours to overrule.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Question</th><th>My default</th><th>What changes if you differ</th></tr></thead>
+<tbody>
+<tr><td class="k">Team size and budget — is 40 FTE over 30 months realistic for you?</td><td>Scoped as a mid-size production, roughly $18–25M</td><td>At 12–15 people, cut to one discipline, four rinks, no career mode, and lead with Free Skate plus the Composer as a premium indie. The sim core and tracings survive intact; the content does not. The design still works at that scale — it is the only part of this document that scales down cleanly.</td></tr>
+<tr><td class="k">Is Unreal actually available to you, or is the team Unity-native?</td><td>Unreal 5.4+</td><td>Unity is workable but you rebuild motion matching, cloth and the character pipeline. Budget six extra months and one more animation engineer. Tell me and I will rewrite §06 and the code samples against Unity 6 and DOTS.</td></tr>
+<tr><td class="k">Single-player-first, or is multiplayer a launch requirement?</td><td>Single-player-first; async and warm-up at launch, pairs post-launch</td><td>If real-time competitive multiplayer is a launch requirement, add a senior network engineer from month one and expect the pairs constraint solver to become a critical-path item rather than an expansion.</td></tr>
+<tr><td class="k">Simulation fidelity versus accessibility — where does the default sit?</td><td>The Novice tier is the default; Senior is the intended experience</td><td>If the target is broad and casual, invert it: Club becomes default, and the Edge Ribbon needs a much louder, more prescriptive design. This changes the tutorial, the camera and the entire first hour.</td></tr>
+<tr><td class="k">Which disciplines at launch?</td><td>Men's and women's singles only</td><td>Adding pairs or ice dance at launch is roughly +8 months and a second animation team. Adding synchronised skating is a different game.</td></tr>
+<tr><td class="k">Do you want licensed athletes or federations?</td><td>No — original skaters</td><td>Licensing constrains the career fiction, adds legal review to every content drop, and delays announcement. I would revisit it only as post-launch DLC.</td></tr>
+</tbody></table></div>
+
+<p>Tell me which of these to lock and I will produce the next artefact — the most useful ones are, in order:
+a <strong>month-by-month pre-production plan</strong> for the feel prototype with the specific playtest protocol
+for the month-four kill gate; a <strong>complete element and SOV data schema</strong> ready to import; or the
+<strong>Composer transition solver</strong> specified properly, since it is the piece with the most hidden
+complexity.</p>
+
+<p class="end">Edgework · Design &amp; Technical Bible · v1.0 · Scale of Values and component factors are
+indicative and must be verified against current ISU regulations before content lock.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  if (window.hljs) { try { hljs.highlightAll(); } catch(e) {} }
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var secs = Array.prototype.slice.call(document.querySelectorAll('section[id]'));
+  if (!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (!en.isIntersecting) return;
+      links.forEach(function(a){ a.classList.remove('on'); });
+      var a = map[en.target.id];
+      if (a) a.classList.add('on');
+    });
+  }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+  secs.forEach(function(s){ io.observe(s); });
+})();
+</script>

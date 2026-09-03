@@ -1,0 +1,5 @@
+discipline,segment,target_seconds,tolerance_seconds,component_factor,jump_elements,spin_elements,step_elements,notes
+men,short,160,10,1.67,3,3,1,One axel-type jump; one solo jump; one combination. Three spins of different types.
+women,short,160,10,1.33,3,3,1,One axel-type jump; one solo jump; one combination. Three spins of different types.
+men,free,240,10,3.33,7,3,2,"Max 3 combinations or sequences, one of which may contain three jumps. One step sequence plus one choreographic sequence."
+women,free,240,10,2.67,7,3,2,"Max 3 combinations or sequences, one of which may contain three jumps. One step sequence plus one choreographic sequence."
