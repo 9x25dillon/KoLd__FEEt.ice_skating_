@@ -16,7 +16,7 @@ Build/
 *.xcworkspace
 # Keep .uproject and Config/ — they are source.
 
-# ── Unity (in case §11's engine decision goes the other way) ─────
+# ── Unity (D2 closed to Unreal 2026-09-03; kept only for stray tooling) ──
 Library/
 Temp/
 Obj/

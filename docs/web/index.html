@@ -1145,8 +1145,9 @@ sparingly — only on triples and above — it will be the thing people describe
 <tr><td class="k">Crowd</td><td>Mass + Niagara instancing</td><td class="k">DOTS is excellent here</td></tr>
 </tbody></table>
 <caption>Unity wins iteration speed and crowd performance. Unreal wins the character, costume, animation and
-cinematic pipeline — which is most of this game. If the team is Unity-native and senior, that changes the
-calculus; the retraining cost is real and should be weighed honestly rather than dismissed.</caption></div>
+cinematic pipeline — which is most of this game. <strong>Decided: Unreal Engine 5.4+</strong>, ahead of
+pre-production rather than at its week-two deadline. This table is retained as the reasoning, not as an
+open question.</caption></div>
 
 <div class="note"><span class="lbl">Do not use CharacterMovementComponent</span>
 <p>UE's built-in character movement is a capsule-and-ground-plane walker with hard-coded acceleration and
@@ -1936,14 +1937,15 @@ void FSkaterAnimDriver::PostProcess(FPoseContext&amp; Pose, const FSkaterState&a
 <!-- ═══════════════════════════ 11 ═══════════════════════════ -->
 <section id="s11">
 <div class="sec-head"><span class="sec-num">—</span><h2>Decisions I Need From You</h2></div>
-<p>Everything above is buildable as written. These six choices would change the shape of it, and I have made
-a defensible default for each rather than leaving a hole — but they are yours to overrule.</p>
+<p>Everything above is buildable as written. These choices would change the shape of it, and I have made
+a defensible default for each rather than leaving a hole — but they are yours to overrule. <strong>The engine
+is now settled</strong>; five remain open, and none of them carries a date.</p>
 
 <div class="tw"><table>
 <thead><tr><th>Question</th><th>My default</th><th>What changes if you differ</th></tr></thead>
 <tbody>
 <tr><td class="k">Team size and budget — is 40 FTE over 30 months realistic for you?</td><td>Scoped as a mid-size production, roughly $18–25M</td><td>At 12–15 people, cut to one discipline, four rinks, no career mode, and lead with Free Skate plus the Composer as a premium indie. The sim core and tracings survive intact; the content does not. The design still works at that scale — it is the only part of this document that scales down cleanly.</td></tr>
-<tr><td class="k">Is Unreal actually available to you, or is the team Unity-native?</td><td>Unreal 5.4+</td><td>Unity is workable but you rebuild motion matching, cloth and the character pipeline. Budget six extra months and one more animation engineer. Tell me and I will rewrite §06 and the code samples against Unity 6 and DOTS.</td></tr>
+<tr><td class="k"><s>Which engine?</s> <strong>Closed</strong></td><td><strong>Unreal Engine 5.4+</strong></td><td>Decided ahead of pre-production, which cancels the two-engine bake-off in weeks 1–2 and hands that time back to the carve solver. Two consequences are now standing instructions rather than recommendations: write a custom <code>USkateMovementComponent</code> and never bend <code>CharacterMovementComponent</code>; and treat the Unreal idiom in §10 as literal rather than illustrative.</td></tr>
 <tr><td class="k">Single-player-first, or is multiplayer a launch requirement?</td><td>Single-player-first; async and warm-up at launch, pairs post-launch</td><td>If real-time competitive multiplayer is a launch requirement, add a senior network engineer from month one and expect the pairs constraint solver to become a critical-path item rather than an expansion.</td></tr>
 <tr><td class="k">Simulation fidelity versus accessibility — where does the default sit?</td><td>The Novice tier is the default; Senior is the intended experience</td><td>If the target is broad and casual, invert it: Club becomes default, and the Edge Ribbon needs a much louder, more prescriptive design. This changes the tutorial, the camera and the entire first hour.</td></tr>
 <tr><td class="k">Which disciplines at launch?</td><td>Men's and women's singles only</td><td>Adding pairs or ice dance at launch is roughly +8 months and a second animation team. Adding synchronised skating is a different game.</td></tr>

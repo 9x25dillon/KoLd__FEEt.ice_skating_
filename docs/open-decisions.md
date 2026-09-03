@@ -28,21 +28,33 @@ is the only part of the bible that scales cleanly, and it scales well.
 
 **Default:** Unreal Engine 5.4+.
 
-**Status:** OPEN — **must close by week 2 of pre-production.** This is the only decision here
-with a hard deadline. A two-week spike in both engines (carve on a plane, ice material, tracing
-RVT) runs in week 1; the call is made on that evidence plus team fluency in week 2 and is not
-revisited. See [pre-production-plan.md](pre-production-plan.md#month-1--the-blade-on-ice).
+**Status:** RESOLVED — **Unreal Engine 5.4+ (2026-09-03).** Closed ahead of pre-production
+rather than at the week-2 deadline, which is the best possible outcome for this decision: it was
+the only item on the register with a hard date, and every week it stayed open cost two engineers
+half their throughput.
 
-The recommendation rests on MetaHuman, Chaos Cloth, Groom, Pose Search and Sequencer — the
-character, costume, animation and cinematic pipeline, which is most of this game. Unity wins
-iteration speed and crowd performance and is entirely workable, but you rebuild motion
-matching, cloth and the character pipeline: budget six extra months and one more animation
-engineer.
+The recommendation rested on MetaHuman, Chaos Cloth, Groom, Pose Search and Sequencer — the
+character, costume, animation and cinematic pipeline, which is most of this game. Unity's genuine
+advantages, iteration speed and crowd performance, were judged not to outweigh that.
 
-**The deciding question is not which engine is better, it is what the team already knows.**
-A senior Unity team should probably stay on Unity.
+### Consequences now locked
 
-**Affects:** §06 entirely, §10 code samples, §03.3 animation approach.
+- **The engine bake-off is cancelled.** Weeks 1–2 of pre-production no longer run a two-engine
+  spike. What remains is a single-engine *validation* spike in UE5 — the ice material, the tracing
+  RVT, planar reflection cost — and M1.1 changes from "decide the engine" to "prove the ice
+  renders." See [pre-production-plan.md](pre-production-plan.md#month-1--the-blade-on-ice).
+- **`USkateMovementComponent`, not `CharacterMovementComponent`.** The bible's warning
+  ([§6.1](design-bible.md#61-engine-recommendation-unreal-engine-54)) is now a standing
+  instruction rather than a contingent one. CMC's assumptions are all wrong for a carve model.
+- **The reference code's Unreal flavour is now literal**, not illustrative. `F` prefixes,
+  `FVector`, `TArray` — the samples in `src/reference/` are the intended idiom.
+- **`ScoreCalculator.cs` is the one exception** and stays C#: scoring runs headlessly in the
+  server-side verification path, where a managed implementation is the more convenient host.
+  Port it to C++ only if the verification service ends up in-engine.
+- **Licensing:** Unreal's royalty terms apply above the revenue threshold. Model that in the
+  P&L before the vertical slice gate, not after — it changes the break-even, not the plan.
+
+**Was affected:** §06 entirely, §10 code samples, §03.3 animation approach. All now consistent.
 
 ---
 

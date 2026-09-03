@@ -38,9 +38,12 @@ Three structural properties are load-bearing and should survive any rewrite:
 
 ## Language choice
 
-The C++ files are Unreal-flavoured (`F` prefixes, `FVector`) per the §6.1 engine
-recommendation. `ScoreCalculator.cs` is C# because scoring is a gameplay-layer concern that
-would sit in managed code in a Unity build and in a tools/backend context in an Unreal one —
-the server-side verification path re-runs it headlessly either way.
+The C++ files are Unreal-flavoured (`F` prefixes, `FVector`) — and since
+[D2 closed to Unreal 5.4+](../../docs/open-decisions.md#d2--engine), that idiom is now literal
+rather than illustrative. Write `USkateMovementComponent`; never bend `CharacterMovementComponent`.
+
+`ScoreCalculator.cs` is the one deliberate exception and stays C#. Scoring runs headlessly in the
+server-side verification path, where a managed implementation is the more convenient host. Port it
+to C++ only if that service ends up in-engine.
 
 Licensed Apache-2.0 (see `/LICENSE-CODE`), unlike the design documents.

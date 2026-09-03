@@ -9,7 +9,7 @@ ice beneath you.
 | | |
 | --- | --- |
 | **Genre** | Sports simulation / creative sandbox |
-| **Engine** | Unreal Engine 5.4+ ([D2](open-decisions.md#d2--engine)) |
+| **Engine** | Unreal Engine 5.4+ — [decided](open-decisions.md#d2--engine) |
 | **Platforms** | PC, PS5, Xbox Series, Switch 2 |
 | **Team peak** | 40 FTE |
 | **Schedule** | 30 months to launch |
@@ -908,9 +908,13 @@ describe when they describe the game.
 | Crowd | Mass + Niagara instancing | **DOTS is excellent here** |
 
 Unity wins iteration speed and crowd performance. Unreal wins the character, costume, animation
-and cinematic pipeline — which is most of this game. If the team is Unity-native and senior, that
-changes the calculus; the retraining cost is real and should be weighed honestly rather than
-dismissed. See [D2](open-decisions.md#d2--engine).
+and cinematic pipeline — which is most of this game.
+
+> **Decided: Unreal Engine 5.4+** ([D2](open-decisions.md#d2--engine), 2026-09-03), ahead of
+> pre-production rather than at the week-2 deadline. The table above is retained as the reasoning,
+> not as an open question. Two consequences are now standing instructions rather than
+> recommendations: **write `USkateMovementComponent`, never bend `CharacterMovementComponent`**,
+> and treat the Unreal idiom in [§10](#10--reference-code) as literal rather than illustrative.
 
 > ### Do not use CharacterMovementComponent
 > UE's built-in character movement is a capsule-and-ground-plane walker with hard-coded

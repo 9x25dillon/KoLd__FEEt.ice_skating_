@@ -76,7 +76,7 @@ Eight people. Every one of them plays the build every week, including the produc
 | **Creative lead / director** | 1 | The question. Runs the daily play session. **Recused from the gate vote** (see §8). |
 | **Gameplay engineer — solver** | 1 | `FSkateSolver`, blade contact, ice grid, friction and bite curves. |
 | **Gameplay engineer — input & feel** | 1 | The three control schemes, the balance model, the hop, the telemetry pipeline. |
-| **Rendering / technical artist** | 1 | Engine spike: ice material, tracing RVT, planar reflection cost. Answers D2 with evidence. |
+| **Rendering / technical artist** | 1 | Ice material, tracing RVT, planar reflection cost in UE5. Owns the `USkateMovementComponent` scaffold — CMC is not used. |
 | **Animation engineer** | 1 | Placeholder rig, procedural lean layer, blade IK, powered-ragdoll falls. No authored animation. |
 | **Designer** | 1 | Control scheme specification, test tasks, the playtest protocol, the scoring data model. |
 | **Producer** | 1 | Hiring, mocap vendor and volume booking, schedule, budget, tester recruitment. |
@@ -143,10 +143,17 @@ Weeks are relative to project start. Calendar anchoring is the producer's.
 
 | Week | Deliverable |
 | --- | --- |
-| **W1** | Repo, CI, build farm. Skating consultant starts. Engine spike begins in **both** UE5 and Unity — a carve on a plane, an ice material, a tracing RVT — timeboxed to two weeks. |
-| **W2** | **M1.1 — Engine decision locked** ([D2](open-decisions.md#d2--engine)). Decided on spike evidence plus team fluency, and not revisited. Every week D2 stays open costs two engineers half their throughput. |
+| **W1** | Repo, CI, build farm. Skating consultant starts. **UE5 validation spike** — a carve on a plane, an ice material, a tracing RVT. One engine, not two ([D2 is closed](open-decisions.md#d2--engine)). |
+| **W2** | **M1.1 — The ice renders.** Planar reflection cost measured, tracing RVT writing at simulation rate, `USkateMovementComponent` scaffolded in place of `CharacterMovementComponent`. |
 | **W3** | Solver v0: one foot, lean → carve, longitudinal friction. Capsule with a blade on an infinite plane. Debug camera. No balance, no second foot. |
 | **W4** | **M1.2 — You can carve a circle, and its radius changes with lean.** Internal only. Nobody outside the room sees this. First telemetry: lean, speed, radius, skid, logged per tick. |
+
+> **The bake-off is cancelled, and the freed week goes to the solver — not to the calendar.**
+> Closing D2 early recovers roughly one engineer-week that was budgeted for evaluating a second
+> engine. Do not pull the gate in to W15: the schedule's tightest passage is the protocol pilot
+> and the two testing weeks, and compressing those degrades the only measurement that matters.
+> Bank the time in W3–W4 instead, where it buys a better carve solver — which is the thing
+> actually under test.
 
 ### Month 2 · Three schemes, one question
 
@@ -393,5 +400,6 @@ Planned in full in [vertical-slice-plan.md](vertical-slice-plan.md); summarised 
 ---
 
 *Thresholds in §8 are pre-commitments and must be signed before week 13. Open project-level
-decisions are tracked in [open-decisions.md](open-decisions.md); note that [D2](open-decisions.md#d2--engine)
-must close in week 2 of this plan.*
+decisions are tracked in [open-decisions.md](open-decisions.md). [D2 — engine](open-decisions.md#d2--engine)
+closed to Unreal 5.4+ ahead of week 1, which cancels the bake-off and hands week 1–2 back to the
+solver.*

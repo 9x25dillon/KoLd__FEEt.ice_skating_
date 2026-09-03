@@ -119,9 +119,9 @@ production plan are deliberately provisional until the
 [W40 recalculation](docs/production-plan.md#8--the-w40-recalculation) replaces them with
 measurements from the slice.
 
-**The nearest deadline is not a build.** [D2 — engine choice](docs/open-decisions.md#d2--engine)
-must close in **week 2** of pre-production. Every week it stays open costs two engineers half
-their throughput.
+**Engine: Unreal Engine 5.4+** — [D2 closed](docs/open-decisions.md#d2--engine) on 2026-09-03,
+ahead of its week-2 deadline. That cancels the two-engine bake-off in pre-production weeks 1–2 and
+hands the time back to the carve solver. Four decisions remain open; none of them now carry a date.
 
 ---
 
