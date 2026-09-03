@@ -1,0 +1,153 @@
+{
+  "schema_version": "1.0",
+  "description": "Parameterised final approaches for every element. An entry template is the fixed run-in an element requires: a length of specific edge, at a minimum speed, on a bounded curvature. The transition solver does NOT plan to an exact terminal pose - it plans to the START of the template, which turns a needle-thread into a fat target. See docs/composer-solver.md section 4.",
+
+  "notes": {
+    "why_templates": "Planning to an exact pose (position, heading, speed, foot, edge, all simultaneously) is a two-point boundary value problem and the reason naive approaches to this solver fail. Templates collapse it: the search only has to reach a dock region, and the template itself is a pre-solved, physically valid run-in that carries the skater the rest of the way.",
+    "max_curvature": "1/metres. A lutz needs a LONG shallow back outside edge; too much curvature and the takeoff edge is unclear or the skater pre-rotates. This is why lutzes are entered down the long axis of the rink.",
+    "speed_scaling": "min_entry_speed_ms is quoted for a triple. Scale by rotations: singles x0.72, doubles x0.86, triples x1.0, quads x1.12."
+  },
+
+  "rink_regions": {
+    "long_axis":     { "description": "Approach along the 60 m dimension. Needed by templates over 10 m." },
+    "short_axis":    { "description": "Across the 30 m dimension. Only viable for short templates." },
+    "corner":        { "description": "The natural place to build speed with back crossovers." },
+    "any":           { "description": "No positional preference." }
+  },
+
+  "templates": [
+    {
+      "id": "entry_toeloop",
+      "element_codes": ["1T", "2T", "3T", "4T"],
+      "approach": { "foot": "right", "edge": "outside", "forward": false },
+      "min_entry_speed_ms": 6.8,
+      "template_length_m": 7.0,
+      "template_duration_s": 1.1,
+      "max_curvature": 0.11,
+      "preferred_region": "any",
+      "dock_tolerance": { "position_m": 1.0, "heading_deg": 15, "speed_ms": 0.9 },
+      "combo_eligible_as_second": true,
+      "notes": "Takes off from the landing edge of any jump, so as a second jump in a combination its template length collapses to zero - the previous jump's landing IS the entry."
+    },
+    {
+      "id": "entry_salchow",
+      "element_codes": ["1S", "2S", "3S", "4S"],
+      "approach": { "foot": "left", "edge": "inside", "forward": false },
+      "min_entry_speed_ms": 6.6,
+      "template_length_m": 8.0,
+      "template_duration_s": 1.3,
+      "max_curvature": 0.14,
+      "preferred_region": "any",
+      "dock_tolerance": { "position_m": 1.0, "heading_deg": 15, "speed_ms": 0.9 },
+      "preceding_primitive_hint": "three_turn",
+      "notes": "Conventionally entered from a forward outside three turn onto the back inside edge. The solver is biased toward that primitive but not required to use it."
+    },
+    {
+      "id": "entry_loop",
+      "element_codes": ["1Lo", "2Lo", "3Lo", "4Lo"],
+      "approach": { "foot": "right", "edge": "outside", "forward": false },
+      "min_entry_speed_ms": 6.4,
+      "template_length_m": 6.5,
+      "template_duration_s": 1.1,
+      "max_curvature": 0.13,
+      "preferred_region": "any",
+      "dock_tolerance": { "position_m": 1.0, "heading_deg": 15, "speed_ms": 0.9 },
+      "combo_eligible_as_second": true
+    },
+    {
+      "id": "entry_flip",
+      "element_codes": ["1F", "2F", "3F", "4F"],
+      "approach": { "foot": "left", "edge": "inside", "forward": false },
+      "min_entry_speed_ms": 7.0,
+      "template_length_m": 9.0,
+      "template_duration_s": 1.4,
+      "max_curvature": 0.10,
+      "preferred_region": "long_axis",
+      "dock_tolerance": { "position_m": 0.9, "heading_deg": 13, "speed_ms": 0.8 },
+      "edge_callable": true,
+      "notes": "Edge-callable. The template holds a committed inside edge; drifting outside during it produces a lip. The solver flags a template it cannot hold within curvature bounds as a lip risk in the Composer UI."
+    },
+    {
+      "id": "entry_lutz",
+      "element_codes": ["1Lz", "2Lz", "3Lz", "4Lz"],
+      "approach": { "foot": "left", "edge": "outside", "forward": false },
+      "min_entry_speed_ms": 7.5,
+      "template_length_m": 12.0,
+      "template_duration_s": 2.0,
+      "max_curvature": 0.06,
+      "preferred_region": "long_axis",
+      "dock_tolerance": { "position_m": 0.8, "heading_deg": 12, "speed_ms": 0.8 },
+      "edge_callable": true,
+      "notes": "The longest and most constrained template in the game, and the reason lutzes are entered down the long axis from a corner. A tight approach curve is exactly how a flutz happens."
+    },
+    {
+      "id": "entry_axel",
+      "element_codes": ["1A", "2A", "3A", "4A"],
+      "approach": { "foot": "left", "edge": "outside", "forward": true },
+      "min_entry_speed_ms": 7.8,
+      "template_length_m": 10.0,
+      "template_duration_s": 1.5,
+      "max_curvature": 0.09,
+      "preferred_region": "long_axis",
+      "dock_tolerance": { "position_m": 0.9, "heading_deg": 12, "speed_ms": 0.9 },
+      "requires_direction_change": true,
+      "notes": "The only FORWARD takeoff, so the template forces a direction change late in the transition. The solver almost always docks via a mohawk or three turn out of back crossovers, which is what real skaters do."
+    },
+
+    {
+      "id": "entry_spin_standard",
+      "element_codes": ["USp", "SSp", "CSp", "LSp", "CoSp", "CCoSp"],
+      "approach": { "foot": "left", "edge": "inside", "forward": false },
+      "min_entry_speed_ms": 3.2,
+      "template_length_m": 5.0,
+      "template_duration_s": 1.2,
+      "max_curvature": 0.35,
+      "min_curvature": 0.18,
+      "preferred_region": "any",
+      "dock_tolerance": { "position_m": 1.4, "heading_deg": 25, "speed_ms": 1.0 },
+      "notes": "Note min_curvature: a spin entry needs a TIGHT hook, not a shallow one, because the entry curve is where the angular momentum comes from. This is the only template with a lower curvature bound."
+    },
+    {
+      "id": "entry_spin_flying",
+      "element_codes": ["FCSp", "FSSp"],
+      "approach": { "foot": "left", "edge": "outside", "forward": true },
+      "min_entry_speed_ms": 5.5,
+      "template_length_m": 8.0,
+      "template_duration_s": 1.3,
+      "max_curvature": 0.12,
+      "preferred_region": "any",
+      "dock_tolerance": { "position_m": 1.1, "heading_deg": 18, "speed_ms": 1.0 }
+    },
+
+    {
+      "id": "entry_step_sequence",
+      "element_codes": ["StSq"],
+      "approach": { "foot": "any", "edge": "any", "forward": "any" },
+      "min_entry_speed_ms": 4.5,
+      "template_length_m": 2.0,
+      "template_duration_s": 0.4,
+      "max_curvature": 0.5,
+      "preferred_region": "rink_end",
+      "dock_tolerance": { "position_m": 2.5, "heading_deg": 40, "speed_ms": 1.5 },
+      "notes": "Deliberately loose. A step sequence can start almost anywhere in almost any state - but it should start at a rink extremity, because the element itself must cover the full sheet."
+    },
+    {
+      "id": "entry_choreo_sequence",
+      "element_codes": ["ChSq"],
+      "approach": { "foot": "any", "edge": "any", "forward": "any" },
+      "min_entry_speed_ms": 4.0,
+      "template_length_m": 2.0,
+      "template_duration_s": 0.4,
+      "max_curvature": 0.5,
+      "preferred_region": "rink_end",
+      "dock_tolerance": { "position_m": 3.0, "heading_deg": 50, "speed_ms": 1.8 }
+    }
+  ],
+
+  "exit_templates": {
+    "note": "The mirror image: every element ends in a known state, which is the transition's START. Jumps all exit right back outside, which is why the solver's start state is so often identical.",
+    "jump_all":   { "foot": "right", "edge": "outside", "forward": false, "exit_speed_factor": 0.72 },
+    "spin_all":   { "foot": "left",  "edge": "outside", "forward": false, "exit_speed_ms": 2.4 },
+    "step_all":   { "foot": "any",   "edge": "any",     "forward": "any", "exit_speed_factor": 0.9 }
+  }
+}

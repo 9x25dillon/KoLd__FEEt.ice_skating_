@@ -19,6 +19,8 @@
 | `spin-positions.json` | The authored position catalogue — 19 variations with difficulty flags, pose tolerances, moment-of-inertia scales and flexibility gates, plus 8 entries and 4 exits. What "declared" level features reference. |
 | `spin-features.json` | The 11 spin level features, their detection requirements, and minimum revolution requirements per spin type. |
 | `step-features.json` | Turn taxonomy, the four-grade variety ladder, step sequence features, and choreographic sequence validity. |
+| `motion-primitives.json` | The move vocabulary the Composer's transition solver searches over: 21 primitives with preconditions, arc geometry, speed deltas and stamina costs. |
+| `entry-templates.json` | Per-element required approaches — the run-in each element needs, which the solver plans *to* rather than planning an exact terminal pose. |
 
 ## Column notes
 

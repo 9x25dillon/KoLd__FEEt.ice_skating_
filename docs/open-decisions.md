@@ -113,7 +113,7 @@ as surprises.
 | Gap | Where it bites | Notes |
 | --- | --- | --- |
 | ~~**Spin and step level features** are not enumerated~~ | — | **CLOSED 2026-09-02.** Specified in [level-features.md](level-features.md), data in `data/spin-features.json`, `step-features.json`, `spin-positions.json`, detection in `src/reference/SpinResolver.cpp`. Two follow-ons remain: verify the feature lists against the current ISU Communication, and build the 50-element protocol validation corpus (vertical slice, needs Composer v0). |
-| **The Composer transition solver** is specified in outline only | §09A | An A* search over the motion-matching database constrained by the physics solver. This is the piece with the most hidden complexity in the whole design and deserves its own document. |
+| ~~**The Composer transition solver** is specified in outline only~~ | — | **CLOSED 2026-09-02.** Specified in [composer-solver.md](composer-solver.md). Note it corrects the bible: the search is over a motion-primitive lattice in physics space, not over the motion-matching database. |
 | **Balance model tuning constants** are placeholders | `SkateSolver.cpp`, `kBalanceGain` | Cannot be derived; must come from the feel prototype in months 1–4. |
 | **Crowd reaction propagation** timing is unspecified | §07.3 | Per-agent delay curve for the reaction wave. Cheap to tune late. |
 | **Career economy** — training weeks, cost curves, progression pacing | §01 The Season | Deliberately deferred until the moment-to-moment game is proven. Designing progression before the verb is fun is a classic way to waste six months. |

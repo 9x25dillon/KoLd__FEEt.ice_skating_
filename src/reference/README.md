@@ -10,6 +10,7 @@ code cannot drift. If you edit these, mirror the change into `docs/design-bible.
 | `ScoreCalculator.cs` | 10.3 | ISU data model, base values, GOE aggregation across nine judges, PCS factors, deductions. |
 | `SkaterAnimDriver.cpp` | 10.4 | Layered animation state resolution plus the post-selection warping chain. |
 | `SpinResolver.cpp` | [level-features.md](../../docs/level-features.md) | The segment model and level-feature detection for spins. Reduces most of the ISU feature list to queries over a list of segments. |
+| `TransitionSolver.cpp` | [composer-solver.md](../../docs/composer-solver.md) | The Composer's transition planner: bidirectional lattice A*, time fitting with slack-filling, whole-program DP chaining, and constraint-relaxation diagnostics. |
 
 ## These do not compile, and that is intentional
 

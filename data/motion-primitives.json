@@ -1,0 +1,222 @@
+{
+  "schema_version": "1.0",
+  "description": "The move vocabulary the Composer's transition solver searches over. Each primitive takes the skater from one discrete (foot, edge, direction) state to another along a known arc, with a known duration, speed change and stamina cost. Search happens over THESE, not over continuous space. See docs/composer-solver.md.",
+
+  "notes": {
+    "speed_delta": "Metres per second gained or lost, at the reference entry speed of 6.0 m/s. Scaled by the solver: crossover gain falls off at high speed, turn losses grow with speed since they fight a tighter arc.",
+    "heading_delta_deg": "Signed change in travel direction. Mirrored automatically for the opposite lobe; only one chirality is listed.",
+    "arc_length_m": "Path length at reference speed. Parametric primitives scale with entry speed; authored ones do not.",
+    "turn_tag": "Feeds step-sequence variety scoring (data/step-features.json) and the solver's diminishing-returns variety reward.",
+    "authored": "true means a fixed animation clip whose duration and geometry cannot be warped much. false means procedurally warped, so the solver may scale its radius freely within physical limits."
+  },
+
+  "reference_speed_ms": 6.0,
+
+  "primitives": [
+    {
+      "id": "glide",
+      "name": "Glide",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "same", "forward": "same" },
+      "heading_delta_deg": 0, "arc_length_m": 3.0, "speed_delta": -0.18,
+      "stamina_legs": 0.0, "stamina_wind": 0.004, "turn_tag": null,
+      "authored": false, "repeatable": true,
+      "notes": "The time-burning primitive. Free, slow, and how the solver spends surplus time when it arrives early."
+    },
+    {
+      "id": "glide_curve",
+      "name": "Curved glide",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "same", "forward": "same" },
+      "heading_delta_deg": 30, "arc_length_m": 4.0, "speed_delta": -0.25,
+      "stamina_legs": 0.01, "stamina_wind": 0.005, "turn_tag": null,
+      "authored": false, "repeatable": true,
+      "notes": "Heading change without a foot change. Radius is solved from speed and lean, so heading_delta is nominal and the solver rescales it."
+    },
+    {
+      "id": "stroke",
+      "name": "Stroke",
+      "pre":  { "foot": "any", "edge": "any", "forward": true },
+      "post": { "foot": "other", "edge": "outside", "forward": true },
+      "heading_delta_deg": 12, "arc_length_m": 4.5, "speed_delta": 0.75,
+      "stamina_legs": 0.012, "stamina_wind": 0.008, "turn_tag": null,
+      "authored": false, "repeatable": true
+    },
+    {
+      "id": "stroke_back",
+      "name": "Back stroke",
+      "pre":  { "foot": "any", "edge": "any", "forward": false },
+      "post": { "foot": "other", "edge": "outside", "forward": false },
+      "heading_delta_deg": 12, "arc_length_m": 4.2, "speed_delta": 0.6,
+      "stamina_legs": 0.014, "stamina_wind": 0.009, "turn_tag": null,
+      "authored": false, "repeatable": true
+    },
+    {
+      "id": "crossover_fwd",
+      "name": "Forward crossover",
+      "pre":  { "foot": "any", "edge": "any", "forward": true },
+      "post": { "foot": "other", "edge": "inside", "forward": true },
+      "heading_delta_deg": 45, "arc_length_m": 4.0, "speed_delta": 1.15,
+      "stamina_legs": 0.016, "stamina_wind": 0.011, "turn_tag": null,
+      "authored": false, "repeatable": true,
+      "notes": "The propulsion engine. Only legal on a curve — the solver rejects it below a minimum heading change, which is physically why you cannot crossover in a straight line."
+    },
+    {
+      "id": "crossover_back",
+      "name": "Back crossover",
+      "pre":  { "foot": "any", "edge": "any", "forward": false },
+      "post": { "foot": "other", "edge": "inside", "forward": false },
+      "heading_delta_deg": 45, "arc_length_m": 3.8, "speed_delta": 1.05,
+      "stamina_legs": 0.018, "stamina_wind": 0.012, "turn_tag": null,
+      "authored": false, "repeatable": true,
+      "notes": "The standard approach to most jumps: back crossovers build speed while already travelling backward."
+    },
+    {
+      "id": "change_of_edge",
+      "name": "Change of edge",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "opposite", "forward": "same" },
+      "heading_delta_deg": 0, "arc_length_m": 3.5, "speed_delta": -0.2,
+      "stamina_legs": 0.008, "stamina_wind": 0.005, "turn_tag": "change_of_edge",
+      "authored": false, "repeatable": false,
+      "notes": "A serpentine. Reverses lobe direction without changing foot or direction of travel."
+    },
+
+    {
+      "id": "three_turn",
+      "name": "Three turn",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "opposite", "forward": "flip" },
+      "heading_delta_deg": 180, "arc_length_m": 2.2, "speed_delta": -0.45,
+      "stamina_legs": 0.010, "stamina_wind": 0.006, "turn_tag": "three_turn",
+      "authored": false, "repeatable": true, "difficulty": 1
+    },
+    {
+      "id": "mohawk",
+      "name": "Mohawk",
+      "pre":  { "foot": "any", "edge": "inside", "forward": "any" },
+      "post": { "foot": "other", "edge": "inside", "forward": "flip" },
+      "heading_delta_deg": 180, "arc_length_m": 2.4, "speed_delta": -0.40,
+      "stamina_legs": 0.010, "stamina_wind": 0.006, "turn_tag": "mohawk",
+      "authored": false, "repeatable": true, "difficulty": 2
+    },
+    {
+      "id": "choctaw",
+      "name": "Choctaw",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "other", "edge": "opposite", "forward": "flip" },
+      "heading_delta_deg": 180, "arc_length_m": 2.6, "speed_delta": -0.55,
+      "stamina_legs": 0.013, "stamina_wind": 0.007, "turn_tag": "choctaw",
+      "authored": false, "repeatable": true, "difficulty": 3
+    },
+    {
+      "id": "bracket",
+      "name": "Bracket",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "opposite", "forward": "flip" },
+      "heading_delta_deg": 180, "arc_length_m": 2.3, "speed_delta": -0.70,
+      "stamina_legs": 0.016, "stamina_wind": 0.008, "turn_tag": "bracket",
+      "authored": false, "repeatable": true, "difficulty": 3,
+      "notes": "Rotates against the curve, so it costs markedly more speed than a three turn covering the same heading change."
+    },
+    {
+      "id": "rocker",
+      "name": "Rocker",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "same", "forward": "flip" },
+      "heading_delta_deg": 180, "arc_length_m": 2.5, "speed_delta": -0.65,
+      "stamina_legs": 0.015, "stamina_wind": 0.008, "turn_tag": "rocker",
+      "authored": false, "repeatable": true, "difficulty": 3,
+      "notes": "Reverses the lobe. Valuable to the solver because it changes which side of the rink the next arc curves toward."
+    },
+    {
+      "id": "counter",
+      "name": "Counter",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "same", "forward": "flip" },
+      "heading_delta_deg": 180, "arc_length_m": 2.6, "speed_delta": -0.85,
+      "stamina_legs": 0.019, "stamina_wind": 0.009, "turn_tag": "counter",
+      "authored": false, "repeatable": true, "difficulty": 4
+    },
+    {
+      "id": "loop_turn",
+      "name": "Loop turn",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "same", "forward": "same" },
+      "heading_delta_deg": 360, "arc_length_m": 3.2, "speed_delta": -0.90,
+      "stamina_legs": 0.018, "stamina_wind": 0.009, "turn_tag": "loop",
+      "authored": false, "repeatable": false, "difficulty": 3,
+      "notes": "Returns to the same state having drawn a closed loop. Useless for travel, excellent for burning time and earning variety."
+    },
+    {
+      "id": "twizzle",
+      "name": "Twizzle",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "any", "forward": "any" },
+      "heading_delta_deg": 720, "arc_length_m": 4.5, "speed_delta": -1.0,
+      "stamina_legs": 0.024, "stamina_wind": 0.012, "turn_tag": "twizzle",
+      "authored": false, "repeatable": false, "difficulty": 4,
+      "notes": "Travels while rotating. The exit direction is solver-selectable, which makes it unusually useful for docking onto an entry template."
+    },
+
+    {
+      "id": "spiral",
+      "name": "Spiral",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "same", "edge": "same", "forward": "same" },
+      "heading_delta_deg": 60, "arc_length_m": 7.0, "speed_delta": -0.9,
+      "stamina_legs": -0.020, "stamina_wind": 0.010, "turn_tag": null,
+      "authored": true, "repeatable": false, "min_duration_s": 2.0,
+      "notes": "NEGATIVE leg stamina: a spiral is rest. Real choreographers build these in deliberately, and the solver discovers the same trick when the stamina budget is tight."
+    },
+    {
+      "id": "ina_bauer",
+      "name": "Ina Bauer",
+      "pre":  { "foot": "any", "edge": "any", "forward": true },
+      "post": { "foot": "any", "edge": "outside", "forward": true },
+      "heading_delta_deg": 25, "arc_length_m": 6.0, "speed_delta": -1.1,
+      "stamina_legs": -0.014, "stamina_wind": 0.009, "turn_tag": null,
+      "authored": true, "repeatable": false, "min_duration_s": 1.8,
+      "requires_flexibility": 0.6
+    },
+    {
+      "id": "spread_eagle",
+      "name": "Spread eagle",
+      "pre":  { "foot": "any", "edge": "any", "forward": true },
+      "post": { "foot": "any", "edge": "outside", "forward": true },
+      "heading_delta_deg": 90, "arc_length_m": 6.5, "speed_delta": -0.8,
+      "stamina_legs": -0.008, "stamina_wind": 0.008, "turn_tag": null,
+      "authored": true, "repeatable": false, "min_duration_s": 1.6,
+      "requires_turnout": 0.75
+    },
+    {
+      "id": "hydroblade",
+      "name": "Hydroblading",
+      "pre":  { "foot": "any", "edge": "inside", "forward": "any" },
+      "post": { "foot": "same", "edge": "inside", "forward": "same" },
+      "heading_delta_deg": 120, "arc_length_m": 8.0, "speed_delta": -1.6,
+      "stamina_legs": 0.020, "stamina_wind": 0.010, "turn_tag": null,
+      "authored": true, "repeatable": false, "min_duration_s": 1.5,
+      "requires_flexibility": 0.7
+    },
+    {
+      "id": "lunge",
+      "name": "Lunge",
+      "pre":  { "foot": "any", "edge": "any", "forward": true },
+      "post": { "foot": "same", "edge": "any", "forward": true },
+      "heading_delta_deg": 15, "arc_length_m": 4.0, "speed_delta": -1.3,
+      "stamina_legs": 0.010, "stamina_wind": 0.006, "turn_tag": null,
+      "authored": true, "repeatable": false, "min_duration_s": 1.2
+    },
+    {
+      "id": "hop",
+      "name": "Hop",
+      "pre":  { "foot": "any", "edge": "any", "forward": "any" },
+      "post": { "foot": "any", "edge": "any", "forward": "any" },
+      "heading_delta_deg": 0, "arc_length_m": 2.0, "speed_delta": -0.5,
+      "stamina_legs": 0.022, "stamina_wind": 0.007, "turn_tag": null,
+      "authored": true, "repeatable": false,
+      "notes": "A free state-reset. Expensive in stamina but can flip foot, edge and direction at once, so the solver reaches for it when docking is otherwise impossible."
+    }
+  ]
+}
