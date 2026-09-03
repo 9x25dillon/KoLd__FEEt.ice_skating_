@@ -297,7 +297,7 @@ the same pre-commitment discipline as the kill gate, for the same reason.
 
 | Outcome | Condition | Action |
 | --- | --- | --- |
-| **GREEN** | All three gates | Green-light production at planned scope. Week 41 begins. |
+| **GREEN** | All three gates | Green-light production at planned scope. Week 41 begins — see [production-plan.md](production-plan.md). |
 | **AMBER** | A and B pass, C fails | **Green-light at reduced content scope.** Cut rinks, garments and music tracks — *never* systems — until the forecast fits with contingency. Re-forecast and proceed. This is the expected outcome, and planning for it is not pessimism. |
 | **RED** | A or B fails | The quality bar is not reachable at this budget, or 2:40 of judged skating is not compelling. Stop, or rescope fundamentally — a smaller, cheaper game built around Free Skate and the Composer, per [D1](open-decisions.md#d1--budget-and-team-size). |
 

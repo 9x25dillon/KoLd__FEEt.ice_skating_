@@ -18,6 +18,8 @@ you take is written permanently into the ice beneath you. There is no jump butto
 | **🌀 Level features** | [`docs/level-features.md`](docs/level-features.md) — how spins and step sequences earn levels 1–4 |
 | **🧭 Composer solver** | [`docs/composer-solver.md`](docs/composer-solver.md) — planning the skating between elements |
 | **🏗 Vertical slice** | [`docs/vertical-slice-plan.md`](docs/vertical-slice-plan.md) · [rendered](https://claude.ai/code/artifact/dde9b2ad-4d31-412f-a15e-6edbb6cc305a) — 24 weeks to the production green-light |
+| **🚂 Production** | [`docs/production-plan.md`](docs/production-plan.md) · [rendered](https://claude.ai/code/artifact/6a36f22c-3ed6-4439-828b-cd14759ebaca) — 48 weeks, content trains, the cut list, alpha |
+| **🚦 Beta** | [`docs/beta-plan.md`](docs/beta-plan.md) · [rendered](https://claude.ai/code/artifact/bdd4ebbf-b24e-4b31-bcf3-9afdce6a4e53) — 20 weeks, text lock, cert, the ship gate |
 | **❓ Open calls** | [`docs/open-decisions.md`](docs/open-decisions.md) — six decisions that change the shape of the project |
 
 ---
@@ -29,6 +31,8 @@ docs/
   design-bible.md        The full specification — 10 sections, ~16k words
   pre-production-plan.md 16-week feel prototype, playtest protocol, kill gate
   vertical-slice-plan.md 24-week slice, cost model, production green-light gate
+  production-plan.md     48-week build: content trains, cut list, alpha gate
+  beta-plan.md           20 weeks to cert: text lock, bug curve, ship gate
   level-features.md      Spin and step level detection: declared vs observed
   composer-solver.md     Transition planning: lattice search, time fit, chaining
   open-decisions.md      Unresolved calls + known specification gaps
@@ -107,8 +111,13 @@ implemented yet.
 2. ~~The spin and step level-feature enumeration~~ → [`docs/level-features.md`](docs/level-features.md)
 3. ~~The Composer transition solver~~ → [`docs/composer-solver.md`](docs/composer-solver.md)
 
-All three are written, plus both phase plans. The specification is complete through the
-production green-light; the next artefact is a build.
+All three are written, and the phase plan series is complete: pre-production → vertical slice
+→ production → beta. **The specification is finished. The next artefact is a build.**
+
+Total planned development cost to launch: **~$11.9M** over 30 months. Content volumes in the
+production plan are deliberately provisional until the
+[W40 recalculation](docs/production-plan.md#8--the-w40-recalculation) replaces them with
+measurements from the slice.
 
 **The nearest deadline is not a build.** [D2 — engine choice](docs/open-decisions.md#d2--engine)
 must close in **week 2** of pre-production. Every week it stays open costs two engineers half
