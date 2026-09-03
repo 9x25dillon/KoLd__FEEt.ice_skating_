@@ -63,15 +63,32 @@ advantages, iteration speed and crowd performance, were judged not to outweigh t
 **Default:** Single-player first. Async competition and the six-player Warm-Up Group ship at
 launch; pairs and ice dance are the year-one expansion.
 
-**Status:** OPEN
+**Status:** RESOLVED — **single-player first, as specified (2026-09-03).**
 
-If real-time competitive multiplayer is a launch requirement, add a senior network engineer
-from month one and expect the pairs constraint solver to become a critical-path item rather
-than an expansion. Note that singles competition has no simultaneous play at all — this is
-the single largest piece of free luck in the project and the architecture should keep
-exploiting it.
+Closed at the default, which was already load-bearing across every downstream document: the
+netcode design in [§6.3](design-bible.md#63-networking), the two network FTE in production, the
+P1/P2 phasing, and the year-one expansion timed into the Olympic build-up. Nothing needed to move.
 
-**Affects:** §06.3, §08 team composition and phasing.
+### What this locks
+
+- **No senior network engineer in month one.** Production's two network FTE stand, rising to
+  three only for the pairs expansion.
+- **The pairs constraint solver stays off the critical path.** Authority handoff with a
+  three-to-five-frame rollback on the shared constraint is a year-one problem, not a launch one.
+- **Client-authoritative warm-up lobby is confirmed.** Six players, nothing contested, no
+  prediction and no reconciliation. Saying that out loud saves months, and it is only defensible
+  because nothing in that lobby is worth defending against.
+- **Determinism becomes the whole integrity model.** With real-time competition off the table,
+  async ghosts are the *only* competitive multiplayer at launch — so server-side re-simulation is
+  not merely a nice-to-have for replays, it is the entire anti-cheat story. The CI harness from
+  pre-production week 5 is now load-bearing in a way it was not before.
+- **Cut-list item 6 stays legitimate.** Live Events can be cut without touching async ghosts.
+
+The observation that made this easy is worth restating: **singles competition has no simultaneous
+play.** One skater is on the ice at a time. That is the largest piece of free luck in the project,
+and the architecture exploits it rather than ignoring it.
+
+**Affects:** §06.3, §08 team composition and phasing. All already consistent.
 
 ---
 

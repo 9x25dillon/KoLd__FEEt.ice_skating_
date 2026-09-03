@@ -125,7 +125,14 @@ hands the time back to the carve solver.
 
 **Difficulty default: adaptive** — [D4 closed](docs/open-decisions.md#d4--where-the-difficulty-default-sits)
 the same day. The Patch recommends an assist tier from the tracing score it already computes, with
-Novice as the fallback. Three decisions remain open; none carries a date.
+Novice as the fallback. **Multiplayer: single-player first** —
+[D3 closed](docs/open-decisions.md#d3--multiplayer-at-launch) at its default, which was already
+load-bearing everywhere downstream.
+
+Two decisions remain open — [D1 budget](docs/open-decisions.md#d1--budget-and-team-size) and
+[D5 disciplines](docs/open-decisions.md#d5--disciplines-at-launch) — and they are really one
+conversation: if the $18–25M envelope is development-only, the ~$6M of headroom buys exactly the
+second discipline D5 asks about.
 
 ---
 
