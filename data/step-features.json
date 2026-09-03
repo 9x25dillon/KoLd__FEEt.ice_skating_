@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0",
+  "ruleset_season": "2025-26",
+  "source": "ISU Communication — technical panel handbook, step sequences",
+  "verified_against_isu": false,
+  "verification_note": "As with spin-features.json, the feature set is data and must be checked against the current ISU Communication. Additionally, every NUMBER in the variety ladder below is our operationalization of a word the ISU leaves to human judgement, and is a balance lever rather than a rule.",
+
+  "element_group": "step_sequence",
+
+  "level_rule": {
+    "type": "graded_prerequisite_plus_features",
+    "formula": "level = min(variety_grade, 1 + other_features_attained)",
+    "rationale": "The ISU grades turn variety on a four-step ladder (minimum variety / simple variety / variety / complexity) and separately awards features. Taking the minimum of the two means excellent footwork with nothing else caps at Level 1, and three supporting features cannot rescue a sequence built from three turns and a chassé. Both of those outcomes are correct in spirit.",
+    "levels": ["B", "1", "2", "3", "4"]
+  },
+
+  "turn_taxonomy": {
+    "difficult": ["rocker", "counter", "bracket", "twizzle", "loop"],
+    "simple": ["three_turn", "mohawk", "choctaw"],
+    "steps": ["cross_roll", "chasse", "toe_step", "change_of_edge", "running_step", "cross_behind", "cross_in_front"],
+    "note": "The difficult set is exactly the set the bible's turn matrix marks three stars or above: turns that rotate against the curve, reverse the lobe, or travel. See docs/design-bible.md section 2.3."
+  },
+
+  "variety_ladder": {
+    "note": "OPERATIONALIZATION, not an ISU rule. The ISU says 'variety'; a human technical specialist applies judgement; a game must pick numbers. These are the numbers, and they are tunable.",
+    "grades": [
+      {
+        "grade": 1,
+        "name": "Minimum variety",
+        "requires": {
+          "distinct_turn_and_step_types": 5,
+          "distinct_difficult_turn_types": 0,
+          "both_feet_used": true
+        }
+      },
+      {
+        "grade": 2,
+        "name": "Simple variety",
+        "requires": {
+          "distinct_turn_and_step_types": 7,
+          "distinct_difficult_turn_types": 2,
+          "both_feet_used": true
+        }
+      },
+      {
+        "grade": 3,
+        "name": "Variety",
+        "requires": {
+          "distinct_turn_and_step_types": 9,
+          "distinct_difficult_turn_types": 4,
+          "both_feet_used": true,
+          "difficult_turns_on_both_feet": true
+        }
+      },
+      {
+        "grade": 4,
+        "name": "Complexity",
+        "requires": {
+          "distinct_turn_and_step_types": 11,
+          "distinct_difficult_turn_types": 5,
+          "both_feet_used": true,
+          "difficult_turns_on_both_feet": true,
+          "difficult_turns_in_both_rotational_directions": true
+        }
+      }
+    ]
+  },
+
+  "features": [
+    {
+      "id": "step.rotation_both_directions",
+      "name": "Rotations in both directions with full body rotation",
+      "kind": "observed",
+      "requires": {
+        "clockwise_rotation_fraction_of_pattern": 0.33,
+        "counterclockwise_rotation_fraction_of_pattern": 0.33,
+        "min_full_body_rotation_deg": 360
+      },
+      "measurement": "Fraction of pattern length (not time) during which the skater is accumulating body rotation in each sense. Measured against the tracing buffer's path length, so coasting does not count toward either direction.",
+      "notes": "This is the feature that most reliably separates a real step sequence from a pretty one. Most players will naturally favour their rotation direction; earning this requires deliberate practice, which is exactly right."
+    },
+    {
+      "id": "step.body_movements",
+      "name": "Use of upper body movements",
+      "kind": "observed",
+      "requires": {
+        "fraction_of_pattern": 0.33,
+        "min_carriage_activity": 0.35
+      },
+      "measurement": "Carriage-stick displacement integrated over pattern length, normalised. Activity is the time-weighted mean of the carriage vector's magnitude plus its rate of change, so holding one arm pose does not count: the metric rewards motion, not position.",
+      "notes": "Measurable precisely because the right stick already drives the upper body every frame. No pose classification required."
+    },
+    {
+      "id": "step.difficult_turn_combinations",
+      "name": "Two different combinations of three difficult turns",
+      "kind": "observed",
+      "requires": {
+        "combinations": 2,
+        "turns_per_combination": 3,
+        "turns_from": ["rocker", "counter", "bracket", "twizzle", "loop"],
+        "combinations_must_differ": true,
+        "executed_on_different_feet": true,
+        "max_gap_between_turns_s": 1.2,
+        "clean_start_and_finish": true
+      },
+      "measurement": "A combination is three difficult turns with no simple turn, step, or gap longer than the max between them. Clean start and finish means balance error below 0.4 entering the first and leaving the third. Two combinations 'differ' if their ordered turn-type triples are not identical.",
+      "notes": "The single hardest step-sequence feature to earn and the clearest skill expression in the element."
+    },
+    {
+      "id": "step.pattern_coverage",
+      "name": "Full ice coverage",
+      "kind": "observed",
+      "requires": {
+        "min_rink_length_fraction": 0.75,
+        "min_rink_width_fraction": 0.5
+      },
+      "measurement": "Bounding extent of the tracing during the element, as a fraction of the 60 x 30 m sheet.",
+      "notes": "Read directly off the tracing buffer. Also feeds the Composition component of PCS, so one measurement serves two systems."
+    }
+  ],
+
+  "choreographic_sequence": {
+    "code": "ChSq",
+    "note": "Fixed base value, no levels, GOE only. The technical panel confirms it happened rather than grading it.",
+    "validity_requirements": {
+      "min_duration_s": 8,
+      "min_rink_length_fraction": 0.6,
+      "min_listed_movements": 2,
+      "listed_movements": ["spiral", "arabesque", "ina_bauer", "hydroblading", "spread_eagle", "kneeling", "lunge", "any_jump_max_one_revolution", "small_lift"],
+      "must_be_clearly_visible": true
+    }
+  }
+}

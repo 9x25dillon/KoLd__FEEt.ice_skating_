@@ -1,0 +1,252 @@
+{
+  "schema_version": "1.0",
+  "ruleset_season": "2025-26",
+  "verified_against_isu": false,
+  "description": "Authored spin position catalogue. Every playable spin position is declared here with its difficulty flag, its reference pose asset, the tolerance within which the player must hold it, and its moment-of-inertia scale. Difficulty is DECLARED here rather than detected at runtime; the simulation only verifies that a declared position was actually attained and held. See docs/level-features.md.",
+
+  "inertia_baseline_kgm2": 4.0,
+  "inertia_note": "inertia_scale multiplies the baseline open-position moment of inertia about the vertical axis. Since omega = L / I, this catalogue is what makes a camel visibly slow and an upright visibly fast, emergently, without any scripting. Values are physically motivated: extended horizontal positions carry mass far from the axis, compact upright positions carry it close.",
+
+  "positions": [
+    {
+      "id": "upright_basic",
+      "name": "Upright",
+      "basic_position": "upright",
+      "difficult": false,
+      "reference_pose": "SP_Upright_Basic",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 15,
+      "inertia_scale": 1.0,
+      "stamina_drain": 0.5
+    },
+    {
+      "id": "upright_crossfoot",
+      "name": "Crossfoot",
+      "basic_position": "upright",
+      "difficult": true,
+      "reference_pose": "SP_Upright_Crossfoot",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 0.85,
+      "stamina_drain": 0.7
+    },
+    {
+      "id": "upright_layback",
+      "name": "Layback",
+      "basic_position": "upright",
+      "difficult": true,
+      "reference_pose": "SP_Upright_Layback",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 1.05,
+      "stamina_drain": 0.9,
+      "notes": "Torso arched backward, head dropped. Counts as the layback position for LSp scoring and is edge-change eligible."
+    },
+    {
+      "id": "upright_biellmann",
+      "name": "Biellmann",
+      "basic_position": "upright",
+      "difficult": true,
+      "reference_pose": "SP_Upright_Biellmann",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 10,
+      "inertia_scale": 0.80,
+      "stamina_drain": 1.3,
+      "requires_flexibility": 0.85,
+      "notes": "Free foot drawn overhead. Gated on the skater's flexibility attribute; below the threshold the position cannot be selected in the Composer. Edge-change eligible."
+    },
+    {
+      "id": "upright_catch_foot",
+      "name": "Catch-foot upright",
+      "basic_position": "upright",
+      "difficult": true,
+      "reference_pose": "SP_Upright_CatchFoot",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 0.95,
+      "stamina_drain": 1.0,
+      "requires_flexibility": 0.6
+    },
+    {
+      "id": "upright_haircutter",
+      "name": "Haircutter",
+      "basic_position": "upright",
+      "difficult": true,
+      "reference_pose": "SP_Upright_Haircutter",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 0.90,
+      "stamina_drain": 1.1,
+      "requires_flexibility": 0.75
+    },
+    {
+      "id": "upright_side_lean",
+      "name": "Side-leaning upright",
+      "basic_position": "upright",
+      "difficult": true,
+      "reference_pose": "SP_Upright_SideLean",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 13,
+      "inertia_scale": 1.10,
+      "stamina_drain": 0.8
+    },
+
+    {
+      "id": "sit_basic",
+      "name": "Sit",
+      "basic_position": "sit",
+      "difficult": false,
+      "reference_pose": "SP_Sit_Basic",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 15,
+      "inertia_scale": 1.25,
+      "stamina_drain": 1.2,
+      "notes": "Skating thigh must reach or pass horizontal. Below that the position is not attained and scores as upright."
+    },
+    {
+      "id": "sit_pancake",
+      "name": "Pancake",
+      "basic_position": "sit",
+      "difficult": true,
+      "reference_pose": "SP_Sit_Pancake",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 11,
+      "inertia_scale": 1.50,
+      "stamina_drain": 1.6,
+      "requires_flexibility": 0.7
+    },
+    {
+      "id": "sit_broken_leg",
+      "name": "Broken leg",
+      "basic_position": "sit",
+      "difficult": true,
+      "reference_pose": "SP_Sit_BrokenLeg",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 1.30,
+      "stamina_drain": 1.4
+    },
+    {
+      "id": "sit_cannonball",
+      "name": "Cannonball",
+      "basic_position": "sit",
+      "difficult": true,
+      "reference_pose": "SP_Sit_Cannonball",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 1.35,
+      "stamina_drain": 1.5,
+      "requires_flexibility": 0.6
+    },
+    {
+      "id": "sit_tuck_behind",
+      "name": "Tuck behind",
+      "basic_position": "sit",
+      "difficult": true,
+      "reference_pose": "SP_Sit_TuckBehind",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 1.15,
+      "stamina_drain": 1.5
+    },
+    {
+      "id": "sit_twisted",
+      "name": "Twisted sit",
+      "basic_position": "sit",
+      "difficult": true,
+      "reference_pose": "SP_Sit_Twisted",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 1.28,
+      "stamina_drain": 1.5
+    },
+
+    {
+      "id": "camel_basic",
+      "name": "Camel",
+      "basic_position": "camel",
+      "difficult": false,
+      "reference_pose": "SP_Camel_Basic",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 15,
+      "inertia_scale": 2.20,
+      "stamina_drain": 1.0,
+      "notes": "Free leg extended behind at or above hip height, torso horizontal. Highest moment of inertia in the catalogue, so camels are inherently the slowest spins."
+    },
+    {
+      "id": "camel_catch_foot",
+      "name": "Catch-foot camel",
+      "basic_position": "camel",
+      "difficult": true,
+      "reference_pose": "SP_Camel_CatchFoot",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 11,
+      "inertia_scale": 2.00,
+      "stamina_drain": 1.3,
+      "requires_flexibility": 0.7
+    },
+    {
+      "id": "camel_donut",
+      "name": "Donut",
+      "basic_position": "camel",
+      "difficult": true,
+      "reference_pose": "SP_Camel_Donut",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 10,
+      "inertia_scale": 1.90,
+      "stamina_drain": 1.5,
+      "requires_flexibility": 0.85
+    },
+    {
+      "id": "camel_layover",
+      "name": "Layover camel",
+      "basic_position": "camel",
+      "difficult": true,
+      "reference_pose": "SP_Camel_Layover",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 2.10,
+      "stamina_drain": 1.2
+    },
+    {
+      "id": "camel_side",
+      "name": "Side camel",
+      "basic_position": "camel",
+      "difficult": true,
+      "reference_pose": "SP_Camel_Side",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 12,
+      "inertia_scale": 2.15,
+      "stamina_drain": 1.2
+    },
+    {
+      "id": "camel_twisted",
+      "name": "Twisted camel",
+      "basic_position": "camel",
+      "difficult": true,
+      "reference_pose": "SP_Camel_Twisted",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 11,
+      "inertia_scale": 2.05,
+      "stamina_drain": 1.4
+    }
+  ],
+
+  "entries": [
+    { "id": "entry_basic_bi",      "name": "Back inside edge",   "difficult": false, "min_entry_speed_ms": 3.0 },
+    { "id": "entry_forward_outside","name": "Forward outside",   "difficult": false, "min_entry_speed_ms": 3.0 },
+    { "id": "entry_illusion",      "name": "Illusion",           "difficult": true,  "min_entry_speed_ms": 4.5 },
+    { "id": "entry_cannonball_drop","name": "Cannonball drop",   "difficult": true,  "min_entry_speed_ms": 4.5 },
+    { "id": "entry_flying_camel",  "name": "Flying camel",       "difficult": true,  "min_entry_speed_ms": 5.5, "airborne": true },
+    { "id": "entry_flying_sit",    "name": "Flying sit",         "difficult": true,  "min_entry_speed_ms": 5.5, "airborne": true },
+    { "id": "entry_death_drop",    "name": "Death drop",         "difficult": true,  "min_entry_speed_ms": 6.0, "airborne": true },
+    { "id": "entry_butterfly",     "name": "Butterfly",          "difficult": true,  "min_entry_speed_ms": 6.0, "airborne": true }
+  ],
+
+  "exits": [
+    { "id": "exit_basic",     "name": "Standard check-out", "difficult": false },
+    { "id": "exit_jump",      "name": "Jump exit",          "difficult": true  },
+    { "id": "exit_illusion",  "name": "Illusion exit",      "difficult": true  },
+    { "id": "exit_windmill",  "name": "Windmill exit",      "difficult": true  }
+  ]
+}

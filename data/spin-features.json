@@ -1,0 +1,200 @@
+{
+  "schema_version": "1.0",
+  "ruleset_season": "2025-26",
+  "source": "ISU Communication — technical panel handbook, singles spins",
+  "verified_against_isu": false,
+  "verification_note": "THIS LIST IS THE SWAPPABLE PART. The feature set and its exact wording are revised by the ISU and must be checked against the current Communication before content lock. The detection architecture in docs/level-features.md is stable; this file is data.",
+
+  "element_group": "spin",
+  "level_rule": {
+    "type": "feature_count",
+    "levels": [
+      { "level": "B", "min_features": 0 },
+      { "level": "1", "min_features": 1 },
+      { "level": "2", "min_features": 2 },
+      { "level": "3", "min_features": 3 },
+      { "level": "4", "min_features": 4 }
+    ],
+    "note": "Level is the count of ATTAINED features, clamped to 4. Attempted-but-not-attained features count zero toward level and additionally depress GOE."
+  },
+
+  "kinds": {
+    "declared": "Difficulty is a property of an authored asset (a position, entry or exit in spin-positions.json). The simulation does not classify it; it verifies the declared thing was attained and held within tolerance.",
+    "observed": "Computed purely from simulation state. No authoring involved."
+  },
+
+  "features": [
+    {
+      "id": "spin.difficult_variation",
+      "name": "Difficult variation of a basic position",
+      "kind": "declared",
+      "counts_per": "basic_position",
+      "max_per_element": 3,
+      "applies_to": ["USp", "SSp", "CSp", "LSp", "CoSp", "CCoSp", "FCSp", "FSSp"],
+      "requires": {
+        "position_flag": "difficult",
+        "min_revolutions_held": 2,
+        "max_mean_pose_error_deg": "from position.pose_tolerance_deg",
+        "max_centering_error_m": 0.45
+      },
+      "notes": "Counts separately in each distinct basic position, so a combination spin can earn up to three from this feature alone. Repeating a difficult variation within the same basic position counts once."
+    },
+    {
+      "id": "spin.change_foot_by_jump",
+      "name": "Change of foot executed by jump",
+      "kind": "observed",
+      "counts_per": "element",
+      "max_per_element": 1,
+      "applies_to": ["CoSp", "CCoSp"],
+      "requires": {
+        "airborne_during_foot_change": true,
+        "min_air_time_s": 0.12,
+        "max_revolutions_lost": 0.75,
+        "resumes_spin_within_s": 0.4
+      }
+    },
+    {
+      "id": "spin.jump_within_spin",
+      "name": "Jump within a spin without changing feet",
+      "kind": "observed",
+      "counts_per": "element",
+      "max_per_element": 1,
+      "applies_to": ["USp", "SSp", "CSp", "LSp", "CoSp", "CCoSp"],
+      "requires": {
+        "airborne": true,
+        "min_air_time_s": 0.12,
+        "foot_unchanged": true,
+        "resumes_spin_within_s": 0.4
+      }
+    },
+    {
+      "id": "spin.difficult_change_of_foot",
+      "name": "Difficult change of foot",
+      "kind": "observed",
+      "counts_per": "element",
+      "max_per_element": 1,
+      "applies_to": ["CCoSp"],
+      "requires": {
+        "position_changes_simultaneously": true,
+        "max_transition_s": 0.5,
+        "max_revolutions_lost": 0.5
+      },
+      "notes": "The change of foot and the change of basic position happen together rather than sequentially. Detected as overlapping transition windows."
+    },
+    {
+      "id": "spin.difficult_entrance",
+      "name": "Difficult entrance into the spin",
+      "kind": "declared",
+      "counts_per": "element",
+      "max_per_element": 1,
+      "applies_to": ["USp", "SSp", "CSp", "LSp", "CoSp", "CCoSp", "FCSp", "FSSp"],
+      "requires": {
+        "entry_flag": "difficult",
+        "min_entry_speed_ms": "from entry.min_entry_speed_ms",
+        "no_stop_before_entry": true,
+        "max_setup_steps": 2,
+        "position_attained_within_revolutions": 2
+      }
+    },
+    {
+      "id": "spin.difficult_exit",
+      "name": "Difficult exit from the spin",
+      "kind": "declared",
+      "counts_per": "element",
+      "max_per_element": 1,
+      "applies_to": ["USp", "SSp", "CSp", "LSp", "CoSp", "CCoSp", "FCSp", "FSSp"],
+      "requires": {
+        "exit_flag": "difficult",
+        "max_balance_error_at_exit": 0.4,
+        "min_exit_speed_ms": 2.5
+      }
+    },
+    {
+      "id": "spin.change_of_edge",
+      "name": "Clear change of edge",
+      "kind": "observed",
+      "counts_per": "basic_position",
+      "max_per_element": 2,
+      "applies_to": ["SSp", "CSp", "LSp", "CoSp", "CCoSp"],
+      "eligible_positions": ["sit_basic", "sit_pancake", "sit_broken_leg", "sit_cannonball", "sit_tuck_behind", "sit_twisted", "camel_basic", "camel_catch_foot", "camel_donut", "camel_layover", "camel_side", "camel_twisted", "upright_layback", "upright_biellmann"],
+      "requires": {
+        "edge_sign_flips": true,
+        "min_revolutions_before_flip": 2,
+        "min_revolutions_after_flip": 2,
+        "position_unchanged_across_flip": true,
+        "max_centering_error_m": 0.5
+      },
+      "notes": "A genuine change of edge, not a wobble. The two-revolution windows either side are what separate the feature from an accident."
+    },
+    {
+      "id": "spin.all_three_positions_second_foot",
+      "name": "All three basic positions on the second foot",
+      "kind": "observed",
+      "counts_per": "element",
+      "max_per_element": 1,
+      "applies_to": ["CCoSp"],
+      "requires": {
+        "distinct_basic_positions_after_foot_change": 3,
+        "min_revolutions_each": 2
+      }
+    },
+    {
+      "id": "spin.both_directions",
+      "name": "Both rotational directions immediately following each other",
+      "kind": "observed",
+      "counts_per": "element",
+      "max_per_element": 1,
+      "applies_to": ["SSp", "CSp", "CoSp", "CCoSp"],
+      "requires": {
+        "rotation_sign_flips": true,
+        "min_revolutions_each_direction": 3,
+        "max_gap_s": 1.0,
+        "basic_position_in": ["sit", "camel"]
+      },
+      "notes": "Rare and spectacular. Physically this requires killing all angular momentum and regenerating it in the opposite sense, so the simulation gets this almost for free: the sign of L flips."
+    },
+    {
+      "id": "spin.increase_of_speed",
+      "name": "Clear increase of speed",
+      "kind": "observed",
+      "counts_per": "basic_position",
+      "max_per_element": 2,
+      "applies_to": ["USp", "SSp", "CSp", "LSp", "CoSp", "CCoSp"],
+      "requires": {
+        "omega_ratio_min": 1.30,
+        "sustained_revolutions": 2,
+        "position_unchanged": true,
+        "foot_unchanged": true
+      },
+      "notes": "Ratio of peak to trough angular velocity within one position segment. Emerges naturally from the player pulling in: omega = L / I, so drawing the free leg and arms toward the axis produces this without any special-case code."
+    },
+    {
+      "id": "spin.eight_revolutions_no_change",
+      "name": "Eight or more revolutions without any change",
+      "kind": "observed",
+      "counts_per": "element",
+      "max_per_element": 1,
+      "applies_to": ["USp", "SSp", "CSp", "LSp", "CoSp", "CCoSp", "FCSp", "FSSp"],
+      "requires": {
+        "min_revolutions": 8,
+        "position_unchanged": true,
+        "foot_unchanged": true,
+        "edge_unchanged": true,
+        "variation_unchanged": true,
+        "max_centering_error_m": 0.5
+      },
+      "notes": "A single unbroken segment of at least eight revolutions. Trivially detected because the segment model already breaks on every change."
+    }
+  ],
+
+  "minimum_requirements": {
+    "note": "Independent of level. Failing these downgrades or invalidates the element rather than reducing its level.",
+    "basic_position_min_revolutions": 2,
+    "spin_min_total_revolutions": {
+      "USp": 6, "SSp": 6, "CSp": 6, "LSp": 8,
+      "FCSp": 6, "FSSp": 6, "CoSp": 6, "CCoSp": 10
+    },
+    "max_centering_travel_m": 1.2,
+    "travel_penalty_note": "Exceeding max travel does not invalidate the spin but is a mandatory GOE reduction and blocks every feature with a centering requirement."
+  }
+}

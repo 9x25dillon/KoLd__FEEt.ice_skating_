@@ -112,7 +112,7 @@ as surprises.
 
 | Gap | Where it bites | Notes |
 | --- | --- | --- |
-| **Spin and step level features** are not enumerated | `FSpinResolver` feature detection, `data/` | The criteria that raise an element from level 1 to level 4. Needs a structured format, not CSV. Required before the vertical slice's judging pipeline is complete. |
+| ~~**Spin and step level features** are not enumerated~~ | — | **CLOSED 2026-09-02.** Specified in [level-features.md](level-features.md), data in `data/spin-features.json`, `step-features.json`, `spin-positions.json`, detection in `src/reference/SpinResolver.cpp`. Two follow-ons remain: verify the feature lists against the current ISU Communication, and build the 50-element protocol validation corpus (vertical slice, needs Composer v0). |
 | **The Composer transition solver** is specified in outline only | §09A | An A* search over the motion-matching database constrained by the physics solver. This is the piece with the most hidden complexity in the whole design and deserves its own document. |
 | **Balance model tuning constants** are placeholders | `SkateSolver.cpp`, `kBalanceGain` | Cannot be derived; must come from the feel prototype in months 1–4. |
 | **Crowd reaction propagation** timing is unspecified | §07.3 | Per-agent delay curve for the reaction wave. Cheap to tune late. |

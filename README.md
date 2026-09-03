@@ -15,6 +15,7 @@ you take is written permanently into the ice beneath you. There is no jump butto
 | **📖 Rendered** | [Published document](https://claude.ai/code/artifact/58f6234d-6ece-4f55-8fc5-2b7a7ce86da9) — with diagrams, syntax-highlighted code, light/dark |
 | **📄 Markdown** | [`docs/design-bible.md`](docs/design-bible.md) — the reviewable, diffable copy |
 | **🧪 Pre-production** | [`docs/pre-production-plan.md`](docs/pre-production-plan.md) · [rendered](https://claude.ai/code/artifact/531a5952-fcfd-44bf-966a-ae31ce3562c9) — 16 weeks, 8 people, and the kill gate |
+| **🌀 Level features** | [`docs/level-features.md`](docs/level-features.md) — how spins and step sequences earn levels 1–4 |
 | **❓ Open calls** | [`docs/open-decisions.md`](docs/open-decisions.md) — six decisions that change the shape of the project |
 
 ---
@@ -25,6 +26,7 @@ you take is written permanently into the ice beneath you. There is no jump butto
 docs/
   design-bible.md        The full specification — 10 sections, ~16k words
   pre-production-plan.md 16-week feel prototype, playtest protocol, kill gate
+  level-features.md      Spin and step level detection: declared vs observed
   open-decisions.md      Unresolved calls + known specification gaps
   web/index.html         The rendered design bible (opens in any browser)
 data/
@@ -33,11 +35,15 @@ data/
   spin-step-values.csv     Spin and step sequence values by level
   calls-and-deductions.csv Technical panel calls with their simulation thresholds
   segment-rules.csv        Durations, PCS factors, well-balanced program requirements
+  spin-positions.json      19 positions: difficulty, pose tolerance, inertia scale
+  spin-features.json       11 spin level features and their detection requirements
+  step-features.json       Turn taxonomy, variety ladder, step sequence features
 src/reference/
   SkateSolver.cpp          The carve solver — the heart of the game
   JumpResolver.cpp         Load → air → land, with technical-panel rotation accounting
   ScoreCalculator.cs       ISU scoring: base values, nine-judge GOE, PCS, deductions
   SkaterAnimDriver.cpp     Layered animation selection + warping chain
+  SpinResolver.cpp         The segment model and spin level-feature detection
 ```
 
 The reference code is **specification as code** — it does not compile, and that is
@@ -91,8 +97,7 @@ implemented yet.
 **Next artefacts**, in the order they are most useful:
 
 1. ~~Pre-production plan for the feel prototype~~ → [`docs/pre-production-plan.md`](docs/pre-production-plan.md)
-2. The spin and step **level-feature** enumeration, in a structured format (the one gap that
-   blocks completing the judging pipeline).
+2. ~~The spin and step level-feature enumeration~~ → [`docs/level-features.md`](docs/level-features.md)
 3. The **Composer transition solver** specified properly — the piece with the most hidden
    complexity in the design.
 

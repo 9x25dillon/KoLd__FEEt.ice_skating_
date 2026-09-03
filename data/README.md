@@ -13,9 +13,12 @@
 | --- | --- |
 | `scale-of-values.csv` | Jump base values and GOE step per element. `goe_step` is 10% of base value, per the jump rule. |
 | `jump-definitions.csv` | The physical definition of each jump: takeoff foot, edge, direction, toe assist, whether it is edge-callable. Drives `FJumpDef` and the entry-edge check. |
-| `spin-step-values.csv` | Spin and step sequence base values by level, with the fixed per-level GOE step. |
+| `spin-step-values.csv` | Spin and step sequence base values by level (B, 1–4), with the fixed per-level GOE step. |
 | `calls-and-deductions.csv` | Technical panel calls (`q`, `<`, `<<`, `!`, `e`, `*`) with the simulation thresholds that trigger them, plus the deduction schedule. |
 | `segment-rules.csv` | Per-discipline segment duration, tolerance, PCS component factor, and well-balanced program element counts. |
+| `spin-positions.json` | The authored position catalogue — 19 variations with difficulty flags, pose tolerances, moment-of-inertia scales and flexibility gates, plus 8 entries and 4 exits. What "declared" level features reference. |
+| `spin-features.json` | The 11 spin level features, their detection requirements, and minimum revolution requirements per spin type. |
+| `step-features.json` | Turn taxonomy, the four-grade variety ladder, step sequence features, and choreographic sequence validity. |
 
 ## Column notes
 
@@ -39,9 +42,22 @@ tune them during the vertical slice.
 comparable magnitudes. Under the pre-2022 five-component system these factors were
 different; do not mix the two systems.
 
-## Deliberately not here
+## Level features
 
-Spin and step sequence **level features** — the criteria that raise an element from
-level 1 to level 4 — are a longer structured list than CSV handles well. They belong in
-a structured format (JSON or a UE DataTable) once the spin resolver's feature detection
-is specified. Tracked in `docs/open-decisions.md`.
+The three JSON files carry the criteria that raise an element from level B to level 4.
+Their design — and in particular the split between **declared** difficulty (a flag on an
+authored asset, verified by the simulation) and **observed** difficulty (computed purely
+from simulation state) — is specified in
+[`docs/level-features.md`](../docs/level-features.md).
+
+Two cautions specific to these files:
+
+1. **Every number is a balance lever, not a rule.** The ISU says "clear increase of speed";
+   a human technical specialist applies judgement; a game must pick a number. We picked a
+   1.30 ratio of peak to trough angular velocity. Label these as design decisions wherever
+   they surface, and expect to tune them against real protocol sheets.
+
+2. **`spin-positions.json` couples scoring to physics.** Each variation's `inertia_scale`
+   feeds the solver directly, so a camel is slow and a Biellmann is fast as a consequence of
+   this file rather than of any scripting. Editing these values changes how spins *feel*, not
+   only how they score.
