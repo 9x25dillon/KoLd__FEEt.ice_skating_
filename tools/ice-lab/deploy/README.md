@@ -8,6 +8,34 @@ plays lands in a file you own.**
 
 ---
 
+## If the box is already doing something else
+
+Most boxes are. Everything below is designed to sit beside an existing service
+without touching it — new user, new directories, new port, new subdomain — but
+three things can genuinely break a running backend, and all three are avoidable:
+
+1. **Upgrading Node with the package manager.** If the existing app runs on
+   Node, `apt install nodejs` can move it under the app's feet. Install Node 26
+   **side by side** in `/opt/node26` instead and point only this service at it.
+   Nothing else on the box sees it: no PATH change, no package, no symlink.
+2. **A second web server.** Installing Caddy on a box already running nginx
+   gives you two processes both wanting port 80. Find out what is there first
+   and add a site to it rather than installing a rival.
+3. **Reloading a web server with a broken config.** Always `nginx -t` or
+   `caddy validate` before the reload, never after.
+
+Reconnaissance first — every command here only reads:
+
+```sh
+ss -tlnp | grep -E ':(80|443|8124)\s'   # who owns the ports that matter
+systemctl list-units --type=service --state=running | grep -Ei 'caddy|nginx|apache|httpd'
+command -v caddy nginx; node --version 2>/dev/null
+id edgework 2>/dev/null; ls -d /srv/edgework /var/lib/edgework 2>/dev/null
+```
+
+If port 8124 is taken, change `PORT` in the unit and the upstream in the web
+server config to match — nothing else refers to it.
+
 ## What you need first
 
 - A box with a public IP and root.
@@ -15,9 +43,26 @@ plays lands in a file you own.**
   certificate on first start and cannot if the name does not resolve yet.
 - **Node 26 or newer.** Not optional and not arbitrary: the build step is
   Node's own TypeScript stripper, which is why this thing has no build tooling
-  to install. Distribution packages are usually far older —
-  [nodesource](https://github.com/nodesource/distributions) or a tarball from
-  nodejs.org both work. Check with `node --version` before going further.
+  to install. Distribution packages are usually far older.
+
+  On a box that is already running something, install it **beside** whatever is
+  there rather than over it:
+
+  ```sh
+  case "$(uname -m)" in x86_64) NARCH=x64;; aarch64) NARCH=arm64;; *) echo "unknown arch"; exit 1;; esac
+  NODE_VER=$(curl -fsSL https://nodejs.org/dist/index.json | grep -o '"version":"v26[^"]*"' | head -1 | cut -d'"' -f4)
+  curl -fsSL "https://nodejs.org/dist/${NODE_VER}/node-${NODE_VER}-linux-${NARCH}.tar.xz" -o /tmp/node26.tar.xz
+  curl -fsSL "https://nodejs.org/dist/${NODE_VER}/SHASUMS256.txt" -o /tmp/node26.sha
+  (cd /tmp && grep " node-${NODE_VER}-linux-${NARCH}.tar.xz$" node26.sha | sha256sum -c -)
+  sudo mkdir -p /opt/node26 && sudo tar -xJf /tmp/node26.tar.xz -C /opt/node26 --strip-components=1
+  /opt/node26/bin/node --version
+  ```
+
+  Then point the unit at it, and nothing else on the box is affected:
+
+  ```sh
+  sudo sed -i 's#/usr/bin/node#/opt/node26/bin/node#g' /etc/systemd/system/edgework-collect.service
+  ```
 
 ## 1 · A user and two directories
 
@@ -83,7 +128,53 @@ edgework-collect` will tell you how it scores. If you change `ExecStart`,
 re-run `systemd-analyze verify` on the file first; it catches keys in the wrong
 section, which systemd otherwise ignores in silence.
 
-## 5 · Caddy
+## 5 · The web server
+
+### If Caddy is already running
+
+Do not replace `/etc/caddy/Caddyfile` — append a site block to it, or drop one
+in if the file ends with an import:
+
+```sh
+sudo tee -a /etc/caddy/Caddyfile < /srv/edgework/tools/ice-lab/deploy/Caddyfile
+sudo nano /etc/caddy/Caddyfile        # set the domain on the block you just added
+sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+```
+
+### If nginx is already running
+
+Do not install Caddy. This is the whole server block, and it touches nothing
+else nginx is serving:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name skate.example.com;
+
+    # certbot --nginx -d skate.example.com will fill these in
+    ssl_certificate     /etc/letsencrypt/live/skate.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/skate.example.com/privkey.pem;
+
+    client_max_body_size 64k;
+
+    # The collector holds nothing about a person; do not undo that in the log.
+    access_log /var/log/nginx/edgework.log combined;   # or: access_log off;
+
+    location / {
+        proxy_pass http://127.0.0.1:8124;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```sh
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### If nothing is serving 80/443 yet
+
+## 5b · Caddy
 
 ```sh
 sudo apt install caddy          # or per caddyserver.com/docs/install
@@ -121,7 +212,22 @@ Back it up as a plain file — `rsync`, a nightly `cp` to another disk, anything
 It is text, it is small, and it is the only thing on this box you cannot
 regenerate.
 
-## 7 · Updating
+## 7 · Removing it again
+
+Nothing here is entangled with anything else, which is the point:
+
+```sh
+sudo systemctl disable --now edgework-collect
+sudo rm /etc/systemd/system/edgework-collect.service && sudo systemctl daemon-reload
+sudo rm -rf /srv/edgework /etc/edgework /opt/node26
+sudo userdel edgework
+# and delete the site block from the web server config, then reload
+```
+
+`/var/lib/edgework` is left out of that on purpose: it is the sessions, and it
+is the only thing on the box that cannot be regenerated.
+
+## 8 · Updating
 
 ```sh
 sudo -u edgework git -C /srv/edgework pull
