@@ -6,7 +6,7 @@ Read this before touching anything. It covers what exists, what is decided, the 
 hold the document set together, and the things most likely to trip you up.
 
 > **This line changed.** Until 2026-09-08 this file said *"zero implementation."* That is no longer
-> true: `tools/ice-lab/` is real, runs, and has 68 passing tests. Nothing else has been built.
+> true: `tools/ice-lab/` is real, runs, and has 78 passing tests. Nothing else has been built.
 
 ---
 
@@ -31,7 +31,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Data files | 12 in `data/` — 5 CSV, 6 JSON, 1 README |
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
-| Implementation | `tools/ice-lab/` — 3,635 lines, 68 tests, zero dependencies |
+| Implementation | `tools/ice-lab/` — ~4,400 lines, 78 tests, zero dependencies |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 
@@ -67,7 +67,7 @@ transcription rather than as discovery. **It is not the game and it is not an en
 
 ```sh
 cd tools/ice-lab
-node --test test/*.test.ts     # 68 pass, ~1.8 s
+node --test test/*.test.ts     # 78 pass, ~2 s
 node app/serve.mjs             # http://localhost:8123/
 ```
 
@@ -84,9 +84,9 @@ Read [`tools/ice-lab/README.md`](tools/ice-lab/README.md) before changing any of
 
 ### What the rig found
 
-Seven things, each recorded as a test rather than prose, so they fail loudly if reverted.
-**Findings 4, 5 and 6 have been fixed in the rig** (2026-09-09, second session); the defects stay
-reproducible because `spec` still carries them.
+Eight things, each recorded as a test rather than prose, so they fail loudly if reverted.
+**Findings 4, 5, 6 and 7 have been fixed in the rig** (2026-09-09); the defects stay reproducible
+because `spec` still carries every one of them.
 
 1. **`big_reffg.txt` contains both readings of the handedness.** One half correctly calls `Up × t`
    "the skater's left"; the other calls the identical expression "Right" and derives every edge
@@ -111,8 +111,11 @@ reproducible because `spec` still carries them.
    |---|---|---|---|
    | `spec` (Kd 8, angulation 20°, no rate term) | 4° | **11°** | 32° |
    | `spec` + finding 5's rate term, nothing else | 9° | **19°** | 43° |
-   | `responsive` (Kd 16, angulation 40°, fixed) | 16° | **27°** | 46° |
-   | `assisted` | 18° | **29°** | 48° |
+   | `responsive` (Kd 16, angulation 40°, fixed) | 13° | **25°** | 44° |
+   | `assisted` | 13° | **25°** | 44° |
+
+   These are leans **reached**, not merely survived: each preset stays up about 2° deeper than it
+   tracks. Quote the tracked number — the other one flatters.
 
    Two things it is not, both checked rather than assumed: **not an entry transient** (slewing the
    stick at 360 / 180 / 90 / 45 °/s changes the limit by nothing), and **partly the measurement
@@ -138,7 +141,18 @@ reproducible because `spec` still carries them.
    the presets). It buys no depth at all — the entry envelope with credit alone is identical to
    `spec` — and it does not make the skater unfallable: an unholdable lean still goes down by
    `LEAN EXCEEDED`.
-7. **Four mechanisms the package lacks**: variable effective rocker along the blade; lateral
+7. **The internal authority has no range limit, and will hold a lean forever.** Found by building
+   control scheme B, which could not steer and should have been able to. A skater asked for a 20°
+   edge settled at 13°, blade flat, going straight, indefinitely — arms and centre of pressure
+   holding a lean the ice was not carrying, while the balance loop steered the other way trying to
+   reach the edge it had been asked for. The arithmetic is exact: authority 2.74 m/s² against
+   `g·tan(13°)` = 2.26 m/s², so it holds forever. **Fixed** by `internalWashout`, a high-pass on
+   the arms term — what is held drains away, what changes still gets through — with the
+   centre-of-pressure term deliberately exempt, because a 24 cm stance really can hold ~7°
+   indefinitely and that is what standing still is. **This was invisible until finding 6 was
+   fixed**: while the fall test credited none of the authority, these states timed out and fell, so
+   the model looked honest for the wrong reason. Fixing one thing is how you find the next.
+8. **Four mechanisms the package lacks**: variable effective rocker along the blade; lateral
    resistance on a flat blade; a rate-limited knee; and rotating rather than projecting velocity
    under the constraint.
 
@@ -300,7 +314,17 @@ If you add a sixth page, copy the head from `docs/web/production.html`.
    afterwards only confirmed sizes. A sweep tells you a number moved. A trace tells you why, and
    the why is what turns out to be wrong.
 
-9. **`sim/` has no type checker in this environment.** `tsc` is not installed and the build only
+9. **A fixed defect is how you find the next one.** Finding 7 was invisible while finding 6 stood:
+   the states where the arms hold a lean forever used to trip the balance timeout and fall over, so
+   the model looked honest for the wrong reason. After every fix, re-measure the things the fix was
+   not about — the entry tables moved by 1–3° and nothing in the change touched them.
+
+10. **A "control" parameter set built by subtracting fixes from a preset will rot.** Two tests
+    constructed "as the package specifies it" as `{...PRESETS.responsive, someFix: 0}`, so the next
+    fix leaked straight into the control case and both tests failed for the wrong reason. Build
+    control cases by ADDING to `spec`, which is the baseline by definition.
+
+11. **`sim/` has no type checker in this environment.** `tsc` is not installed and the build only
    strips types, so a slider naming a parameter that does not exist, or a state field never
    initialised, reaches a browser silently. `test/boundary.test.ts` catches the syntax rules; for
    `app/`, a throwaway DOM stub that constructs `Panel` and asserts every slider key is a real
@@ -323,12 +347,21 @@ In descending order of value:
    the session in `docs/tuning/` and export the parameter set with the panel's **params.json**
    button, which emits only what differs from `spec`.
 
-   **Two control schemes, and say which one was used.** The pad defaults to the bible's §2.1
-   scheme — the whole lean vector on the left stick — and **M** or **Back** switches to lean on the
-   left stick's X with the rocker on its own right stick. The first play report (2026-09-09) said
-   the shared stick was harder to navigate; part of that was a real deadzone bug, now fixed, and
-   the rest is the open question the fallback exists to answer. Bible risk 1 asks for exactly this:
-   *keep two fallback schemes prototyped rather than one.*
+   **The rig is now set up for the plan's own M2, not for the kill gate.** Read
+   [pre-production-plan.md §3, §6 and §7](docs/pre-production-plan.md) before running anyone:
+
+   - **All three schemes exist** — A *Lean & Load* (bible §2.1), B *Steer & Load*, C *Two-Foot* —
+     cycled with **M** or **Back**, labelled A/B/C on screen and nowhere identified, because §7
+     requires the labels be blind to the testers *and* the observers.
+   - **`?playtest=1`** hides the sliders, the preset name and the exports. A tester gets a rink and
+     a letter.
+   - **The session export** is the five §6 metrics the rig can compute, under that document's
+     definitions, plus the scheme and the parameters. No names, no accounts, no free text.
+   - **W8's M2 is the milestone this serves**: *"eight team members plus eight friendly externals,
+     blind A/B/C, ranked. Soft gate: down-select 3 → 2."* Friends and family are friendly
+     externals, and their data legitimately chooses a scheme. It can **never** feed the W16 kill
+     gate, which excludes *"anyone who knows the team"* — and W13's protocol pilot exists precisely
+     so a first run debugs the protocol rather than the game. Its data is discarded by design.
 
    **Start them on `responsive`, not `spec`.** `spec` cannot enter an edge deeper than 11° at
    stroking pace, which is not a fair test of anything. The two questions worth putting to a skater
@@ -379,6 +412,7 @@ worth having.
 | --- | --- |
 | 2026-09-02 → 03 | Specification completed. D2, D3, D4, D6 closed. Five Artifacts published and mirrored. |
 | 2026-09-08 → 09 | `big_reffg.txt` reviewed and committed with its defects recorded. `tools/ice-lab/` built, 56 tests. Six defects found in the engineering package, each captured as a test. D2 re-raised and re-closed. Merged as PR #1 (`fbbf83c`). |
+| 2026-09-09 (fourth) | Publishing and playtest prep. Control schemes B and C built, labelled A/B/C blind, `?playtest=1` mode, and the plan's §6 session metrics. An eighth finding: the internal authority holds a lean forever, found because B could not steer. 78 tests. |
 | 2026-09-09 (third) | First play report on a pad. `app/pad.ts` had applied a per-axis deadzone while its own header described a radial one; fixed, plus fore/aft cross-talk suppression and a second control scheme on M / Back. The root URL served a blank rink and now redirects. 68 tests. |
 | 2026-09-09 (second) | The controls. Findings 4 and 5 fixed and a seventh found: the fall test scores a save as a fall. Two new parameters, both defaulting to the spec's behaviour; `validate()` now rejects the assist tier written the wrong way. 64 tests. |
 

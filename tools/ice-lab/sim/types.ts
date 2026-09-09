@@ -103,6 +103,12 @@ export interface SkaterState {
   pos: Vec2;
   vel: Vec2;
   heading: Vec2;      // unit; the support blade's tangent
+  /**
+   * rad/s the skater is actually turning, this tick. Derived, but kept because
+   * a controller that steers has to see it — a heading demand with no rate term
+   * winds the lean up and puts the skater down, measured at 2.0 s flat.
+   */
+  yawRate: number;
   lean: number;       // rad, + = COM leans toward perpLeft(heading)
   leanRate: number;
   leanEq: number;     // rad the current lateral acceleration would balance
@@ -119,6 +125,11 @@ export interface SkaterState {
    * without seeing this, and the fall test now credits it.
    */
   intAccel: number;
+  /**
+   * The part of the internal authority that has been held long enough to have
+   * been washed out — how far the arms already are from where they started.
+   */
+  intHeld: number;
   tiltCmd: number;    // rad, after the neuromuscular lag
   legLength: number;  // m, contact to COM
   legRate: number;
@@ -148,12 +159,27 @@ export interface SkatingInput {
   knee: number;   // 0 = straight leg .. 1 = deep bend
   weight: number; // 0 = all left foot .. 1 = all right foot
   pitch: number;  // -1 heel .. +1 toe; moves the contact along the rocker
+  /**
+   * -1..1, how far the two blades are tilted APART from each other.
+   *
+   * The body has one lean and each blade has a tilt, so (lean, leanSplit) is
+   * the mean and the difference of the two tilts — an exact reparametrization
+   * of controlling each blade separately, with the balance loop still solving
+   * for the mean instead of being bypassed.
+   *
+   * Zero everywhere except control scheme C (pre-production-plan.md §3, the
+   * two-foot scheme), which is what it exists for. It is also the axis a
+   * crossover, mohawk or choctaw needs, since those are two-foot actions with
+   * the blades on opposite edges — so it is not scaffolding for a test, it is
+   * the input the element vocabulary was always going to want.
+   */
+  leanSplit: number;
   push: boolean;
   brake: boolean;
 }
 
 export const NEUTRAL_INPUT: SkatingInput = {
-  lean: 0, knee: 0.35, weight: 0.5, pitch: 0, push: false, brake: false,
+  lean: 0, knee: 0.35, weight: 0.5, pitch: 0, leanSplit: 0, push: false, brake: false,
 };
 
 // ── events ──────────────────────────────────────────────────────────────────

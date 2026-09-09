@@ -163,6 +163,7 @@ test("equilibrium lean is the arctangent it claims to be", () => {
  * for that reason instead of the one under test.
  */
 const sequence = (i: number) => ({
+  ...NEUTRAL_INPUT,
   lean: 0.30 * Math.sin(i * 0.017), knee: 0.45, weight: 0.5,
   pitch: 0, push: i % 90 === 0, brake: false,
 });
@@ -187,10 +188,15 @@ test("MEASURED: as the package specifies it, internal authority is not a knob", 
   assert.ok(survives(PRESETS.assisted), "the assisted preset skates this sequence");
 
   // The tuned gains with the package's own internal authority: proportional
-  // only, and a fall test that credits none of it. This is the parameter set
-  // the finding was measured on, kept so the defect stays reproducible after
-  // the presets were fixed.
-  const asSpecified = { ...PRESETS.responsive, internalRateGain: 0, fallAuthorityCredit: 0 };
+  // only, no washout, and a fall test that credits none of it. This is the
+  // parameter set the finding was measured on, kept so the defect stays
+  // reproducible after the presets were fixed.
+  //
+  // Built by ADDING the two gain changes to `spec` rather than by subtracting
+  // fixes from `responsive`: subtracting means every future fix silently leaks
+  // into the control case, which is how a regression test stops testing the
+  // thing it was written for. It cost two failures to notice.
+  const asSpecified = { ...DEFAULT_PARAMS, balanceKd: 16.0, angulationLimit: 0.70 };
   const at15 = ticksUp(asSpecified);                                 // 617
   const at20 = ticksUp({ ...asSpecified, internalMax: 2.0 });        // 725
   const at25 = ticksUp({ ...asSpecified, internalMax: 2.5 });        //  77
@@ -208,7 +214,7 @@ test("MEASURED: a save is scored as a fall, which is most of why", () => {
   // IS the fall condition, and the more authority the sooner it fires.
   //
   // The tell is where the skater is standing when it does.
-  const p = { ...PRESETS.responsive, internalRateGain: 0, fallAuthorityCredit: 0, internalMax: 2.5 };
+  const p = { ...DEFAULT_PARAMS, balanceKd: 16.0, angulationLimit: 0.70, internalMax: 2.5 };
   const s = createState(p, 4.0, 0);
   const ev: never[] = [];
   let tick = -1;
@@ -224,7 +230,7 @@ test("MEASURED: a save is scored as a fall, which is most of why", () => {
     `nobody is on the ice at ${(s.lean * 180 / Math.PI).toFixed(1)} degrees of lean`);
 
   // Credit the authority and the same run simply skates.
-  const fixed = { ...p, internalRateGain: 2.0, fallAuthorityCredit: 1.0 };
+  const fixed = { ...p, internalRateGain: 2.0, internalWashout: 1.5, fallAuthorityCredit: 1.0 };
   const s2 = createState(fixed, 4.0, 0);
   for (let i = 0; i < 1800; i++) step(s2, sequence(i), fixed, SIM_DT, ev);
   assert.ok(!s2.fallen, "with the authority credited, the save is a save");

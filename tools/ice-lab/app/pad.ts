@@ -4,6 +4,11 @@
 // work and has eleven play reports behind it. The shape is unchanged; only
 // what it produces is different.
 //
+// THIS FILE READS HARDWARE AND NOTHING ELSE. What an axis MEANS belongs to
+// app/schemes.ts, because pre-production-plan.md §3 requires three answers to
+// that question and the entire point of the exercise is that nobody yet knows
+// which one is right.
+//
 // WHY THE DEADZONE IS RADIAL. Treating the axes separately squares off the
 // diagonals: a stick pushed to its corner reads 1.0 on both, a magnitude of
 // 1.41, and forty percent more reach on the diagonals than the cardinals.
@@ -18,22 +23,6 @@
 // WHY THERE IS A CURVE ON IT. The stick sets a lean, and the interesting part
 // of that lean is the first third — a shallow edge is a slow, precise thing.
 // A mild exponential gives that back at no cost to full deflection.
-//
-// ── two schemes, deliberately ───────────────────────────────────────────────
-//
-// design-bible.md §2.1 gives the LEFT STICK the whole lean vector — sideways is
-// which edge and how deep, fore/aft is over the toe or the heel — and reserves
-// the RIGHT STICK for carriage. That is the scheme the game ships with, so it
-// is the default here.
-//
-// It is also the scheme the bible's own risk 1 says to keep a fallback for:
-// "no shipped game has used analog lean plus analog knee as its primary verb …
-// keep two fallback schemes prototyped rather than one." So `split` puts lean
-// on the left stick's X alone and the rocker on the right stick's Y, and M (or
-// Back) switches between them mid-glide. Which scheme a tuning session ran is
-// worth writing in the log next to the parameters.
-
-import type { SkatingInput } from "../sim/types.ts";
 
 const DEADZONE = 0.22;
 const CURVE = 1.35;
@@ -41,7 +30,7 @@ const TRIGGER = 0.35;
 
 /**
  * How far off horizontal the stick must be pushed before it reads as rocker,
- * in the unified scheme. Radians.
+ * in scheme A. Radians.
  *
  * Without it, a lean is never purely a lean: nobody pushes a stick along an
  * exact axis, so every edge came with a few degrees of unasked-for fore/aft and
@@ -52,13 +41,36 @@ const TRIGGER = 0.35;
  */
 const PITCH_BAND = 0.44;          // 25 deg
 
-export const SCHEME = { Unified: 0, Split: 1 } as const;
-export type Scheme = 0 | 1;
-export const SCHEME_NAME = ["unified · bible §2.1", "split sticks"] as const;
-
 const A = 0, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, BACK = 8, START = 9;
 
-export interface PadState extends SkatingInput {
+/**
+ * Hardware state, with the sticks shaped but not yet interpreted.
+ *
+ * Both readings of the left stick are carried, because the schemes want
+ * different ones: A wants the lean with the fore/aft bleed removed, B wants the
+ * direction exactly as pushed, since "point where you want to go" is distorted
+ * by any suppression at all.
+ */
+export interface Controls {
+  /** Left stick, radial deadzone and curve applied, direction preserved. */
+  lx: number;
+  ly: number;
+  /** Right stick, the same treatment. */
+  rx: number;
+  ry: number;
+  /** Scheme A's reading of the left stick. */
+  lean: number;
+  pitch: number;
+  /** Keyboard, A/D and W/S or the arrows: the axis every scheme can use. */
+  kx: number;
+  ky: number;
+  /** A/D alone and the arrows alone, so ten fingers can drive two blades. */
+  kPrimaryX: number;
+  kAltX: number;
+  knee: number;
+  weight: number;
+  push: boolean;
+  brake: boolean;
   /** One-shot: true only on the frame the button went down. */
   reset: boolean;
   pause: boolean;
@@ -66,8 +78,10 @@ export interface PadState extends SkatingInput {
   cycleScheme: boolean;
 }
 
-const NOTHING: PadState = {
-  lean: 0, knee: 0.35, weight: 0.5, pitch: 0, push: false, brake: false,
+const NOTHING: Controls = {
+  lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
+  kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
+  knee: 0.35, weight: 0.5, push: false, brake: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false,
 };
 
@@ -86,8 +100,8 @@ function stick(x: number, y: number): { x: number; y: number } {
 }
 
 /**
- * The unified scheme's left stick: a lean vector, with the fore/aft component
- * relieved of the bleed a sideways push carries with it.
+ * Scheme A's left stick: a lean vector, with the fore/aft component relieved of
+ * the bleed a sideways push carries with it.
  *
  * Exported and pure because this is where the deadzone bug lived, and because
  * a mapping is exactly the kind of thing that is easier to argue about than to
@@ -99,17 +113,7 @@ export function leanVector(rawX: number, rawY: number): { lean: number; pitch: n
   return { lean: l.x, pitch: Math.sign(l.y) * Math.max(0, Math.abs(l.y) - bleed) };
 }
 
-/** One axis on its own, for the split scheme's two half-sticks. */
-function axis(v: number): number {
-  const a = Math.abs(v);
-  if (a < DEADZONE) return 0;
-  return Math.sign(v) * Math.pow((a - DEADZONE) / (1 - DEADZONE), CURVE);
-}
-
 export class Pad {
-  /** Which mapping is live. Cycled by M or Back; read by the HUD. */
-  scheme: Scheme = SCHEME.Unified;
-
   private keys = new Set<string>();
   private prevButtons = new Set<number>();
   private prevKeys = new Set<string>();
@@ -131,21 +135,18 @@ export class Pad {
     return this.keys.has(k) && !this.prevKeys.has(k);
   }
 
-  read(): PadState {
-    const out: PadState = { ...NOTHING };
+  read(): Controls {
+    const out: Controls = { ...NOTHING };
     const gp = navigator.getGamepads?.().find((g) => g && g.connected) ?? null;
 
     if (gp) {
-      if (this.scheme === SCHEME.Split) {
-        // Lean is the left stick's X and nothing else; the rocker gets a stick
-        // of its own. Costs the carriage stick, which is why it is not default.
-        out.lean = axis(gp.axes[0] ?? 0);
-        out.pitch = -axis(gp.axes[3] ?? gp.axes[1] ?? 0);
-      } else {
-        const l = leanVector(gp.axes[0] ?? 0, -(gp.axes[1] ?? 0));
-        out.lean = l.lean;
-        out.pitch = l.pitch;
-      }
+      const l = stick(gp.axes[0] ?? 0, -(gp.axes[1] ?? 0));
+      const r = stick(gp.axes[2] ?? 0, -(gp.axes[3] ?? 0));
+      out.lx = l.x; out.ly = l.y;
+      out.rx = r.x; out.ry = r.y;
+      const a = leanVector(gp.axes[0] ?? 0, -(gp.axes[1] ?? 0));
+      out.lean = a.lean; out.pitch = a.pitch;
+
       out.knee = Math.max(0, Math.min(1, gp.buttons[RT]?.value ?? 0));
       const wl = gp.buttons[LB]?.pressed ? 1 : 0;
       const wr = gp.buttons[RB]?.pressed ? 1 : 0;
@@ -160,10 +161,15 @@ export class Pad {
     }
 
     // The keyboard is not a fallback, it is the same intent by other means.
-    const kx = (this.held("d", "arrowright") ? 1 : 0) - (this.held("a", "arrowleft") ? 1 : 0);
-    const ky = (this.held("w", "arrowup") ? 1 : 0) - (this.held("s", "arrowdown") ? 1 : 0);
-    if (kx) out.lean = kx;
-    if (ky) out.pitch = ky;
+    // A/D and the arrows are one axis for schemes A and B, and two separate
+    // ones for C, which needs a control per blade.
+    const primaryX = (this.held("d") ? 1 : 0) - (this.held("a") ? 1 : 0);
+    const altX = (this.held("arrowright") ? 1 : 0) - (this.held("arrowleft") ? 1 : 0);
+    out.kPrimaryX = primaryX;
+    out.kAltX = altX;
+    out.kx = primaryX !== 0 ? primaryX : altX;
+    out.ky = (this.held("w", "arrowup") ? 1 : 0) - (this.held("s", "arrowdown") ? 1 : 0);
+
     if (this.held("shift")) out.knee = 0.95;
     else if (!gp) out.knee = 0.35;
     if (this.held("q")) out.weight = 0;
@@ -176,7 +182,6 @@ export class Pad {
     if (this.pressed("m")) out.cycleScheme = true;
 
     this.prevKeys = new Set(this.keys);
-    if (out.cycleScheme) this.scheme = (1 - this.scheme) as Scheme;
     return out;
   }
 }

@@ -87,11 +87,33 @@ export interface Params {
    * `internalMax` must raise this first.
    */
   internalRateGain: number;
+  /**
+   * Seconds over which a SUSTAINED internal authority washes out. 0 disables it.
+   *
+   * Arms and a free leg have finite travel. You can throw them out to catch a
+   * wobble; you cannot hold them out to hold a lean, and a model that lets you
+   * is a model where the ice is optional. Without this the skater reaches a
+   * stable, wrong equilibrium — body held at a shallow lean by the arms, blade
+   * steering the other way forever, neither tracking the command nor falling.
+   *
+   * So the term is high-passed: transients pass through at full strength and
+   * anything held decays toward zero, which puts the load back on the edge
+   * where it belongs. 0 in `spec`, because that is what the package specifies
+   * and every recorded measurement was taken against it.
+   */
+  internalWashout: number;
   internalMax: number;
   /** Shifting the centre of pressure within the stance, two-footed only. */
   copGain: number;
   /** Guards kappa = a / v^2 at a standstill. */
   minSpeedForCurv: number;
+  /**
+   * Full deflection of `leanSplit`, in radians of tilt per blade.
+   *
+   * Inert unless something drives that axis, so `spec` is unaffected and every
+   * recorded measurement still measures the same thing.
+   */
+  splitTiltMax: number;
 
   // ── stroke ────────────────────────────────────────────────────────────────
   /**
@@ -181,9 +203,11 @@ export const DEFAULT_PARAMS: Params = {
   controlLatency: 0.12,
   internalGain: 6.0,
   internalRateGain: 0.0,    // the package has no rate term; see the field comment
+  internalWashout: 0.0,     // nor any limit on holding it out; see the field comment
   internalMax: 1.5,
   copGain: 12.0,
   minSpeedForCurv: 0.5,
+  splitTiltMax: 0.35,       // 20 deg apart at full deflection
 
   strokePower: 3.2,
   strokeBeta: 0.65,          // 37 deg
@@ -237,6 +261,8 @@ export function validate(p: Params): string[] {
   if (p.kneeRate <= 0) errs.push("kneeRate must be positive");
   if (p.strokeEdge <= p.flatThreshold)
     errs.push("strokeEdge is at or below the flat threshold, so a push has no edge to bite with");
+  if (p.internalWashout < 0)
+    errs.push("internalWashout is a time constant in seconds, or 0 to disable it");
   if (p.internalRateGain < 0)
     errs.push("internalRateGain must not be negative: a negative rate term is anti-damping");
   if (p.fallAuthorityCredit < 0 || p.fallAuthorityCredit > 1)
@@ -283,7 +309,7 @@ export const PRESETS: Readonly<Record<string, Params>> = {
   spec: DEFAULT_PARAMS,
   responsive: {
     ...DEFAULT_PARAMS, balanceKd: 16.0, angulationLimit: 0.70,
-    internalRateGain: 2.0, fallAuthorityCredit: 1.0,
+    internalRateGain: 2.0, internalWashout: 1.5, fallAuthorityCredit: 1.0,
   },
   /**
    * An assist tier, as a parameter overlay and nothing else.
@@ -310,6 +336,7 @@ export const PRESETS: Readonly<Record<string, Params>> = {
   assisted: {
     ...DEFAULT_PARAMS, balanceKd: 20.0, angulationLimit: 0.70,
     controlLatency: 0.04,
-    internalRateGain: 4.0, internalMax: 2.5, fallAuthorityCredit: 1.0,
+    internalRateGain: 4.0, internalWashout: 1.5, internalMax: 2.5,
+    fallAuthorityCredit: 1.0,
   },
 };

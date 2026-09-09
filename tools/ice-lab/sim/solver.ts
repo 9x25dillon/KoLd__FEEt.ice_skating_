@@ -62,6 +62,20 @@ import { SIM_DT } from "./params.ts";
 import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean } from "./blade.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
 
+/**
+ * A non-finite axis is a bug in the caller, and it must not be a quiet one.
+ *
+ * Without this, one missing field in an input literal makes every derived
+ * quantity NaN, and a NaN skater never falls (no comparison is true) and never
+ * diverges (NaN !== NaN, but the checksum quantizes to the same 0) — so three
+ * separate tests report SUCCESS while nothing is being simulated at all. That
+ * happened, within an hour of writing down that this rig has no type checker.
+ *
+ * In C++ the input arrives as quantized integers, where this cannot occur and
+ * the compiler deletes the check.
+ */
+const axis = (v: number, fallback: number): number => (Number.isFinite(v) ? v : fallback);
+
 // ── construction ────────────────────────────────────────────────────────────
 
 function makeBlade(): BladeState {
@@ -75,9 +89,9 @@ function makeBlade(): BladeState {
 
 export function createState(p: Params, speed = 0, lean = 0): SkaterState {
   return {
-    pos: v2(0, 0), vel: v2(speed, 0), heading: v2(1, 0),
+    pos: v2(0, 0), vel: v2(speed, 0), heading: v2(1, 0), yawRate: 0,
     lean, leanRate: 0, leanEq: 0, balanceError: 0, balanceErrorTime: 0,
-    latAccel: 0, intAccel: 0, tiltCmd: lean, legLength: p.comHeight, legRate: 0,
+    latAccel: 0, intAccel: 0, intHeld: 0, tiltCmd: lean, legLength: p.comHeight, legRate: 0,
     comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
     knee: 0, strokeTime: 0, strokeFoot: FOOT.Left,
     fallReason: FALL.None, fallen: false, tick: 0,
@@ -94,13 +108,14 @@ export function step(
   s.tick++;
 
   const alive = !s.fallen;
-  const leanCmd = clamp(input.lean, -1, 1) * p.maxLean;
+  const leanCmd = clamp(axis(input.lean, 0), -1, 1) * p.maxLean;
   // Rate-limited: a leg takes time to bend, and a step command would unload
   // the blades entirely for a tick and read as a jump.
-  s.knee = moveToward(s.knee, clamp(input.knee, 0, 1), p.kneeRate * dt);
+  s.knee = moveToward(s.knee, clamp(axis(input.knee, 0.35), 0, 1), p.kneeRate * dt);
   const knee = s.knee;
-  const weightR = clamp(input.weight, 0, 1);
-  const contactS = clamp(0.5 + 0.5 * clamp(input.pitch, -1, 1), 0, 1);
+  const weightR = clamp(axis(input.weight, 0.5), 0, 1);
+  const split = clamp(axis(input.leanSplit, 0), -1, 1);
+  const contactS = clamp(0.5 + 0.5 * clamp(axis(input.pitch, 0), -1, 1), 0, 1);
 
   // ── 1. legs -> normal load ────────────────────────────────────────────────
   // A deep knee is more push, more bite and more jump impulse; here it only
@@ -167,9 +182,13 @@ export function step(
     // foot the inside edge is a negative tilt and for the right a positive
     // one, which is the same rule classify.ts states, read backwards.
     const pushing = stroking && i === s.strokeFoot;
+    // A pushing blade is committed to its own inside edge and answers to
+    // nothing else; every other blade carries the body's tilt, plus its share
+    // of however far the two are being held apart.
+    const apart = (i === FOOT.Left ? -1 : 1) * split * p.splitTiltMax;
     b.tilt = pushing
       ? (i === FOOT.Left ? -p.strokeEdge : p.strokeEdge)
-      : s.tiltCmd;
+      : clamp(s.tiltCmd + apart, -p.maxTilt, p.maxTilt);
 
     if (!b.inContact) {
       b.regime = REGIME.Unloaded;
@@ -278,6 +297,7 @@ export function step(
   }
 
   const yawRate = yawDenom > 1e-6 ? yawNumer / yawDenom : 0;
+  s.yawRate = yawRate;
   const dPsi = yawRate * dt;
   if (dPsi !== 0) {
     for (let i = 0; i < 2; i++) {
@@ -363,6 +383,20 @@ export function step(
     // skating) does not kick it.
     aInt = clamp(p.internalGain * s.balanceError + p.internalRateGain * s.leanRate,
       -p.internalMax, p.internalMax);
+
+    // WASHOUT. Arms have finite travel: what is held drains away, what changes
+    // gets through. Without it the arms hold a lean the edge is not carrying,
+    // forever, and the skater neither reaches the commanded edge nor falls off
+    // it — which reads on screen as a controller that ignores you.
+    if (p.internalWashout > 1e-4) {
+      s.intHeld += (aInt - s.intHeld) * Math.min(1, dt / p.internalWashout);
+      aInt = clamp(aInt - s.intHeld, -p.internalMax, p.internalMax);
+    } else {
+      s.intHeld = 0;
+    }
+
+    // The centre of pressure is NOT washed out: a stance 24 cm wide really can
+    // hold a small lean indefinitely, which is what standing still is.
     if (s.supportMode === 2) {
       const copMax = g * p.stanceHalfWidth / L;
       aInt += clamp(p.copGain * s.balanceError, -copMax, copMax);
