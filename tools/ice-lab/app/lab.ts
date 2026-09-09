@@ -13,7 +13,7 @@ import type { SkaterState, EdgeEvent } from "../sim/types.ts";
 import { Renderer, DEFAULT_OPTIONS } from "./draw.ts";
 import type { DrawOptions } from "./draw.ts";
 import { Panel } from "./panel.ts";
-import { Pad } from "./pad.ts";
+import { Pad, SCHEME_NAME } from "./pad.ts";
 import { FixedStep } from "./loop.ts";
 
 const PRESET_NAMES = Object.keys(PRESETS);
@@ -82,7 +82,7 @@ class Lab {
     const log = this.telemetry.eventLog();
     const recent = log ? log.split("\n").slice(-6).reverse() : [];
     const info = [
-      `preset ${PRESET_NAMES[this.presetIndex]}   `
+      `preset ${PRESET_NAMES[this.presetIndex]}   pad ${SCHEME_NAME[this.pad.scheme]}   `
       + (this.clock.paused ? "PAUSED" : `${this.clock.lastSteps} steps/frame`),
       ...recent.map((line) => `· ${line}`),
     ];

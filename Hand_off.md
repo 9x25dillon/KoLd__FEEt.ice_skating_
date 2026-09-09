@@ -6,7 +6,7 @@ Read this before touching anything. It covers what exists, what is decided, the 
 hold the document set together, and the things most likely to trip you up.
 
 > **This line changed.** Until 2026-09-08 this file said *"zero implementation."* That is no longer
-> true: `tools/ice-lab/` is real, runs, and has 64 passing tests. Nothing else has been built.
+> true: `tools/ice-lab/` is real, runs, and has 68 passing tests. Nothing else has been built.
 
 ---
 
@@ -31,7 +31,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Data files | 12 in `data/` — 5 CSV, 6 JSON, 1 README |
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
-| Implementation | `tools/ice-lab/` — 3,460 lines, 64 tests, zero dependencies |
+| Implementation | `tools/ice-lab/` — 3,635 lines, 68 tests, zero dependencies |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 
@@ -67,7 +67,7 @@ transcription rather than as discovery. **It is not the game and it is not an en
 
 ```sh
 cd tools/ice-lab
-node --test test/*.test.ts     # 64 pass, ~0.6 s
+node --test test/*.test.ts     # 68 pass, ~1.8 s
 node app/serve.mjs             # http://localhost:8123/
 ```
 
@@ -323,6 +323,13 @@ In descending order of value:
    the session in `docs/tuning/` and export the parameter set with the panel's **params.json**
    button, which emits only what differs from `spec`.
 
+   **Two control schemes, and say which one was used.** The pad defaults to the bible's §2.1
+   scheme — the whole lean vector on the left stick — and **M** or **Back** switches to lean on the
+   left stick's X with the rocker on its own right stick. The first play report (2026-09-09) said
+   the shared stick was harder to navigate; part of that was a real deadzone bug, now fixed, and
+   the rest is the open question the fallback exists to answer. Bible risk 1 asks for exactly this:
+   *keep two fallback schemes prototyped rather than one.*
+
    **Start them on `responsive`, not `spec`.** `spec` cannot enter an edge deeper than 11° at
    stroking pace, which is not a fair test of anything. The two questions worth putting to a skater
    first, because the rig now has an answer to check against: does depth arriving with speed feel
@@ -372,6 +379,7 @@ worth having.
 | --- | --- |
 | 2026-09-02 → 03 | Specification completed. D2, D3, D4, D6 closed. Five Artifacts published and mirrored. |
 | 2026-09-08 → 09 | `big_reffg.txt` reviewed and committed with its defects recorded. `tools/ice-lab/` built, 56 tests. Six defects found in the engineering package, each captured as a test. D2 re-raised and re-closed. Merged as PR #1 (`fbbf83c`). |
+| 2026-09-09 (third) | First play report on a pad. `app/pad.ts` had applied a per-axis deadzone while its own header described a radial one; fixed, plus fore/aft cross-talk suppression and a second control scheme on M / Back. The root URL served a blank rink and now redirects. 68 tests. |
 | 2026-09-09 (second) | The controls. Findings 4 and 5 fixed and a seventh found: the fall test scores a save as a fall. Two new parameters, both defaulting to the spec's behaviour; `validate()` now rejects the assist tier written the wrong way. 64 tests. |
 
 ### How the 2026-09-09 session ran, for whoever runs the next one

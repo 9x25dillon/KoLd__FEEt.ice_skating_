@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 64 tests, ~0.8 s
+node --test test/*.test.ts     # 68 tests, ~1.8 s
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -203,6 +203,44 @@ bit; the presets set it to 1. Two things worth knowing about it:
 
 ---
 
+## Controls, and the two schemes
+
+Keyboard: **A/D** lean, **W/S** rocker fore-aft, **Shift** knee, **Q/E** weight,
+**Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **M** pad
+scheme.
+
+Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
+weight, **Y** reset, **X** preset, **Back** scheme. A browser hides a gamepad
+until a button is pressed, which reads exactly like a broken pad.
+
+| scheme | lean | rocker | |
+|---|---|---|---|
+| **unified** (default) | left stick, as a vector | left stick fore-aft | what [design-bible.md §2.1](../../docs/design-bible.md#21-control-mapping) specifies, and what ships |
+| **split** | left stick X only | right stick Y | costs the carriage stick, which the bible reserves for arms and free leg |
+
+Both exist because the bible's own risk 1 says to: *"no shipped game has used
+analog lean plus analog knee as its primary verb … keep two fallback schemes
+prototyped rather than one."* **Record which scheme a tuning session ran** — it
+belongs in the log next to the parameters.
+
+### What the first play report changed
+
+> *"the button mapping is correct, but the x and y axis on the same control
+> stick makes it a little bit more difficult to navigate"*
+
+Two things, and the first was a bug: **the deadzone was per-axis** while this
+file's own header described a radial one, so the corner read 1.41 of deflection
+against a cardinal's 1.0 and every diagonal was over-reaching. `stick()` now
+deadzones and curves the *vector*, which is what a lean vector requires — the
+angle you push is the edge you get.
+
+Second, fore/aft is now attenuated by `tan(25°) × |sideways|`, so a sideways
+push is a lean and nothing else. Measured: a stick at (0.9, 0.30) — nineteen
+degrees off horizontal, which is an ordinary human's idea of "sideways" — used
+to move the contact point along the blade and now reads as pitch exactly zero,
+with the lean intact at 0.85. A deliberate 45° diagonal still pitches.
+`test/pad.test.ts` holds both.
+
 ## Layout
 
 ```
@@ -213,7 +251,7 @@ sim/blade.ts       effective rocker, carve radius, bite capacity, skid onset
 sim/solver.ts      one skater, one fixed tick, a pure function
 sim/classify.ts    continuous blade state -> the discrete edge vocabulary
 sim/telemetry.ts   fixed ring, CSV export, event log
-app/pad.ts         controller and keyboard, one intent shape
+app/pad.ts         controller and keyboard, two schemes, one intent shape
 app/loop.ts        the 120 Hz accumulator and its dt clamp
 app/draw.ts        blades, carve circles, force vectors, tracings, HUD
 app/panel.ts       the sliders
