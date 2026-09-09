@@ -5,7 +5,7 @@
 // with your hands instead of a rebuild. Everything here is presentation and
 // glue; no physics is decided in this file.
 
-import { DEFAULT_PARAMS, PRESETS, SIM_DT, SIM_HZ } from "../sim/params.ts";
+import { PRESETS, SIM_DT, SIM_HZ } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import { createState, step, checksum } from "../sim/solver.ts";
 import { Telemetry } from "../sim/telemetry.ts";
@@ -18,8 +18,19 @@ import { FixedStep } from "./loop.ts";
 
 const PRESET_NAMES = Object.keys(PRESETS);
 
+/**
+ * What the lab boots on — `responsive`, not `spec`.
+ *
+ * `spec` is the baseline every measurement is taken against and it stays that,
+ * but it cannot enter an edge deeper than 11 degrees at stroking pace, so
+ * handing it to someone as their first thirty seconds of the model is not a
+ * fair test of anything: it reads as a broken skater rather than as a recorded
+ * defect. Press the preset button (T, or X on a pad) to cycle to it.
+ */
+const BOOT_PRESET = "responsive";
+
 class Lab {
-  private params: Params = { ...DEFAULT_PARAMS };
+  private params: Params = { ...PRESETS[BOOT_PRESET] };
   private state: SkaterState;
   private pad = new Pad();
   private renderer: Renderer;
@@ -28,7 +39,7 @@ class Lab {
   private clock: FixedStep;
   private events: EdgeEvent[] = [];
   private options: DrawOptions = { ...DEFAULT_OPTIONS };
-  private presetIndex = 0;
+  private presetIndex = Math.max(0, PRESET_NAMES.indexOf(BOOT_PRESET));
   private startSpeed = 4.0;
   private checksums: number[] = [];
 

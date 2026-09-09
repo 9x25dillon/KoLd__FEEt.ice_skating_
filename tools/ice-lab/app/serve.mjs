@@ -14,7 +14,17 @@ const port = Number(process.env.PORT ?? 8123);
 
 createServer(async (req, res) => {
   const rel = normalize(decodeURIComponent((req.url ?? "/").split("?")[0]));
-  const path = join(root, rel === "/" ? "app/index.html" : rel);
+
+  // REDIRECT rather than serve the page at "/". The page is at build/app/, and
+  // its own script tag is `./lab.js` — served at the root, that resolves to
+  // /lab.js and 404s, so the rink comes up blank with no error anywhere the
+  // user can see. Redirecting keeps every relative path in the page honest:
+  // ./lab.js -> /app/lab.js, and lab.js's own ../sim/params.js -> /sim/params.js.
+  if (rel === "/" || rel === "/app") {
+    res.writeHead(302, { location: "/app/" }).end();
+    return;
+  }
+  const path = join(root, rel.endsWith("/") ? join(rel, "index.html") : rel);
   if (!path.startsWith(root)) { res.writeHead(403).end("no"); return; }
   try {
     const body = await readFile(path);
