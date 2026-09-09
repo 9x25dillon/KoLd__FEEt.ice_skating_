@@ -1,0 +1,24 @@
+name: Tuning session
+description: You moved sliders and something got better, or worse.
+title: "Tuning: "
+labels: ["tuning"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What were you trying to change, and what happened?
+    validations:
+      required: true
+  - type: textarea
+    id: params
+    attributes:
+      label: params.json
+      description: Exports only what differs from `spec`, which is what a tuning-log entry should be.
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: preset
+    attributes:
+      label: Which preset did you start from?
+      placeholder: spec / responsive / assisted

@@ -1,0 +1,25 @@
+name: Bug
+description: Something in the rig is wrong, broken, or lying.
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: input
+    id: context
+    attributes:
+      label: Scheme, preset, browser
+      placeholder: "B, responsive, Firefox 141"
+  - type: textarea
+    id: repro
+    attributes:
+      label: How would someone else see it?
+  - type: markdown
+    attributes:
+      value: |
+        If the simulation itself is wrong rather than the page, a failing test is
+        the best possible bug report — see `tools/ice-lab/test/` for the shape.

@@ -18,15 +18,30 @@ import { join } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
 
+/** A canvas context whose every method is a no-op and every property a number. */
+function fakeContext(): unknown {
+  return new Proxy({}, {
+    get: (_t, prop) => (prop === "canvas" ? {} : () => undefined),
+    set: () => true,
+  });
+}
+
 class El {
   tag: string;
   children: El[] = [];
   style: Record<string, string> = {};
+  width = 900;
+  height = 600;
+  checked = false;
+  value = "";
   private text = "";
   constructor(tag: string) { this.tag = tag; }
   appendChild(c: El): El { this.children.push(c); return c; }
   append(...cs: El[]): void { this.children.push(...cs); }
   addEventListener(): void { /* nothing to dispatch */ }
+  getContext(): unknown { return fakeContext(); }
+  getBoundingClientRect(): { width: number; height: number } { return { width: 900, height: 600 }; }
+  get parentElement(): El { return this; }
   set innerHTML(_v: string) { this.children = []; }
   set textContent(v: string) { this.text = v; }
   get textContent(): string { return this.text; }
@@ -49,15 +64,36 @@ function put(name: string, value: unknown): void {
 }
 
 function installDom(): void {
+  const made = new Map<string, El>();
+  const byId = (id: string): El => {
+    if (!made.has(id)) made.set(id, new El(`#${id}`));
+    return made.get(id)!;
+  };
   put("document", {
     createElement: (t: string) => new El(t),
-    getElementById: () => null,
-    querySelector: () => null,
+    getElementById: byId,
+    querySelector: (sel: string) => byId(sel),
     body: new El("body"),
   });
   put("window", { addEventListener: () => { /* nothing to dispatch */ } });
   put("location", { search: "" });
+  put("performance", { now: () => 0 });
+  // The clock must not actually start: one frame is enough to prove the wiring.
+  put("requestAnimationFrame", () => 0);
 }
+
+test("the lab constructs against a stub DOM", async () => {
+  // Importing a module proves its imports RESOLVE. It does not prove the code
+  // runs: `newSchemeState()` in a class field was simply never imported, so
+  // the module linked cleanly and the constructor threw `ReferenceError` in the
+  // browser, blanking the page. A type checker would have said so; there is
+  // none here, so the test constructs the thing.
+  //
+  // getElementById hands back an element for every id, so `new Lab(...)` at the
+  // foot of lab.ts actually runs.
+  installDom();
+  await import(join(root, "app", "lab.ts"));
+});
 
 test("every app module links and evaluates", async () => {
   installDom();

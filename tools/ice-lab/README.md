@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 78 tests, ~2 s
+node --test test/*.test.ts     # 81 tests, ~2 s
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -333,6 +333,59 @@ to move the contact point along the blade and now reads as pitch exactly zero,
 with the lean intact at 0.85. A deliberate 45° diagonal still pitches.
 `test/pad.test.ts` holds both.
 
+## Putting it in front of people
+
+Two jobs, two pieces, because a static host cannot collect anything and a
+collector should not be the front door for contributors.
+
+### The public build — GitHub Pages
+
+`.github/workflows/pages.yml` runs the tests, builds, and deploys
+`tools/ice-lab/build/`. The tests gate the deploy on purpose: what goes up is
+the thing people are asked to form an opinion about, and a solver failing its
+own measurements is not that thing.
+
+`node app/build.mjs` also writes `build/index.html`, a redirect to `app/`,
+because the page's own script tag is `./lab.js` and a static host serving it at
+`/` resolves that to `/lab.js` and 404s — a blank rink with no error anywhere a
+user can see. That happened. The local server redirects; a static host cannot,
+so the redirect ships as a file.
+
+### Collecting sessions — `app/collect.mjs`
+
+```sh
+COLLECT_TOKEN=$(openssl rand -hex 16) node app/collect.mjs   # :8124
+curl -H "Authorization: Bearer $COLLECT_TOKEN" https://your.host/api/sessions > sessions.jsonl
+```
+
+One file, zero dependencies. It serves the rig **and** accepts session cards at
+`POST /api/session`, appending them to a JSONL file. Same origin by default, so
+a rig served by the collector needs no configuration and no CORS; a build hosted
+elsewhere points at it with `?collect=https://your.host/api/session`.
+
+`GET /api/sessions` returns 404 unless the bearer token matches, and stays shut
+when `COLLECT_TOKEN` is unset. That is the whole authentication story, which is
+appropriate for a file of anonymous numbers and would not be for anything else.
+
+**Nothing that arrives is trusted.** The card is rebuilt field by field from a
+fixed schema: numbers are coerced and rounded, the scheme is two characters, the
+note is stripped to a safe alphabet, unknown fields are dropped, and a body over
+64 KB is refused. What lands on disk is what this project defined, not what was
+posted.
+
+**No accounts, no cookies, no analytics, no IP logging.** The payload is numbers
+about a simulation and nothing about a person. That matters most for whoever is
+handed the controller first — often somebody's nephew — and the cheapest way to
+comply with every rule about children's data is to hold none of it.
+
+Behind TLS, the whole deployment is:
+
+```
+your.domain {
+    reverse_proxy localhost:8124
+}
+```
+
 ## Layout
 
 ```
@@ -352,6 +405,7 @@ app/panel.ts       the sliders
 app/lab.ts         wiring
 app/build.mjs      TypeScript -> browser JS, no dependencies
 app/serve.mjs      static server that will not cache
+app/collect.mjs    the same, plus somewhere for a session card to land
 ```
 
 `sim/` never imports `app/`, never touches the DOM, a clock, or `Math.random`,

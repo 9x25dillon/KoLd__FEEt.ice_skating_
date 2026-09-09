@@ -15,6 +15,8 @@ import { Renderer, DEFAULT_OPTIONS } from "./draw.ts";
 import type { DrawOptions } from "./draw.ts";
 import { Panel } from "./panel.ts";
 import { Pad } from "./pad.ts";
+import { applyScheme, newSchemeState, SCHEME_LABEL } from "./schemes.ts";
+import type { Scheme } from "./schemes.ts";
 import { FixedStep } from "./loop.ts";
 
 const PRESET_NAMES = Object.keys(PRESETS);
@@ -86,6 +88,8 @@ class Lab {
    * facilitator may never do.
    */
   private hideEverythingATesterShouldNotSee(): void {
+    // The send button stays: a tester who cannot send the session was not
+    // playtested, they were just playing.
     for (const sel of ["aside", "#controls", "#keys"]) {
       const el = document.querySelector(sel) as HTMLElement | null;
       if (el) el.style.display = "none";
@@ -151,6 +155,7 @@ class Lab {
     on("export-events", () => this.download("edgework-events.txt", this.telemetry.eventLog()));
     on("export-params", () => this.download("edgework-params.json", this.panel.exportJson()));
     on("export-session", () => this.download("edgework-session.json", this.sessionCard()));
+    on("send-session", () => { void this.sendSession(); });
 
     for (const key of Object.keys(this.options) as Array<keyof DrawOptions>) {
       const el = document.getElementById(`opt-${key}`) as HTMLInputElement | null;
@@ -186,6 +191,39 @@ class Lab {
       params: JSON.parse(this.panel.exportJson()).changed,
       metrics: this.meter.summary(),
     }, null, 2);
+  }
+
+  /**
+   * Post the session card to whatever is collecting, and say so plainly.
+   *
+   * Same origin by default, so a rig served from the collector needs no
+   * configuration and no CORS. `?collect=<url>` points it somewhere else, which
+   * is how a build hosted on GitHub Pages reports to a box that is not GitHub.
+   * When there is nothing to post to, the file is handed over instead — an
+   * offline session is still a session.
+   */
+  private async sendSession(): Promise<void> {
+    const button = document.getElementById("send-session") as HTMLButtonElement | null;
+    const say = (text: string, done = false): void => {
+      if (!button) return;
+      button.textContent = text;
+      button.disabled = done;
+    };
+    const endpoint = new URLSearchParams(location.search).get("collect") ?? "/api/session";
+    const card = this.sessionCard();
+    say("sending…");
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: card,
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      say("sent — thank you", true);
+    } catch {
+      say("saved to a file instead");
+      this.download("edgework-session.json", card);
+    }
   }
 
   /**
