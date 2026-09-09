@@ -108,7 +108,17 @@ export interface SkaterState {
   leanEq: number;     // rad the current lateral acceleration would balance
   balanceError: number;
   balanceErrorTime: number;
-  latAccel: number;   // m/s^2 realized toward perpLeft(heading)
+  latAccel: number;   // m/s^2 realized toward perpLeft(heading), from the EDGE
+  /**
+   * m/s^2 of balance authority that did not come from an edge: arms and free
+   * leg, plus the centre-of-pressure shift inside the stance when two-footed.
+   * After clamping, so this is what was actually applied.
+   *
+   * Separate from latAccel because they are separate channels: one needs an
+   * edge and a speed, the other does not. A tuning session cannot read a save
+   * without seeing this, and the fall test now credits it.
+   */
+  intAccel: number;
   tiltCmd: number;    // rad, after the neuromuscular lag
   legLength: number;  // m, contact to COM
   legRate: number;

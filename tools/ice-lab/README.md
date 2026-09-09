@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 56 tests, ~1.4 s
+node --test test/*.test.ts     # 64 tests, ~0.8 s
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -74,38 +74,112 @@ load. It is not, yet. `test/bite.test.ts` fails the day someone makes it so.
 ### 4. The specified balance gains cannot enter a deep edge from upright
 
 Holding a 20° edge at 4 m/s is stable. *Getting there from upright* is not.
-The angulation limit means the blade cannot reach the 27° that lean requires
-until the body has already leaned over, so entry is an under-supported fall the
-loop has to arrest — and at the specified damping it overshoots and keeps
-going.
+Entry is an under-supported fall the loop has to arrest, and at the specified
+damping it overshoots into a region it cannot recover from.
+
+Instrumenting which clamp binds says exactly what goes wrong, and the two
+presets fail for **different reasons**:
+
+| | binding clamp | | |
+|---|---|---|---|
+| `spec` at 12° | **angulation**, 256 of 317 ticks | the loop asks for 65° of blade and may only have `lean + 20°` | a controller limit |
+| `responsive` at 27° | **maxTilt**, 215 of 314 ticks | the blade is as deep as it goes and the curvature still is not enough | a physical limit |
+
+That distinction is the useful part. Below about 5 m/s the entry limit is the
+controller and gains move it; above it the limit is blade geometry, and no gain
+does anything — at 6 m/s tripling the authority damping is worth 1°, while
+sharpening the rocker from 2.05 m to 1.6 m is worth 7°.
 
 Measured, deepest lean reachable from upright:
 
 | | 3 m/s | 4 m/s | 6 m/s |
 |---|---|---|---|
-| `spec` (Kd 8, angulation 20°) | — | **11°** | — |
-| `responsive` (Kd 16, angulation 40°) | 13° | **26°** | 46° |
+| `spec` (Kd 8, angulation 20°, no rate term) | 4° | **11°** | 32° |
+| `spec` + the rate term of finding 5, nothing else | 9° | **19°** | 43° |
+| `responsive` (Kd 16, angulation 40°, rate term, credited) | 16° | **27°** | 46° |
+| `assisted` | 18° | **29°** | 48° |
 
-Neither change is sufficient alone: damping alone reaches 18°, a wider
-angulation limit alone reaches 15°. Entering an edge from upright is the most
-common thing a skater does, so this is not an edge case — it is the first thing
-to fix, and `PRESETS.responsive` is the first pass at fixing it.
+The second row is the point: **the single missing term in finding 5 is worth
+more than the gain changes were**, and it costs nothing in Kp, Kd or angulation.
+
+Two things this measurement is NOT, both found by checking rather than by
+assuming:
+
+- **It is not an entry transient.** Slewing the stick command at 360, 180, 90
+  or 45 °/s instead of stepping it changes the limit by nothing at all.
+- **It is partly the measurement horizon.** The run is six seconds with no
+  propulsion, so speed decays and the holdable lean decays with it. With losses
+  off, `spec` reaches 13° at 4 m/s rather than 11° and `responsive` 29° rather
+  than 27°; at twenty seconds *every* parameter set collapses to 4–7° for no
+  reason except that the skater has run out of speed. Any measurement of the
+  balance loop must either stroke or disable losses, and this is the same trap
+  as the fifth entry under *Things that will trip you up* in the hand-off, one
+  level up: it contaminates a finding rather than an afternoon.
 
 The table also contains the most important thing the model says about the game:
-**speed is what buys depth.** Deep edges are a reward for having built speed,
-by a factor far larger than any gain change achieves.
+**speed is what buys depth**, and it buys it as *v²*. Once the controller stops
+throwing depth away at low speed, `tan φ` tracks the closed form κ = g tan φ /
+v² to three digits — 1.777 measured against 1.778 predicted from 3 to 4 m/s.
+Deep edges are a reward for having built speed.
 
 ### 5. An assist tier that raises internal authority makes balance worse
 
 The obvious way to write an assist is to give the player more recovery
 authority. Raising `internalMax` from 1.5 to 2.5 puts the skater down at tick
-**77** of the reference sequence instead of tick 527 — and the response is not
-even monotonic, since 2.0 lasts *longer* than 1.5. That is the signature of a
-proportional gain with no damping rather than of a difficulty knob. Giving that
-term a rate component is the precondition for turning it up. `PRESETS.assisted`
-buys down latency and adds damping instead.
+**77** of the reference sequence instead of tick 617 — and the response is not
+even monotonic, since 2.0 lasts *longer* than both. That is the signature of a
+proportional gain with no damping rather than of a difficulty knob.
 
-### 6. Smaller things the model needed and the package does not have
+**Fixed**, and it took two changes, not one:
+
+```
+a_int = clamp(internalGain * balanceError + internalRateGain * leanRate, ±internalMax)
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+```
+
+Arms and a free leg are *swung*, and what they are swung against is lean rate.
+The term the package has is the position half of a PD controller with the rate
+half missing. `internalRateGain` is 0 in `spec`, so the defect stays measurable,
+and `validate()` now rejects any set that raises `internalMax` past 2 without
+it — which is the check that stops this being rediscovered inside a UE5 tuning
+asset.
+
+With both halves in place the ceiling behaves like the knob it was meant to be:
+1.5, 2.5 and 3.0 all skate the reference sequence. It is still not free, and the
+cost is honest — a 20° edge takes 2.9 s to settle under `assisted` rather than
+1.7 s, because damping is exactly what is being bought.
+
+`internalMax` is also not unbounded. 2.5 m/s² is about a quarter of *g* from
+arms and a free leg, which is already generous; at 5 the skater holds leans no
+edge can support and the ice stops mattering.
+
+### 6. A save is scored as a fall
+
+The other half of finding 5, and the sharper half.
+
+`balanceError` is the gap between the body's lean and the lean the **edge
+alone** would balance — so a skater using their arms and free leg is
+deliberately not at it. That is what the arms are *for*. The balance-timeout
+test reads that error and counts none of the authority, so **using the recovery
+authority is itself the fall condition**, and the more authority a tier grants,
+the sooner it fires.
+
+The tell is where the skater is standing when it does: at `internalMax` 2.5 the
+reference sequence is declared over at tick 77, at **2.6° of lean**, upright, at
+4 m/s, mid-recovery. Whatever that is, it is not a fall — and it is most of why
+the assist tier appeared to make balance worse.
+
+`fallAuthorityCredit` decides how much of the internal authority counts as
+support in that test. It is 0 in `spec`, which reproduces the package bit for
+bit; the presets set it to 1. Two things worth knowing about it:
+
+- It buys **no** depth: the entry envelope with credit alone is 4 / 11 / 32°,
+  identical to `spec`. It is not a gain, it is a correction to a detector, and
+  `test/balance.test.ts` asserts the two are never conflated.
+- It does not make the skater unfallable. A lean the edge cannot hold still
+  goes down, by `LEAN EXCEEDED` — the honest reason — even at full assist.
+
+### 7. Smaller things the model needed and the package does not have
 
 - **The effective rocker varies along the blade.** The front third is far
   tighter, which is why turns are executed "on the rocker" — the contact point

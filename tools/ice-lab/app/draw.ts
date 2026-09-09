@@ -11,7 +11,7 @@ import {
   codeToString, codeSide, EDGE_CODE_NONE,
 } from "../sim/types.ts";
 import type { Params } from "../sim/params.ts";
-import { effectiveRocker, carveRadius, skidOnsetSpeed } from "../sim/blade.ts";
+import { effectiveRocker, carveRadius, skidOnsetSpeed, equilibriumLean } from "../sim/blade.ts";
 import { perpLeft, len } from "../sim/math.ts";
 import type { Vec2 } from "../sim/math.ts";
 
@@ -252,9 +252,27 @@ export class Renderer {
       ctx.fillStyle = col; ctx.fillText(text, 14, y); y += 16;
     };
 
+    // The error the FALL TEST reads, which is the credited one — the plain
+    // balance error is what the skater is solving, and past a credit of zero
+    // the two are different numbers. Colouring the wrong one puts the HUD in
+    // red while the skater is fine, and calm while they are going down.
+    const supported = p.fallAuthorityCredit > 0
+      ? equilibriumLean(s.latAccel + p.fallAuthorityCredit * s.intAccel, p.gravity)
+      : s.leanEq;
+    const residual = s.lean - supported;
+    // The ceiling is the arms plus, two-footed, the centre-of-pressure shift
+    // inside the stance — both are in intAccel, so both belong in the bound.
+    const authorityMax = p.internalMax
+      + (s.supportMode === 2 ? p.gravity * p.stanceHalfWidth / Math.max(s.legLength, 0.3) : 0);
+    const saturated = Math.abs(s.intAccel) >= authorityMax - 1e-3;
+
     line(`SPEED   ${len(s.vel).toFixed(2)} m/s`, GOLD);
     line(`LEAN    ${d(s.lean)}°   eq ${d(s.leanEq)}°   err ${d(s.balanceError)}°`,
-      Math.abs(s.balanceError) > p.fallError ? "#ff4d6d" : INK);
+      Math.abs(residual) > p.fallError ? "#ff4d6d" : INK);
+    line(`SAVE    ${s.intAccel >= 0 ? " " : ""}${s.intAccel.toFixed(2)} of `
+      + `${authorityMax.toFixed(2)} m/s²${saturated ? "  SATURATED" : ""}`
+      + (p.fallAuthorityCredit > 0 ? `   fall err ${d(residual)}°` : "   uncredited"),
+      saturated ? GOLD : DIM);
     line(`TILT    ${d(s.tiltCmd)}°   angulation ${d(s.tiltCmd - s.lean)}°`);
     line(`KNEE    ${s.knee.toFixed(2)}   support ${s.supportMode === 2 ? "two-foot" : s.supportMode === 1 ? "one-foot" : "none"}`);
     y += 6;
