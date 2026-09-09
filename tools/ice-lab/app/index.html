@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ice Lab — KoLd__FEEt edgework</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ink: #dce9f2; --dim: #7b93a6; --faint: #38495a;
+    --bg: #070b10; --panel: #0e141c; --line: #1d2833;
+    --gold: #ffc94a; --jade: #7dffc4; --red: #ff4d6d;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 13px/1.5 "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    display: grid; grid-template-columns: 1fr 340px; height: 100vh; overflow: hidden;
+  }
+  #stage { position: relative; min-width: 0; }
+  #ice { display: block; width: 100%; height: 100%; }
+  #controls {
+    position: absolute; right: 12px; bottom: 12px;
+    background: rgba(14,20,28,0.9); border: 1px solid var(--line);
+    padding: 10px 12px; border-radius: 4px; max-width: 300px;
+  }
+  #controls h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
+  #controls label { display: inline-block; margin-right: 10px; color: var(--dim); font-size: 11px; }
+  #keys { position: absolute; left: 14px; bottom: 12px; color: var(--faint); font-size: 11px; line-height: 1.7; }
+  #keys b { color: var(--dim); font-weight: 500; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px; }
+  aside h2 { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); margin: 0 0 4px; }
+  aside > p.lede { color: var(--dim); font-size: 11px; margin: 0 0 14px; }
+  section { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 12px; }
+  section h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); margin: 0 0 4px; }
+  p.note { color: var(--faint); font-size: 10.5px; line-height: 1.5; margin: 0 0 8px; }
+  .row { display: grid; grid-template-columns: 118px 1fr 56px; align-items: center; gap: 6px; margin: 3px 0; }
+  .row .name { color: var(--dim); font-size: 10.5px; }
+  .row .val { color: var(--ink); font-size: 10.5px; text-align: right; }
+  input[type=range] { width: 100%; accent-color: var(--jade); }
+  .presets { display: flex; gap: 6px; margin-bottom: 8px; }
+  .presets button, .actions button {
+    background: #16202b; color: var(--ink); border: 1px solid var(--line);
+    padding: 4px 9px; border-radius: 3px; cursor: pointer; font: inherit; font-size: 11px;
+  }
+  .presets button:hover, .actions button:hover { border-color: var(--jade); color: var(--jade); }
+  .status { color: var(--jade); font-size: 10.5px; margin-bottom: 6px; }
+  .errors { color: var(--red); font-size: 10.5px; margin-bottom: 8px; display: none; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="ice"></canvas>
+    <div id="keys">
+      <b>A / D</b> lean &nbsp; <b>W / S</b> rocker fore-aft &nbsp; <b>Shift</b> knee<br>
+      <b>Q / E</b> weight to left / right foot &nbsp; <b>Space</b> stroke &nbsp; <b>X</b> brake<br>
+      <b>R</b> reset &nbsp; <b>P</b> pause &nbsp; <b>T</b> cycle preset &nbsp; — a gamepad works too
+    </div>
+    <div id="controls">
+      <h4>Overlay</h4>
+      <label><input type="checkbox" id="opt-blades"> blades</label>
+      <label><input type="checkbox" id="opt-carveCircle"> carve circle</label>
+      <label><input type="checkbox" id="opt-forces"> forces</label>
+      <label><input type="checkbox" id="opt-balance"> balance</label>
+      <label><input type="checkbox" id="opt-tracing"> tracing</label>
+      <label><input type="checkbox" id="opt-hud"> hud</label>
+      <div class="row" style="grid-template-columns:80px 1fr 56px;margin-top:8px">
+        <span class="name">reset speed</span>
+        <input type="range" id="start-speed" min="0" max="10" step="0.5">
+        <span class="val" id="start-speed-val">4.0 m/s</span>
+      </div>
+    </div>
+  </div>
+  <aside>
+    <h2>Ice Lab</h2>
+    <p class="lede">
+      The KoLd__FEEt edgework model, at 120 Hz, with every constant on a slider.
+      Blue is an outside edge, red inside, amber a skid. The dashed circle is the
+      arc the blade geometry wants; the amber line is where the body would have to
+      be for it.
+    </p>
+    <div id="panel"></div>
+    <section>
+      <h3>Export</h3>
+      <p class="note">CSV is the per-tick telemetry ring (20 s). Files also go to the clipboard, since a sandboxed viewer will not let a page hand you a download.</p>
+      <div class="actions">
+        <button id="reset">reset skater</button>
+        <button id="clear-trace">clear ice</button>
+        <button id="export-csv">telemetry.csv</button>
+        <button id="export-events">events.txt</button>
+        <button id="export-params">params.json</button>
+      </div>
+    </section>
+  </aside>
+  <script type="module" src="./lab.js"></script>
+</body>
+</html>

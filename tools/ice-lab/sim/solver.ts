@@ -1,0 +1,450 @@
+// tools/ice-lab/sim/solver.ts — one skater, one fixed tick, a pure function.
+//
+// State in, state out, plus events into a caller-owned array. No DOM, no
+// allocation beyond the events, no hidden globals, no wall clock. That is not
+// tidiness: replays, ghosts, server-side verification and every automated test
+// in this rig depend on it holding, and it is the property the UE5 port must
+// preserve above all others.
+//
+// 120 Hz, semi-implicit Euler. INERTIAL — velocity is state, not a function of
+// position. That is the one thing that could not be carried over from SONIC
+// DRIFTER, whose water is overdamped and whose design rule 1 is that no
+// velocity term exists at all.
+//
+// ── three corrections to the engineering package, made deliberately ─────────
+//
+// 1. HANDEDNESS. Up x t is to the skater's LEFT, and every edge code follows
+//    from that. See math.ts perpLeft and classify.ts.
+//
+// 2. INTERNAL BALANCE AUTHORITY SIGN. The package has
+//        a_int = clamp(-gain * balanceError, ...)
+//    but the pendulum it feeds is
+//        leanAccel = (g sin phi - (a_lat + a_int) cos phi) / L
+//    so a positive balance error — over-leaned, falling inward — needs a
+//    POSITIVE a_int to arrest it. As written, the arms and free leg push the
+//    skater further over, which would read in play as a balance system that
+//    makes every wobble worse.
+//
+// 3. TWO-BLADE LATERAL SOLVE. The package computes each blade's impulse from
+//    the FULL body mass and applies them Gauss-Seidel, so the first blade in
+//    the order absorbs everything and the second sees no slip left to cancel.
+//    Its own acceptance test ("light blade skids first") cannot pass against
+//    it. Here each blade answers for its own share of the load, which is what
+//    makes weight transfer mean anything.
+//
+// The hold/skid model follows src/reference/SkateSolver.cpp rather than the
+// package: when the edge lets go, the ARC WIDENS to whatever the bite can
+// actually hold, and speed bleeds through mu_skid. The package instead leaves
+// residual slip velocity, which is the same idea one derivative apart, but the
+// bible's version is the project's own and reads more directly on screen.
+
+import {
+  add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped,
+  moveToward, quantize, crc32, v2,
+} from "./math.ts";
+import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT } from "./types.ts";
+import type {
+  SkaterState, BladeState, SkatingInput, EdgeEvent, Foot, Fall,
+} from "./types.ts";
+import type { Params } from "./params.ts";
+import { SIM_DT } from "./params.ts";
+import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean } from "./blade.ts";
+import { classifyCode, classifyDepth } from "./classify.ts";
+
+// ── construction ────────────────────────────────────────────────────────────
+
+function makeBlade(): BladeState {
+  return {
+    contact: v2(0, 0), tangent: v2(1, 0), tilt: 0, contactS: 0.5,
+    normalLoad: 0, weight: 0.5, longSpeed: 0, latSlipAccel: 0, latForce: 0,
+    biteCapacity: 0, demandRatio: 0, turnRadius: Infinity, dwell: 0,
+    code: EDGE_CODE_NONE, depth: 0, regime: REGIME.Unloaded, inContact: false,
+  };
+}
+
+export function createState(p: Params, speed = 0, lean = 0): SkaterState {
+  return {
+    pos: v2(0, 0), vel: v2(speed, 0), heading: v2(1, 0),
+    lean, leanRate: 0, leanEq: 0, balanceError: 0, balanceErrorTime: 0,
+    latAccel: 0, tiltCmd: lean, legLength: p.comHeight, legRate: 0,
+    comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
+    knee: 0, strokeTime: 0, strokeFoot: FOOT.Left,
+    fallReason: FALL.None, fallen: false, tick: 0,
+    blade: [makeBlade(), makeBlade()],
+  };
+}
+
+// ── the step ────────────────────────────────────────────────────────────────
+
+export function step(
+  s: SkaterState, input: SkatingInput, p: Params, dt: number, events: EdgeEvent[],
+): void {
+  const g = p.gravity;
+  s.tick++;
+
+  const alive = !s.fallen;
+  const leanCmd = clamp(input.lean, -1, 1) * p.maxLean;
+  // Rate-limited: a leg takes time to bend, and a step command would unload
+  // the blades entirely for a tick and read as a jump.
+  s.knee = moveToward(s.knee, clamp(input.knee, 0, 1), p.kneeRate * dt);
+  const knee = s.knee;
+  const weightR = clamp(input.weight, 0, 1);
+  const contactS = clamp(0.5 + 0.5 * clamp(input.pitch, -1, 1), 0, 1);
+
+  // ── 1. legs -> normal load ────────────────────────────────────────────────
+  // A deep knee is more push, more bite and more jump impulse; here it only
+  // has to produce the load, since the vertical axis belongs to the jump
+  // package. legAccel enters N because pressing down loads the blade.
+  const legTarget = p.comHeight * (1 - p.maxKneeCompression * knee);
+  const legAccel = p.kneeSpring * (legTarget - s.legLength) - p.kneeDamping * s.legRate;
+  s.legRate += legAccel * dt;
+  s.legLength += s.legRate * dt;
+  s.legLength = clamp(s.legLength, 0.3, p.comHeight * 1.05);
+
+  const nTotal = Math.max(0, p.mass * (g + legAccel));
+  const weights = [1 - weightR, weightR];
+  let loaded = 0;
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    b.weight = weights[i];
+    b.normalLoad = nTotal * weights[i];
+    b.contactS = contactS;
+    b.inContact = b.normalLoad > 1e-3;
+    if (b.inContact) loaded++;
+  }
+  s.supportMode = loaded;
+  s.supportFoot = (weights[1] >= weights[0] ? FOOT.Right : FOOT.Left) as Foot;
+
+  // ── 1b. begin a stroke, before any blade tilt is assigned ─────────────────
+  if (alive && input.push && s.strokeTime <= 0) {
+    s.strokeTime = p.strokeDuration;
+    s.strokeFoot = (1 - s.strokeFoot) as Foot;   // two-beat alternation
+  }
+  const stroking = s.strokeTime > 0;
+
+  // ── 2. balance controller: where the lean should put the blade ────────────
+  // The skater does not steer, they lean; the blade angle that produces the
+  // curvature the lean needs is solved for here, then rate-limited by the
+  // neuromuscular lag. Assist tiers shrink that lag and nothing else.
+  const rhoSupport = effectiveRocker(s.blade[s.supportFoot].contactS, p);
+  if (alive) {
+    const v2sq = Math.max(dot(s.vel, s.vel), p.minSpeedForCurv * p.minSpeedForCurv);
+    const aCmd = g * Math.tan(leanCmd)
+      + p.balanceKp * (s.lean - leanCmd)
+      + p.balanceKd * s.leanRate;
+    const kappaMax = Math.sin(p.maxTilt) / rhoSupport;
+    const kappa = clamp(aCmd / v2sq, -kappaMax, kappaMax);
+    let tiltTarget = asinClamped(kappa * rhoSupport);
+    // Angulation: the blade may run deeper than the body leans, but only so
+    // far. This gap is most of what "edge quality" means to a judge.
+    tiltTarget = clamp(tiltTarget, s.lean - p.angulationLimit, s.lean + p.angulationLimit);
+    tiltTarget = clamp(tiltTarget, -p.maxTilt, p.maxTilt);
+    const alpha = p.controlLatency > 1e-4 ? Math.min(1, dt / p.controlLatency) : 1;
+    s.tiltCmd += (tiltTarget - s.tiltCmd) * alpha;
+  } else {
+    s.tiltCmd += (0 - s.tiltCmd) * Math.min(1, dt / 0.3);
+  }
+
+  // ── 3. carve and bite, per loaded blade ───────────────────────────────────
+  let yawNumer = 0, yawDenom = 0, latForceTotal = 0, excessWeighted = 0;
+  let flatImpulse = v2(0, 0);
+
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    // The pushing blade rolls onto its own INSIDE edge for the length of the
+    // push; every other blade carries the body's commanded tilt. For the left
+    // foot the inside edge is a negative tilt and for the right a positive
+    // one, which is the same rule classify.ts states, read backwards.
+    const pushing = stroking && i === s.strokeFoot;
+    b.tilt = pushing
+      ? (i === FOOT.Left ? -p.strokeEdge : p.strokeEdge)
+      : s.tiltCmd;
+
+    if (!b.inContact) {
+      b.regime = REGIME.Unloaded;
+      b.latForce = 0; b.latSlipAccel = 0; b.demandRatio = 0;
+      b.biteCapacity = 0; b.turnRadius = Infinity; b.longSpeed = 0;
+      continue;
+    }
+
+    const wasSkid = b.regime === REGIME.Skid;
+    const t = b.tangent;
+    const vLong = dot(s.vel, t);
+    b.longSpeed = vLong;
+
+    const rhoEff = effectiveRocker(b.contactS, p);
+    const absTilt = Math.abs(b.tilt);
+    const onEdge = absTilt >= p.flatThreshold;
+
+    if (!onEdge) {
+      // A FLAT BLADE IS NOT A CASTER. It still resists being pushed sideways —
+      // that is exactly what biteC0 is — and skipping the lateral solve here
+      // leaves stroke impulses in the velocity with nothing to remove them.
+      // Straight stroking then crabs sideways: measured at just under a metre
+      // of drift over fourteen metres of travel before this was added.
+      const nFlat = perpLeft(b.tangent);
+      const vLatFlat = dot(s.vel, nFlat);
+      const capFlat = biteCapacity(b.normalLoad, b.tilt, p);
+      const wanted = Math.abs(vLatFlat) * (b.normalLoad / g);
+      const allowed = Math.min(wanted, capFlat * dt);
+      flatImpulse = add(flatImpulse, mul(nFlat, -sign(vLatFlat) * allowed));
+
+      b.turnRadius = Infinity; b.latForce = -sign(vLatFlat) * allowed / dt;
+      b.latSlipAccel = 0;
+      b.demandRatio = capFlat > 1e-6 ? wanted / (capFlat * dt) : 0;
+      b.biteCapacity = capFlat;
+      b.regime = REGIME.Glide;
+      if (wasSkid) events.push({
+        tick: s.tick, type: EVENT.SkidEnd, foot: i as Foot,
+        prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: 0,
+      });
+      yawDenom += b.normalLoad;
+      continue;
+    }
+
+    const rGeo = carveRadius(b.tilt, rhoEff);
+    const massShare = b.normalLoad / g;      // kg this blade answers for
+    const fNeed = massShare * vLong * vLong / rGeo;
+    const fBite = biteCapacity(b.normalLoad, b.tilt, p);
+
+    // `excess` is an ACCELERATION (m/s^2): the part of the demand the edge
+    // could not answer. It is what gets scrubbed off as speed below.
+    let radius: number, excess: number, fLat: number;
+    if (fNeed <= fBite) {
+      radius = rGeo; excess = 0; fLat = fNeed;
+    } else {
+      // The edge lets go: the arc opens out to whatever the bite can hold and
+      // the difference is scrubbed off as speed.
+      radius = fBite > 1e-6 ? massShare * vLong * vLong / fBite : 1e6;
+      excess = (fNeed - fBite) / Math.max(massShare, 1e-6);
+      fLat = fBite;
+    }
+
+    b.turnRadius = radius;
+    b.biteCapacity = fBite;
+    b.demandRatio = fBite > 1e-6 ? fNeed / fBite : 0;
+    b.latSlipAccel = excess;
+    b.latForce = fLat * sign(b.tilt);
+
+    // A PUSHING blade is not carrying the skater — it is the push. Its lateral
+    // force is applied explicitly in 5b, so counting the carve force here as
+    // well would apply the same sideways shove twice, and the second copy is
+    // the one that steers and unbalances the body. Left in, ten strokes from a
+    // standstill wound the lean up to 40 degrees and put the skater down; the
+    // stroke reads as a weave that never comes back.
+    if (!(stroking && i === s.strokeFoot)) {
+      latForceTotal += b.latForce;
+      excessWeighted += excess * b.weight;
+      const yawRate = sign(b.tilt) * vLong / Math.max(radius, 0.35);
+      yawNumer += yawRate * b.normalLoad;
+      yawDenom += b.normalLoad;
+    }
+
+    b.regime = excess > 0 ? REGIME.Skid
+      : b.demandRatio > p.carveDemand ? REGIME.Carve
+        : REGIME.Edge;
+    if (input.brake && Math.abs(vLong) > 0.2) b.regime = REGIME.Brake;
+
+    const isSkid = b.regime === REGIME.Skid;
+    if (isSkid && !wasSkid) events.push({
+      tick: s.tick, type: EVENT.SkidBegin, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: excess,
+    });
+    if (!isSkid && wasSkid) events.push({
+      tick: s.tick, type: EVENT.SkidEnd, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: 0,
+    });
+  }
+
+  // ── 4. turn the blades and the body ───────────────────────────────────────
+  // An ideal edge does no work: it changes where the velocity points, not how
+  // big it is. Rotating the velocity rather than projecting out its lateral
+  // component matters more than it sounds — a projection bleeds speed as
+  // cos(w dt) every tick, which is a discretization artifact that scales with
+  // the timestep and would otherwise get tuned around as though it were drag.
+  if (flatImpulse.x !== 0 || flatImpulse.y !== 0) {
+    s.vel = add(s.vel, mul(flatImpulse, 1 / p.mass));
+  }
+
+  const yawRate = yawDenom > 1e-6 ? yawNumer / yawDenom : 0;
+  const dPsi = yawRate * dt;
+  if (dPsi !== 0) {
+    for (let i = 0; i < 2; i++) {
+      const b = s.blade[i];
+      if (b.inContact) b.tangent = normalizeOr(rotate(b.tangent, dPsi), b.tangent);
+    }
+    s.vel = rotate(s.vel, dPsi);
+  }
+  s.heading = s.blade[s.supportFoot].inContact
+    ? s.blade[s.supportFoot].tangent
+    : s.heading;
+
+  // ── 5. losses ─────────────────────────────────────────────────────────────
+  let speed = len(s.vel);
+  if (speed > 1e-6) {
+    const dir = mul(s.vel, 1 / speed);
+
+    // Skid scrub, following SkateSolver.cpp: mu_skid * (excess acceleration)
+    // * dt is a speed decrement, which is where the snow comes from.
+    if (excessWeighted > 0) speed = Math.max(0, speed - p.muSkid * excessWeighted * dt);
+
+    // Blade friction, summed over the blades so the load split is honoured.
+    let dv = 0;
+    for (let i = 0; i < 2; i++) {
+      const b = s.blade[i];
+      if (!b.inContact) continue;
+      dv += muLong(b.tilt, b.latSlipAccel > 0, p) * b.normalLoad / p.mass * dt;
+    }
+    if (input.brake) dv += p.muSkid * nTotal / p.mass * dt;
+
+    // Air drag. At 8 m/s this is several times blade friction, which is why
+    // speed is expensive to build and cheap to keep.
+    dv += 0.5 * p.airDensity * p.cdA * speed * speed / p.mass * dt;
+
+    // Friction never reverses motion.
+    speed = Math.max(0, speed - dv);
+    s.vel = mul(dir, speed);
+  }
+
+  // ── 5b. stroke ────────────────────────────────────────────────────────────
+  // You push SIDEWAYS against an edge. A blade offers almost nothing along its
+  // own length, so the pushing foot is splayed out of the line of travel by
+  // beta and only F sin(beta) of the push goes forward — which is why a stroke
+  // is a wide, slow, deep-knee movement rather than a run.
+  //
+  // The push is capped by the pushing blade's own bite: you cannot push off a
+  // flat blade, and over-pushing a lightly loaded one just skids it. That
+  // falls out of the capacity term rather than being special-cased.
+  if (stroking) {
+    s.strokeTime -= dt;
+    const push = s.blade[s.strokeFoot];
+    if (push.inContact) {
+      const outward = s.strokeFoot === FOOT.Left ? 1 : -1;
+      const wanted = p.strokePower * knee * p.mass;
+      const force = Math.min(wanted, push.biteCapacity);
+      // Reaction to a push along the splayed blade's normal: forward by
+      // sin(beta), sideways by cos(beta). The sideways halves cancel across
+      // the two beats, which is what makes alternation the natural gait.
+      const dirv = mul(rotate(perpLeft(s.heading), outward * p.strokeBeta), -outward);
+      s.vel = add(s.vel, mul(dirv, (force / p.mass) * dt));
+    }
+  }
+
+  // ── 6. integrate ──────────────────────────────────────────────────────────
+  s.pos = add(s.pos, mul(s.vel, dt));
+
+  // ── 7. the inverted pendulum ──────────────────────────────────────────────
+  const L = Math.max(s.legLength, 0.3);
+  s.latAccel = latForceTotal / p.mass;
+  s.leanEq = equilibriumLean(s.latAccel, g);
+  s.balanceError = s.lean - s.leanEq;
+
+  let aInt = 0;
+  if (alive) {
+    // POSITIVE gain: an over-lean needs MORE lateral acceleration to arrest it.
+    aInt = clamp(p.internalGain * s.balanceError, -p.internalMax, p.internalMax);
+    if (s.supportMode === 2) {
+      const copMax = g * p.stanceHalfWidth / L;
+      aInt += clamp(p.copGain * s.balanceError, -copMax, copMax);
+    }
+  }
+  const leanAccel = (g * Math.sin(s.lean) - (s.latAccel + aInt) * Math.cos(s.lean)) / L;
+  s.leanRate += leanAccel * dt;
+  s.lean = clamp(s.lean + s.leanRate * dt, -1.55, 1.55);
+  s.comZ = L * Math.cos(s.lean);
+
+  // Blade contacts hang off the base of the pendulum, not off the COM.
+  const right = mul(perpLeft(s.heading), -1);
+  const base = add(s.pos, mul(right, L * Math.sin(s.lean)));
+  for (let i = 0; i < 2; i++) {
+    const off = s.supportMode === 2 ? p.stanceHalfWidth : 0;
+    s.blade[i].contact = add(base,
+      mul(perpLeft(s.heading), i === FOOT.Left ? off : -off));
+  }
+
+  // ── 8. classify, and say so ───────────────────────────────────────────────
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    const prev = b.code;
+    if (!b.inContact) {
+      if (prev !== EDGE_CODE_NONE) {
+        events.push({
+          tick: s.tick, type: EVENT.EdgeLost, foot: i as Foot,
+          prevCode: prev, newCode: EDGE_CODE_NONE, prevDwell: b.dwell, value: b.tilt,
+        });
+      }
+      b.code = EDGE_CODE_NONE; b.dwell = 0; b.depth = 0;
+      continue;
+    }
+    const next = classifyCode(i as Foot, b.tilt, b.longSpeed, prev, p);
+    if (next !== prev) {
+      events.push({
+        tick: s.tick, type: EVENT.EdgeChanged, foot: i as Foot,
+        prevCode: prev, newCode: next, prevDwell: b.dwell, value: b.tilt,
+      });
+      b.code = next; b.dwell = 0;
+    } else {
+      const was = b.dwell;
+      b.dwell += dt;
+      if (was < p.minDwell && b.dwell >= p.minDwell) {
+        events.push({
+          tick: s.tick, type: EVENT.EdgeEstablished, foot: i as Foot,
+          prevCode: next, newCode: next, prevDwell: b.dwell, value: b.tilt,
+        });
+      }
+    }
+    b.depth = classifyDepth(b.tilt, p);
+  }
+  // ── 9. fall, latched ──────────────────────────────────────────────────────
+  // Latched, because a fall condition that stays true would otherwise emit an
+  // event every tick and drown the stream it is trying to explain.
+  if (alive) {
+    if (Math.abs(s.balanceError) > p.fallError) s.balanceErrorTime += dt;
+    else s.balanceErrorTime = 0;
+
+    let reason: Fall = FALL.None;
+    if (Math.abs(s.lean) > p.fallLean) reason = FALL.LeanExceeded;
+    else if (s.balanceErrorTime > p.fallErrorTime) reason = FALL.BalanceTimeout;
+
+    if (reason !== FALL.None) {
+      s.fallReason = reason;
+      s.fallen = true;
+      events.push({
+        tick: s.tick, type: EVENT.Fall, foot: s.supportFoot,
+        prevCode: s.blade[s.supportFoot].code, newCode: reason,
+        prevDwell: s.balanceErrorTime, value: s.lean,
+      });
+    }
+  }
+}
+
+/** Run n ticks at the fixed rate. Convenience for tests and the replay path. */
+export function run(
+  s: SkaterState, input: SkatingInput, p: Params, ticks: number, events: EdgeEvent[] = [],
+): SkaterState {
+  for (let i = 0; i < ticks; i++) step(s, input, p, SIM_DT, events);
+  return s;
+}
+
+// ── checksum ────────────────────────────────────────────────────────────────
+
+/**
+ * Quantized state checksum, for divergence detection across a replay.
+ *
+ * Position to 0.1 mm, angles to 1e-5 rad, by truncation. Blade codes are
+ * included: a divergence that showed up only as a different edge call, with
+ * the kinematics still matching to a tenth of a millimetre, is exactly the
+ * kind this has to catch.
+ */
+export function checksum(s: SkaterState): number {
+  const q = new Int32Array([
+    quantize(s.pos.x, 1e4), quantize(s.pos.y, 1e4),
+    quantize(s.vel.x, 1e4), quantize(s.vel.y, 1e4),
+    quantize(s.heading.x, 1e6), quantize(s.heading.y, 1e6),
+    quantize(s.lean, 1e5), quantize(s.leanRate, 1e5),
+    quantize(s.tiltCmd, 1e5), quantize(s.latAccel, 1e4),
+    s.blade[0].code | (s.blade[1].code << 8) | (s.blade[0].regime << 16) | (s.blade[1].regime << 24),
+    s.tick | 0,
+  ]);
+  return crc32(new Uint8Array(q.buffer));
+}
