@@ -1,0 +1,86 @@
+# Caddy in front of the Ice Lab.
+#
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile      # edit the domain first
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# Caddy gets the certificate and renews it without being asked, which is the
+# entire reason it is here rather than nginx.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Replace this with your domain. The A record must already point at this box or
+# the certificate will not issue.
+skate.example.com {
+
+	encode zstd gzip
+
+	# NO IP ADDRESSES IN THE LOGS.
+	#
+	# The collector holds nothing about a person on purpose, and it would be
+	# a strange kind of care to strip the payload and then write everyone's
+	# address to disk anyway — especially since the people most likely to be
+	# handed the controller are children. This deletes the client address and
+	# the user agent from every log line and keeps the rest, which is what you
+	# actually want at three in the morning.
+	#
+	# To turn logging off completely instead: replace the whole block with
+	#   log { output discard }
+	log {
+		format filter {
+			wrap console
+			fields {
+				request>remote_ip delete
+				request>client_ip delete
+				request>headers>User-Agent delete
+				request>headers>Cookie delete
+			}
+		}
+	}
+
+	# A session card is about a kilobyte. This refuses anything absurd before
+	# it reaches Node at all — the collector caps the body too, and the two
+	# limits are deliberately the same number.
+	request_body {
+		max_size 64KB
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options SAMEORIGIN
+		-Server
+
+		# HSTS is a promise to browsers that this domain is HTTPS-only, and it
+		# is remembered for as long as max-age says even if you change your
+		# mind. Sensible here, but uncomment it deliberately rather than by
+		# copying a config.
+		# Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	reverse_proxy 127.0.0.1:8124
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ALTERNATIVE, if you would rather Node never touched a static file: let Caddy
+# serve the rig from disk and give it only the API. Slightly faster, and it
+# shrinks the surface of the thing that parses JSON from strangers to exactly
+# one route.
+#
+# skate.example.com {
+# 	encode zstd gzip
+# 	root * /srv/edgework/tools/ice-lab/build
+#
+# 	handle /api/* {
+# 		request_body { max_size 64KB }
+# 		reverse_proxy 127.0.0.1:8124
+# 	}
+#
+# 	handle {
+# 		try_files {path} {path}/ /index.html
+# 		file_server
+# 	}
+# }
+#
+# The build directory has to be readable by the caddy user for this, and it is
+# rebuilt by the service on every start:
+#   sudo chmod o+rx /srv/edgework /srv/edgework/tools /srv/edgework/tools/ice-lab

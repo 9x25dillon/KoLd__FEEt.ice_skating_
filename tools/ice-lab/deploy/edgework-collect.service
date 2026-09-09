@@ -1,0 +1,78 @@
+# The Ice Lab and its session collector, as a service.
+#
+#   sudo cp deploy/edgework-collect.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now edgework-collect
+#
+# Paths assume the layout in deploy/README.md. If you cloned somewhere else,
+# the three to change are WorkingDirectory, ExecStart* and ReadWritePaths.
+
+[Unit]
+Description=Edgework Ice Lab — the rig, and somewhere for a session to land
+Documentation=https://github.com/9x25dillon/KoLd__FEEt.ice_skating_
+After=network-online.target
+Wants=network-online.target
+# Five failures in a minute means the box is not going to fix itself. These two
+# belong in [Unit] and are silently ignored in [Service] — `systemd-analyze
+# verify` says so, which is worth running before trusting any unit file.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=edgework
+Group=edgework
+WorkingDirectory=/srv/edgework/tools/ice-lab
+
+# Node 26 or newer: the build step IS Node's own TypeScript stripper, which is
+# why this service has no dependencies to install and no lock file to trust.
+ExecStartPre=/usr/bin/node app/build.mjs
+ExecStart=/usr/bin/node app/collect.mjs
+
+Environment=PORT=8124
+Environment=HOST=127.0.0.1
+Environment=COLLECT_DIR=/var/lib/edgework
+# COLLECT_TOKEN lives here, 0600, root-owned. Never in this file — unit files
+# are world-readable by design.
+EnvironmentFile=/etc/edgework/collect.env
+
+Restart=always
+RestartSec=3
+
+# ── hardening ───────────────────────────────────────────────────────────────
+# This process parses JSON from the open internet. It should be able to do
+# almost nothing else.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+RemoveIPC=yes
+UMask=0077
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# The only two places it may write. `build` has to be one of them because
+# ExecStartPre rebuilds the rig from source on every start, so a restart can
+# never serve something older than the checkout.
+#
+# MemoryDenyWriteExecute is deliberately NOT set: V8 needs W^X for its JIT and
+# the service will not start with it on.
+ReadWritePaths=/var/lib/edgework /srv/edgework/tools/ice-lab/build
+
+[Install]
+WantedBy=multi-user.target

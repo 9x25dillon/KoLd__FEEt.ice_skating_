@@ -382,9 +382,17 @@ Behind TLS, the whole deployment is:
 
 ```
 your.domain {
-    reverse_proxy localhost:8124
+    reverse_proxy 127.0.0.1:8124
 }
 ```
+
+It binds **loopback** unless `HOST` says otherwise, because on a box with a
+public IP the alternative is this port answering in plaintext next to the TLS
+Caddy is carefully providing.
+
+[`deploy/`](deploy/) has the rest: a hardened systemd unit, that Caddyfile with
+client addresses stripped from the access log, and a runbook that takes about
+twenty minutes on a fresh box — [`deploy/README.md`](deploy/README.md).
 
 ## Layout
 
@@ -406,6 +414,7 @@ app/lab.ts         wiring
 app/build.mjs      TypeScript -> browser JS, no dependencies
 app/serve.mjs      static server that will not cache
 app/collect.mjs    the same, plus somewhere for a session card to land
+deploy/            systemd unit, Caddyfile, and the runbook for a real box
 ```
 
 `sim/` never imports `app/`, never touches the DOM, a clock, or `Math.random`,

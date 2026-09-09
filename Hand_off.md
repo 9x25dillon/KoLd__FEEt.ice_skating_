@@ -173,7 +173,8 @@ not be the front door for contributors.
 | | |
 | --- | --- |
 | **Public build** | `.github/workflows/pages.yml` — tests, builds, deploys to GitHub Pages. The tests gate the deploy. |
-| **Collection** | `tools/ice-lab/app/collect.mjs` — serves the rig *and* takes `POST /api/session` into a JSONL file. Zero dependencies, one file, meant for a small box behind Caddy. |
+| **Collection** | `tools/ice-lab/app/collect.mjs` — serves the rig *and* takes `POST /api/session` into a JSONL file. Zero dependencies, one file, binds loopback. |
+| **Deployment** | `tools/ice-lab/deploy/` — hardened systemd unit, a Caddyfile that strips client addresses from the access log, and a twenty-minute runbook. |
 | **Contributors** | `CONTRIBUTING.md` and three issue templates. The docs licence needs the grant in it — see below. |
 
 **An Artifact with a database cannot be used for this.** The `db` capability

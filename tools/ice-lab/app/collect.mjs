@@ -7,8 +7,12 @@
 //   POST /api/session     accept one session card, append it to a JSONL file
 //   GET  /api/sessions    hand the whole file back, if you know the token
 //
-//   node app/collect.mjs                    -> http://localhost:8124/
+//   node app/collect.mjs                    -> http://127.0.0.1:8124/
 //   COLLECT_TOKEN=... PORT=8124 node app/collect.mjs
+//
+// It binds LOOPBACK unless told otherwise, because on a public box the
+// alternative is this port answering in plaintext next to the TLS Caddy is
+// providing. HOST=0.0.0.0 to override, deliberately.
 //
 // WHAT IT DELIBERATELY DOES NOT DO.
 //
@@ -34,6 +38,16 @@ const dataDir = process.env.COLLECT_DIR ?? join(here, "..", "sessions");
 const dataFile = join(dataDir, "sessions.jsonl");
 const token = process.env.COLLECT_TOKEN ?? "";
 const port = Number(process.env.PORT ?? 8124);
+
+/**
+ * Loopback by default.
+ *
+ * On a box with a public IP, binding every interface publishes this on :8124
+ * beside the TLS that Caddy is carefully providing, and the plaintext one wins
+ * whenever somebody guesses the port. Set HOST=0.0.0.0 deliberately, or not at
+ * all.
+ */
+const host = process.env.HOST ?? "127.0.0.1";
 
 const TYPES = {
   ".html": "text/html", ".js": "text/javascript",
@@ -156,8 +170,8 @@ createServer(async (req, res) => {
   } catch {
     send(res, 404, "not found", "text/plain");
   }
-}).listen(port, () => {
-  console.log(`ice lab + collector -> http://localhost:${port}/`);
+}).listen(port, host, () => {
+  console.log(`ice lab + collector -> http://${host}:${port}/`);
   console.log(`sessions -> ${dataFile}`);
   if (!token) console.log("COLLECT_TOKEN is unset, so /api/sessions stays closed.");
 });
