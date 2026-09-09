@@ -29,6 +29,13 @@
   }
   #controls h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
   #controls label { display: inline-block; margin-right: 10px; color: var(--dim); font-size: 11px; }
+  #send-session {
+    position: absolute; right: 14px; top: 12px; z-index: 3;
+    background: #14202b; color: var(--gold); border: 1px solid #2c3f52;
+    border-radius: 3px; padding: 6px 12px; font: 500 12px var(--mono); cursor: pointer;
+  }
+  #send-session:hover { background: #1b2a38; }
+  #send-session[disabled] { opacity: 0.55; cursor: default; }
   #keys { position: absolute; left: 14px; bottom: 12px; color: var(--faint); font-size: 11px; line-height: 1.7; }
   #keys b { color: var(--dim); font-weight: 500; }
   aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px; }
@@ -58,8 +65,12 @@
     <div id="keys">
       <b>A / D</b> lean &nbsp; <b>W / S</b> rocker fore-aft &nbsp; <b>Shift</b> knee<br>
       <b>Q / E</b> weight to left / right foot &nbsp; <b>Space</b> stroke &nbsp; <b>X</b> brake<br>
-      <b>R</b> reset &nbsp; <b>P</b> pause &nbsp; <b>T</b> cycle preset &nbsp; — a gamepad works too
+      <b>R</b> reset &nbsp; <b>P</b> pause &nbsp; <b>T</b> cycle preset &nbsp; <b>M</b> cycle scheme A/B/C<br>
+      <b>pad</b> left stick &nbsp; <b>RT</b> knee &nbsp; <b>A</b> stroke &nbsp;
+      <b>LT</b> brake &nbsp; <b>LB/RB</b> weight &nbsp; <b>Y</b> reset &nbsp; <b>X</b> preset &nbsp; <b>Back</b> scheme<br>
+      three control schemes, labelled A / B / C — press <b>M</b> to change which one you are skating
     </div>
+    <button id="send-session" title="Sends the numbers this session measured. Nothing about you.">send session</button>
     <div id="controls">
       <h4>Overlay</h4>
       <label><input type="checkbox" id="opt-blades"> blades</label>
@@ -93,6 +104,7 @@
         <button id="export-csv">telemetry.csv</button>
         <button id="export-events">events.txt</button>
         <button id="export-params">params.json</button>
+        <button id="export-session">session.json</button>
       </div>
     </section>
   </aside>

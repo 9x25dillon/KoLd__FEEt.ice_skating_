@@ -74,11 +74,46 @@ export interface Params {
   controlLatency: number;
   /** Arms and free leg: bounded lateral authority with no edge involved. */
   internalGain: number;
+  /**
+   * Rate term on that same authority, per rad/s of lean rate.
+   *
+   * The engineering package has no such term, and that omission is why raising
+   * `internalMax` makes balance WORSE rather than easier: a proportional gain
+   * with no damping is an oscillator, so a bigger ceiling is a bigger
+   * oscillation. Arms and a free leg do not work that way — they are swung,
+   * and what they are swung against is lean RATE.
+   *
+   * Zero in `spec`, so the defect stays measurable. Every preset that raises
+   * `internalMax` must raise this first.
+   */
+  internalRateGain: number;
+  /**
+   * Seconds over which a SUSTAINED internal authority washes out. 0 disables it.
+   *
+   * Arms and a free leg have finite travel. You can throw them out to catch a
+   * wobble; you cannot hold them out to hold a lean, and a model that lets you
+   * is a model where the ice is optional. Without this the skater reaches a
+   * stable, wrong equilibrium — body held at a shallow lean by the arms, blade
+   * steering the other way forever, neither tracking the command nor falling.
+   *
+   * So the term is high-passed: transients pass through at full strength and
+   * anything held decays toward zero, which puts the load back on the edge
+   * where it belongs. 0 in `spec`, because that is what the package specifies
+   * and every recorded measurement was taken against it.
+   */
+  internalWashout: number;
   internalMax: number;
   /** Shifting the centre of pressure within the stance, two-footed only. */
   copGain: number;
   /** Guards kappa = a / v^2 at a standstill. */
   minSpeedForCurv: number;
+  /**
+   * Full deflection of `leanSplit`, in radians of tilt per blade.
+   *
+   * Inert unless something drives that axis, so `spec` is unaffected and every
+   * recorded measurement still measures the same thing.
+   */
+  splitTiltMax: number;
 
   // ── stroke ────────────────────────────────────────────────────────────────
   /**
@@ -115,6 +150,19 @@ export interface Params {
   fallLean: number;
   fallError: number;
   fallErrorTime: number;
+  /**
+   * How much of the internal authority counts as support when deciding whether
+   * the skater is going down, 0..1.
+   *
+   * The balance-timeout test asks whether the lean is far from the lean the
+   * EDGE would balance, and for how long. A skater using their arms and free
+   * leg is deliberately away from that lean — so at 0, which is what the
+   * package specifies, using the recovery authority is itself scored as
+   * falling, and the harder the assist tier the sooner the skater goes down.
+   *
+   * 0 in `spec`, so that stays measurable. 1 credits it in full.
+   */
+  fallAuthorityCredit: number;
 
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
@@ -154,9 +202,12 @@ export const DEFAULT_PARAMS: Params = {
   angulationLimit: 0.35,    // 20 deg
   controlLatency: 0.12,
   internalGain: 6.0,
+  internalRateGain: 0.0,    // the package has no rate term; see the field comment
+  internalWashout: 0.0,     // nor any limit on holding it out; see the field comment
   internalMax: 1.5,
   copGain: 12.0,
   minSpeedForCurv: 0.5,
+  splitTiltMax: 0.35,       // 20 deg apart at full deflection
 
   strokePower: 3.2,
   strokeBeta: 0.65,          // 37 deg
@@ -171,6 +222,7 @@ export const DEFAULT_PARAMS: Params = {
   fallLean: 1.13,
   fallError: 0.35,
   fallErrorTime: 0.35,
+  fallAuthorityCredit: 0.0,   // the package credits none of it; see the field comment
 
   mass: 55.0,
   comHeight: 0.95,
@@ -209,6 +261,19 @@ export function validate(p: Params): string[] {
   if (p.kneeRate <= 0) errs.push("kneeRate must be positive");
   if (p.strokeEdge <= p.flatThreshold)
     errs.push("strokeEdge is at or below the flat threshold, so a push has no edge to bite with");
+  if (p.internalWashout < 0)
+    errs.push("internalWashout is a time constant in seconds, or 0 to disable it");
+  if (p.internalRateGain < 0)
+    errs.push("internalRateGain must not be negative: a negative rate term is anti-damping");
+  if (p.fallAuthorityCredit < 0 || p.fallAuthorityCredit > 1)
+    errs.push("fallAuthorityCredit is a fraction, 0..1");
+  // Measured on this rig, not asserted from theory: with no rate term, raising
+  // the ceiling past about 2 m/s^2 costs more in oscillation than it buys in
+  // authority. This is the check that stops an assist tier being written the
+  // obvious wrong way in a UE5 tuning asset.
+  if (p.internalMax > 2.0 && p.internalRateGain <= 0)
+    errs.push("internalMax above 2 with no internalRateGain: a proportional gain with no damping "
+      + "makes balance worse, not easier — raise internalRateGain first");
   return errs;
 }
 
@@ -234,28 +299,44 @@ export function leanLoopResponse(p: Params): { wn: number; zeta: number } {
  * `spec` is DEFAULT_PARAMS: what the engineering package and design bible say,
  * with nothing tuned. It is the baseline every measurement is taken against.
  *
- * `responsive` is the first tuning pass. It widens the angulation limit and
- * roughly doubles lean damping, which is what it took to make entering a deep
- * edge from upright possible at ordinary stroking speed — see
- * test/balance.test.ts for the envelope both of them produce.
+ * `responsive` is the first tuning pass. It widens the angulation limit,
+ * roughly doubles lean damping, gives the internal authority the rate term the
+ * package never had, and credits that authority in the fall test. See
+ * test/balance.test.ts for the envelope each of those buys, measured
+ * separately — the gains and the rate term fix different halves of it.
  */
 export const PRESETS: Readonly<Record<string, Params>> = {
   spec: DEFAULT_PARAMS,
-  responsive: { ...DEFAULT_PARAMS, balanceKd: 16.0, angulationLimit: 0.70 },
+  responsive: {
+    ...DEFAULT_PARAMS, balanceKd: 16.0, angulationLimit: 0.70,
+    internalRateGain: 2.0, internalWashout: 1.5, fallAuthorityCredit: 1.0,
+  },
   /**
    * An assist tier, as a parameter overlay and nothing else.
    *
-   * It buys down neuromuscular latency and adds damping. It does NOT raise
-   * `internalMax`, which is the obvious way to write an assist and is wrong:
-   * internal authority is a proportional term on balance error with no
-   * damping of its own, so raising it past about 1.5 m/s^2 sets the lean loop
-   * oscillating and the skater falls SOONER than with no assist at all
-   * (measured: down at tick 77 of the reference sequence, against surviving
-   * the whole run at 1.5). Giving that term a rate component would be the
-   * precondition for turning it up.
+   * It buys down neuromuscular latency, adds damping, and — now that the
+   * preconditions exist — actually raises recovery authority, which is the
+   * obvious way to write an assist and which used to make things worse. Both
+   * preconditions are required and neither is optional:
+   *
+   *   internalRateGain   the authority is a PD term, so a bigger ceiling is
+   *                      more damping rather than a bigger oscillation
+   *   fallAuthorityCredit  the fall test counts that authority as support,
+   *                      instead of scoring the save itself as a fall
+   *
+   * Measured at 2.5 m/s^2 of authority: deepest lean from upright 18 / 29 / 48
+   * degrees at 3 / 4 / 6 m/s, against 15 / 27 / 46 for the old overlay. The
+   * cost is honest and shows on a stopwatch: a 20 degree edge takes 2.9 s to
+   * settle rather than 1.7 s, because damping is what is being bought.
+   *
+   * `internalMax` is not a free knob. 2.5 m/s^2 is about a quarter of g from
+   * arms and a free leg, which is already generous; at 5 the skater holds
+   * leans the edge cannot support at all and the ice stops mattering.
    */
   assisted: {
     ...DEFAULT_PARAMS, balanceKd: 20.0, angulationLimit: 0.70,
     controlLatency: 0.04,
+    internalRateGain: 4.0, internalWashout: 1.5, internalMax: 2.5,
+    fallAuthorityCredit: 1.0,
   },
 };

@@ -29,6 +29,7 @@ import { rng } from "../sim/math.ts";
  */
 function scripted(i: number): SkatingInput {
   return {
+    ...NEUTRAL_INPUT,
     lean: 0.30 * Math.sin(i * 0.017),
     knee: 0.45 + 0.25 * Math.sin(i * 0.004),
     weight: 0.5 + 0.45 * Math.sin(i * 0.011),

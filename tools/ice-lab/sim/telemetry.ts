@@ -12,7 +12,7 @@ import { len } from "./math.ts";
 
 export interface Frame {
   tick: number; speed: number; lean: number; leanEq: number; balanceError: number;
-  latAccel: number; tiltCmd: number; supportFoot: number; supportMode: number;
+  latAccel: number; intAccel: number; tiltCmd: number; supportFoot: number; supportMode: number;
   code: [number, number]; tilt: [number, number]; load: [number, number];
   latForce: [number, number]; demand: [number, number]; regime: [number, number];
   dwell: [number, number];
@@ -36,7 +36,8 @@ export class Telemetry {
   capture(s: SkaterState): void {
     const f = this.buf[this.head];
     f.tick = s.tick; f.speed = len(s.vel); f.lean = s.lean; f.leanEq = s.leanEq;
-    f.balanceError = s.balanceError; f.latAccel = s.latAccel; f.tiltCmd = s.tiltCmd;
+    f.balanceError = s.balanceError; f.latAccel = s.latAccel; f.intAccel = s.intAccel;
+    f.tiltCmd = s.tiltCmd;
     f.supportFoot = s.supportFoot; f.supportMode = s.supportMode;
     for (let i = 0; i < 2; i++) {
       const b = s.blade[i];
@@ -68,7 +69,7 @@ export class Telemetry {
   toCsv(): string {
     const head = [
       "tick", "time_s", "speed_mps", "lean_deg", "lean_eq_deg", "balance_err_deg",
-      "lat_accel", "tilt_cmd_deg", "support_foot", "support_mode",
+      "lat_accel", "int_accel", "tilt_cmd_deg", "support_foot", "support_mode",
       "L_code", "L_tilt_deg", "L_load_N", "L_lat_force_N", "L_demand", "L_regime", "L_dwell_s",
       "R_code", "R_tilt_deg", "R_load_N", "R_lat_force_N", "R_demand", "R_regime", "R_dwell_s",
     ].join(",");
@@ -76,7 +77,7 @@ export class Telemetry {
     const rows = this.frames().map((f) => [
       f.tick, (f.tick / SIM_HZ).toFixed(4), f.speed.toFixed(4),
       d(f.lean), d(f.leanEq), d(f.balanceError),
-      f.latAccel.toFixed(4), d(f.tiltCmd), f.supportFoot, f.supportMode,
+      f.latAccel.toFixed(4), f.intAccel.toFixed(4), d(f.tiltCmd), f.supportFoot, f.supportMode,
       codeToString(f.code[0]), d(f.tilt[0]), f.load[0].toFixed(1), f.latForce[0].toFixed(1),
       f.demand[0].toFixed(3), REGIME_NAME[f.regime[0]], f.dwell[0].toFixed(3),
       codeToString(f.code[1]), d(f.tilt[1]), f.load[1].toFixed(1), f.latForce[1].toFixed(1),
@@ -96,7 +97,8 @@ export class Telemetry {
 
 function blank(): Frame {
   return {
-    tick: 0, speed: 0, lean: 0, leanEq: 0, balanceError: 0, latAccel: 0, tiltCmd: 0,
+    tick: 0, speed: 0, lean: 0, leanEq: 0, balanceError: 0, latAccel: 0, intAccel: 0,
+    tiltCmd: 0,
     supportFoot: 0, supportMode: 0,
     code: [0xff, 0xff], tilt: [0, 0], load: [0, 0], latForce: [0, 0],
     demand: [0, 0], regime: [0, 0], dwell: [0, 0],

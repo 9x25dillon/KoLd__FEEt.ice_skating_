@@ -1,0 +1,64 @@
+# Publish the Ice Lab to GitHub Pages.
+#
+# The rig has zero dependencies — Node strips the TypeScript itself — so this
+# is a checkout, a test run and a copy. There is nothing to install and no lock
+# file to trust.
+#
+# The tests gate the deploy on purpose. What goes up is the thing people are
+# asked to form an opinion about, and a solver that fails its own measurements
+# is not that thing.
+
+name: Ice Lab
+
+on:
+  push:
+    branches: [main, controls-balance-authority]
+    paths:
+      - "tools/ice-lab/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deploy midway; queue instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/ice-lab
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 26 for `stripTypeScriptTypes`, which is the entire build step.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+
+      - name: Test
+        run: node --test test/*.test.ts
+
+      - name: Build
+        run: node app/build.mjs
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: tools/ice-lab/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

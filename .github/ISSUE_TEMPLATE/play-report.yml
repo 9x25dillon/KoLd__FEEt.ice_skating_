@@ -1,0 +1,53 @@
+name: Play report
+description: You skated the Ice Lab. This is the most valuable thing you can file.
+title: "Play report: "
+labels: ["play report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you — this is the data the whole project is downstream of.
+
+        **Please do not include anything about yourself.** No name, no age, no
+        location, no contact details. Everything here should be about the
+        simulation.
+  - type: dropdown
+    id: scheme
+    attributes:
+      label: Which scheme were you skating?
+      description: Shown on screen. If you tried more than one, file one report each.
+      options: ["A", "B", "C", "I did not notice"]
+    validations:
+      required: true
+  - type: dropdown
+    id: input
+    attributes:
+      label: Gamepad or keyboard?
+      options: ["Gamepad", "Keyboard"]
+    validations:
+      required: true
+  - type: textarea
+    id: could-not
+    attributes:
+      label: What were you trying to do that you could not?
+      description: The single most useful question. Be specific and be blunt.
+    validations:
+      required: true
+  - type: textarea
+    id: fell
+    attributes:
+      label: When you fell, was that you or the game?
+      description: One word is a fine answer. If it was the game, say what it did.
+    validations:
+      required: true
+  - type: textarea
+    id: turn
+    attributes:
+      label: Describe a good turn to someone who has not played it.
+      description: Only if you had one. If you did not, say that instead — it is also an answer.
+  - type: textarea
+    id: session
+    attributes:
+      label: session.json
+      description: The button in the right-hand panel. Paste it here if you have it.
+      render: json
