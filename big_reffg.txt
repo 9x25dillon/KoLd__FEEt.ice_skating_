@@ -1,0 +1,3711 @@
+KoLd__FEEt — Edgework Subsystem: Engineering Package v0.1
+0. Honesty gate before anything else
+
+REPOSITORY ACCESS: UNKNOWN. I cannot fetch github.com/9x25dillon/KoLd__FEEt from this session. Per the Prime Directive and the Engineering Truth Standard, I will not invent file names, schemas, or implementation status. Everything below that touches existing repo content is labeled ASSUMPTION and must be reconciled against the real repo before any task is merged.
+
+To close that gap, paste (or attach) the following and I will produce the full Repository→UE5 map and re-key every task ID to your existing conventions:
+
+tree -L 3 of the repo (or the GitHub file listing).
+Any data files touching edges or steps — likely candidates by the terminology in your brief: step features, motion primitives, entry templates, segment rules.
+JumpResolver and ScoreCalculator (the edge-call / takeoff-edge portions specifically).
+Design Bible sections on skating skills / edge quality, and the Open Decisions doc.
+
+Provisional migration stance (ASSUMPTION, pending audit):
+
+Existing Repository Concept (assumed)	UE5 Representation	Runtime Owner	Source of Truth	Migration Status
+Edge vocabulary (FO/FI/BO/BI) in step features / jump entry templates	EKoldEdge + EKoldSkateDirection enums, generated from repo data	KoldSim	Repo data file → codegen	KEEP (vocabulary) / NEW (runtime enum)
+Jump entry edge requirements (e.g., Lutz = BO, Flip = BI)	FKoldEdgeRequirement in element definition Data Asset	KoldElements	Repo jump definitions	ADAPT
+Edge-call logic in JumpResolver ("e", "!")	FKoldEdgeLobe telemetry consumed by validator; JumpResolver retained as external validation oracle	KoldElements	Repo JumpResolver	REFACTOR (port) + KEEP (oracle)
+Any physics constants for friction/edges	UKoldBladeTuningAsset (authoring) → FKoldBladeTuning (runtime)	KoldSim	New Data Asset, seeded from repo values if present	UNKNOWN until audit
+Skating Skills scoring proxy	Consumes FKoldEdgeLobe stream (edge depth, flow, one-foot ratio)	KoldScoring	Repo PCS notes	ADAPT
+
+Now — the thing you asked for.
+
+1. Scope: what "Edgework" is in this architecture
+
+What we are building: the deterministic blade–ice contact and edge-control layer. It is the root of the causal chain: no glide, turn, jump entry, spin entry, edge call, or Skating Skills score exists without it.
+
+In scope (this package):
+
+Blade contact state (per foot)
+Longitudinal friction and drag
+Lateral edge force: hold vs. skid
+Edge-induced curvature (the physical reason a skater on an edge travels a lobe)
+Edge classification with hysteresis (FO/FI/BO/BI/flat)
+Edge change events and edge lobe records (the telemetry unit that later powers edge calls and "your edge flattened 180 ms before takeoff")
+Weight transfer between feet
+Braking / toe-pick regimes as detection only (behaviors are later tasks)
+Fixed-step integration of the body on ice
+Tests, telemetry, debug draw, task graph, Codex spec
+
+Out of scope (hooks exposed): balance recovery torque (consumes RequiredLeanRad), turns as gameplay maneuvers (consume edge lobes + steering), jumps, spins, animation.
+
+Design rule inherited from the brief: edge state is computed from contact physics, never read from an animation state.
+
+2. Module placement
+Source/
+  KoldSim/            Runtime module. Depends ONLY on Core. No UObject. Deterministic.
+    Public/KoldSimTypes.h
+    Public/KoldBladeTypes.h
+    Public/KoldBladeIceSolver.h
+    Public/KoldEdgeClassifier.h
+    Private/KoldBladeIceSolver.cpp
+    Private/KoldEdgeClassifier.cpp
+  KoldSimData/        Runtime module. Depends on Core, CoreUObject, Engine. Data Assets + bake.
+    Public/KoldBladeTuningAsset.h
+  KoldSkater/         Actor/Component layer. Drives KoldSim from the fixed-step ticker.
+  KoldSimTests/       Automation tests (Editor/Program target).
+
+Why KoldSim has no UObject: determinism, testability outside the editor (it can be built into a console program for CI regression on replay streams), and zero GC pressure in the hot loop.
+
+3. Data contracts
+3.1 Enums
+// KoldSim/Public/KoldBladeTypes.h
+// UE5 C++ IMPLEMENTATION
+#pragma once
+#include "CoreMinimal.h"
+
+enum class EKoldFoot : uint8 { Left = 0, Right = 1 };
+
+// Edge is relative to the skater's body (inside = medial side of the foot).
+enum class EKoldEdge : uint8 { Flat = 0, Inside = 1, Outside = 2 };
+
+enum class EKoldSkateDirection : uint8 { Forward = 0, Backward = 1 };
+
+enum class EKoldBladeRegime : uint8
+{
+    Airborne = 0,
+    Glide,        // |edge angle| below flat threshold
+    ShallowEdge,  // holding, below deep threshold
+    DeepEdge,     // holding, above deep threshold
+    Carve,        // deep edge AND lateral demand near capacity (high-speed hold)
+    Skid,         // lateral demand exceeded capacity; lateral slip nonzero
+    Brake,        // blade tangent misaligned with velocity beyond brake angle
+    ToePick,      // pitch beyond toe-pick threshold (detection only in this package)
+    SpinContact   // reserved for spin package
+};
+3.2 Runtime tuning (immutable, baked)
+// UE5 C++ IMPLEMENTATION — plain struct, baked from UKoldBladeTuningAsset once at load.
+struct FKoldBladeTuning
+{
+    // Geometry
+    float RockerRadius        = 2.4f;   // m. ASSUMPTION: typical freestyle blade rocker ~7–8 ft. Tunable.
+    float ContactLengthFlat   = 0.06f;  // m, effective flat-glide contact length. ASSUMPTION.
+    // Edge thresholds (radians of blade tilt from vertical)
+    float FlatEdgeThreshold   = 0.05f;  // ~3°
+    float DeepEdgeThreshold   = 0.40f;  // ~23°
+    float MaxEdgeAngle        = 1.05f;  // ~60°, clamp
+    float EdgeAngleRate       = 6.0f;   // rad/s max rate of change (control authority)
+    // Longitudinal friction. ASSUMPTION: steel-on-ice kinetic mu is on the order of 1e-2 or lower;
+    // treat as tunable, VERIFY against measurement/tuning sessions.
+    float MuGlide             = 0.006f;
+    float MuEdgeGain          = 0.010f; // added mu at MaxEdgeAngle (scales with sin(theta))
+    float MuSkid              = 0.12f;  // lateral friction when skidding
+    float MuBrake             = 0.20f;  // lateral friction when braking (blade dragged sideways)
+    // Lateral hold capacity: F_cap = LateralHold(theta) * N
+    float LateralHoldMax      = 1.6f;   // dimensionless, at deep edge. ASSUMPTION.
+    float LateralHoldFlat     = 0.15f;  // at flat: almost no bite
+    // Regime detection
+    float BrakeAngle          = 0.60f;  // rad between velocity and tangent
+    float ToePickPitch        = 0.35f;  // rad forward pitch
+    float CarveDemandFraction = 0.75f;  // demand/capacity above which DeepEdge -> Carve
+    // Body
+    float AirDragCoeff        = 0.35f;  // N·s²/m², F = k v². ASSUMPTION for ~70 kg skater.
+    float SkaterMass          = 60.0f;  // kg, overridden per skater
+    float Gravity             = 9.81f;
+};
+3.3 Per-blade state — 48 bytes, cache-line friendly (two blades + body fit in 128 B)
+// UE5 C++ IMPLEMENTATION
+struct FKoldBladeState
+{
+    FVector3f ContactPoint;        // 12  world, ice-plane point under blade (z = ice height)
+    FVector3f Tangent;             // 12  unit, in ice plane, points toe-ward
+    float     EdgeAngle;           // 4   signed radians; + = tilted toward +Normal (Normal = Up × Tangent)
+    float     Pitch;               // 4   rocker position, + = toward toe
+    float     NormalForce;         // 4   N
+    float     LateralSlip;         // 4   m/s, blade velocity along Normal (0 when holding)
+    float     LateralDemandRatio;  // 4   required/capacity lateral force (diagnostic + Carve detection)
+    uint8     bInContact;          // 1
+    EKoldEdge Edge;                // 1
+    EKoldSkateDirection Direction; // 1
+    EKoldBladeRegime Regime;       // 1
+};
+static_assert(sizeof(FKoldBladeState) == 48, "FKoldBladeState layout changed; update replay version.");
+3.4 Body state (edgework-relevant subset of FSkaterSimulationState)
+// UE5 C++ IMPLEMENTATION
+struct FKoldSkaterBodyState
+{
+    FVector3f Position;       // 12  COM projected to ice plane + COM height in Z
+    FVector3f Velocity;       // 12  m/s
+    float     Yaw;            // 4   body facing, radians
+    float     YawRate;        // 4
+    float     Lean;           // 4   body roll, radians (+ = toward +Normal of dominant blade)
+    float     RequiredLean;   // 4   OUTPUT: lean needed for current curvature/speed (for balance module)
+    float     WeightSplit;    // 4   0 = all left, 1 = all right
+    float     Stance;         // 4   m, lateral foot separation
+    uint32    Tick;           // 4
+    uint32    Pad;            // 4
+};
+static_assert(sizeof(FKoldSkaterBodyState) == 56, "Layout changed; update replay version.");
+
+struct FKoldSkaterEdgeworkState
+{
+    FKoldSkaterBodyState Body;      // 56
+    FKoldBladeState      Blade[2];  // 96
+};                                   // 152 B → 3 cache lines; hot loop reads all of it exactly once.
+3.5 Input (quantized for replay determinism)
+// UE5 C++ IMPLEMENTATION
+struct FKoldSkatingInput
+{
+    int16 EdgeLeft;      // [-32767, 32767] → target edge angle, scaled by MaxEdgeAngle
+    int16 EdgeRight;
+    int16 SteerLeft;     // blade yaw relative to body, scaled by MaxSteer
+    int16 SteerRight;
+    int16 WeightSplit;   // → [0,1]
+    int16 Push;          // stroke intent [0,1]; consumed by movement package, sampled here for telemetry
+    int16 Lean;          // body lean intent
+    uint8 Flags;         // bit0 LeftLifted, bit1 RightLifted, bit2 BrakeIntent, bit3 ToeIntent
+    uint8 Pad;
+};
+static_assert(sizeof(FKoldSkatingInput) == 16, "Input layout is replay-versioned.");
+
+Ownership: KoldSkater owns the input pipeline (sample → timestamp → quantize) and the state buffer. KoldSim owns the math and is a pure function of (state, input, tuning, dt) → state'. Telemetry is written by KoldSim into a caller-provided buffer.
+
+4. Physics model
+4.1 Frames and conventions
+Ice plane is z = 0 for the vertical slice (ASSUMPTION; rink surface as height field is a later task).
+Per blade: Tangent t (unit, in-plane, toe-ward), Normal n = Up × t (unit, in-plane, to the skater's left when standing on that blade facing toe-ward), Up = (0,0,1).
+Edge angle θ: blade tilt from vertical, positive toward n.
+Edge naming (body-relative, computed, never authored):
+Left foot: θ > 0 (tilt left) → Outside; θ < 0 → Inside.
+Right foot: θ > 0 (tilt left) → Inside; θ < 0 → Outside.
+|θ| < FlatEdgeThreshold → Flat (with hysteresis, §5).
+Direction: v · t > 0 → Forward, else Backward (with hysteresis; v ≈ 0 holds previous).
+4.2 Weight distribution
+
+Total normal force must equal m·g minus vertical acceleration effects (ignored in slice; ASSUMPTION, revisited in knee-compression/jump packages):
+
+N_left  = m g (1 - w)     N_right = m g w        w = WeightSplit, forced to 0/1 if a foot is lifted
+4.3 Longitudinal friction and drag
+F_long,i = -μ_long(θ_i) · N_i · sign(v_t,i) · t_i
+μ_long(θ)  = MuGlide + MuEdgeGain · sin|θ|
+F_drag     = -k · |v| · v
+
+Marked ASSUMPTION: the linear-in-sin(θ) edge friction increase is a gameplay approximation, not a tribological model. It gives the correct feel (deep edges cost speed) and is tunable.
+
+4.4 Edge-induced curvature — the core equation of edgework
+
+A blade rocker is an arc of radius ρ in the blade plane. Tilt that plane by θ and intersect with the ice plane: the projected arc is locally an ellipse with semi-axes ρ (along t) and ρ·sin θ (along n). Its radius of curvature at the contact apex is
+
+R_geo(θ) = ρ / sin|θ|
+
+The blade tangent therefore rotates about Up at
+
+ψ̇_blade = sign(θ) · v_t / R_geo = sign(θ) · v_t · sin|θ| / ρ
+
+This is why an edge is a curve. It is kinematic, stable, and needs no force integration to turn — this is the key decision (ADR-EDGE-01). It matches how skaters describe it: lean more → tighter lobe; same lean, more speed → same radius, but more force required (which is what §4.5 checks).
+
+Clamp: for |θ| < FlatEdgeThreshold, ψ̇_blade = 0 (a flat glides straight, apart from steering).
+
+4.5 Lateral hold vs. skid (the "does the edge bite" test)
+
+Required lateral (centripetal) force to actually follow R_geo:
+
+a_req = v_t² / R_geo = v_t² · sin|θ| / ρ
+F_req = (N_i / g) · a_req            ← mass share carried by this blade
+F_cap = LateralHold(θ) · N_i
+LateralHold(θ) = lerp(LateralHoldFlat, LateralHoldMax, saturate(|θ| / DeepEdgeThreshold))
+
+Implementation as an impulse constraint (not a spring):
+
+v_n      = blade velocity · n                  (lateral slip velocity)
+J_needed = -(N_i/g) · v_n                      (impulse to zero the slip this tick)
+J_max    = F_cap · dt
+J        = clamp(J_needed, -J_max, J_max)
+
+If |J_needed| ≤ J_max → hold (lateral slip goes to zero, regime Shallow/Deep/Carve by θ and demand ratio).
+Else → Skid: slip persists, and additional lateral friction MuSkid · N_i opposes the residual slip.
+
+LateralDemandRatio = F_req / F_cap is exported; it is exactly the signal that later becomes GOE "edge quality" and coaching ("edge was at 92% of hold capacity — you were about to skid").
+
+4.6 Required lean (interface to balance)
+
+For circular motion on a blade the body's resultant must pass through the contact point:
+
+tan(φ_req) = v_t² / (g · R_geo) = v_t² · sin|θ| / (g · ρ)
+
+Exported as RequiredLean. Edgework does not enforce balance — it reports what balance is needed. The balance module computes E_b = φ_actual − φ_req and applies recovery. Decoupling θ (blade) from φ (body) is deliberate: real skaters use ankle/knee to run a deeper edge than their body lean, and the gap is a skill signal.
+
+4.7 Braking and toe-pick (detection only here)
+misalign = angle(v_blade, ±t)  → if > BrakeAngle: Regime = Brake, lateral mu = MuBrake
+Pitch > ToePickPitch           → Regime = ToePick (jump package consumes this)
+4.8 Body yaw
+
+Body yaw tracks the pressure-weighted blade tangent direction with a first-order lag YawFollowRate (tunable). Upper-body counter-rotation is a later package (spins/turns); the hook is that yaw is a separate state from blade tangent.
+
+4.9 Integration order (per fixed tick)
+1. Decode input → target θ_i, steer_i, w, lean
+2. Rate-limit θ_i toward target (EdgeAngleRate)
+3. Distribute N_i
+4. For each contacting blade:
+   a. Recompute n_i = Up × t_i
+   b. blade velocity v_b = V + YawRate × r_i  (r_i = blade offset from COM in plane)
+   c. Decompose v_t, v_n
+   d. Apply steering to t_i (rate-limited), then edge-induced rotation ψ̇_blade · dt
+   e. Lateral impulse J (hold or skid)
+   f. Longitudinal friction impulse
+   g. Regime + demand ratio
+5. Sum impulses → V += ΣJ / m ; V += F_drag/m · dt  (semi-implicit Euler)
+6. Position += V · dt
+7. Yaw follows weighted tangent; RequiredLean computed from dominant blade
+8. Edge classifier (§5) → events
+9. Telemetry write
+
+Fixed dt = 1/120 s (ASSUMPTION, ADR-EDGE-02). All scalar math in float (FVector3f), no double, no FMath:: functions with platform-dependent implementations in the hot path (avoid FMath::Sin on compilers that may use FMA differently across platforms — see ADR-EDGE-02 for the quantization fallback).
+
+5. Edge classifier and lobe records
+5.1 Hysteresis
+
+Edge classification uses two thresholds to avoid event spam:
+
+enter Inside/Outside:  |θ| > FlatEdgeThreshold · 1.25
+return to Flat:        |θ| < FlatEdgeThreshold · 0.75
+minimum dwell:         DwellTicks (default 6 ticks = 50 ms) before an edge change is committed
+
+Direction hysteresis: |v_t| < 0.15 m/s holds previous direction.
+
+5.2 Events and lobes
+// UE5 C++ IMPLEMENTATION
+struct FKoldEdgeChangeEvent
+{
+    uint32    Tick;
+    EKoldFoot Foot;
+    EKoldEdge FromEdge, ToEdge;
+    EKoldSkateDirection FromDir, ToDir;
+    float     Speed;
+    float     EdgeAngle;
+};
+
+// One continuous ride on one edge of one foot. This is the atom of edgework telemetry:
+// step-sequence recognition, jump takeoff-edge calls, Skating Skills proxies, and coaching all read these.
+struct FKoldEdgeLobe
+{
+    uint32    StartTick, EndTick;
+    EKoldFoot Foot;
+    EKoldEdge Edge;
+    EKoldSkateDirection Direction;
+    float     ArcAngle;         // rad of heading change accumulated on this lobe
+    float     PeakEdgeAngle;    // rad
+    float     MeanEdgeAngle;    // rad
+    float     EntrySpeed, ExitSpeed;
+    float     PeakDemandRatio;  // how close to skidding
+    uint16    SkidTicks;        // ticks in Skid regime
+    uint16    FlattenTicks;     // ticks where |θ| fell below 50% of PeakEdgeAngle after peak (the "edge flattened before takeoff" signal)
+    uint8     bTwoFoot;         // other blade also loaded > 20% for majority of lobe
+    uint8     Pad[3];
+};
+
+Lobes are written into a preallocated ring (TStaticArray<FKoldEdgeLobe, 256> per skater, ASSUMPTION on size); consumers copy what they need. No allocation.
+
+6. Code
+6.1 Solver
+// KoldSim/Public/KoldBladeIceSolver.h
+// UE5 C++ IMPLEMENTATION (compiles against Core; verify includes per engine version)
+#pragma once
+#include "CoreMinimal.h"
+#include "KoldBladeTypes.h"
+
+struct FKoldEdgeworkTelemetryTick;
+
+class KOLDSIM_API FKoldBladeIceSolver
+{
+public:
+    // Pure function of inputs. Thread-safe as long as State/Telemetry are not shared.
+    static void Step(FKoldSkaterEdgeworkState& State,
+                     const FKoldSkatingInput& Input,
+                     const FKoldBladeTuning& Tuning,
+                     float Dt,
+                     FKoldEdgeworkTelemetryTick* OutTelemetry /* may be null */);
+
+    static FORCEINLINE float GeometricTurnRadius(float EdgeAngle, float RockerRadius)
+    {
+        const float S = FMath::Abs(FMath::Sin(EdgeAngle));
+        return S > 1e-4f ? RockerRadius / S : 1e6f;
+    }
+
+    static FORCEINLINE float LateralHold(float EdgeAngle, const FKoldBladeTuning& T)
+    {
+        const float A = FMath::Clamp(FMath::Abs(EdgeAngle) / T.DeepEdgeThreshold, 0.f, 1.f);
+        return FMath::Lerp(T.LateralHoldFlat, T.LateralHoldMax, A);
+    }
+
+    static FORCEINLINE float DecodeInput(int16 Q, float Scale)
+    {
+        return (static_cast<float>(Q) * (1.0f / 32767.0f)) * Scale;
+    }
+};
+// KoldSim/Private/KoldBladeIceSolver.cpp
+// UE5 C++ IMPLEMENTATION
+#include "KoldBladeIceSolver.h"
+#include "KoldEdgeworkTelemetry.h"
+
+namespace
+{
+    constexpr FVector3f KoldUp(0.f, 0.f, 1.f);
+
+    FORCEINLINE FVector3f RotateInPlane(const FVector3f& V, float Angle)
+    {
+        const float C = FMath::Cos(Angle), S = FMath::Sin(Angle);
+        return FVector3f(V.X * C - V.Y * S, V.X * S + V.Y * C, 0.f);
+    }
+
+    FORCEINLINE float MoveToward(float Cur, float Target, float MaxDelta)
+    {
+        return Cur + FMath::Clamp(Target - Cur, -MaxDelta, MaxDelta);
+    }
+
+    FORCEINLINE EKoldEdge EdgeFromAngle(EKoldFoot Foot, float Theta, float FlatThresh)
+    {
+        if (FMath::Abs(Theta) < FlatThresh) return EKoldEdge::Flat;
+        const bool bTiltLeft = Theta > 0.f;
+        // Left foot: tilt left = outside. Right foot: tilt left = inside.
+        return (Foot == EKoldFoot::Left) == bTiltLeft ? EKoldEdge::Outside : EKoldEdge::Inside;
+    }
+}
+
+void FKoldBladeIceSolver::Step(FKoldSkaterEdgeworkState& S,
+                               const FKoldSkatingInput& In,
+                               const FKoldBladeTuning& T,
+                               float Dt,
+                               FKoldEdgeworkTelemetryTick* Tel)
+{
+    const float InvMass = 1.0f / T.SkaterMass;
+    const float Gravity = T.Gravity;
+
+    // 1. Decode input
+    const float TargetEdge[2]  = { DecodeInput(In.EdgeLeft,  T.MaxEdgeAngle),
+                                   DecodeInput(In.EdgeRight, T.MaxEdgeAngle) };
+    const float TargetSteer[2] = { DecodeInput(In.SteerLeft,  0.6f),   // ASSUMPTION: max blade yaw 0.6 rad
+                                   DecodeInput(In.SteerRight, 0.6f) };
+    const bool  bLifted[2]     = { (In.Flags & 0x1) != 0, (In.Flags & 0x2) != 0 };
+
+    float W = FMath::Clamp(DecodeInput(In.WeightSplit, 0.5f) + 0.5f, 0.f, 1.f);
+    if (bLifted[0] && !bLifted[1]) W = 1.f;
+    if (bLifted[1] && !bLifted[0]) W = 0.f;
+    S.Body.WeightSplit = W;
+
+    // 3. Normal force distribution (vertical acceleration ignored in slice: ASSUMPTION)
+    const float TotalN = T.SkaterMass * Gravity;
+    const float NShare[2] = { TotalN * (1.f - W), TotalN * W };
+
+    FVector3f Impulse(0.f);
+    float     WeightedTangentX = 0.f, WeightedTangentY = 0.f;
+    float     DominantRequiredLean = 0.f;
+    float     DominantN = -1.f;
+
+    for (int32 i = 0; i < 2; ++i)
+    {
+        FKoldBladeState& B = S.Blade[i];
+        const EKoldFoot Foot = static_cast<EKoldFoot>(i);
+
+        B.bInContact  = !bLifted[i] && S.Body.Position.Z <= 1e-3f; // airborne → no contact (jump package sets Z)
+        B.NormalForce = B.bInContact ? NShare[i] : 0.f;
+
+        if (!B.bInContact)
+        {
+            B.Regime = EKoldBladeRegime::Airborne;
+            B.LateralSlip = 0.f;
+            B.LateralDemandRatio = 0.f;
+            B.EdgeAngle = MoveToward(B.EdgeAngle, TargetEdge[i], T.EdgeAngleRate * Dt); // free-foot blade still tilts
+            continue;
+        }
+
+        // 2. Edge angle control authority
+        B.EdgeAngle = MoveToward(B.EdgeAngle, FMath::Clamp(TargetEdge[i], -T.MaxEdgeAngle, T.MaxEdgeAngle),
+                                 T.EdgeAngleRate * Dt);
+
+        // 4a/4b. Blade kinematics
+        const float   Side   = (i == 0) ? +1.f : -1.f;
+        const FVector3f BodyLeft = RotateInPlane(FVector3f(1.f, 0.f, 0.f), S.Body.Yaw + HALF_PI);
+        const FVector3f R      = BodyLeft * (Side * 0.5f * S.Body.Stance);   // blade offset from COM
+        B.ContactPoint = FVector3f(S.Body.Position.X + R.X, S.Body.Position.Y + R.Y, 0.f);
+        const FVector3f Vb = S.Body.Velocity + FVector3f::CrossProduct(FVector3f(0.f, 0.f, S.Body.YawRate), R);
+
+        // 4d. Steering (blade yaw relative to body, rate-limited) then edge-induced rotation
+        const FVector3f BodyFwd = RotateInPlane(FVector3f(1.f, 0.f, 0.f), S.Body.Yaw);
+        const FVector3f DesiredT = RotateInPlane(BodyFwd, TargetSteer[i]);
+        const float CurrentRel = FMath::Atan2(B.Tangent.Y, B.Tangent.X) - FMath::Atan2(BodyFwd.Y, BodyFwd.X);
+        const float SteerDelta = FMath::Clamp(FMath::FindDeltaAngleRadians(CurrentRel, TargetSteer[i]),
+                                              -T.EdgeAngleRate * Dt, T.EdgeAngleRate * Dt);
+        B.Tangent = RotateInPlane(B.Tangent, SteerDelta);
+
+        const FVector3f N = FVector3f::CrossProduct(KoldUp, B.Tangent);
+        const float Vt = FVector3f::DotProduct(Vb, B.Tangent);
+        const float Vn = FVector3f::DotProduct(Vb, N);
+
+        const float AbsTheta = FMath::Abs(B.EdgeAngle);
+        const bool  bOnEdge  = AbsTheta >= T.FlatEdgeThreshold;
+        if (bOnEdge)
+        {
+            // ψ̇ = sign(θ) · v_t · sin|θ| / ρ   (see §4.4)
+            const float YawRateBlade = FMath::Sign(B.EdgeAngle) * Vt * FMath::Sin(AbsTheta) / T.RockerRadius;
+            B.Tangent = RotateInPlane(B.Tangent, YawRateBlade * Dt);
+        }
+        B.Tangent.Normalize();
+        (void)DesiredT;
+
+        // 4e. Lateral impulse: hold or skid
+        const float MassShare = B.NormalForce / Gravity;
+        const float FCap      = LateralHold(B.EdgeAngle, T) * B.NormalForce;
+        const float JMax      = FCap * Dt;
+        const float JNeeded   = -MassShare * Vn;
+        const float J         = FMath::Clamp(JNeeded, -JMax, JMax);
+        const bool  bSkid     = FMath::Abs(JNeeded) > JMax;
+
+        const float FReq = bOnEdge ? MassShare * (Vt * Vt * FMath::Sin(AbsTheta) / T.RockerRadius) : 0.f;
+        B.LateralDemandRatio = FCap > 1e-3f ? FReq / FCap : 0.f;
+
+        FVector3f BladeImpulse = N * J;
+        if (bSkid)
+        {
+            // residual slip opposed by skid friction
+            const float Residual = Vn + J / FMath::Max(MassShare, 1e-3f);
+            BladeImpulse += N * (-FMath::Sign(Residual) * FMath::Min(T.MuSkid * B.NormalForce * Dt,
+                                                                     FMath::Abs(Residual) * MassShare));
+        }
+        B.LateralSlip = bSkid ? Vn + J / FMath::Max(MassShare, 1e-3f) : 0.f;
+
+        // 4f. Longitudinal friction
+        const float Mu = T.MuGlide + T.MuEdgeGain * FMath::Sin(AbsTheta);
+        const float JLongMax = Mu * B.NormalForce * Dt;
+        const float JLong = -FMath::Sign(Vt) * FMath::Min(JLongMax, FMath::Abs(Vt) * MassShare);
+        BladeImpulse += B.Tangent * JLong;
+
+        // Brake detection: velocity strongly misaligned with tangent
+        const float Speed = Vb.Size();
+        const float Misalign = Speed > 0.2f ? FMath::Acos(FMath::Clamp(FMath::Abs(Vt) / Speed, 0.f, 1.f)) : 0.f;
+
+        // 4g. Regime
+        if (B.Pitch > T.ToePickPitch)           B.Regime = EKoldBladeRegime::ToePick;
+        else if (Misalign > T.BrakeAngle)       B.Regime = EKoldBladeRegime::Brake;
+        else if (bSkid)                         B.Regime = EKoldBladeRegime::Skid;
+        else if (!bOnEdge)                      B.Regime = EKoldBladeRegime::Glide;
+        else if (AbsTheta < T.DeepEdgeThreshold)B.Regime = EKoldBladeRegime::ShallowEdge;
+        else if (B.LateralDemandRatio > T.CarveDemandFraction) B.Regime = EKoldBladeRegime::Carve;
+        else                                    B.Regime = EKoldBladeRegime::DeepEdge;
+
+        if (B.Regime == EKoldBladeRegime::Brake)
+        {
+            BladeImpulse += N * (-FMath::Sign(Vn) * FMath::Min(T.MuBrake * B.NormalForce * Dt, FMath::Abs(Vn) * MassShare));
+        }
+
+        B.Edge      = EdgeFromAngle(Foot, B.EdgeAngle, T.FlatEdgeThreshold);
+        B.Direction = FMath::Abs(Vt) < 0.15f ? B.Direction
+                    : (Vt > 0.f ? EKoldSkateDirection::Forward : EKoldSkateDirection::Backward);
+
+        Impulse += BladeImpulse;
+        WeightedTangentX += B.Tangent.X * B.NormalForce;
+        WeightedTangentY += B.Tangent.Y * B.NormalForce;
+
+        if (B.NormalForce > DominantN)
+        {
+            DominantN = B.NormalForce;
+            const float ARequired = bOnEdge ? (Vt * Vt * FMath::Sin(AbsTheta) / T.RockerRadius) : 0.f;
+            DominantRequiredLean = FMath::Atan(ARequired / Gravity) * FMath::Sign(B.EdgeAngle);
+        }
+    }
+
+    // 5. Integrate velocity (semi-implicit Euler)
+    S.Body.Velocity += Impulse * InvMass;
+    const float Speed = S.Body.Velocity.Size();
+    if (Speed > 1e-4f)
+    {
+        S.Body.Velocity -= S.Body.Velocity * (T.AirDragCoeff * Speed * InvMass * Dt);
+    }
+    S.Body.Velocity.Z = 0.f; // slice: no vertical motion in edgework; jump package owns Z
+
+    // 6. Position
+    S.Body.Position += S.Body.Velocity * Dt;
+
+    // 7. Yaw follows weighted tangent (first-order lag). ASSUMPTION: 8 rad/s follow rate; tunable later.
+    if (DominantN >= 0.f)
+    {
+        const float TargetYaw = FMath::Atan2(WeightedTangentY, WeightedTangentX);
+        const float DeltaYaw  = FMath::FindDeltaAngleRadians(S.Body.Yaw, TargetYaw);
+        S.Body.YawRate = FMath::Clamp(DeltaYaw * 8.0f, -6.f, 6.f);
+        S.Body.Yaw    += S.Body.YawRate * Dt;
+    }
+    S.Body.RequiredLean = DominantRequiredLean;
+    S.Body.Tick++;
+
+    // 9. Telemetry
+    if (Tel) { Tel->Capture(S); }
+}
+
+Engine-version notes: FVector3f, FMath::FindDeltaAngleRadians, and HALF_PI exist in UE 5.0+. Normalize() on FVector3f is available. Verify KOLDSIM_API export macro against your .Build.cs.
+
+Two known simplifications to remove in later tasks (not hidden): (a) Vn in the skid branch uses pre-impulse slip and a first-order residual; a Gauss–Seidel two-blade lateral solve is task EDGE-006. (b) Yaw follow is a hard-coded lag; move to tuning in EDGE-004.
+
+6.2 Edge classifier (hysteresis + lobes)
+// KoldSim/Public/KoldEdgeClassifier.h
+// UE5 C++ IMPLEMENTATION
+#pragma once
+#include "CoreMinimal.h"
+#include "KoldBladeTypes.h"
+
+class KOLDSIM_API FKoldEdgeClassifier
+{
+public:
+    struct FPerFoot
+    {
+        EKoldEdge           CommittedEdge = EKoldEdge::Flat;
+        EKoldSkateDirection CommittedDir  = EKoldSkateDirection::Forward;
+        EKoldEdge           PendingEdge   = EKoldEdge::Flat;
+        uint16              PendingTicks  = 0;
+        float               LastHeading   = 0.f;
+        FKoldEdgeLobe       OpenLobe{};
+        float               ThetaSum      = 0.f;
+        uint32              ThetaCount    = 0;
+        bool                bLobeOpen     = false;
+        bool                bPastPeak     = false;
+    };
+
+    void Reset();
+    // Returns number of events written to OutEvents (0..2). OutLobes receives closed lobes.
+    int32 Update(const FKoldSkaterEdgeworkState& S, const FKoldBladeTuning& T, uint16 DwellTicks,
+                 FKoldEdgeChangeEvent* OutEvents, FKoldEdgeLobe* OutClosedLobes, int32& OutClosedCount);
+
+    const FPerFoot& Foot(EKoldFoot F) const { return Feet[(int32)F]; }
+
+private:
+    FPerFoot Feet[2];
+};
+// KoldSim/Private/KoldEdgeClassifier.cpp
+// UE5 C++ IMPLEMENTATION
+#include "KoldEdgeClassifier.h"
+
+void FKoldEdgeClassifier::Reset() { Feet[0] = FPerFoot{}; Feet[1] = FPerFoot{}; }
+
+int32 FKoldEdgeClassifier::Update(const FKoldSkaterEdgeworkState& S, const FKoldBladeTuning& T, uint16 DwellTicks,
+                                  FKoldEdgeChangeEvent* OutEvents, FKoldEdgeLobe* OutClosedLobes, int32& OutClosedCount)
+{
+    int32 EventCount = 0;
+    OutClosedCount = 0;
+
+    for (int32 i = 0; i < 2; ++i)
+    {
+        const FKoldBladeState& B = S.Blade[i];
+        FPerFoot& F = Feet[i];
+        const float AbsTheta = FMath::Abs(B.EdgeAngle);
+
+        // Hysteresis: raw edge with enter/exit bands
+        EKoldEdge Raw = B.Edge;
+        if (F.CommittedEdge == EKoldEdge::Flat && AbsTheta < T.FlatEdgeThreshold * 1.25f) Raw = EKoldEdge::Flat;
+        if (F.CommittedEdge != EKoldEdge::Flat && AbsTheta > T.FlatEdgeThreshold * 0.75f && Raw == EKoldEdge::Flat)
+            Raw = F.CommittedEdge;
+        if (!B.bInContact) Raw = EKoldEdge::Flat;
+
+        // Dwell
+        if (Raw != F.PendingEdge) { F.PendingEdge = Raw; F.PendingTicks = 0; }
+        else if (F.PendingTicks < 0xFFFF) { ++F.PendingTicks; }
+
+        const bool bEdgeCommit = (F.PendingEdge != F.CommittedEdge) && (F.PendingTicks >= DwellTicks);
+        const bool bDirChange  = B.bInContact && (B.Direction != F.CommittedDir);
+
+        const float Heading = FMath::Atan2(B.Tangent.Y, B.Tangent.X);
+        const float Speed   = S.Body.Velocity.Size();
+
+        if (bEdgeCommit || bDirChange)
+        {
+            if (EventCount < 2)
+            {
+                FKoldEdgeChangeEvent& E = OutEvents[EventCount++];
+                E.Tick = S.Body.Tick; E.Foot = (EKoldFoot)i;
+                E.FromEdge = F.CommittedEdge; E.ToEdge = bEdgeCommit ? F.PendingEdge : F.CommittedEdge;
+                E.FromDir  = F.CommittedDir;  E.ToDir  = B.Direction;
+                E.Speed = Speed; E.EdgeAngle = B.EdgeAngle;
+            }
+
+            // Close open lobe
+            if (F.bLobeOpen)
+
+Yes. I’ve grounded this in the KoLd__FEEt engineering material rather than inventing a generic 50-task roadmap. The existing material already specifies a 120 Hz fixed-step simulation, SI-unit simulation core, semi-implicit Euler, an analytic/non-holonomic blade model rather than Chaos rigid-body locomotion, baked POD tuning, deterministic checksums, telemetry, and a deliberately scoped Edgework milestone.
+
+One important qualification: the repository audit material itself says its repository-to-UE5 mapping was pending verification at the time it was authored.  So I treat those mappings as **the current intended architecture**, not as proof that every named file/module already exists in GitHub.
+
+# KoLd__FEEt — First 50 Engineering Tasks
+
+## Agent legend
+
+* **ASTRA** — GPT-6 Astra: architecture, mathematical reasoning, decomposition, difficult debugging, review.
+* **FABLE** — Claude Code Fable 5.1: repository implementation, C++, tests, refactoring, tooling.
+* **HUMAN** — your judgment/review, especially physical feel, architecture approval, visual/UX decisions.
+* **A+** — best handled collaboratively: agent implements, Astra reviews, human accepts.
+
+The ordering below is intentional: **nothing downstream should be allowed to conceal a broken foundation.**
+
+---
+
+# Phase 0 — Repository & Architecture Audit
+
+### KOLD-001 — Establish Repository Baseline
+
+**Dependencies:** None
+
+**Files/modules affected**
+
+* `docs/`
+* repository root
+* `README`
+* proposed `Plugins/KoLdFEEt/`
+* `docs/audit/`
+
+**Objective:** Establish the actual repository state before modifying it.
+
+**Acceptance criteria**
+
+* Repository inventory generated.
+* Git history summarized.
+* Existing branches/tags identified.
+* Existing source/data/docs categorized.
+* No assumptions presented as facts.
+* Baseline committed as an audit artifact.
+
+**Test plan**
+
+* Compare inventory against Git tree.
+* Verify every identified subsystem has a source reference.
+
+**Profiling plan**
+
+* None; baseline task.
+
+**Owner:** **FABLE implementation + ASTRA review**
+
+---
+
+### KOLD-002 — Repository-to-UE5 Architecture Map
+
+**Dependencies:** KOLD-001
+
+**Files/modules**
+
+* `docs/architecture/repository-to-ue5.md`
+
+**Acceptance criteria**
+Every existing major concept receives:
+
+`KEEP / ADAPT / REFACTOR / REPLACE / NEW`
+
+mapping to:
+
+* UE5 module
+* runtime owner
+* source of truth
+* migration status.
+
+Existing intended mappings include jump definitions → Data Assets/runtime data, motion primitives → Motion Matching metadata, rules → versioned rule assets, and `JumpResolver`/`ScoreCalculator` → ports plus retained validation oracles.
+
+**Test**
+
+* No unmapped production-critical artifact.
+
+**Profiling**
+
+* N/A.
+
+**Owner:** **ASTRA + HUMAN**
+
+---
+
+### KOLD-003 — Freeze Architectural Decisions
+
+**Dependencies:** KOLD-002
+
+**Files**
+
+* `docs/ADR/`
+* `docs/architecture/architecture-overview.md`
+
+**Acceptance criteria**
+Record the major existing decisions:
+
+* analytic blade model
+* SI simulation units
+* no UObject hot loop
+* 120 Hz simulation
+* semi-implicit Euler
+* deterministic wrapped math
+* event-based edge classification
+* baked POD parameters
+* presentation interpolation.
+
+These decisions are already explicitly represented in the project's ADR material.
+
+**Test**
+
+* ADR consistency check against implementation requirements.
+
+**Profiling**
+
+* N/A.
+
+**Owner:** **ASTRA + HUMAN**
+
+---
+
+### KOLD-004 — Define UE5 Version and Build Matrix
+
+**Dependencies:** KOLD-003
+
+**Files**
+
+* `.uproject`
+* `Config/`
+* `Build/`
+* `docs/build-matrix.md`
+
+**Acceptance criteria**
+
+* Exact UE5 version selected.
+* Windows development target established.
+* Editor build succeeds.
+* Development/Test targets defined.
+* Headless simulation target strategy documented.
+
+**Test**
+
+* Clean checkout builds.
+
+**Profiling**
+
+* Record baseline empty-project startup/build characteristics.
+
+**Owner:** **FABLE + HUMAN**
+
+---
+
+### KOLD-005 — Establish Coding & Agent Contribution Contract
+
+**Dependencies:** KOLD-003
+
+**Files**
+
+* `CONTRIBUTING.md`
+* `AGENTS.md`
+* `docs/engineering/`
+* `.github/`
+
+**Acceptance criteria**
+Define:
+
+* C++ standards
+* naming
+* ownership
+* test requirements
+* profiling requirements
+* PR requirements
+* prohibited modifications
+* agent task format
+* architecture review rules.
+
+**Test**
+
+* Give task contract to an independent agent and verify it can identify allowed files.
+
+**Profiling**
+
+* N/A.
+
+**Owner:** **ASTRA + HUMAN**
+
+---
+
+# Phase 1 — UE5 Foundation
+
+The intended architecture separates deterministic simulation from UE presentation: the simulation module is deliberately free of UObject access and the higher-level skating layer owns input, fixed-step scheduling and presentation.
+
+### KOLD-006 — Create KoLdFEEt Plugin Skeleton
+
+**Dependencies:** KOLD-004
+
+**Modules**
+
+```text
+Plugins/KoLdFEEt/
+    Source/
+        KoLdSimCore/
+        KoLdSkating/
+        KoLdTelemetry/
+        KoLdSkatingEditor/
+```
+
+**Acceptance**
+
+* Plugin loads.
+* All modules compile.
+* Dependency direction enforced.
+
+**Test**
+
+* Clean Editor build.
+
+**Profiling**
+
+* Module startup cost recorded.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-007 — Establish Module Dependency Rules
+
+**Dependencies:** KOLD-006
+
+**Acceptance**
+Enforce:
+
+```text
+KoLdSimCore
+    ↓
+Core only
+
+KoLdSkating
+    ↓
+KoLdSimCore + Engine + EnhancedInput
+
+KoLdTelemetry
+    ↓
+simulation interfaces
+
+KoLdSkatingEditor
+    ↓
+editor-only dependencies
+```
+
+The existing design explicitly calls for these boundaries.
+
+**Test**
+
+* Intentionally introduce forbidden dependency; build must fail or validation must flag it.
+
+**Profiling**
+
+* N/A.
+
+**Owner:** **FABLE + ASTRA**
+
+---
+
+### KOLD-008 — Establish SI ↔ UE Unit Boundary
+
+**Dependencies:** KOLD-006
+
+**Files**
+
+* `KoLdSimUnits.h`
+* `KoLdPresentationUnits.h`
+* tests
+
+**Acceptance**
+
+* Simulation uses meters, seconds, kilograms, radians.
+* UE presentation uses centimeters.
+* Conversion functions centralized.
+* No scattered `*100` conversions.
+
+The architecture explicitly specifies SI internally and centimeters only at the presentation boundary.
+
+**Test**
+
+* Round-trip conversion tests.
+
+**Profiling**
+
+* Verify conversion is inline/zero-cost where appropriate.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-009 — Establish Deterministic Math Layer
+
+**Dependencies:** KOLD-008
+
+**Files**
+
+* `KoLdDeterministicMath.h/.cpp`
+* tests
+
+**Acceptance**
+Create wrappers for all simulation math requiring deterministic control.
+
+At minimum:
+
+* sin
+* cos
+* atan2
+* sqrt
+* clamp
+* interpolation
+* quantization.
+
+The existing design specifically routes transcendental math through a common math layer.
+
+**Test**
+
+* known-value tests
+* repeated-run checksum tests.
+
+**Profiling**
+
+* Benchmark wrappers against native math.
+
+**Owner:** **FABLE + ASTRA**
+
+---
+
+### KOLD-010 — Define Simulation Versioning
+
+**Dependencies:** KOLD-009
+
+**Files**
+
+* `KoLdSimulationVersion.h`
+* replay/version docs
+
+**Acceptance**
+Define:
+
+```text
+SimulationVersion
+PhysicsVersion
+DataVersion
+ReplayVersion
+```
+
+Any state-layout or mathematical change increments the appropriate version.
+
+**Test**
+
+* Serialization rejects incompatible versions.
+
+**Profiling**
+
+* N/A.
+
+**Owner:** **ASTRA + FABLE**
+
+---
+
+# Phase 2 — Canonical Data Contracts
+
+The existing specification already defines compact blade/body/input state structures and explicit replay-oriented layouts.
+
+### KOLD-011 — Define Foot/Edge/Direction Enums
+
+**Dependencies:** KOLD-009
+
+**Files**
+
+* `KoLdBladeTypes.h`
+
+**Acceptance**
+Canonical enums:
+
+```cpp
+EKoldFoot
+EKoldEdge
+EKoldSkateDirection
+EKoldBladeRegime
+```
+
+with stable serialized values.
+
+The intended definitions already distinguish Flat/Inside/Outside and Forward/Backward.
+
+**Test**
+
+* Enum serialization tests.
+* Repository terminology compatibility test.
+
+**Profiling**
+
+* N/A.
+
+**Owner:** **FABLE + HUMAN terminology review**
+
+---
+
+### KOLD-012 — Implement Blade Runtime State
+
+**Dependencies:** KOLD-011
+
+**Files**
+
+* `KoldBladeTypes.h`
+
+**Acceptance**
+Implement compact blade state containing:
+
+* contact point
+* tangent
+* edge angle
+* pitch
+* normal force
+* lateral slip
+* demand ratio
+* contact
+* edge
+* direction
+* regime.
+
+Target layout: **48 bytes per blade**, as specified.
+
+**Test**
+
+* `static_assert(sizeof(...) == 48)`.
+
+**Profiling**
+
+* Cache/memory-layout inspection.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-013 — Implement Skater Body State
+
+**Dependencies:** KOLD-012
+
+**Files**
+
+* `KoldSkaterState.h`
+
+**Acceptance**
+Implement position, velocity, yaw, lean, required lean, weight split, stance and tick.
+
+Target: **56 bytes** for the defined body structure.
+
+**Test**
+
+* Layout assertions.
+* Initialization tests.
+
+**Profiling**
+
+* Cache alignment inspection.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-014 — Implement Complete Simulation State
+
+**Dependencies:** KOLD-013
+
+**Files**
+
+* `KoldSimTypes.h`
+
+**Acceptance**
+Combine body + two blade states and additional required state.
+
+Target architecture calls for a fixed **256-byte simulation state**.
+
+**Test**
+
+* static size assertion.
+* zero-state determinism.
+* copy/restore equality.
+
+**Profiling**
+
+* state-copy benchmark.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-015 — Implement Quantized Input Contract
+
+**Dependencies:** KOLD-014
+
+**Files**
+
+* `KoldInputTypes.h`
+
+**Acceptance**
+Implement replay-stable quantized input.
+
+The existing specification defines a 16-byte edgework input with quantized edge, steering, weight, push, lean and flags.
+
+**Test**
+
+* encode/decode round trip.
+* ≤1 quantization unit error.
+
+**Profiling**
+
+* per-input conversion benchmark.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-016 — Implement Skater Profile
+
+**Dependencies:** KOLD-014
+
+**Files**
+
+* `KoldSkaterProfile.h`
+* `KoldSkaterProfileAsset.h`
+
+**Acceptance**
+Define authoritative physical parameters:
+
+* mass
+* height/leg length
+* stance
+* gravity profile
+* skating tuning references.
+
+Do not silently substitute assumptions for repository-defined values.
+
+**Test**
+
+* validation rejects impossible profiles.
+
+**Profiling**
+
+* baked runtime profile contains no UObject access.
+
+**Owner:** **FABLE + HUMAN**
+
+---
+
+### KOLD-017 — Implement Blade Tuning Asset + Bake
+
+**Dependencies:** KOLD-011, KOLD-016
+
+**Files**
+
+* `KoldBladeTuningAsset.h/.cpp`
+* `KoldBladeTuning.h`
+
+**Acceptance**
+Authoring → validation → baked POD pipeline.
+
+The project explicitly specifies immutable baked tuning and LUT-oriented parameters.
+
+**Test**
+Reject:
+
+* negative mass
+* invalid thresholds
+* inverted limits
+* impossible friction
+* malformed LUTs.
+
+**Profiling**
+
+* runtime reads POD only.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-018 — Implement Data Validation Framework
+
+**Dependencies:** KOLD-017
+
+**Files**
+
+* `KoLdDataValidation`
+* editor validation
+* automation tests
+
+**Acceptance**
+Every authored simulation asset can validate itself before runtime.
+
+**Test**
+
+* deliberately corrupt each major parameter class.
+
+**Profiling**
+
+* validation is editor/build-time only.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-019 — Establish Domain Data Import Pipeline
+
+**Dependencies:** KOLD-018
+
+**Files**
+
+* `Tools/`
+* `KoLdSimData/`
+* importer/commandlet
+
+**Acceptance**
+Define how existing JSON/CSV/etc. becomes UE assets/runtime data.
+
+The architecture explicitly identifies the source format as a decision that determines the importer strategy.
+
+**Test**
+
+* round-trip representative domain data.
+* malformed input rejected.
+
+**Profiling**
+
+* import time and generated asset size.
+
+**Owner:** **FABLE + ASTRA**
+
+---
+
+### KOLD-020 — Create Data Contract Documentation
+
+**Dependencies:** KOLD-011 through KOLD-019
+
+**Files**
+
+* `docs/contracts/`
+
+**Acceptance**
+Document every runtime structure:
+
+```text
+owner
+lifetime
+units
+serialization
+thread ownership
+mutation rules
+version
+```
+
+**Test**
+
+* static documentation checklist.
+
+**Profiling**
+
+* N/A.
+
+**Owner:** **ASTRA**
+
+---
+
+# Phase 3 — Fixed-Step Simulation
+
+The intended simulator is **120 Hz**, semi-implicit Euler, with two simulation steps per 60 FPS render frame and presentation interpolation.
+
+### KOLD-021 — Implement Fixed-Step Clock
+
+**Dependencies:** KOLD-014
+
+**Files**
+
+* `KoldFixedStepClock.h/.cpp`
+
+**Acceptance**
+
+* 120 Hz.
+* accumulator.
+* deterministic step count.
+* spiral-of-death guard.
+* no variable-dt simulation.
+
+**Test**
+
+* varying render FPS produces identical simulation ticks.
+
+**Profiling**
+
+* clock overhead < 0.05 ms for expected skater count.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-022 — Implement Simulation Tick Contract
+
+**Dependencies:** KOLD-021
+
+**Files**
+
+* `KoldSimCore`
+* `KoldSkatingSubsystem`
+
+**Acceptance**
+Formal:
+
+```cpp
+State' = Step(State, Input, Params, Dt)
+```
+
+No hidden world state.
+
+**Test**
+
+* same inputs/state → identical output.
+
+**Profiling**
+
+* function call overhead.
+
+**Owner:** **FABLE + ASTRA**
+
+---
+
+### KOLD-023 — Integrate Pre-Actor Tick Scheduling
+
+**Dependencies:** KOLD-021
+
+**Files**
+
+* `KoldSkatingSubsystem`
+
+**Acceptance**
+Simulation occurs before actor/animation updates.
+
+The project specifies `OnWorldPreActorTick` for this purpose, with the delegate signature marked engine-version-sensitive.
+
+**Test**
+
+* actor observes already-updated authoritative state.
+
+**Profiling**
+
+* scheduling overhead.
+
+**Owner:** **FABLE + HUMAN engine-version review**
+
+---
+
+### KOLD-024 — Implement Input Latching
+
+**Dependencies:** KOLD-015, KOLD-021
+
+**Files**
+
+* `KoldInputAdapter`
+* `KoldSkatingSubsystem`
+
+**Acceptance**
+Input sampled on game thread → quantized → latched exactly once per sim tick.
+
+**Test**
+
+* input bursts produce deterministic tick sequence.
+
+**Profiling**
+
+* input conversion/latching timing.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-025 — Implement State Checksum
+
+**Dependencies:** KOLD-014, KOLD-009
+
+**Files**
+
+* `KoldSimChecksum`
+
+**Acceptance**
+
+* deterministic checksum.
+* quantized fields where specified.
+* stable repeated execution.
+
+The project already calls for quantized checksums for replay divergence detection.
+
+**Test**
+
+* identical replay = identical checksums.
+* one altered input = divergence.
+
+**Profiling**
+
+* checksum cost per tick.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-026 — Build Headless Simulation Harness
+
+**Dependencies:** KOLD-022, KOLD-025
+
+**Files**
+
+* `KoLdSimTests`
+* commandlet/test executable
+
+**Acceptance**
+Simulation can run without the UE editor.
+
+This is explicitly desired for deterministic validation/oracle use.
+
+**Test**
+
+* 10,000 simulation ticks without editor.
+
+**Profiling**
+
+* benchmark ticks/sec.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-027 — Establish Determinism Regression Suite
+
+**Dependencies:** KOLD-026
+
+**Files**
+
+* `Tests/Determinism/`
+* CI
+
+**Acceptance**
+
+* fixed seed
+* fixed input sequence
+* expected checksum stream
+* regression detection.
+
+**Test**
+
+* repeated execution produces identical checksum stream.
+
+**Profiling**
+
+* record runtime baseline.
+
+**Owner:** **FABLE + ASTRA**
+
+---
+
+### KOLD-028 — Implement Presentation Interpolation
+
+**Dependencies:** KOLD-023
+
+**Files**
+
+* `KoldPresentationInterpolator`
+
+**Acceptance**
+Simulation remains 120 Hz while visual state interpolates between states.
+
+At 60 FPS, two simulation steps should normally feed one rendered frame.
+
+**Test**
+
+* no visible stepping at normal playback.
+* authoritative state unaffected.
+
+**Profiling**
+
+* <0.1 ms target for one skater.
+
+**Owner:** **FABLE**
+
+---
+
+# Phase 4 — Blade / Ice Foundation
+
+This is the critical part.
+
+The existing design explicitly identifies Edgework as the causal root for glide, turns, jump entries, spin entries, edge calls and skating-skills evaluation.
+
+### KOLD-029 — Implement Blade Geometry Model
+
+**Dependencies:** KOLD-012, KOLD-022
+
+**Files**
+
+* `KoldBladeIceSolver`
+
+**Acceptance**
+Calculate:
+
+* contact point
+* tangent
+* rocker relationship
+* blade offset from COM.
+
+**Test**
+
+* stationary geometry.
+* symmetric stance.
+* left/right mirror.
+
+**Profiling**
+
+* microbenchmark geometry step.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-030 — Implement Rocker Turn Radius
+
+**Dependencies:** KOLD-029
+
+**Files**
+
+* `KoldBladeIceSolver`
+
+**Acceptance**
+Implement the project's initial relationship:
+
+$$
+R=\frac{R_{rocker}}{|\sin(\theta)|}
+$$
+
+with a bounded near-flat radius. The current engineering package already specifies this function.
+
+**Test**
+
+* flat → effectively infinite radius.
+* increasing edge → decreasing radius.
+* symmetry.
+
+**Profiling**
+
+* benchmark.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-031 — Implement Edge Angle Control
+
+**Dependencies:** KOLD-015, KOLD-029
+
+**Files**
+
+* `KoldBladeIceSolver`
+
+**Acceptance**
+
+* target edge decoded from quantized input.
+* rate limited.
+* clamped to maximum edge.
+* left/right independent.
+
+The existing implementation uses `MoveToward` and `EdgeAngleRate * Dt`.
+
+**Test**
+
+* rate-limit test.
+* saturation test.
+* deterministic response.
+
+**Profiling**
+
+* per-blade cost.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-032 — Implement Normal Force Distribution
+
+**Dependencies:** KOLD-016, KOLD-031
+
+**Files**
+
+* `KoldBladeIceSolver`
+
+**Acceptance**
+Implement weight split into blade normal forces.
+
+Initial edgework slice may use:
+
+$$
+N_{total}=mg
+$$
+
+as specified by the current slice assumptions.
+
+**Test**
+
+* total normal force conservation.
+* one-foot support.
+* two-foot symmetry.
+
+**Profiling**
+
+* microbenchmark.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-033 — Implement Longitudinal Glide Friction
+
+**Dependencies:** KOLD-032, KOLD-017
+
+**Files**
+
+* `KoldBladeIceSolver`
+* tuning asset
+
+**Acceptance**
+Implement glide drag/friction without reversing motion.
+
+The current task definition explicitly calls for friction tests and glide deceleration against the default model.
+
+**Test**
+
+* `Friction.NeverReversesMotion`
+* glide deceleration.
+* zero-speed stability.
+
+**Profiling**
+
+* per-step timing.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-034 — Implement Edge-Dependent Lateral Capacity
+
+**Dependencies:** KOLD-033
+
+**Files**
+
+* `KoldBladeIceSolver`
+
+**Acceptance**
+Implement:
+
+$$
+F_{capacity}=N \cdot H(\theta)
+$$
+
+using tunable edge-dependent capacity.
+
+The existing design provides `LateralHoldFlat`, `LateralHoldMax`, and deep-edge interpolation.
+
+**Test**
+
+* flat edge has low capacity.
+* deep edge has higher capacity.
+* continuity at thresholds.
+
+**Profiling**
+
+* benchmark.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-035 — Implement Non-Holonomic Blade Constraint
+
+**Dependencies:** KOLD-034
+
+**Files**
+
+* `KoldBladeIceSolver.cpp`
+* `EdgeworkBiteTests.cpp`
+
+**Acceptance**
+Implement lateral impulse/bite saturation.
+
+The existing specification explicitly calls for demand/capacity comparison, saturation, residual slip and skid regime.
+
+**Test**
+
+* below-capacity hold.
+* capacity saturation.
+* skid.
+* light-blade skid.
+
+**Profiling**
+
+* target ≤ **0.6 µs** for this solver section according to the existing task specification.
+
+**Owner:** **FABLE + ASTRA review**
+
+---
+
+### KOLD-036 — Implement Skid Regime
+
+**Dependencies:** KOLD-035
+
+**Files**
+
+* `KoldBladeIceSolver`
+
+**Acceptance**
+When lateral demand exceeds capacity:
+
+* `Regime = Skid`
+* `LateralSlip > 0`
+* residual velocity is retained
+* skid transitions are observable.
+
+**Test**
+
+* SkidBegin.
+* SkidEnd.
+* recovery below capacity.
+
+**Profiling**
+
+* compare hold vs skid costs.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-037 — Implement Brake Regime Detection
+
+**Dependencies:** KOLD-035
+
+**Files**
+
+* `KoldBladeIceSolver`
+
+**Acceptance**
+Detect excessive tangent/velocity misalignment and enter Brake regime.
+
+The current tuning contract defines `BrakeAngle` and `MuBrake`.
+
+**Test**
+
+* below threshold → no brake.
+* above threshold → brake.
+* no false trigger while carving.
+
+**Profiling**
+
+* per-step cost.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-038 — Implement Sagittal/Rocker Balance
+
+**Dependencies:** KOLD-037
+
+**Files**
+
+* `KoldBladeIceSolver`
+
+**Acceptance**
+Implement pitch/rocker position relationship.
+
+The existing task explicitly calls for `RockerPos` from pitch error and toe-pick regime detection.
+
+**Test**
+
+* forward over-lean at high speed trips.
+* low-speed case does not falsely trip.
+
+**Profiling**
+
+* benchmark.
+
+**Owner:** **FABLE + HUMAN skating-feel review**
+
+---
+
+### KOLD-039 — Implement Toe-Pick Detection
+
+**Dependencies:** KOLD-038
+
+**Files**
+
+* `KoldBladeIceSolver`
+
+**Acceptance**
+Detect toe-pick engagement without implementing jumps yet.
+
+Conditions include:
+
+* pitch threshold
+* sufficient forward velocity
+* contact state.
+
+**Test**
+
+* high-speed toe catch.
+* low-speed non-trigger.
+* airborne exclusion.
+
+**Profiling**
+
+* negligible incremental cost target.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-040 — Implement Edge Classifier
+
+**Dependencies:** KOLD-031, KOLD-035
+
+**Files**
+
+* `KoldEdgeClassifier`
+
+**Acceptance**
+Classify:
+
+```text
+Flat
+Inside
+Outside
+```
+
+with correct foot-relative semantics.
+
+The existing implementation explicitly maps tilt sign differently for left and right feet.
+
+**Test**
+
+* all foot/edge combinations.
+* flat threshold.
+* sign inversion.
+
+**Profiling**
+
+* classifier cost per blade.
+
+**Owner:** **FABLE + HUMAN terminology validation**
+
+---
+
+# Phase 5 — Edge History & Telemetry
+
+### KOLD-041 — Implement Edge Hysteresis/Dwell
+
+**Dependencies:** KOLD-040
+
+**Files**
+
+* `KoldEdgeClassifier`
+* `KoldEdgeHistory`
+
+**Acceptance**
+Prevent edge flicker by requiring dwell before committing a change.
+
+The existing design specifically uses hysteresis + dwell because scoring needs reliable establishment timestamps.
+
+**Test**
+
+* oscillating signal doesn't generate false edge changes.
+* valid sustained change commits.
+
+**Profiling**
+
+* classifier + history overhead.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-042 — Implement Edge Change Events
+
+**Dependencies:** KOLD-041
+
+**Files**
+
+* `KoldEdgeEvents.h`
+* solver
+
+**Acceptance**
+Emit:
+
+```text
+Tick
+Foot
+PreviousEdge
+NewEdge
+Direction
+Speed
+EdgeAngle
+```
+
+The existing event implementation already follows this shape.
+
+**Test**
+
+* exact event ordering.
+* no duplicate events.
+
+**Profiling**
+
+* zero heap allocation.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-043 — Implement Edge Lobe Records
+
+**Dependencies:** KOLD-042
+
+**Files**
+
+* `KoldEdgeHistory.h/.cpp`
+
+**Acceptance**
+Record:
+
+* start/end tick
+* foot
+* edge
+* direction
+* arc angle
+* peak/mean edge angle
+* entry/exit speed
+* demand ratio
+* skid ticks
+* flatten ticks
+* two-foot status.
+
+These fields are already specified in the project.
+
+**Test**
+
+* lobe opens/closes correctly.
+* no allocations.
+* ring wraparound works.
+
+**Profiling**
+
+* target fixed memory.
+* ring update cost.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-044 — Implement Telemetry Ring Buffer
+
+**Dependencies:** KOLD-043
+
+**Files**
+
+* `KoLdTelemetry`
+
+**Acceptance**
+
+* fixed-size telemetry ring.
+* approximately 2-second history.
+* fall dump support.
+* no runtime allocation.
+
+Existing budget: **128-byte frames, 2-second ring, ≤32 KB/skater**.
+
+**Test**
+
+* frame count equals ticks.
+* wraparound.
+* dump integrity.
+
+**Profiling**
+
+* memory and write throughput.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-045 — Implement CSV/JSON Telemetry Export
+
+**Dependencies:** KOLD-044
+
+**Files**
+
+* `KoLdTelemetryExport`
+* commandlet
+
+**Acceptance**
+Export enough information to answer:
+
+> "Exactly when and why did this edge flatten?"
+
+**Test**
+
+* deterministic export.
+* parse exported file.
+* no missing ticks.
+
+**Profiling**
+
+* export occurs off hot path.
+
+**Owner:** **FABLE**
+
+---
+
+# Phase 6 — Input, Proxy & Integrated Ice Lab
+
+### KOLD-046 — Implement Enhanced Input Adapter
+
+**Dependencies:** KOLD-024, KOLD-031
+
+**Files**
+
+* `KoLdInputAdapter`
+* Input Mapping Context
+
+**Acceptance**
+Map player controls → quantized `FKoldSkatingInput`.
+
+Support at minimum:
+
+* left/right edge
+* steering
+* weight
+* lean
+* lift flags
+* braking
+* toe intent.
+
+**Test**
+
+* quantization round trip.
+* dead-zone behavior.
+* deterministic input recording.
+
+**Profiling**
+
+* game-thread input cost.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-047 — Implement Debug Skater Proxy
+
+**Dependencies:** KOLD-028, KOLD-046
+
+**Files**
+
+* `KoldSkaterProxyActor`
+* debug meshes
+
+**Acceptance**
+Two blade meshes + COM indicator.
+
+**No capsule controller.**
+
+Proxy transforms must correspond to interpolated simulation state.
+
+The project already specifies this exact kind of non-animated proxy.
+
+**Test**
+
+* transform equality.
+* left/right blade tracking.
+* COM tracking.
+
+**Profiling**
+
+* render + update cost.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-048 — Implement Blade/COM Debug Visualization
+
+**Dependencies:** KOLD-047
+
+**Files**
+
+* `KoLdDebugDraw`
+* CVars
+
+**Acceptance**
+Runtime toggles for:
+
+```text
+blade contact
+edge
+tangent
+velocity
+COM
+required lean
+lateral force
+skid
+support foot
+```
+
+Existing requirements call for debug visualization and CVars with a ≤0.3 ms budget.
+
+**Test**
+
+* each visualization independently toggles.
+* shipping build excludes/strips appropriately.
+
+**Profiling**
+
+* ≤0.3 ms target with debug enabled.
+
+**Owner:** **FABLE**
+
+---
+
+### KOLD-049 — Build Ice Lab
+
+**Dependencies:** KOLD-045, KOLD-047, KOLD-048
+
+**Files**
+
+* `Content/Maps/IceLab`
+* HUD
+* tuning assets
+* documentation
+
+**Acceptance**
+The Ice Lab supports:
+
+* flat rink
+* distance markers
+* debug skater
+* live edge visualization
+* COM visualization
+* telemetry
+* tuning
+* controlled skating experiments.
+
+The existing Edgework milestone explicitly calls for this environment.
+
+**Test**
+Run the full Edgework acceptance suite manually and automatically.
+
+**Profiling**
+
+* 60 FPS target.
+* capture Unreal Insights trace.
+
+**Owner:** **FABLE + HUMAN**
+
+---
+
+### KOLD-050 — Edgework Milestone / Scientific Validation Gate
+
+**Dependencies:** **ALL 001–049**
+
+**Files**
+
+* `docs/milestones/edgework-v0.1.md`
+* automated regression suite
+* tuning log
+
+**This is NOT merely a coding task. It is the first serious human acceptance gate.**
+
+**Acceptance criteria**
+
+The Ice Lab must demonstrate:
+
+1. Forward skating.
+2. Backward skating.
+3. Left/right inside edges.
+4. Left/right outside edges.
+5. Flat blade.
+6. Edge transitions with hysteresis.
+7. Stable carving.
+8. Skidding when capacity is exceeded.
+9. Braking detection.
+10. Toe-pick detection.
+11. Weight transfer.
+12. COM/required-lean telemetry.
+13. Edge lobe generation.
+14. Telemetry export.
+15. Deterministic 30-second replay.
+16. No unexplained divergence.
+17. No hot-loop allocations.
+18. Solver performance within budget.
+
+The existing Edgework definition of done explicitly makes this sort of Ice Lab validation the milestone gate, while deliberately leaving airborne flight, spins, falls/recovery animation, animation integration, audio and networking outside this milestone.
+
+**Test plan**
+
+Automated:
+
+```text
+Edgework.*
+Determinism.*
+Telemetry.*
+Performance.*
+Input.*
+```
+
+Fuzz:
+
+* random valid input sequences
+* extreme but legal edge angles
+* alternating foot loading
+* rapid edge changes.
+
+Soak:
+
+* ≥10 minutes simulation.
+* checksum stream.
+* memory stability.
+
+Manual:
+
+* **human skating-feel evaluation.**
+
+**Profiling**
+
+Required report:
+
+```text
+Mean solver µs/skater/tick
+P95 solver µs
+P99 solver µs
+Game-thread cost
+Telemetry cost
+Debug cost
+Memory/skater
+Allocations
+60-FPS frame time
+```
+
+The existing budget targets approximately **≤5 µs per skater-step**, 256 B state, 4 KB edge history, ≤32 KB telemetry ring and zero hot-path allocations.
+
+**Owner:** **A+ / HUMAN GATE**
+
+---
+
+# Dependency Graph
+
+The first 50 collapse into this:
+
+```text
+001 Repository Audit
+ │
+ ├── 002 Architecture Map
+ │      └── 003 ADRs
+ │
+ └── 004 UE5 Build
+        │
+        ├── 006 Plugin
+        │    └── 007 Modules
+        │
+        └── 005 Contribution Contract
+                 │
+                 ▼
+        ┌───────────────────┐
+        │ DATA CONTRACTS    │
+        └─────────┬─────────┘
+                  │
+       008 → 009 → 010
+                  │
+       011 → 012 → 013 → 014
+                    │       │
+                    │       ├── 015
+                    │       └── 016 → 017 → 018 → 019 → 020
+                    │
+                    ▼
+             FIXED STEP
+             021 → 022
+                    │
+             023 → 024 → 025
+                    │
+                    ▼
+                 026
+                    │
+                 027
+                    │
+                 028
+                    │
+                    ▼
+             BLADE / ICE
+                    │
+       029 → 030 → 031 → 032
+                    │
+                    ▼
+              033 → 034
+                    │
+                    ▼
+              035 → 036
+                    │
+             ┌──────┴──────┐
+             ▼             ▼
+            037           038
+             │             │
+             └──────┬──────┘
+                    ▼
+                   039
+                    │
+                   040
+                    │
+             EDGE TELEMETRY
+                    │
+       041 → 042 → 043 → 044 → 045
+                    │
+                    ▼
+             INPUT / PRESENTATION
+                    │
+             046 → 047 → 048
+                    │
+                    ▼
+                  049
+                    │
+                    ▼
+            ╔═══════════════╗
+            ║    EDGEWORK   ║
+            ║    GATE 050   ║
+            ╚═══════════════╝
+```
+
+## Agent allocation
+
+I'd divide the work differently than simply giving both models the same 50 tasks:
+
+### **GPT-6 Astra**
+
+Best for:
+
+* 001
+* 002
+* 003
+* 005
+* 009
+* 010
+* 020
+* 022 architecture review
+* 025 determinism review
+* 035 physics review
+* 040 edge semantics
+* 050 validation
+
+In other words:
+
+**Astra is the architectural conscience.**
+
+### **Claude Code Fable 5.1**
+
+Best for:
+
+* 004
+* 006–008
+* 011–019
+* 021
+* 023–024
+* 026–028
+* 029–034
+* 036–049
+
+In other words:
+
+**Fable is the high-throughput implementation engineer.**
+
+### **You**
+
+Your most important responsibilities are:
+
+* 002 — what the existing project actually means
+* 003 — architectural approval
+* 016/017 — physical parameter judgment
+* 030–039 — **does it actually feel like skating?**
+* 049 — Ice Lab usability
+* **050 — final acceptance**
+
+That division matters.
+
+**Don't let an AI decide whether the blade feels right.**
+
+The AI can tell us whether the equations are internally consistent, whether the solver is deterministic, whether the test passes and whether the CPU budget is met.
+
+You decide whether **KoLd__FEEt actually feels like a human being skating on ice.**
+
+---
+
+# The first major milestone
+
+If we complete these 50, we **do not have a figure-skating game yet**.
+
+We have something much more valuable:
+
+> **A validated skating simulation kernel.**
+
+Specifically:
+
+```text
+                PLAYER
+                  │
+                  ▼
+             INPUT 8/16 B
+                  │
+                  ▼
+            120 Hz SIM
+                  │
+        ┌─────────┴─────────┐
+        ▼                   ▼
+     LEFT BLADE          RIGHT BLADE
+        │                   │
+        └─────────┬─────────┘
+                  ▼
+             ICE RESPONSE
+                  │
+                  ▼
+             BODY STATE
+                  │
+                  ▼
+          EDGE CLASSIFIER
+                  │
+                  ▼
+             EDGE LOBES
+                  │
+        ┌─────────┼─────────┐
+        ▼         ▼         ▼
+    TELEMETRY   REPLAY    SCORING*
+```
+
+`*` downstream, not yet implemented.
+
+And that's a **very strong position for a solo developer with AI coding agents**.
+
+The project documents already make the same architectural bet: Edgework is deliberately the first buildable pillar because everything from jump takeoff-edge validation to coaching and skating-skills evaluation depends upon its telemetry being trustworthy.
+
+### One thing I would *not* do yet
+
+I would **not start generating the 100+ animation tasks, jump tasks, scoring tasks, or beautiful UE5 environment tasks until Task 050 passes.**
+
+That gives us a hard scientific gate:
+
+**If the blade/ice model isn't convincing with two debug blades and a sphere representing COM, prettier art is not allowed to hide the problem.**
+
+Once 050 passes, the next dependency layer becomes dramatically more exciting:
+
+**turns → crossovers → balance recovery → first jump → airborne rotation → landing → element recognition → scoring → real skater animation.**
+
+That is where KoLd__FEEt starts becoming the game rather than merely the simulator.
+
+
+
+KoLd__FEEt — Edgework Build Package (EDGE-*)
+
+Edgework it is. This package is the first buildable pillar of the dependency graph (FOUNDATION → DATA CONTRACTS → FIXED-STEP SIM → BLADE/ICE → BALANCE → GLIDE/EDGE CONTROL → TURNS). Everything downstream — jumps, spins, element validation, GOE — consumes what this layer produces, so it is specified to a higher standard of rigor than anything else in the project.
+
+0. Status Declaration (read first)
+
+Repository access: NONE in this session. I cannot fetch https://github.com/9x25dillon/KoLd__FEEt, so per the Engineering Truth Standard:
+
+Every statement about repository contents below is UNKNOWN until an audit is run.
+The Repository-to-UE5 map in §1 is a hypothesis skeleton built only from the concept names in the project brief, plus the exact audit protocol needed to fill it in. It is not a description of what the repo contains.
+Nothing in the edgework design depends on a repository fact I have not verified; where alignment is required (e.g., edge naming, assist-tier semantics), it is flagged as an integration point with an explicit VERIFY step.
+
+Fastest path to a real audit: paste git ls-files, the docs index, and any data file that mentions edges/steps/assists, and I will complete §1 with KEEP/ADAPT/REFACTOR/REPLACE/NEW decisions per artifact.
+
+Engine API baseline: code is written against UE 5.3+ public APIs. Version-sensitive lines are flagged inline. Code blocks are labeled UE5 C++ IMPLEMENTATION (compile-intent) or ILLUSTRATIVE (structure only).
+
+1. Repository Audit Protocol and Repository-to-UE5 Map (PENDING AUDIT)
+1.1 Audit protocol (run before EDGE-000 is merged)
+git clone https://github.com/9x25dillon/KoLd__FEEt && cd KoLd__FEEt
+git log --oneline | wc -l ; git ls-files | wc -l ; find . -maxdepth 3 -type d | sort
+# Domain data + docs inventory
+rg -il "design bible|pre-production|vertical slice|beta plan|open decision" .
+rg -n -i "RFO|RFI|RBO|RBI|LFO|LFI|LBO|LBI|outside edge|inside edge|edge change|flat" .
+rg -n -i "step feature|motion primitive|entry template|segment rule|assist tier" .
+rg -n -i "JumpResolver|ScoreCalculator|GOE|base value|deduction|call\b" .
+rg -n -i "friction|rocker|lean|balance|COM|stamina|fatigue" .
+# Data formats present
+git ls-files | grep -Ei "\.(json|ya?ml|csv|toml|py|ts|js|cs|cpp|h|md)$" | sed 's/.*\.//' | sort | uniq -c
+
+Audit output must answer, for edgework specifically:
+
+Does the repo already define an edge enumeration/naming (e.g., RFO)? → FEdgeCode::ToString must match it byte-for-byte.
+Do step features / entry templates reference edges, edge changes, or dwell durations? → they become consumers of EDGE-009 events and FEdgeHistory::Summarize.
+Does JumpResolver take takeoff edge / toe assist as inputs, and in what form? → defines the contract EDGE-009 must emit.
+Do assist tiers already have semantics (what they alter)? → EDGE-010 must map them onto FEdgeworkParams scaling, not invent new semantics.
+Are there performance parameters for skaters (mass, height, speed)? → FSkaterProfile must be populated from them, not from my ASSUMPTION defaults.
+Is there any existing physics/simulation helper (friction constants, radius formulas)? → KEEP as oracle test fixtures even if replaced.
+Data format(s) → decides the importer (JSON→DataAsset commandlet vs. hand-authored assets).
+Any documented open decisions on control scheme or realism tier → constrains §15.
+1.2 Repository-to-UE5 Architecture Map (hypothesis; every row PENDING AUDIT)
+Existing Repository Concept (from brief)	UE5 Representation (proposed)	Runtime Owner	Source of Truth	Migration Status
+Design Bible / terminology	docs/ mirrored; terminology frozen into KoLdSimTypes.h enums	—	Repo markdown	PENDING — hypothesis: KEEP
+Pre-Prod / Production / VS / Beta plans	GitHub Projects milestones + docs/roadmap/; task IDs from §12	—	Repo	PENDING — ADAPT (re-sequence to dependency graph)
+Open decisions	docs/ADR/ (ADR per decision, §13 format)	—	Repo	PENDING — ADAPT
+Jump definitions	UJumpDefinitionAsset (UPrimaryDataAsset) → baked FJumpDefinitionRuntime[]	JUMP-*	Repo data (importer)	PENDING — ADAPT
+Spin definitions / positions	USpinDefinitionAsset, positions as DataTable rows	SPIN-*	Repo data	PENDING — ADAPT
+Step features	UStepFeatureAsset referencing FEdgeCode sequences + dwell/depth requirements; consumes EDGE-009	ELEMENT-*	Repo data	PENDING — ADAPT ← edgework dependency
+Motion primitives	Motion Matching (Pose Search) tags / anim metadata	ANIM-*	Repo data	PENDING
+Entry templates	FEntryTemplate consumed by validators via FEdgeHistory::Summarize	ELEMENT-*	Repo data	PENDING — ADAPT ← edgework dependency
+Segment / program rules	URuleSetAsset (versioned)	SCORE-*	Repo (versioned)	PENDING — KEEP source, NEW importer
+Scoring values / GOE / calls / deductions	URuleSetAsset tables	SCORE-*	Repo; VERIFY AGAINST CURRENT OFFICIAL RULESET	PENDING
+Assist tiers	UAssistTierAsset → scales FEdgeworkParams (latency, gains, angulation) and is reported to scoring	INPUT-*/SIM	Repo	PENDING — ADAPT ← edgework dependency
+Performance parameters	USkaterProfileAsset → FSkaterProfile	SIM	Repo	PENDING
+JumpResolver	Port to FJumpResolver (KoLdSimCore); original retained as validation oracle in tests	JUMP-/ELEMENT-	Repo code	PENDING — ADAPT + oracle
+ScoreCalculator	Port to FScoreEngine driven by rule data; original as oracle	SCORE-*	Repo code	PENDING — ADAPT + oracle
+Element validation	FElementValidator consuming telemetry/edge history — must not consume animation state	ELEMENT-*	Repo logic	PENDING — REFACTOR
+Composition / routine logic	Program assets + FProgramRunner	PROGRAM-*	Repo	PENDING
+Simulation helpers	Evaluate per function: KEEP / REPLACE	SIM	Repo	PENDING
+2. Edgework: Scope and Definition of Done
+
+What we are building: the authoritative blade–ice–body layer: two blades on ice, edges that bite or skid, a body that must lean correctly for the arc it is carving, and a classifier that turns continuous physics into the discrete edge vocabulary (RFO, LBI, …) with timing that scoring and coaching can trust.
+
+Why this first: every jump takeoff edge call, every "flattened before takeoff" coaching line, every skating-skills proxy, and every step-sequence validation reads this layer. If edges are faked here, nothing downstream can be honest.
+
+Explicitly out of scope for EDGE-*: airborne flight, spins, falls/recovery animation, animation integration, audio, networking. Hooks for all of these are defined (airborne flag, Pivot/Spin regimes, event stream).
+
+Definition of done (Edgework milestone): on the Ice Lab test level, with a non-animated debug proxy:
+
+Stroke to speed, glide two-foot, transfer to one foot, hold shallow/moderate/deep edges on all 8 edge codes (backward edges reached via three-turn).
+Over-edge for the speed → visible skid → fall inward. Over-lean at low speed → fall inward. Under-lean → thrown outward.
+Debug overlay shows blade, edge side, contact, lateral force, predicted carve circle, COM, equilibrium lean.
+A 30 s session replays from the input stream with identical state checksums every tick.
+Telemetry export lets an analyst read: "RFO established t=3.12 s (tilt 22°); tilt fell to 3° at t=4.05 s — flat for 140 ms."
+3. Physical Model
+
+Sim core units: SI (m, s, kg, N, rad). UE centimeters appear only at the presentation boundary (ADR-EDGE-002).
+
+3.1 Blade geometry
+
+A figure blade is rockered longitudinally (radius ρ — typical 7–8 ft ≈ 2.1–2.4 m; ASSUMPTION default 2.2 m, tunable) and has a hollow producing two edges. Per blade we track:
+
+contact point c (world), tangent t (unit, horizontal, toe-ward), right r = ẑ × t
+tilt θ (rotation about t; θ > 0 ⇒ top of blade leans toward r)
+rocker position s (m along blade, + toe) — set by sagittal balance; toe pick engages when s > s_toe
+normal load N, pressure share w ∈ [0,1]
+
+Edge side is a foot-relative classification of a world tilt: leaning toward r engages the right-hand edge of the hollow; for the right foot that is the lateral (outside) edge, for the left foot the medial (inside) edge. Direction is sign(v·t). This is why a three-turn (FO→BI) needs no special-case code: the body yaws 180° while the world lean is preserved, so the foot-relative side flips and the direction flips.
+
+3.2 Steering from rocker geometry (derivation)
+
+Tilt the rocker circle (radius ρ, in the blade plane) by θ about t. Parametrize the edge near contact: in-plane point (ρ sin τ, ρ(1−cos τ)); the in-plane vertical maps to world lateral y = ρ(1−cos τ) sin θ. Near τ=0: x ≈ ρτ, y ≈ sin θ · x²/(2ρ). Curvature of y = a x² is 2a, so the track radius is
+
+R = ρ / sin θ
+
+and the blade tangent rotates at  ψ̇ = v∥ · sin θ / ρ  (toward r), where v∥ = v·t is signed: skating backward rotates the tangent the other way while the path still curves toward the lean side. Sanity: θ=10° → R≈12.7 m; θ=30° → 4.4 m; θ=45° → 3.1 m. Plausible skating arcs.
+
+3.3 Non-holonomic constraint with bite saturation (the "edge")
+
+An edge on ice is a velocity constraint: lateral slip v·r → 0, enforced by a reaction force limited by the edge's holding capacity. Per fixed step, per loaded blade:
+
+required impulse J_req = −m (v·r)
+bite capacity F_bite = N (c₀ + c₁ sin|θ|) · sharpness · iceHardness (c₀ = flat-blade lateral μ; ASSUMPTION c₀=0.08, c₁=3.5)
+if |J_req| ≤ F_bite Δt → apply J_req (slip zeroed; regime Glide/Edge/Carve)
+else apply sign(J_req)·F_bite Δt; residual slip remains → Skid regime, extra longitudinal μ (ice shaving), SkidBegin event
+
+Steady state on an arc: F_lat = m v²/R = m v² sin θ/ρ. Skid onset: v² sin θ/ρ > g(c₀ + c₁ sin θ) ⇒ for deep edges v > √(gρc₁) ≈ 8.7 m/s with defaults — i.e., very fast deep edges chatter, otherwise hold. This is the number designers will tune first.
+
+3.4 Balance: inverted pendulum steered by angulation
+
+Lateral lean φ (COM line vs vertical, + toward r), COM height L. In the frame co-rotating with the arc:
+
+φ̈ = ( g sin φ − a_c cos φ ) / L + a_int/L,  a_c = realized lateral acceleration (from §3.3 impulses), a_int = bounded internal authority (arms, free leg, two-foot COP shift)
+
+Equilibrium: tan φ_eq = a_c / g = v²/(gR). Balance error E_b = φ − φ_eq (the "angular error" — the COM should not be over the blade on an arc).
+
+The human balance mechanism is primarily steering the base under the COM — here, angulating the blade relative to the body (ankle/knee/hip), which changes R and therefore a_c. Controller:
+
+a_cmd = g tan φ_d + K_p (φ − φ_d) + K_d φ̇ [m/s²]
+κ_cmd = a_cmd / v² (guard v² ≥ v_min²), clamp |κ| ≤ sin θ_max/ρ
+θ_cmd = asin(κ_cmd ρ), clamp |θ_cmd − φ| ≤ α_max (angulation limit), clamp |θ| ≤ θ_max
+θ ← first-order lag(θ_cmd, τ_latency)
+
+Linearized about φ_d: δφ̈ ≈ ((g − K_p) δφ − K_d δφ̇)/L → stable iff K_p > g; ω_n = √((K_p−g)/L), ζ = K_d / (2√(L(K_p−g))). Defaults K_p = 39 m/s²/rad, K_d = 8 → ω_n ≈ 5.5 rad/s, ζ ≈ 0.76.
+
+Emergent skill expression (not scripted):
+
+No speed, no edge: at 2 m/s a 20° lean needs sin θ = 1.96 → impossible → clamped → falls inward.
+Angulation limit: a lean beyond what α_max can steer under → wobble → fall.
+Skid → inward fall: bite saturation reduces a_c below g tan φ.
+Assist tiers scale τ_latency, K_p/K_d, α_max transparently (§10 task EDGE-010) and are reported to scoring.
+3.5 Sagittal balance and toe pick
+
+Same structure fore/aft: pitch lean φ_p with equilibrium tan φ_p,eq = a∥/g. Control authority = moving the contact along the rocker: Δs = clamp(K_s E_p L, −L_heel, L_toe). s ≥ s_toe with v∥ > v_trip → ToePickCatch (trip); s ≤ −L_heel → heel-off. (Implemented in EDGE-005; the code in §7 shows the lateral channel, the sagittal channel is the mirror.)
+
+3.6 Friction and drag
+μ_long(v, θ, skid) = μ_glide(v) · (1 + k_e (1 − cos θ)) + [skid] μ_skid. μ_glide(v) baked from an authoring curve; literature range for skates ~0.003–0.007 (ASSUMPTION default 0.005; k_e = 0.6; μ_skid = 0.03).
+Never reverse velocity from friction (impulse clamped to |v∥|).
+Aero drag F = ½ ρ_air C_dA v² (ASSUMPTION C_dA = 0.45 m² upright).
+3.7 Regimes
+
+Unloaded, Glide (|θ|<θ_flat), Edge, Carve (|F_lat| > 0.5N), Skid, ToePick, Pivot (turn cusp), Spin (reserved) — determined every step from continuous state with hysteresis, never from animation.
+
+3.8 Stroke (EDGE-011, algorithm)
+
+Push blade tangent = heading rotated outward by β (data: 30–45°), on its inside edge. Leg force profile F_leg(t) along the push blade's inward normal, clamped by that blade's F_bite(θ_push, N_push). Propulsive component along heading = F sin β. Push contact advects along its own tangent (so it recedes relative to the body); stroke ends when separation > leg reach or profile ends; weight transfers to glide foot. Emergent: you cannot push off a flat blade; over-pushing a lightly loaded blade skids. This is a semi-analytic approximation (ADR-EDGE-001 consequence), not a full leg model.
+
+3.9 Three-turn (EDGE-012, algorithm)
+
+Pivot phase (τ_p ≈ 0.18 s, ASSUMPTION): tangent yaw driven by ω = π/τ_p toward the tilt side; lateral constraint relaxed with μ_pivot (speed loss); bite check suspended; re-engage constraint on exit. Requires an upper-body "check" input inside a window or yaw continues (over-rotation → skid). Emits TurnEvent{entryCode, exitCode, speedRetained, cuspQuality}. FO→BI emerges from §3.1.
+
+4. Data Contracts (hot path)
+
+Hot structures are plain C++ (no USTRUCT, no UObject pointers) in KoLdSimCore; USTRUCT mirrors exist only for telemetry export and Blueprint inspection. Float32 throughout (determinism policy §13 ADR-EDGE-007).
+
+Struct	Size	Layout rationale
+FBladeState	80 B (alignas 16)	Contact/Tangent first (read by steering, constraint, debug every step); force/telemetry floats next; 4 packed uint8 codes; 2 blades = 160 B (2.5 cache lines)
+FSkaterSimulationState	256 B	Body fields 96 B (kinematics first), then Blade[2]; exactly 4 cache lines per skater; 8 skaters = 2 KB → whole roster stays L1-resident
+FSkatingInput	8 B	Quantized int8 axes + button mask; 120 Hz × 8 B = 960 B/s/skater replay stream
+FEdgeEvent	16 B	Fixed-size, allocation-free; ≤ 8 per step
+FEdgeSample (history)	8 B	256-deep ring per blade = 4 KB/skater; powers Summarize(fromTick,toTick) for validators
+FEdgeworkParams	~400 B	Immutable after bake; LUT of 32 floats replaces UCurveFloat evaluation
+
+Authoring → Validated → Runtime → Telemetry: UEdgeworkTuningAsset (editor) → Bake() with range validation → FEdgeworkParams (POD) → FEdgeworkTelemetryFrame ring buffer + events.
+
+5. Fixed-Step Architecture and Modules
+Plugins/KoLdFEEt/Source/
+  KoLdSimCore/        Runtime. Depends ONLY on Core, CoreUObject. Solvers, contracts, deterministic math,
+                      params POD, checksums, automation tests. Headless-compilable → validation oracle/commandlet.
+  KoLdSkating/        Runtime. Engine, EnhancedInput. USkatingSimulationSubsystem (fixed step, input latch,
+                      interpolation), tuning UPrimaryDataAssets + Bake, debug draw, skater proxy actor.
+  KoLdTelemetry/      Runtime. Ring buffers, CSV/JSON export, replay input stream (feeds REPLAY-*).
+  KoLdSkatingEditor/  Editor. Tuning panel, live param reload, Ice Lab utilities.
+Timestep: 120 Hz fixed (Δt = 1/120 s), semi-implicit Euler, one ordered Gauss-Seidel pass for blade impulses (ADR-EDGE-006). 60 FPS render → 2 steps/frame; frame time accumulator with interpolation alpha for presentation; spiral-of-death guard drops time, never alters step semantics.
+Stepping point: FWorldDelegates::OnWorldPreActorTick so authoritative state exists before any actor/animation ticks (ADR-EDGE-008). (Version-sensitive: verify delegate signature in your engine.)
+Input: sampled by Enhanced Input on the game thread → quantized FSkatingInput → latched per sim tick → recorded to the replay stream per tick.
+Parallelism: skaters are independent in EDGE-* (no inter-skater contact) so a ParallelFor is trivially safe — and not used: 8 skaters × ~1.5 µs is below task-dispatch overhead. Revisit with crowd-scale AI only.
+Determinism: same-platform bit-exactness in Phase 1; all transcendental math routed through KoLdMath so a bit-exact cross-platform library can be dropped in later; quantized Checksum() per tick for divergence detection. VERIFY the module's floating-point/FMA contraction settings under UBT before trusting replays across compilers.
+6. Performance and Memory Budget (Edgework)
+Item	Budget	Expected
+Solver, per skater-step	≤ 5 µs	~1–2 µs (~30 transcendentals, ~200 flops)
+Game thread, 8 skaters @60 FPS (2 steps)	≤ 0.05 ms	~0.03 ms
+Debug draw (when enabled)	≤ 0.3 ms	draw-call bound
+State memory / skater	256 B	fixed
+Edge history / skater	4 KB	fixed
+Telemetry ring (2 s) / skater	≤ 32 KB	240 × 128 B
+Allocations in hot path	0	verified by test with FMemory counters or LLM tag
+
+Profiling: stat KoLdSim (cycle stats), TRACE_CPUPROFILER_EVENT_SCOPE for Unreal Insights, automation perf test asserting mean step time.
+
+7. Code
+7.1 Types — KoLdSimCore/Public/KoLdSimTypes.h (UE5 C++ IMPLEMENTATION)
+#pragma once
+#include "CoreMinimal.h"
+
+namespace KoLd
+{
+	// The simulation core is SI: meters, seconds, kilograms, newtons, radians.
+	// UE units (cm) exist ONLY in the presentation/glue layer (KoLdSkating). ADR-EDGE-002.
+	constexpr float kGravity          = 9.81f;         // m/s^2 (standard; tunable later if a designer needs it)
+	constexpr float kMetersToUU       = 100.0f;
+	constexpr float kUUToMeters       = 0.01f;
+
+	constexpr int32 kSimHz            = 120;           // ADR-EDGE-006
+	constexpr float kSimDt            = 1.0f / 120.0f;
+	constexpr int32 kMaxSkaters       = 8;
+	constexpr int32 kEdgeHistoryLen   = 256;           // ~2.13 s @120 Hz, power of two for index masking
+	constexpr int32 kMaxEventsPerStep = 8;
+}
+
+enum class EFoot : uint8           { Left = 0, Right = 1 };
+enum class ESkateDirection : uint8 { Stationary = 0, Forward = 1, Backward = 2 };
+enum class EEdgeSide : uint8       { Flat = 0, Inside = 1, Outside = 2 };
+enum class EEdgeDepth : uint8      { Flat = 0, Shallow = 1, Moderate = 2, Deep = 3 };
+enum class EBladeRegime : uint8    { Unloaded = 0, Glide, Edge, Carve, Skid, ToePick, Pivot, Spin };
+enum class EFallReason : uint8     { None = 0, LeanExceeded, BalanceErrorTimeout, ToePickTrip, SkidCollapse };
+enum class EEdgeEventType : uint8  { EdgeChanged, EdgeEstablished, EdgeLost, SkidBegin, SkidEnd, ToePickCatch, FallTriggered };
+
+/** Packed edge code: bit0 = foot, bits1-2 = direction, bits3-4 = side. 0xFF = none/unloaded. */
+struct KOLDSIMCORE_API FEdgeCode
+{
+	static constexpr uint8 None = 0xFF;
+
+	static constexpr uint8 Make(EFoot Foot, ESkateDirection Dir, EEdgeSide Side)
+	{
+		return static_cast<uint8>(static_cast<uint8>(Foot)
+			| (static_cast<uint8>(Dir)  << 1)
+			| (static_cast<uint8>(Side) << 3));
+	}
+	static constexpr EFoot           GetFoot(uint8 C) { return static_cast<EFoot>(C & 1); }
+	static constexpr ESkateDirection GetDir (uint8 C) { return static_cast<ESkateDirection>((C >> 1) & 3); }
+	static constexpr EEdgeSide       GetSide(uint8 C) { return static_cast<EEdgeSide>((C >> 3) & 3); }
+
+	/** "RFO", "LBI", "RF-" (flat), "L--" (stationary). Debug/telemetry only — never in the hot path.
+	 *  VERIFY: must match the repository's existing edge naming once audited (§1.1 Q1). */
+	static FString ToString(uint8 C);
+};
+7.2 Deterministic math — KoLdDeterministicMath.h (UE5 C++ IMPLEMENTATION)
+#pragma once
+#include "CoreMinimal.h"
+
+// ADR-EDGE-007: every solver goes through this namespace so the transcendental implementation can be
+// swapped for a bit-exact cross-platform library without touching solver code.
+// Phase-1 policy: same-platform determinism (FMath → platform libm).
+namespace KoLdMath
+{
+	FORCEINLINE float Sqrt (float X)          { return FMath::Sqrt(X); }   // IEEE-754 correctly rounded everywhere
+	FORCEINLINE float Sin  (float X)          { return FMath::Sin(X);  }   // VERIFY: libm may differ by ulps across platforms/compilers
+	FORCEINLINE float Cos  (float X)          { return FMath::Cos(X);  }
+	FORCEINLINE float Tan  (float X)          { return FMath::Tan(X);  }
+	FORCEINLINE float Asin (float X)          { return FMath::Asin(FMath::Clamp(X, -1.0f, 1.0f)); }
+	FORCEINLINE float Atan2(float Y, float X) { return FMath::Atan2(Y, X); }
+	FORCEINLINE float Sign (float X)          { return X > 0.f ? 1.f : (X < 0.f ? -1.f : 0.f); }
+
+	FORCEINLINE float Dot(const FVector3f& A, const FVector3f& B) { return A.X*B.X + A.Y*B.Y + A.Z*B.Z; }
+	FORCEINLINE FVector3f Cross(const FVector3f& A, const FVector3f& B)
+	{
+		return FVector3f(A.Y*B.Z - A.Z*B.Y, A.Z*B.X - A.X*B.Z, A.X*B.Y - A.Y*B.X);
+	}
+
+	/** Deterministic normalize. Deliberately avoids FVector::GetSafeNormal, which uses FMath::InvSqrt
+	 *  (platform-specific rsqrt approximations → non-identical bits across targets). */
+	FORCEINLINE FVector3f NormalizeOr(const FVector3f& V, const FVector3f& Fallback)
+	{
+		const float L2 = V.X*V.X + V.Y*V.Y + V.Z*V.Z;
+		if (L2 <= 1e-12f) return Fallback;
+		const float Inv = 1.0f / Sqrt(L2);
+		return FVector3f(V.X*Inv, V.Y*Inv, V.Z*Inv);
+	}
+}
+7.3 Runtime params and profile — KoLdEdgeworkParams.h (UE5 C++ IMPLEMENTATION)
+#pragma once
+#include "CoreMinimal.h"
+
+/** Immutable, baked, POD. Produced by UEdgeworkTuningAsset::Bake(). No UObject access in the hot loop (ADR-EDGE-005).
+ *  All defaults are ASSUMPTIONS for first-light tuning; the tuning asset is the source of truth in production. */
+struct KOLDSIMCORE_API FEdgeworkParams
+{
+	// --- Blade geometry ---
+	float RockerRadius       = 2.2f;    // m  (typical figure blade rocker ~7–8 ft)
+	float BladeToeReach      = 0.13f;   // m  from rocker contact center to toe-pick root
+	float BladeHeelReach     = 0.12f;   // m
+	float ToePickEngagePos   = 0.11f;   // m  rocker position beyond which the pick engages
+	float Sharpness          = 1.0f;    // 1 = freshly sharpened
+
+	// --- Ice ---
+	float IceHardness        = 1.0f;
+	static constexpr int32 kMuLutSize = 32;
+	float MuLutMaxSpeed      = 16.0f;   // m/s
+	float MuGlideLut[kMuLutSize];       // μ_long(v) for a flat blade, baked from authoring curve
+	float MuEdgeGain         = 0.6f;    // μ multiplier per (1 - cos θ)
+	float MuSkidLong         = 0.03f;   // additive μ while skidding (ice shaving)
+	float MuPivot            = 0.05f;   // during turn cusp (EDGE-012)
+
+	// --- Edge bite (lateral holding capacity) ---
+	float BiteC0             = 0.08f;   // flat-blade lateral μ
+	float BiteC1             = 3.5f;    // per sin|θ|
+	float CarveLoadFraction  = 0.5f;    // |F_lat| / N above which regime = Carve
+
+	// --- Edge classification ---
+	float FlatThresholdRad   = 0.070f;  // 4°
+	float FlatHysteresisRad  = 0.026f;  // 1.5°  (must be < FlatThresholdRad)
+	float DepthShallowRad    = 0.21f;   // 12°
+	float DepthDeepRad       = 0.44f;   // 25°
+	float MinEdgeDwellSec    = 0.12f;   // edge counts as "established" after this
+	float DirSpeedEps        = 0.15f;   // m/s dead-band for forward/backward
+
+	// --- Balance / control (§3.4) ---
+	float MaxLeanCmdRad      = 0.785f;  // 45°
+	float BalanceKp          = 39.0f;   // m/s^2 per rad  — MUST exceed g for stability
+	float BalanceKd          = 8.0f;    // m/s^2 per rad/s
+	float AngulationLimitRad = 0.35f;   // 20° max |tilt - lean|
+	float MaxTiltRad         = 1.05f;   // 60°
+	float ControlLatencySec  = 0.12f;   // first-order lag on tilt command; assist tiers scale this
+	float InternalAccelGain  = 6.0f;    // m/s^2 per rad  (arms / free leg)
+	float InternalAccelMax   = 1.5f;    // m/s^2
+	float TwoFootCopGain     = 12.0f;   // m/s^2 per rad  (center-of-pressure shift within stance)
+	float MinSpeedForCurv    = 0.5f;    // m/s, guards κ = a / v²
+
+	// --- Vertical / legs ---
+	float KneeSpring         = 120.0f;  // 1/s^2
+	float KneeDamping        = 18.0f;   // 1/s
+	float MaxKneeCompression = 0.25f;   // fraction of standing COM height
+
+	// --- Fall ---
+	float FallLeanRad        = 0.96f;   // 55°
+	float FallErrorRad       = 0.35f;   // 20°
+	float FallErrorTimeSec   = 0.35f;
+	float ToePickTripSpeed   = 1.5f;    // m/s
+
+	// --- Aero ---
+	float AirDensity         = 1.2f;    // kg/m^3
+	float CdA                = 0.45f;   // m^2 (upright skater)
+
+	FEdgeworkParams() { for (float& M : MuGlideLut) { M = 0.005f; } }   // literature range for skates ~0.003–0.007
+
+	/** Deterministic linear LUT sample. */
+	float MuGlide(float Speed) const
+	{
+		const float T  = FMath::Clamp(Speed / MuLutMaxSpeed, 0.0f, 1.0f) * float(kMuLutSize - 1);
+		const int32 I0 = FMath::Min(int32(T), kMuLutSize - 2);
+		const float F  = T - float(I0);
+		return MuGlideLut[I0] + (MuGlideLut[I0 + 1] - MuGlideLut[I0]) * F;
+	}
+};
+
+/** Per-skater physical profile. VERIFY: populate from the repository's performance parameters once audited. */
+struct KOLDSIMCORE_API FSkaterProfile
+{
+	float Mass              = 55.0f;   // kg   (ASSUMPTION)
+	float COMHeightStanding = 0.95f;   // m    contact → COM
+	float StanceHalfWidth   = 0.12f;   // m
+	float LegReach          = 0.85f;   // m    (EDGE-011)
+};
+7.4 State contracts — KoLdSkaterState.h (UE5 C++ IMPLEMENTATION)
+#pragma once
+#include "CoreMinimal.h"
+#include "KoLdSimTypes.h"
+
+struct alignas(16) FBladeState                 // 80 bytes
+{
+	FVector3f Contact       = FVector3f::ZeroVector; // world contact point (m); Z = ice height
+	float     Tilt          = 0.f;   // rad, + = top of blade leans toward Right (= Up × Tangent)
+	FVector3f Tangent       = FVector3f(1,0,0);      // unit, horizontal, toe direction
+	float     RockerPos     = 0.f;   // m along blade, + toward toe (EDGE-005)
+	float     NormalLoad    = 0.f;   // N
+	float     PressureWeight= 0.f;   // 0..1 share of body load
+	float     LongSpeed     = 0.f;   // m/s signed along Tangent
+	float     LatSlip       = 0.f;   // m/s residual lateral slip after solve (0 unless skidding)
+	float     LatForce      = 0.f;   // N lateral force supplied by the edge this step (GOE signal)
+	float     LongForce     = 0.f;   // N friction along tangent
+	float     BiteCapacity  = 0.f;   // N
+	float     EdgeDwell     = 0.f;   // s on current EdgeCode
+	uint8     EdgeCode      = FEdgeCode::None;
+	uint8     Depth         = 0;     // EEdgeDepth
+	uint8     Regime        = 0;     // EBladeRegime
+	uint8     bInContact    = 0;
+	float     Pad0          = 0.f;
+};
+static_assert(sizeof(FBladeState) == 80, "FBladeState layout changed — update memory budget and telemetry schema");
+
+struct alignas(16) FSkaterSimulationState      // 256 bytes = 4 cache lines
+{
+	// --- body kinematics (hottest) ---
+	FVector3f Position        = FVector3f::ZeroVector; // COM (m)
+	float     Lean            = 0.f;  // rad lateral, + toward Right of Heading
+	FVector3f Velocity        = FVector3f::ZeroVector; // COM (m/s)
+	float     LeanRate        = 0.f;  // rad/s
+	FVector3f Heading         = FVector3f(1,0,0);      // unit horizontal = support blade tangent
+	float     PitchLean       = 0.f;  // rad sagittal, + toward toe (EDGE-005)
+	float     PitchLeanRate   = 0.f;
+	float     TiltCmd         = 0.f;  // filtered blade tilt actually applied (rad)
+	float     LegLength       = 0.95f;// m, COM height along body axis
+	float     LegRate         = 0.f;
+	float     BalanceError    = 0.f;  // rad  (Lean - LeanEq)
+	float     BalanceErrorTime= 0.f;  // s above fall threshold
+	float     LateralAccelActual = 0.f; // m/s^2 realized by edges this step (toward Right)
+	uint8     SupportFoot     = uint8(EFoot::Right);
+	uint8     SupportMode     = 0;    // 0 none, 1 one-foot, 2 two-foot
+	uint8     FallReason      = 0;    // EFallReason
+	uint8     bAirborne       = 0;
+	uint32    Tick            = 0;
+	uint8     Pad[12]         = {};
+	FBladeState Blade[2];             // index = EFoot
+
+	/** Quantized checksum for replay divergence detection. Truncation (not rounding) for determinism. */
+	uint32 Checksum() const;
+};
+static_assert(sizeof(FSkaterSimulationState) == 256, "FSkaterSimulationState must stay 256 bytes");
+
+struct FSkatingInput                            // 8 bytes, quantized (replay stream unit)
+{
+	int8  LeanX    = 0;    // -127..127 → desired lean  (± MaxLeanCmdRad)
+	int8  KneeY    = 0;    // -127 deep knee .. +127 tall
+	int8  UpperX   = 0;    // torso twist (check / rotation — EDGE-012+)
+	int8  UpperY   = 0;    // arms
+	uint8 Buttons  = 0;    // bit0 StrokeL, bit1 StrokeR, bit2 Turn, bit3 ToeTap, bit4 Jump, bit5 Spin (reserved)
+	uint8 WeightLR = 128;  // 0 = full left foot .. 255 = full right foot
+	uint8 AssistTier = 0;  // reported to scoring; scales params in EDGE-010
+	uint8 Reserved = 0;
+};
+static_assert(sizeof(FSkatingInput) == 8, "FSkatingInput must stay 8 bytes");
+
+struct FEdgeEvent                               // 16 bytes
+{
+	uint32 Tick;
+	uint8  SkaterId;
+	uint8  Type;        // EEdgeEventType
+	uint8  PrevCode;
+	uint8  NewCode;     // for FallTriggered: EFallReason
+	float  PrevDwell;   // s
+	float  Value;       // context: tilt at change, slip speed at skid, lean at fall
+};
+static_assert(sizeof(FEdgeEvent) == 16, "FEdgeEvent must stay 16 bytes");
+
+struct FEdgeworkStepOutput
+{
+	FEdgeEvent Events[KoLd::kMaxEventsPerStep];
+	int32      NumEvents = 0;
+	void Reset() { NumEvents = 0; }
+	void Push(const FEdgeEvent& E) { if (NumEvents < KoLd::kMaxEventsPerStep) { Events[NumEvents++] = E; } }
+};
+7.5 Solver — KoLdEdgeworkSolver.h/.cpp (UE5 C++ IMPLEMENTATION — lateral channel complete; sagittal/toe-pick, stroke, pivot are EDGE-005/011/012)
+// KoLdEdgeworkSolver.h
+#pragma once
+#include "CoreMinimal.h"
+#include "KoLdEdgeworkParams.h"
+#include "KoLdSkaterState.h"
+
+struct KOLDSIMCORE_API FEdgeworkSolver
+{
+	/** One fixed step. Pure function of (P, S, In, St). No allocations, no UObjects, thread-safe per skater. */
+	static void Step(const FEdgeworkParams& P, const FSkaterProfile& S, const FSkatingInput& In,
+	                 FSkaterSimulationState& St, FEdgeworkStepOutput& Out);
+
+	// Exposed for unit tests and tooling
+	static float      ComputeBiteCapacity(const FEdgeworkParams& P, float NormalLoad, float Tilt);
+	static float      ComputeMuLong(const FEdgeworkParams& P, float Speed, float Tilt, bool bSkidding);
+	static uint8      ClassifyEdge(const FEdgeworkParams& P, EFoot Foot, float Tilt, float LongSpeed, uint8 PrevCode);
+	static EEdgeDepth ClassifyDepth(const FEdgeworkParams& P, float Tilt);
+	static float      EquilibriumLean(float LateralAccel);
+};
+// KoLdEdgeworkSolver.cpp
+#include "KoLdEdgeworkSolver.h"
+#include "KoLdDeterministicMath.h"
+
+DECLARE_STATS_GROUP(TEXT("KoLdSim"), STATGROUP_KoLdSim, STATCAT_Advanced);
+DECLARE_CYCLE_STAT(TEXT("Edgework Step"), STAT_EdgeworkStep, STATGROUP_KoLdSim);
+
+FString FEdgeCode::ToString(uint8 C)
+{
+	if (C == None) { return TEXT("---"); }
+	const TCHAR F = GetFoot(C) == EFoot::Right ? TEXT('R') : TEXT('L');
+	const TCHAR D = GetDir(C)  == ESkateDirection::Forward  ? TEXT('F')
+	              : GetDir(C)  == ESkateDirection::Backward ? TEXT('B') : TEXT('-');
+	const TCHAR Sd= GetSide(C) == EEdgeSide::Outside ? TEXT('O')
+	              : GetSide(C) == EEdgeSide::Inside  ? TEXT('I') : TEXT('-');
+	return FString::Printf(TEXT("%c%c%c"), F, D, Sd);
+}
+
+uint32 FSkaterSimulationState::Checksum() const
+{
+	// Quantize to 0.1 mm / 1e-5 rad by truncation (exact in IEEE), then CRC. Tick included so replays can locate divergence.
+	int32 Q[10] = {
+		int32(Position.X * 1e4f), int32(Position.Y * 1e4f), int32(Position.Z * 1e4f),
+		int32(Velocity.X * 1e4f), int32(Velocity.Y * 1e4f),
+		int32(Heading.X  * 1e6f), int32(Heading.Y  * 1e6f),
+		int32(Lean * 1e5f), int32(LeanRate * 1e5f), int32(Tick) };
+	return FCrc::MemCrc32(Q, sizeof(Q));
+}
+
+float FEdgeworkSolver::EquilibriumLean(float LateralAccel)
+{
+	return KoLdMath::Atan2(LateralAccel, KoLd::kGravity);                   // tan φ_eq = a_c / g
+}
+
+float FEdgeworkSolver::ComputeBiteCapacity(const FEdgeworkParams& P, float N, float Tilt)
+{
+	// F_bite = N (c0 + c1 sin|θ|) · sharpness · hardness — lateral holding capacity before the edge lets go (§3.3)
+	return N * (P.BiteC0 + P.BiteC1 * KoLdMath::Sin(FMath::Abs(Tilt))) * P.Sharpness * P.IceHardness;
+}
+
+float FEdgeworkSolver::ComputeMuLong(const FEdgeworkParams& P, float Speed, float Tilt, bool bSkid)
+{
+	float Mu = P.MuGlide(Speed) * (1.0f + P.MuEdgeGain * (1.0f - KoLdMath::Cos(Tilt)));
+	if (bSkid) { Mu += P.MuSkidLong; }
+	return Mu;
+}
+
+EEdgeDepth FEdgeworkSolver::ClassifyDepth(const FEdgeworkParams& P, float Tilt)
+{
+	const float A = FMath::Abs(Tilt);
+	if (A < P.FlatThresholdRad) { return EEdgeDepth::Flat; }
+	if (A < P.DepthShallowRad)  { return EEdgeDepth::Shallow; }
+	if (A < P.DepthDeepRad)     { return EEdgeDepth::Moderate; }
+	return EEdgeDepth::Deep;
+}
+
+uint8 FEdgeworkSolver::ClassifyEdge(const FEdgeworkParams& P, EFoot Foot, float Tilt, float LongSpeed, uint8 Prev)
+{
+	// --- side, with hysteresis around the flat threshold (ADR-EDGE-004) ---
+	const bool  bPrevFlat = (Prev == FEdgeCode::None) || (FEdgeCode::GetSide(Prev) == EEdgeSide::Flat);
+	const float Enter = P.FlatThresholdRad + P.FlatHysteresisRad;
+	const float Leave = P.FlatThresholdRad - P.FlatHysteresisRad;
+	const float A = FMath::Abs(Tilt);
+	EEdgeSide Side = EEdgeSide::Flat;
+	if (bPrevFlat ? (A > Enter) : (A > Leave))
+	{
+		// +Tilt = top leans toward Right (= Up × Tangent). For the RIGHT foot that is the lateral (outside) side;
+		// for the LEFT foot it is the medial (inside) side. Direction flips (three-turn) fall out of this rule.
+		const bool bLateral = (Foot == EFoot::Right) ? (Tilt > 0.f) : (Tilt < 0.f);
+		Side = bLateral ? EEdgeSide::Outside : EEdgeSide::Inside;
+	}
+	// --- direction with dead-band; hold previous direction inside the band ---
+	ESkateDirection Dir;
+	if      (LongSpeed >  P.DirSpeedEps) { Dir = ESkateDirection::Forward;  }
+	else if (LongSpeed < -P.DirSpeedEps) { Dir = ESkateDirection::Backward; }
+	else { Dir = (Prev == FEdgeCode::None) ? ESkateDirection::Stationary : FEdgeCode::GetDir(Prev); }
+	return FEdgeCode::Make(Foot, Dir, Side);
+}
+
+void FEdgeworkSolver::Step(const FEdgeworkParams& P, const FSkaterProfile& S, const FSkatingInput& In,
+                           FSkaterSimulationState& St, FEdgeworkStepOutput& Out)
+{
+	SCOPE_CYCLE_COUNTER(STAT_EdgeworkStep);
+	using namespace KoLdMath;
+	constexpr float dt = KoLd::kSimDt;
+	constexpr float g  = KoLd::kGravity;
+	const FVector3f Up(0.f, 0.f, 1.f);
+	St.Tick++;
+
+	// ---------- 1. Decode quantized input ----------
+	const float LeanCmd = float(In.LeanX) * (P.MaxLeanCmdRad / 127.0f);
+	const float KneeCmd = float(In.KneeY) * (1.0f / 127.0f);            // -1 deep .. +1 tall
+	const float WeightR = float(In.WeightLR) * (1.0f / 255.0f);
+	const float Weights[2] = { 1.0f - WeightR, WeightR };
+
+	// ---------- 2. Vertical leg model → normal load ----------
+	// Simplification (documented): a_z ≈ leg-axis acceleration; lean cosines omitted. Jump tasks own true flight.
+	const float LegTarget = S.COMHeightStanding * (1.0f - P.MaxKneeCompression * 0.5f * (1.0f - KneeCmd));
+	const float LegAccel  = P.KneeSpring * (LegTarget - St.LegLength) - P.KneeDamping * St.LegRate;
+	St.LegRate   += LegAccel * dt;
+	St.LegLength += St.LegRate * dt;
+	const float NTotal = FMath::Max(0.0f, S.Mass * (g + LegAccel));
+	St.bAirborne = (NTotal <= 1e-3f) ? 1 : 0;
+
+	int32 NumLoaded = 0;
+	for (int32 i = 0; i < 2; ++i)
+	{
+		FBladeState& B = St.Blade[i];
+		B.PressureWeight = Weights[i];
+		B.NormalLoad     = NTotal * Weights[i];
+		B.bInContact     = (B.NormalLoad > 1e-3f) ? 1 : 0;
+		NumLoaded       += B.bInContact;
+	}
+	St.SupportMode = uint8(NumLoaded);
+	St.SupportFoot = (Weights[1] >= Weights[0]) ? uint8(EFoot::Right) : uint8(EFoot::Left);   // fixed tie rule (determinism)
+
+	// ---------- 3. Balance controller: lean error → commanded blade tilt (§3.4) ----------
+	{
+		const float V2 = FMath::Max(St.Velocity.X*St.Velocity.X + St.Velocity.Y*St.Velocity.Y,
+		                            P.MinSpeedForCurv * P.MinSpeedForCurv);
+		// Lateral acceleration (toward Right) required to hold LeanCmd, plus PD correction on lean error. [m/s^2]
+		const float ACmd = g * Tan(LeanCmd) + P.BalanceKp * (St.Lean - LeanCmd) + P.BalanceKd * St.LeanRate;
+		// κ = a / v² ; carve geometry sin θ = κ ρ  (R = ρ / sin θ, §3.2)
+		const float KappaMax = Sin(P.MaxTiltRad) / P.RockerRadius;
+		const float Kappa    = FMath::Clamp(ACmd / V2, -KappaMax, KappaMax);
+		float TiltTarget     = Asin(Kappa * P.RockerRadius);
+		// Angulation limit: blade cannot tilt arbitrarily relative to the body lean (ankle/knee/hip)
+		TiltTarget = FMath::Clamp(TiltTarget, St.Lean - P.AngulationLimitRad, St.Lean + P.AngulationLimitRad);
+		TiltTarget = FMath::Clamp(TiltTarget, -P.MaxTiltRad, P.MaxTiltRad);
+		// Neuromuscular latency: first-order lag. Assist tiers shrink ControlLatencySec (EDGE-010).
+		const float LagAlpha = (P.ControlLatencySec > 1e-4f) ? FMath::Min(1.0f, dt / P.ControlLatencySec) : 1.0f;
+		St.TiltCmd += (TiltTarget - St.TiltCmd) * LagAlpha;
+	}
+
+	// ---------- 4. Steering: a rockered blade on an edge follows R = ρ / sin θ (§3.2) ----------
+	for (int32 i = 0; i < 2; ++i)
+	{
+		FBladeState& B = St.Blade[i];
+		if (!B.bInContact) { continue; }
+		B.Tilt = St.TiltCmd;                                   // both blades tilt with the body in this slice
+		const FVector3f BRight = Cross(Up, B.Tangent);
+		const float BLong = Dot(St.Velocity, B.Tangent);       // signed: backward travel rotates the tangent the other way
+		const float dPsi  = BLong * Sin(B.Tilt) / P.RockerRadius * dt;
+		const float c = Cos(dPsi), s = Sin(dPsi);
+		B.Tangent = NormalizeOr(B.Tangent * c + BRight * s, B.Tangent);
+	}
+	St.Heading = St.Blade[St.SupportFoot].Tangent;
+	const FVector3f Right = Cross(Up, St.Heading);
+
+	// ---------- 5. Non-holonomic blade constraint with bite saturation (§3.3) ----------
+	float LatImpulseSum = 0.0f;                                // toward Right
+	const int32 Order[2] = { int32(St.SupportFoot), 1 - int32(St.SupportFoot) };   // heavier blade first, fixed rule
+	for (int32 k = 0; k < 2; ++k)
+	{
+		FBladeState& B = St.Blade[Order[k]];
+		if (!B.bInContact)
+		{
+			B.Regime = uint8(EBladeRegime::Unloaded); B.LatForce = 0.f; B.LongForce = 0.f; B.LatSlip = 0.f; B.BiteCapacity = 0.f;
+			continue;
+		}
+		const FVector3f BRight = Cross(Up, B.Tangent);
+		const float VLat = Dot(St.Velocity, BRight);
+		const float JReq = -S.Mass * VLat;                     // impulse that would zero lateral slip
+		B.BiteCapacity   = ComputeBiteCapacity(P, B.NormalLoad, B.Tilt);
+		const float JMax = B.BiteCapacity * dt;
+		const bool bWasSkid = (B.Regime == uint8(EBladeRegime::Skid));
+
+		float J;
+		if (FMath::Abs(JReq) <= JMax) { J = JReq;               B.LatSlip = 0.0f; }
+		else                          { J = Sign(JReq) * JMax;  B.LatSlip = VLat + J / S.Mass; }
+
+		St.Velocity   += BRight * (J / S.Mass);
+		B.LatForce     = J / dt;
+		LatImpulseSum += J * Dot(BRight, Right);
+
+		const bool bSkid = (B.LatSlip != 0.0f);
+		if (bSkid && !bWasSkid) { Out.Push(FEdgeEvent{ St.Tick, 0, uint8(EEdgeEventType::SkidBegin), B.EdgeCode, B.EdgeCode, B.EdgeDwell, VLat }); }
+		if (!bSkid && bWasSkid) { Out.Push(FEdgeEvent{ St.Tick, 0, uint8(EEdgeEventType::SkidEnd),   B.EdgeCode, B.EdgeCode, B.EdgeDwell, 0.f  }); }
+
+		if      (bSkid)                                   { B.Regime = uint8(EBladeRegime::Skid);  }
+		else if (FMath::Abs(B.Tilt) < P.FlatThresholdRad) { B.Regime = uint8(EBladeRegime::Glide); }
+		else { B.Regime = (FMath::Abs(B.LatForce) > P.CarveLoadFraction * B.NormalLoad) ? uint8(EBladeRegime::Carve) : uint8(EBladeRegime::Edge); }
+		// ToePick / Pivot regimes are assigned by EDGE-005 / EDGE-012 before this block.
+	}
+	St.LateralAccelActual = LatImpulseSum / (S.Mass * dt);
+
+	// ---------- 6. Longitudinal friction + aero drag (§3.6) ----------
+	for (int32 i = 0; i < 2; ++i)
+	{
+		FBladeState& B = St.Blade[i];
+		if (!B.bInContact) { continue; }
+		const float BLong = Dot(St.Velocity, B.Tangent);
+		B.LongSpeed = BLong;
+		const float Mu = ComputeMuLong(P, FMath::Abs(BLong), B.Tilt, B.Regime == uint8(EBladeRegime::Skid));
+		float DV = Mu * B.NormalLoad / S.Mass * dt;
+		DV = FMath::Min(DV, FMath::Abs(BLong));               // friction never reverses motion
+		St.Velocity -= B.Tangent * (Sign(BLong) * DV);
+		B.LongForce  = -Sign(BLong) * Mu * B.NormalLoad;
+	}
+	{
+		const float Speed = Sqrt(St.Velocity.X*St.Velocity.X + St.Velocity.Y*St.Velocity.Y);
+		if (Speed > 1e-4f)
+		{
+			const float Fd = 0.5f * P.AirDensity * P.CdA * Speed * Speed;
+			const float DV = FMath::Min(Fd / S.Mass * dt, Speed);
+			St.Velocity -= FVector3f(St.Velocity.X, St.Velocity.Y, 0.f) * (DV / Speed);
+		}
+	}
+
+	// ---------- 7. Integrate COM (semi-implicit Euler; velocity already updated) ----------
+	St.Velocity.Z = 0.0f;                                     // contact slice; JUMP-* owns vertical flight
+	St.Position  += St.Velocity * dt;
+
+	// ---------- 8. Lateral inverted pendulum (§3.4) ----------
+	{
+		const float L = FMath::Max(St.LegLength, 0.3f);
+		const float LeanEq = EquilibriumLean(St.LateralAccelActual);
+		St.BalanceError = St.Lean - LeanEq;
+		// Bounded internal authority (arms / free leg) + center-of-pressure shift when two-footed
+		float InternalAccel = FMath::Clamp(-P.InternalAccelGain * St.BalanceError, -P.InternalAccelMax, P.InternalAccelMax);
+		if (St.SupportMode == 2)
+		{
+			const float CopMax = g * S.StanceHalfWidth / L;   // shifting COP by ±stance half-width
+			InternalAccel += FMath::Clamp(-P.TwoFootCopGain * St.BalanceError, -CopMax, CopMax);
+		}
+		const float LeanAccel = (g * Sin(St.Lean) - (St.LateralAccelActual + InternalAccel) * Cos(St.Lean)) / L;
+		St.LeanRate += LeanAccel * dt;
+		St.Lean     += St.LeanRate * dt;
+		St.Lean      = FMath::Clamp(St.Lean, -1.55f, 1.55f);
+		St.Position.Z = L * Cos(St.Lean);                     // ice at z = 0 (ASSUMPTION: flat rink in the slice)
+
+		// Blade contact points follow the pendulum base (ground projection of the COM along the lean line)
+		const FVector3f BaseXY = FVector3f(St.Position.X, St.Position.Y, 0.f) - Right * (L * Sin(St.Lean));
+		for (int32 i = 0; i < 2; ++i)
+		{
+			const float Side = (i == int32(EFoot::Right)) ? 1.0f : -1.0f;
+			const float Offset = (St.SupportMode == 2) ? S.StanceHalfWidth : 0.0f;
+			St.Blade[i].Contact = BaseXY + Right * (Side * Offset);
+		}
+	}
+
+	// ---------- 9. Edge classification, dwell, events (§8) ----------
+	for (int32 i = 0; i < 2; ++i)
+	{
+		FBladeState& B = St.Blade[i];
+		const uint8 Prev = B.EdgeCode;
+		if (!B.bInContact)
+		{
+			if (Prev != FEdgeCode::None) { Out.Push(FEdgeEvent{ St.Tick, 0, uint8(EEdgeEventType::EdgeLost), Prev, FEdgeCode::None, B.EdgeDwell, B.Tilt }); }
+			B.EdgeCode = FEdgeCode::None; B.EdgeDwell = 0.f; B.Depth = uint8(EEdgeDepth::Flat);
+			continue;
+		}
+		const uint8 New = ClassifyEdge(P, EFoot(i), B.Tilt, B.LongSpeed, Prev);
+		if (New != Prev)
+		{
+			Out.Push(FEdgeEvent{ St.Tick, 0, uint8(EEdgeEventType::EdgeChanged), Prev, New, B.EdgeDwell, B.Tilt });
+			B.EdgeCode = New; B.EdgeDwell = 0.0f;
+		}
+		else
+		{
+			const float PrevDwell = B.EdgeDwell;
+			B.EdgeDwell += dt;
+			if (PrevDwell < P.MinEdgeDwellSec && B.EdgeDwell >= P.MinEdgeDwellSec)
+			{
+				Out.Push(FEdgeEvent{ St.Tick, 0, uint8(EEdgeEventType::EdgeEstablished), New, New, B.EdgeDwell, B.Tilt });
+			}
+		}
+		B.Depth = uint8(ClassifyDepth(P, B.Tilt));
+	}
+
+	// ---------- 10. Fall detection (state machine layer consumes FallTriggered) ----------
+	St.FallReason = uint8(EFallReason::None);
+	if (FMath::Abs(St.Lean) > P.FallLeanRad) { St.FallReason = uint8(EFallReason::LeanExceeded); }
+	if (FMath::Abs(St.BalanceError) > P.FallErrorRad)
+	{
+		St.BalanceErrorTime += dt;
+		if (St.BalanceErrorTime > P.FallErrorTimeSec) { St.FallReason = uint8(EFallReason::BalanceErrorTimeout); }
+	}
+	else { St.BalanceErrorTime = 0.0f; }
+	if (St.FallReason != uint8(EFallReason::None))
+	{
+		Out.Push(FEdgeEvent{ St.Tick, 0, uint8(EEdgeEventType::FallTriggered), St.Blade[St.SupportFoot].EdgeCode, St.FallReason, St.BalanceErrorTime, St.Lean });
+	}
+}
+
+Documented approximations in this step (each is a tracked tuning/upgrade item, not hidden): (a) the lateral constraint is applied to the COM velocity, treating lean as an internal DoF rather than constraining the base point and letting the COM swing; (b) both blades share one tilt (angulation per blade arrives with EDGE-011 stroke); (c) flat ice at z=0 (ice-height query hook in EDGE-005).
+
+7.6 Fixed-step subsystem — USkatingSimulationSubsystem (ILLUSTRATIVE — structure is exact, project glue omitted)
+UCLASS()
+class KOLDSKATING_API USkatingSimulationSubsystem : public UWorldSubsystem
+{
+	GENERATED_BODY()
+public:
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override
+	{
+		Super::Initialize(Collection);
+		// Step BEFORE any actor/animation ticks so presentation reads authoritative state (ADR-EDGE-008).
+		// VERSION-SENSITIVE: verify FWorldDelegates::OnWorldPreActorTick signature (UWorld*, ELevelTick, float) in your engine.
+		PreTickHandle = FWorldDelegates::OnWorldPreActorTick.AddUObject(this, &USkatingSimulationSubsystem::OnPreActorTick);
+	}
+	virtual void Deinitialize() override { FWorldDelegates::OnWorldPreActorTick.Remove(PreTickHandle); Super::Deinitialize(); }
+
+	int32 RegisterSkater(const FSkaterProfile& Profile, const FSkaterSimulationState& Initial);   // returns compact handle
+	void  PushInput(int32 Handle, const FSkatingInput& Input) { Inputs[Handle] = Input; }          // latched per tick
+	const FSkaterSimulationState& GetState(int32 Handle) const { return Cur[Handle]; }
+	float GetInterpAlpha() const { return InterpAlpha; }
+	void  GetInterpolated(int32 Handle, FVector& OutPosUU, FVector& OutHeading) const;              // Prev/Cur lerp, ×100 to cm
+
+	FSimpleMulticastDelegate OnFixedStepComplete;    // telemetry/replay hook (game thread)
+
+private:
+	void OnPreActorTick(UWorld* World, ELevelTick, float DeltaSeconds)
+	{
+		if (World != GetWorld()) { return; }
+		Accumulator += FMath::Min(double(DeltaSeconds), 0.25);        // clamp hitch
+		int32 Steps = 0;
+		while (Accumulator >= KoLd::kSimDt && Steps < MaxStepsPerFrame) { FixedStep(); Accumulator -= KoLd::kSimDt; ++Steps; }
+		if (Steps == MaxStepsPerFrame && Accumulator >= KoLd::kSimDt)   // spiral-of-death guard: drop TIME, never alter step semantics
+		{
+			UE_LOG(LogKoLdSkating, Warning, TEXT("Sim fell behind; dropping %.3f s"), Accumulator); Accumulator = 0.0;
+		}
+		InterpAlpha = float(Accumulator / KoLd::kSimDt);
+	}
+	void FixedStep()
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(KoLd_FixedStep);
+		for (int32 i = 0; i < Cur.Num(); ++i)
+		{
+			Prev[i] = Cur[i];
+			StepOutputs[i].Reset();
+			FEdgeworkSolver::Step(Params, Profiles[i], Inputs[i], Cur[i], StepOutputs[i]);
+			for (int32 e = 0; e < StepOutputs[i].NumEvents; ++e) { StepOutputs[i].Events[e].SkaterId = uint8(i); }
+			// Replay stream: (Tick, Inputs[i]) appended by KoLdTelemetry listener on OnFixedStepComplete (EDGE-016)
+		}
+		++SimTick;
+		OnFixedStepComplete.Broadcast();
+	}
+
+	FEdgeworkParams Params;                       // baked once from UEdgeworkTuningAsset (EDGE-003)
+	TArray<FSkaterProfile>          Profiles;     // all arrays preallocated to kMaxSkaters — no per-frame allocation
+	TArray<FSkatingInput>           Inputs;
+	TArray<FSkaterSimulationState>  Cur, Prev;
+	TArray<FEdgeworkStepOutput>     StepOutputs;
+	double Accumulator = 0.0; float InterpAlpha = 0.f; uint64 SimTick = 0;
+	int32 MaxStepsPerFrame = 8;
+	FDelegateHandle PreTickHandle;
+};
+7.7 Tuning asset with validated bake (ILLUSTRATIVE — property list abbreviated)
+UCLASS(BlueprintType)
+class KOLDSKATING_API UEdgeworkTuningAsset : public UPrimaryDataAsset
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(EditAnywhere, Category="Blade", meta=(ClampMin="1.0", ClampMax="4.0"))  float RockerRadiusMeters = 2.2f;
+	UPROPERTY(EditAnywhere, Category="Ice")   TObjectPtr<UCurveFloat> MuGlideVsSpeed;          // authoring curve → baked LUT
+	UPROPERTY(EditAnywhere, Category="Bite",  meta=(ClampMin="0.0"))  float BiteC0 = 0.08f;
+	UPROPERTY(EditAnywhere, Category="Bite",  meta=(ClampMin="0.0"))  float BiteC1 = 3.5f;
+	UPROPERTY(EditAnywhere, Category="Edge",  meta=(ClampMin="0.0", ClampMax="20.0")) float FlatThresholdDeg = 4.f;
+	UPROPERTY(EditAnywhere, Category="Edge",  meta=(ClampMin="0.0", ClampMax="10.0")) float FlatHysteresisDeg = 1.5f;
+	UPROPERTY(EditAnywhere, Category="Balance") float BalanceKp = 39.f;
+	UPROPERTY(EditAnywhere, Category="Balance") float BalanceKd = 8.f;
+	// ... remaining fields mirror FEdgeworkParams, authored in degrees where human-facing
+
+	/** Authoring → Validated → Runtime. Returns false with human-readable reasons on impossible ranges. */
+	bool Bake(FEdgeworkParams& Out, TArray<FString>& OutErrors) const
+	{
+		Out = FEdgeworkParams();
+		Out.RockerRadius = RockerRadiusMeters;
+		Out.BiteC0 = BiteC0; Out.BiteC1 = BiteC1;
+		Out.FlatThresholdRad  = FMath::DegreesToRadians(FlatThresholdDeg);
+		Out.FlatHysteresisRad = FMath::DegreesToRadians(FlatHysteresisDeg);
+		Out.BalanceKp = BalanceKp; Out.BalanceKd = BalanceKd;
+		if (MuGlideVsSpeed)
+		{
+			for (int32 i = 0; i < FEdgeworkParams::kMuLutSize; ++i)
+			{
+				const float V = Out.MuLutMaxSpeed * float(i) / float(FEdgeworkParams::kMuLutSize - 1);
+				Out.MuGlideLut[i] = FMath::Max(0.f, MuGlideVsSpeed->GetFloatValue(V));
+			}
+		}
+		// --- validation rules (data test EDGE-003) ---
+		if (Out.FlatHysteresisRad >= Out.FlatThresholdRad) { OutErrors.Add(TEXT("FlatHysteresis must be < FlatThreshold")); }
+		if (Out.BalanceKp <= KoLd::kGravity)               { OutErrors.Add(TEXT("BalanceKp must exceed g (9.81) or the lean loop is unstable")); }
+		if (Out.MinEdgeDwellSec < 2.f * KoLd::kSimDt)      { OutErrors.Add(TEXT("MinEdgeDwellSec below 2 sim ticks")); }
+		if (Out.DepthShallowRad >= Out.DepthDeepRad)       { OutErrors.Add(TEXT("DepthShallow must be < DepthDeep")); }
+		return OutErrors.Num() == 0;
+	}
+};
+7.8 Debug draw (UE5 C++ IMPLEMENTATION; DrawDebugCircle argument order is version-sensitive — verify)
+#include "DrawDebugHelpers.h"
+#if ENABLE_DRAW_DEBUG
+namespace KoLdDebugDraw
+{
+	void DrawSkater(const UWorld* World, const FSkaterSimulationState& St, const FSkaterProfile& S, const FEdgeworkParams& P)
+	{
+		const float M2U = KoLd::kMetersToUU;
+		for (int32 i = 0; i < 2; ++i)
+		{
+			const FBladeState& B = St.Blade[i];
+			if (!B.bInContact) { continue; }
+			const FVector C = FVector(B.Contact) * M2U;
+			const FVector T = FVector(B.Tangent);
+			const FVector R = FVector::CrossProduct(FVector::UpVector, T);
+			const EEdgeSide Side = FEdgeCode::GetSide(B.EdgeCode);
+			const FColor Col = (B.Regime == uint8(EBladeRegime::Skid)) ? FColor::Yellow
+			                 : Side == EEdgeSide::Outside ? FColor::Blue : Side == EEdgeSide::Inside ? FColor::Red : FColor::White;
+			DrawDebugLine  (World, C - T * (P.BladeHeelReach * M2U), C + T * (P.BladeToeReach * M2U), Col, false, -1.f, 0, 2.0f);   // blade + edge color
+			DrawDebugSphere(World, C, 3.f, 8, Col, false, -1.f, 0, 1.f);                                                          // contact point
+			DrawDebugLine  (World, C, C + R * (B.LatForce * 0.2f), FColor::Green, false, -1.f, 0, 1.5f);                            // lateral edge force (100 N = 20 cm)
+			const float SinT = FMath::Abs(FMath::Sin(B.Tilt));
+			if (SinT > 0.01f)                                                                                                      // predicted carve circle R = ρ / sin θ
+			{
+				const float Rad = P.RockerRadius / SinT * M2U;
+				DrawDebugCircle(World, C + R * (FMath::Sign(B.Tilt) * Rad), Rad, 64, FColor(0, 255, 255, 80), false, -1.f, 0, 0.5f, FVector(1,0,0), FVector(0,1,0), false);
+			}
+		}
+		const FVector COM  = FVector(St.Position) * M2U;
+		const FVector Base = FVector(St.Blade[St.SupportFoot].Contact) * M2U;
+		DrawDebugLine  (World, Base, COM, FColor::Magenta, false, -1.f, 0, 2.f);                                                    // COM line (actual lean)
+		DrawDebugSphere(World, COM, 6.f, 12, FColor::Magenta, false, -1.f, 0, 1.f);
+		const FVector R  = FVector::CrossProduct(FVector::UpVector, FVector(St.Heading));
+		const float LeanEq = FEdgeworkSolver::EquilibriumLean(St.LateralAccelActual);
+		const float L = St.LegLength * M2U;
+		DrawDebugLine(World, Base, Base + R * (L * FMath::Sin(LeanEq)) + FVector::UpVector * (L * FMath::Cos(LeanEq)), FColor::Orange, false, -1.f, 0, 1.f); // equilibrium lean
+	}
+}
+#endif
+
+CVars (EDGE-014): kold.Debug.Blades, kold.Debug.Balance, kold.Debug.CarveCircle, kold.Debug.EdgeHUD (edge code, depth, dwell, regime, bite/lateral ratio, balance error).
+
+7.9 Automation tests (UE5 C++ IMPLEMENTATION; flag macro is version-sensitive)
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+#include "KoLdEdgeworkSolver.h"
+#include "KoLdDeterministicMath.h"
+
+// VERSION-SENSITIVE: UE 5.5+ uses EAutomationTestFlags_ApplicationContextMask; adjust this macro per engine.
+#define KOLD_TEST_FLAGS (EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
+
+namespace KoLdTestUtil
+{
+	static FSkaterSimulationState Gliding(float Speed, float Lean = 0.f)
+	{
+		FSkaterSimulationState St;
+		St.Position = FVector3f(0.f, 0.f, 0.95f); St.Velocity = FVector3f(Speed, 0.f, 0.f);
+		St.Heading = FVector3f(1.f, 0.f, 0.f); St.LegLength = 0.95f; St.Lean = Lean;
+		return St;
+	}
+	static FSkatingInput Input(float LeanRad, const FEdgeworkParams& P, uint8 WeightLR = 255)
+	{
+		FSkatingInput In; In.LeanX = int8(FMath::Clamp(LeanRad / P.MaxLeanCmdRad, -1.f, 1.f) * 127.f); In.WeightLR = WeightLR; return In;
+	}
+	static void Run(const FEdgeworkParams& P, const FSkaterProfile& S, const FSkatingInput& In, FSkaterSimulationState& St, int32 Steps, FEdgeworkStepOutput* Out = nullptr)
+	{
+		FEdgeworkStepOutput Local; FEdgeworkStepOutput& O = Out ? *Out : Local;
+		for (int32 i = 0; i < Steps; ++i) { O.Reset(); FEdgeworkSolver::Step(P, S, In, St, O); }
+	}
+	static void ZeroDissipation(FEdgeworkParams& P) { P.CdA = 0.f; for (float& M : P.MuGlideLut) { M = 0.f; } P.MuSkidLong = 0.f; }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FKoLdEdgeCarveRadius, "KoLdFEEt.Edgework.Steering.CarveRadiusMatchesRockerGeometry", KOLD_TEST_FLAGS)
+bool FKoLdEdgeCarveRadius::RunTest(const FString&)
+{
+	using namespace KoLdTestUtil;
+	FEdgeworkParams P; FSkaterProfile S; ZeroDissipation(P); P.ControlLatencySec = 0.f;
+	const float LeanCmd = FMath::DegreesToRadians(20.f);
+	FSkaterSimulationState St = Gliding(4.0f, LeanCmd);
+	const FSkatingInput In = Input(LeanCmd, P);
+	Run(P, S, In, St, 240);                                                    // settle 2 s
+	const FVector3f H0 = St.Heading;
+	Run(P, S, In, St, 120);                                                    // measure over 1 s
+	const float Turned = FMath::Abs(KoLdMath::Atan2(KoLdMath::Cross(H0, St.Heading).Z, KoLdMath::Dot(H0, St.Heading)));
+	const float V = KoLdMath::Sqrt(St.Velocity.X*St.Velocity.X + St.Velocity.Y*St.Velocity.Y);
+	const float RMeasured = V / Turned;
+	const float RExpected = P.RockerRadius / KoLdMath::Sin(FMath::Abs(St.Blade[1].Tilt));
+	TestEqual(TEXT("no fall"), int32(St.FallReason), int32(EFallReason::None));
+	TestTrue(TEXT("lean tracks command within 2 deg"), FMath::Abs(St.Lean - LeanCmd) < FMath::DegreesToRadians(2.f));
+	TestTrue(TEXT("carve radius within 5% of rho/sin(theta)"), FMath::Abs(RMeasured - RExpected) / RExpected < 0.05f);
+	TestTrue(TEXT("speed conserved without dissipation (<1%)"), FMath::Abs(V - 4.0f) < 0.04f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FKoLdEdgeCodes, "KoLdFEEt.Edgework.Classifier.AllEightCodes", KOLD_TEST_FLAGS)
+bool FKoLdEdgeCodes::RunTest(const FString&)
+{
+	FEdgeworkParams P;
+	struct FCase { EFoot Foot; float Tilt; float Speed; const TCHAR* Expect; };
+	const FCase Cases[] = {
+		{ EFoot::Right,  0.2f,  3.f, TEXT("RFO") }, { EFoot::Right, -0.2f,  3.f, TEXT("RFI") },
+		{ EFoot::Right,  0.2f, -3.f, TEXT("RBO") }, { EFoot::Right, -0.2f, -3.f, TEXT("RBI") },
+		{ EFoot::Left,  -0.2f,  3.f, TEXT("LFO") }, { EFoot::Left,   0.2f,  3.f, TEXT("LFI") },
+		{ EFoot::Left,  -0.2f, -3.f, TEXT("LBO") }, { EFoot::Left,   0.2f, -3.f, TEXT("LBI") },
+		{ EFoot::Right,  0.01f, 3.f, TEXT("RF-") }, { EFoot::Left,   0.0f,  0.f, TEXT("L--") } };
+	for (const FCase& C : Cases)
+	{
+		const uint8 Code = FEdgeworkSolver::ClassifyEdge(P, C.Foot, C.Tilt, C.Speed, FEdgeCode::None);
+		TestEqual(FString::Printf(TEXT("tilt %.2f speed %.1f"), C.Tilt, C.Speed), FEdgeCode::ToString(Code), FString(C.Expect));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FKoLdEdgeHysteresis, "KoLdFEEt.Edgework.Classifier.HysteresisPreventsFlicker", KOLD_TEST_FLAGS)
+bool FKoLdEdgeHysteresis::RunTest(const FString&)
+{
+	FEdgeworkParams P;   // Flat 4°, hysteresis 1.5° → enter at 5.5°, leave at 2.5°
+	uint8 Code = FEdgeCode::None;
+	Code = FEdgeworkSolver::ClassifyEdge(P, EFoot::Right, FMath::DegreesToRadians(5.0f), 3.f, Code);
+	TestEqual(TEXT("5.0° from flat stays flat"), FEdgeCode::ToString(Code), FString(TEXT("RF-")));
+	Code = FEdgeworkSolver::ClassifyEdge(P, EFoot::Right, FMath::DegreesToRadians(6.0f), 3.f, Code);
+	TestEqual(TEXT("6.0° enters outside"), FEdgeCode::ToString(Code), FString(TEXT("RFO")));
+	Code = FEdgeworkSolver::ClassifyEdge(P, EFoot::Right, FMath::DegreesToRadians(3.0f), 3.f, Code);
+	TestEqual(TEXT("3.0° holds outside (above leave)"), FEdgeCode::ToString(Code), FString(TEXT("RFO")));
+	Code = FEdgeworkSolver::ClassifyEdge(P, EFoot::Right, FMath::DegreesToRadians(2.0f), 3.f, Code);
+	TestEqual(TEXT("2.0° drops to flat"), FEdgeCode::ToString(Code), FString(TEXT("RF-")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FKoLdEdgeSkidCausesInwardFall, "KoLdFEEt.Edgework.Bite.SaturationSkidsThenFalls", KOLD_TEST_FLAGS)
+bool FKoLdEdgeSkidCausesInwardFall::RunTest(const FString&)
+{
+	using namespace KoLdTestUtil;
+	FEdgeworkParams P; FSkaterProfile S; P.BiteC1 = 0.05f; P.BiteC0 = 0.02f;   // soft ice / dull blade
+	const float LeanCmd = FMath::DegreesToRadians(30.f);
+	FSkaterSimulationState St = Gliding(6.0f, LeanCmd);
+	FEdgeworkStepOutput Out; bool bSkid = false, bFall = false;
+	for (int32 i = 0; i < 600 && !bFall; ++i)
+	{
+		Out.Reset(); FEdgeworkSolver::Step(P, S, Input(LeanCmd, P), St, Out);
+		for (int32 e = 0; e < Out.NumEvents; ++e) { bSkid |= Out.Events[e].Type == uint8(EEdgeEventType::SkidBegin); bFall |= Out.Events[e].Type == uint8(EEdgeEventType::FallTriggered); }
+	}
+	TestTrue(TEXT("skid event emitted"), bSkid);
+	TestTrue(TEXT("skater falls when the edge cannot supply the needed lateral force"), bFall);
+	TestTrue(TEXT("fall is inward (lean grows in the commanded direction)"), St.Lean > LeanCmd);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FKoLdEdgeDeterminism, "KoLdFEEt.Edgework.Determinism.IdenticalChecksums", KOLD_TEST_FLAGS)
+bool FKoLdEdgeDeterminism::RunTest(const FString&)
+{
+	using namespace KoLdTestUtil;
+	FEdgeworkParams P; FSkaterProfile S;
+	auto Script = [&](FSkaterSimulationState& St, TArray<uint32>& Sums)
+	{
+		FEdgeworkStepOutput Out;
+		for (int32 i = 0; i < 1200; ++i)
+		{
+			FSkatingInput In; In.LeanX = int8(90 * FMath::Sin(float(i) * 0.01f)); In.WeightLR = (i / 300) % 2 ? 255 : 0;   // deterministic scripted input
+			Out.Reset(); FEdgeworkSolver::Step(P, S, In, St, Out); Sums.Add(St.Checksum());
+		}
+	};
+	FSkaterSimulationState A = Gliding(4.f), B = Gliding(4.f);
+	TArray<uint32> SA, SB; SA.Reserve(1200); SB.Reserve(1200);
+	Script(A, SA); Script(B, SB);
+	TestTrue(TEXT("checksum streams identical"), SA == SB);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FKoLdEdgeFrictionNoReverse, "KoLdFEEt.Edgework.Friction.NeverReversesMotion", KOLD_TEST_FLAGS)
+bool FKoLdEdgeFrictionNoReverse::RunTest(const FString&)
+{
+	using namespace KoLdTestUtil;
+	FEdgeworkParams P; FSkaterProfile S;
+	FSkaterSimulationState St = Gliding(0.02f);
+	Run(P, S, Input(0.f, P, 128), St, 240);
+	TestTrue(TEXT("speed along heading is non-negative"), KoLdMath::Dot(St.Velocity, St.Heading) >= 0.f);
+	return true;
+}
+#endif // WITH_DEV_AUTOMATION_TESTS
+
+Validation command (all EDGE tests):
+UnrealEditor-Cmd.exe <Project>.uproject -ExecCmds="Automation RunTests KoLdFEEt.Edgework; Quit" -unattended -nop4 -nosplash -NullRHI -log
+
+8. Edge Classification, Events, and the History API for Validators
+Classification (ClassifyEdge): side with enter/leave hysteresis; direction with dead-band and hold; depth thresholds. Runs per blade per tick; zero allocation.
+Events: EdgeChanged (with previous dwell — a change after <MinDwell is a flicker, validators ignore it), EdgeEstablished (dwell crosses MinDwell — this is the timestamp scoring uses for "on edge"), EdgeLost, SkidBegin/End, ToePickCatch, FallTriggered.
+History (FEdgeHistory, EDGE-009): per blade ring of 256 × FEdgeSample{int16 TiltQ, int16 SpeedQ, int16 LoadQ, uint8 Code, uint8 Regime}; Summarize(FromTick, ToTick) → {DominantCode, FractionOnDominant, MinAbsTilt, FlatTimeSec, MeanTilt, MeanSpeed, SkidTimeSec}. This is the exact query a Lutz validator issues for [TakeoffTick − 0.18 s, TakeoffTick], and the coaching layer turns into "outside edge flattened during the final 180 ms" (§39 causal telemetry).
+
+Scoring/GOE signals originating here (consumed later, defined now): edge depth consistency, |F_lat|/N (edge pressure), skid time, speed retained across turns, RMS balance error (wobble), assist tier.
+
+9. Telemetry
+
+FEdgeworkTelemetryFrame (128 B, per tick): Tick, Position, Velocity, Lean, LeanEq, BalanceError, LateralAccelActual, TiltCmd, SupportMode, SupportFoot, FallReason, per blade {EdgeCode, Depth, Regime, Tilt, NormalLoad, LatForce, BiteCapacity, LatSlip, LongSpeed, EdgeDwell}. Ring buffer 2 s hot; on FallTriggered, the last 2 s are frozen into a "fall dump" (this is the "why did the skater fall" artifact). Export: CSV/JSON via commandlet (EDGE-013). Same frames drive automated tests, the replay checksum diff, and future AI coaching.
+
+10. Input and Assists (EDGE-010)
+
+Mapping is a design decision, ASSUMPTION for the slice: LS-X = desired lean, LS-Y = knee, LT/RT = left/right foot weight (analog → WeightLR), face button = stroke (alternating), bumper = turn, RS = upper body (check/twist). Enhanced Input produces floats; the adapter quantizes to FSkatingInput once per render frame; the sim latches per tick.
+
+Assist tiers (FULL SIMULATION / ASSISTED / COMPETITIVE / ACCESSIBLE) are parameter overlays on FEdgeworkParams: ControlLatencySec (0.12 → 0.04 → 0), BalanceKp/Kd (+0/+25%/+60%), AngulationLimitRad (20°/25°/30°), InternalAccelMax. The active tier is written to every FSkatingInput, so it appears in replay, telemetry, and the scoring record. VERIFY tier semantics against the repository's assist-tier data before implementing.
+
+11. Edgework State Machine Slice
+From → To	Trigger	Prereq / sim condition	Input	Blend	Interruptible	Failure	Scoring hook
+IDLE → STROKE	stroke button	both blades loaded, `	v	< v_max_stroke`	button	0.1 s weight transfer	yes (by fall)
+STROKE → GLIDE	stroke profile ends or leg reach	push blade unloads	—	continuous	yes	—	stroke quality
+GLIDE → EDGE	EdgeEstablished (dwell ≥ MinDwell)	`	tilt	> flat+hyst`	lean	none (continuous physics)	yes
+EDGE → TURN	turn button	`	v	> v_min_turn`, established edge, one-foot	button + check within window	pivot τ_p	no (commit)
+TURN → EDGE	pivot complete	constraint re-engaged, slip = 0	—	continuous	—	landing on flat → Glide	exit edge
+any → FALL	FallTriggered	see §3	—	handled by FALL-*	—	—	deduction hook
+
+Animation is notified by these transitions (later ANIM-* tasks); it never causes them.
+
+12. Task Graph — EDGE-000 … EDGE-019
+EDGE-000 skeleton ─► EDGE-001 contracts ─► EDGE-002 det. math ─► EDGE-003 params/bake ─► EDGE-004 fixed-step
+                                                                                              │
+                        EDGE-006 constraint/bite ─► EDGE-007 friction ─► EDGE-008 balance ◄───┘
+                                 │                                            │
+                                 ├─► EDGE-013 telemetry ─► EDGE-016 replay hook│
+                                 ├─► EDGE-014 debug draw                       ▼
+                                 │                        EDGE-005 rocker/toe-pick ─► EDGE-009 classifier/history
+                                 │                                                             │
+                        EDGE-017 proxy actor ─► EDGE-019 Ice Lab ◄── EDGE-010 input/assists ◄──┘
+                                                                              │
+                        EDGE-003 ─► EDGE-018 editor panel        EDGE-011 stroke ─► EDGE-012 three-turn
+                        EDGE-015 tests accumulate across all → milestone gate
+Full task cards (agent-ready)
+
+EDGE-006 — Non-holonomic blade constraint with bite saturation
+
+PURPOSE: implement the "edge": zero lateral slip up to a load- and tilt-dependent capacity; skid beyond it.
+DEPENDENCIES: EDGE-001, 002, 003, 004. INPUTS: FEdgeworkParams, FSkaterProfile, FSkaterSimulationState (velocity, blade tangents/tilts/loads). OUTPUTS: updated Velocity, per-blade LatForce/LatSlip/BiteCapacity/Regime, LateralAccelActual, SkidBegin/End events.
+FILES: KoLdSimCore/Private/KoLdEdgeworkSolver.cpp (§5 block + ComputeBiteCapacity), tests KoLdSimCore/Private/Tests/EdgeworkBiteTests.cpp.
+STEPS: (1) implement ComputeBiteCapacity; (2) ordered two-blade impulse pass (support foot first; fixed tie rule); (3) saturation + residual slip; (4) regime assignment; (5) events; (6) tests.
+TESTS: Bite.HoldsBelowCapacity (steady arc, LatSlip == 0 all ticks, |F_lat| ≈ m v²/R within 5%), Bite.SaturationSkidsThenFalls (§7.9), Bite.LightBladeSkidsFirst (two-foot, uneven weights → skid on lighter blade), determinism test passes.
+ACCEPTANCE: all tests green; zero heap allocations in Step (assert via allocation counter in test); F_lat never exceeds BiteCapacity by > 1e-3 N.
+PERFORMANCE: constraint block ≤ 0.6 µs per skater-step (measured with STAT_EdgeworkStep over 10k steps).
+DEBUG: LatForce and BiteCapacity drawn/HUD'd by EDGE-014; skid colors blade yellow.
+RISKS: order-dependence artifacts during stroke (two different tangents) — mitigated by fixed order + EDGE-011 test; capacity constants unrealistic — tuning pass in EDGE-019.
+NEXT DEPENDENTS: EDGE-007, 008, 011, 012, JUMP-* (takeoff edge load), SCORE-* (edge pressure GOE signal).
+
+EDGE-008 — Lateral balance controller (lean-steer) and inverted pendulum
+
+PURPOSE: make holding an edge a skill: lean, speed, angulation, and bite must be mutually consistent.
+DEPENDENCIES: EDGE-006, 007. INPUTS: LeanX, LateralAccelActual, Velocity, SupportMode. OUTPUTS: TiltCmd, Lean/LeanRate, BalanceError, FallReason, FallTriggered.
+FILES: solver §3, §8, §10 blocks; tests EdgeworkBalanceTests.cpp.
+STEPS: (1) a_cmd PD with feedforward; (2) κ→θ with clamps; (3) latency lag; (4) pendulum integration with internal + COP authority; (5) fall detection; (6) stability test sweep.
+TESTS: Balance.HoldsLean20At4mps (settle < 1.5 s, overshoot < 3°); Balance.LowSpeedDeepLeanFalls (2 m/s, 30° → LeanExceeded); Balance.TwoFootStationaryRecovers (perturb 10° at v=0 two-foot → recovers; one-foot 10° → falls); Balance.GainBelowGIsRejected (Bake error).
+ACCEPTANCE: tests green across ControlLatencySec ∈ {0, 0.06, 0.12}; no NaN for any input in the quantized domain (fuzz test 10⁵ random inputs).
+PERFORMANCE: ≤ 0.4 µs. DEBUG: COM line vs equilibrium line (magenta/orange), BalanceError HUD.
+RISKS: oscillation with latency + clamps → tune ζ; "feels floaty" → expose gains to EDGE-018 panel early.
+NEXT: EDGE-005, 009, 010, 011; FALL-, ANIM- (lean drives procedural body lean).
+
+EDGE-009 — Edge classifier, dwell, events, history
+
+PURPOSE: convert continuous blade state into the discrete, timestamped edge vocabulary scoring and coaching rely on.
+DEPENDENCIES: EDGE-008. INPUTS: per-blade Tilt, LongSpeed, bInContact. OUTPUTS: EdgeCode/Depth/EdgeDwell, edge events, FEdgeHistory + Summarize.
+FILES: ClassifyEdge/ClassifyDepth, new KoLdSimCore/Public/KoLdEdgeHistory.h; tests EdgeworkClassifierTests.cpp.
+STEPS: (1) side hysteresis; (2) direction dead-band; (3) dwell/established; (4) ring buffer + summarize; (5) ToString aligned with repository naming (VERIFY §1.1 Q1).
+TESTS: Classifier.AllEightCodes, Classifier.HysteresisPreventsFlicker (§7.9), Classifier.ThreeTurnFOtoBI (drive tangent yaw by π with lean held → code sequence RFO → RBI), History.SummarizeFlatWindow (inject 140 ms flat → FlatTimeSec ≈ 0.14 ± 1 tick).
+ACCEPTANCE: no edge change with dwell < 2 ticks under sinusoidal tilt at 5° amplitude around threshold; Summarize O(window) with no allocation.
+PERFORMANCE: ≤ 0.2 µs. DEBUG: edge code + dwell on HUD; event log to LogKoLdEdgework (Verbose).
+RISKS: naming mismatch with repo data; thresholds disagree with designers' intuition → tunable.
+NEXT: ELEMENT-* (entry templates, step features), SCORE-, COACH-.
+
+EDGE-004 — Fixed-step simulation subsystem
+
+PURPOSE: 120 Hz deterministic stepping independent of render rate; latch inputs; interpolate for presentation.
+DEPENDENCIES: EDGE-001–003. INPUTS: frame Δt, FSkatingInput per skater, baked params. OUTPUTS: Cur/Prev states, InterpAlpha, OnFixedStepComplete.
+FILES: KoLdSkating/Public/SkatingSimulationSubsystem.h/.cpp.
+STEPS: pre-actor-tick hook; accumulator + spiral guard; preallocated arrays; stats/trace; register/unregister with handle stability.
+TESTS: functional test: 300 frames with Δt drawn from {8, 16, 33, 50} ms → identical checksum sequence per sim tick vs fixed 16.67 ms run; MaxStepsPerFrame guard drops time and logs once.
+ACCEPTANCE: state identical per tick regardless of frame pacing; zero per-frame allocations after warm-up.
+PERFORMANCE: subsystem overhead ≤ 20 µs/frame at 8 skaters. DEBUG: stat KoLdSim, kold.Sim.PrintTick.
+RISKS: delegate ordering vs animation tick (verify engine version); editor PIE world filtering.
+NEXT: EDGE-013, 016, 017; every later sim system.
+Remaining tasks (condensed; same field set, defaults inherit the module budgets above)
+ID	Title	Purpose / Key acceptance criteria	Deps → Next
+EDGE-000	Plugin + module skeleton, CI test command	4 modules compile; KoLdSimCore depends on Core/CoreUObject only (enforced by Build.cs review + a headless commandlet build); automation command documented	— → 001
+EDGE-001	Data contracts	Structs of §7.4 with static_assert sizes; Checksum(); USTRUCT telemetry mirrors; doc docs/contracts/edgework.md	000 → 002, 003
+EDGE-002	Deterministic math + FP audit	KoLdMath wrappers; VERIFY UBT FP/FMA settings for the module (document result as UNKNOWN→resolved); determinism test	001 → 004, 006
+EDGE-003	Tuning asset + bake + validation	UEdgeworkTuningAsset::Bake; data test rejects each rule in §7.7; default asset DA_Edgework_Default	001 → 004, 018
+EDGE-005	Rocker position, sagittal balance, toe pick	RockerPos from pitch error; ToePick regime; ToePickCatch at s ≥ ToePickEngagePos && v > TripSpeed; ice-height query hook (flat default); tests: forward over-lean at 3 m/s trips, at 0.5 m/s does not	008 → 009, JUMP-* (toe assist)
+EDGE-007	Friction + drag	LUT sampling; edge/skid multipliers; tests: Friction.NeverReversesMotion, glide decel at 5 m/s within ±20% of μg + drag/m for defaults	006 → 008
+EDGE-010	Input adapter + assist overlays	Enhanced Input → quantized FSkatingInput; tier overlays; tier recorded per input; test: quantization round-trip error ≤ 1 LSB	009 → 011, 017
+EDGE-011	Stroke / push	§3.8; tests: stroke from flat blade yields < 20% of edged stroke impulse; 5 strokes reach ≥ 3 m/s with defaults; push-blade skid emits event	010 → 012, CROSSOVER-*
+EDGE-012	Three-turn pivot	§3.9; Pivot regime; tests: RFO→RBI, speed retained ≥ 85% with check, over-rotation without check → skid	011 → TURN-* (bracket, rocker, counter, mohawk)
+EDGE-013	Telemetry ring + export	128 B frames, 2 s ring, fall dump, CSV/JSON commandlet; test: frame count == ticks	004, 006 → 016, COACH-*
+EDGE-014	Debug draw + CVars	§7.8 + HUD; toggles per §30 list relevant to edgework; ≤ 0.3 ms	006 → 019
+EDGE-015	Test suite consolidation	All KoLdFEEt.Edgework.* tests in CI; fuzz test; perf test asserting mean step ≤ 5 µs	all → milestone gate
+EDGE-016	Replay hook	Per-tick input stream (Tick, FSkatingInput) record/playback + checksum stream; divergence detector reports first divergent tick; test: 30 s record→replay identical	004, 013 → REPLAY-*
+EDGE-017	Skater proxy actor	Non-animated: two blade meshes + COM sphere driven by interpolated state (×100 cm); no capsule; test: proxy transform == interpolated state	004, 010 → 019, ANIM-*
+EDGE-018	Editor tuning panel	Details customization + live Bake() → subsystem params; validation errors shown inline	003 → TOOLS-*
+EDGE-019	Ice Lab level + first tuning pass	Flat rink, distance markers, HUD; tuning session log recorded in docs/tuning/edgework-pass-1.md with before/after params	014, 017 → VS
+Codex-ready specification template (instantiated for EDGE-006)
+ROLE
+You are implementing EDGE-006 (Non-holonomic blade constraint with bite saturation) in the KoLd__FEEt UE5 plugin.
+
+CONTEXT
+Sim core is SI, float32, fixed 120 Hz, deterministic. Read docs/contracts/edgework.md and §3.3 of the Edgework
+package. FEdgeworkSolver::Step already exists with sections 1–4, 6–10 implemented; section 5 is a stub.
+
+DO NOT MODIFY
+KoLdSimTypes.h, KoLdSkaterState.h (struct layouts), KoLdDeterministicMath.h, any file under KoLdSkating/.
+
+MODIFY
+KoLdSimCore/Private/KoLdEdgeworkSolver.cpp (section 5 + ComputeBiteCapacity)
+KoLdSimCore/Private/Tests/EdgeworkBiteTests.cpp (create)
+
+REQUIREMENTS
+- Per loaded blade, support foot first (ties: right foot), compute J_req = -m (v·r); capacity F_bite = N (c0 + c1 sin|θ|) s h.
+- Apply min(|J_req|, F_bite Δt) with sign; residual slip → LatSlip; regime Skid; emit SkidBegin/SkidEnd on transitions.
+- Accumulate LateralAccelActual toward the support blade's Right.
+- No heap allocation, no UObject access, no FMath::InvSqrt / GetSafeNormal; use KoLdMath only.
+
+ACCEPTANCE TESTS
+KoLdFEEt.Edgework.Bite.HoldsBelowCapacity, .Bite.SaturationSkidsThenFalls, .Bite.LightBladeSkidsFirst,
+KoLdFEEt.Edgework.Determinism.IdenticalChecksums (must remain green).
+
+PERFORMANCE CONSTRAINTS
+Section 5 ≤ 0.6 µs per skater-step (10k-step average on the CI machine; report the number in the PR).
+
+EXPECTED OUTPUT
+Compiling code, 3 new tests, PR description with measured timing and a debug screenshot (kold.Debug.Blades 1)
+showing green lateral force vectors on a 20° arc and yellow skid on the saturation test scenario.
+
+VALIDATION COMMANDS
+UnrealEditor-Cmd.exe <Project>.uproject -ExecCmds="Automation RunTests KoLdFEEt.Edgework; Quit" -unattended -nop4 -nosplash -NullRHI -log
+13. Architectural Decision Records
+ADR	Decision	Options	Chosen / Reason	Consequences	Reversal cost
+ADR-EDGE-001	Skater movement is a custom analytic model (non-holonomic blade constraint + pendulum), not a Chaos rigid body	(a) Chaos rigid body + friction materials; (b) capsule controller; (c) analytic	(c): Chaos isotropic friction cannot express edge anisotropy, rocker steering, or bite saturation; determinism and sub-µs cost required	Environment collision via queries later; Chaos used only for ragdoll/cloth/props	High (movement stack)
+ADR-EDGE-002	Sim core in SI; cm only at presentation boundary	UE units everywhere / SI core	SI: published constants unchanged, equations readable, unit bugs localized to one conversion	Every glue function converts ×100	Low–medium
+ADR-EDGE-003	Balance via lean-steer (angulation → curvature) with bounded internal torque	Direct PD torque on COM; kinematic "auto-balance"	Lean-steer reproduces speed/edge/lean coupling that is edgework skill; falls emerge causally	Controller gain tuning is design-critical; needs latency model for realism tiers	Medium
+ADR-EDGE-004	Event-based edge classification with hysteresis + dwell	Per-frame instantaneous classification	Prevents flicker; gives scoring timestamps ("established"); preserves causal telemetry	Validators must use Summarize, not sample single ticks	Low
+ADR-EDGE-005	Baked POD params with LUTs; no UObject access in hot loop	Evaluate UCurveFloat/UPROPERTY live	Cache-friendly, deterministic, thread-safe; enables headless oracle builds	Bake step + validation required; live-tune via re-bake	Low
+ADR-EDGE-006	120 Hz fixed step, semi-implicit Euler, one ordered impulse pass	60 Hz; RK4; iterative LCP	120 Hz keeps blade constraint stiffness/latency small at ~1.5 µs cost; RK4 unnecessary for velocity-level constraints	2 steps per 60 FPS frame; interpolation for presentation	Medium (contact tolerances tuned to Δt)
+ADR-EDGE-007	Determinism: same-platform Phase 1; wrapped math; quantized checksums; cross-platform bit-exact library later	Cross-platform from day 1	Ship-relevant first (ghosts on same platform); wrappers make later swap surgical	Cross-platform ghost replays not guaranteed until the library lands	Low
+ADR-EDGE-008	Step in OnWorldPreActorTick, not TickComponent/tickable subsystem	Tickable subsystem; TG_PrePhysics component	Guarantees authoritative state precedes all actor/animation ticks in the same frame	Delegate signature is engine-version-sensitive	Low
+14. Risks
+Risk	Prob.	Impact	Mitigation	Validation
+Bite/skid model doesn't feel like ice	High	High	Expose c₀/c₁/hardness in EDGE-018; two tuning passes with a skater consultant; record decisions	Ice Lab session log, telemetry of skid onset speeds vs. expectations
+Balance loop oscillates under latency + clamps	Med	High	Stability sweep test across latency tiers; ζ ≥ 0.6 requirement	Balance.* tests
+Two-blade constraint conflict during stroke	Med	Med	Fixed ordering; stroke-specific test; consider 2 GS iterations if needed	Stroke.* tests, no jitter in telemetry
+Determinism broken by FMA/libm	Med	High (replay)	KoLdMath wrappers; FP-mode audit (EDGE-002); checksum divergence detector	Record/replay test on CI, later cross-platform matrix
+Animation later contradicts blade contact	High	High	Contract: blade transforms come from FBladeState; ANIM-* IK targets them	Contact-mismatch metric in telemetry (later)
+Parameter explosion for designers	Med	Med	Tiered panel (Feel / Physics / Advanced); validation messages	Tuning-pass feedback
+Stationary/slow-speed feel (κ = a/v² singularity)	Med	Med	MinSpeedForCurv + COP/internal authority; dedicated slow-speed test scenarios	Balance.TwoFootStationaryRecovers
+
+Risk-reduction prototype before large-scale production: EDGE-000…009 + 014 + 017 + 019 (the Ice Lab) — roughly the first two graph nodes of BLADE/ICE → BALANCE → GLIDE/EDGE CONTROL.
+
+15. Open Questions / Decisions Needed
+Repository audit (§1.1) — the blocking item. Paste the tree and edge/step/assist data and I will finalize the map.
+Edge naming convention in the repo (RFO style?) — FEdgeCode::ToString must match.
+Do existing assist tiers define semantics I must honor, or are §10 overlays acceptable?
+Skater profile source: does the repo define mass/height/speed parameters?
+Control scheme (§10 ASSUMPTION) — confirm or redirect before EDGE-010.
+Include stroke (EDGE-011) in the first prototype, or start skaters with an initial velocity?
+Ice hardness/temperature as a per-arena asset now, or a constant in the slice?
+Immediate next actions
+Run the audit protocol; return the outputs → I finalize §1 with KEEP/ADAPT/REFACTOR/REPLACE/NEW decisions.
+Open GitHub issues EDGE-000 → EDGE-004 (foundation) from the cards above; EDGE-000 is unblocked now.
+After EDGE-004 merges, EDGE-006/007/008 can be assigned in parallel to three contributors/agents — they touch disjoint solver sections and share the test utilities in §7.9.
