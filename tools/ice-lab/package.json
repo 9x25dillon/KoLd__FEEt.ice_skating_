@@ -1,0 +1,13 @@
+{
+  "name": "kold-ice-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser tuning rig for the KoLd__FEEt edgework model. Zero dependencies.",
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "build": "node app/build.mjs",
+    "serve": "node app/build.mjs && node app/serve.mjs",
+    "typecheck": "tsc --noEmit -p ."
+  }
+}
