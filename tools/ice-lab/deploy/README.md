@@ -8,6 +8,12 @@ plays lands in a file you own.**
 
 ---
 
+> The commands below assume a systemd Linux. Package manager lines are given for
+> both Arch and Debian/Ubuntu; everything else is identical. The shell examples
+> avoid bash-only syntax, because a surprising number of these boxes run fish,
+> where `case ... esac` is not a thing and an unmatched glob is a hard error
+> rather than a no-op.
+
 ## If the box is already doing something else
 
 Most boxes are. Everything below is designed to sit beside an existing service
@@ -45,7 +51,9 @@ server config to match — nothing else refers to it.
   Node's own TypeScript stripper, which is why this thing has no build tooling
   to install. Distribution packages are usually far older.
 
-  On a box that is already running something, install it **beside** whatever is
+  This is true on Arch as well, where `pacman -S nodejs` gives you the newest
+  Node and hands it to *everything else on the box at the same time*. On a
+  machine that is already running something, install Node **beside** whatever is
   there rather than over it:
 
   ```sh
@@ -177,11 +185,25 @@ sudo nginx -t && sudo systemctl reload nginx
 ## 5b · Caddy
 
 ```sh
-sudo apt install caddy          # or per caddyserver.com/docs/install
+# Arch
+sudo pacman -S --needed caddy
+
+# Debian / Ubuntu
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
+```
+
+Then, on either — `sed` rather than an editor, because the one thing worse than
+a typo in a web server config is a typo you cannot see:
+
+```sh
+sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.default.bak
 sudo cp /srv/edgework/tools/ice-lab/deploy/Caddyfile /etc/caddy/Caddyfile
-sudo nano /etc/caddy/Caddyfile  # put your domain at the top
+sudo sed -i "s/skate.example.com/YOUR.DOMAIN/" /etc/caddy/Caddyfile
 sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
+sudo systemctl enable --now caddy    # reload instead, if it was already running
 ```
 
 Then open `https://your.domain/` and skate. The certificate appears by itself.
