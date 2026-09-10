@@ -15,7 +15,11 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       edge-triggered) and strokes floor the knee at the neutral stance.
 //       Every digest moved because the state shape did; the fixture's
 //       kinematics were replayed under both and matched exactly.
-export const REPLAY_SOLVER = "ice-lab-f64/2";
+//   /3  Jumps (sim/jump.ts): SkaterState gained `jump` and `landed`, and
+//       SkatingInput gained `carriage` and `toe`. With jumpMode 0 — every
+//       preset — nothing kinematic changed; the fixture was replayed through
+//       /2 and /3 and matched to the bit.
+export const REPLAY_SOLVER = "ice-lab-f64/3";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
@@ -136,10 +140,11 @@ export function parseReplay(json: string): Replay {
   for (let i = 0; i < root.frames.length; i++) {
     const path = `frames[${i}]`;
     const frame = object(root.frames[i], path, ["input", "scheme", "digest"], ["params"]);
-    const input = object(frame.input, `${path}.input`, ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake"]);
+    const input = object(frame.input, `${path}.input`,
+      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "toe"]);
     for (const key of ["lean", "pitch", "leanSplit"]) number(input[key], `${path}.input.${key}`, -1, 1);
-    for (const key of ["knee", "weight"]) number(input[key], `${path}.input.${key}`, 0, 1);
-    for (const key of ["push", "brake"]) {
+    for (const key of ["knee", "weight", "carriage"]) number(input[key], `${path}.input.${key}`, 0, 1);
+    for (const key of ["push", "brake", "toe"]) {
       if (typeof input[key] !== "boolean") throw new Error(`${path}.input.${key}: expected a boolean`);
     }
     if (!["A", "B", "C"].includes(frame.scheme as string)) throw new Error(`${path}.scheme: expected A, B, or C`);

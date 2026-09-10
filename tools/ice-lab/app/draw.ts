@@ -15,6 +15,8 @@ import { effectiveRocker, carveRadius, skidOnsetSpeed, equilibriumLean } from ".
 import { perpLeft, len } from "../sim/math.ts";
 import type { Vec2 } from "../sim/math.ts";
 import { PadView } from "./padview.ts";
+import { drawRibbon } from "./ribbon.ts";
+import { JUMP_PHASE, JUMP_CODE, JUMP_NONE, ROTATION_MARK, EDGE_MARK } from "../sim/jump.ts";
 
 const PX = 26;                    // pixels per metre at zoom 1
 
@@ -42,11 +44,13 @@ export interface DrawOptions {
   skater: boolean;
   /** Controller and solver-input panel. Developer-facing; off in playtest. */
   pad: boolean;
+  /** The Edge Ribbon, bible §4.6. Under test, so it stays on in playtest. */
+  ribbon: boolean;
 }
 
 export const DEFAULT_OPTIONS: DrawOptions = {
   blades: true, carveCircle: true, forces: true, balance: true, tracing: true, hud: true,
-  skater: true, pad: true,
+  skater: true, pad: true, ribbon: true,
 };
 
 /**
@@ -139,6 +143,7 @@ export class Renderer {
     ctx.restore();
     if (opt.hud) this.hud(s, p, info);
     if (opt.pad && w > 640) this.pad.draw(ctx, w - 312, 48, scheme, s);
+    if (opt.ribbon) drawRibbon(ctx, w, h, s, p);
   }
 
   // ── ice ───────────────────────────────────────────────────────────────────
@@ -235,8 +240,13 @@ export class Renderer {
       for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
       ctx.stroke();
     };
-    ctx.fillStyle = "rgba(0,5,15,0.35)";
-    ctx.beginPath(); ctx.ellipse(-0.08, -0.10, 0.65, 0.39, 0, 0, Math.PI * 2); ctx.fill();
+    // In the air the shadow stays on the ice and slides out from under the
+    // body, and the body grows toward the camera: height, read from above.
+    const air = s.jump.phase === JUMP_PHASE.Air;
+    const lift = air ? Math.max(0, s.jump.z) : 0;
+    ctx.fillStyle = `rgba(0,5,15,${(0.35 - 0.3 * Math.min(1, lift)).toFixed(2)})`;
+    ctx.beginPath(); ctx.ellipse(-0.08 - 0.6 * lift, -0.10 - 0.6 * lift, 0.65, 0.39, 0, 0, Math.PI * 2); ctx.fill();
+    if (lift > 0) ctx.scale(1 + 0.9 * lift, 1 + 0.9 * lift);
 
     if (s.fallen) {
       stroke([-0.65, -0.25, -0.25, 0, 0.30, 0.12], "#24384d", 0.22);
@@ -258,7 +268,8 @@ export class Renderer {
     for (let i = 0; i < 2; i++) {
       const b = s.blade[i];
       const side = i === FOOT.Left ? 1 : -1;
-      let [fx, fy] = b.inContact ? local(b.contact) : [support[0] - 0.42, support[1] + side * 0.16];
+      let [fx, fy] = air ? [-0.02, side * 0.06]
+        : b.inContact ? local(b.contact) : [support[0] - 0.42, support[1] + side * 0.16];
       if (s.strokeFoot === i && beat > 0) { fx -= 0.25 * beat; fy += side * 0.35 * beat; }
       const load = b.inContact ? 0.35 + 0.65 * b.weight : 0.25;
       const leg = `rgba(84,124,160,${load.toFixed(2)})`;
@@ -279,10 +290,16 @@ export class Renderer {
     // Arms: swung fore and aft against each other by the save, like a skater
     // windmilling to stay up. Normalized by the ceiling, so full swing means
     // the arms have nothing left to give.
-    const save = clampUnit(s.intAccel / Math.max(p.internalMax, 1e-3));
+    // In the air the arms are the moment of inertia: drawn in as it falls
+    // toward the tucked value, which is the pull-in the whole jump rides on.
+    const save = air ? 0 : clampUnit(s.intAccel / Math.max(p.internalMax, 1e-3));
+    const tuck = air ? clampUnit((p.inertiaOpen - s.jump.inertia) / Math.max(p.inertiaOpen - p.inertiaTucked, 1e-3)) : 0;
+    const reach = 1 - 0.8 * Math.max(0, tuck);
     const armCol = Math.abs(save) > 0.95 ? GOLD : "#60d9ce";
-    stroke([torsoX, 0.18, torsoX - 0.05 + 0.3 * save, 0.48, torsoX + 0.1 + 0.45 * save, 0.66], armCol, 0.11);
-    stroke([torsoX, -0.18, torsoX - 0.05 - 0.3 * save, -0.48, torsoX + 0.1 - 0.45 * save, -0.66], armCol, 0.11);
+    stroke([torsoX, 0.18, torsoX - 0.05 + 0.3 * save, 0.18 + 0.30 * reach,
+      torsoX + 0.1 + 0.45 * save, 0.18 + 0.48 * reach], armCol, 0.11);
+    stroke([torsoX, -0.18, torsoX - 0.05 - 0.3 * save, -0.18 - 0.30 * reach,
+      torsoX + 0.1 - 0.45 * save, -0.18 - 0.48 * reach], armCol, 0.11);
 
     ctx.fillStyle = "#69e3d3";
     ctx.beginPath(); ctx.ellipse(torsoX, 0, 0.28, 0.23, 0, 0, Math.PI * 2); ctx.fill();
@@ -379,6 +396,32 @@ export class Renderer {
 
   // ── the numbers ───────────────────────────────────────────────────────────
 
+  /** The jump in progress and the last one landed, while jumps are on. */
+  private jumpLines(s: SkaterState, p: Params): Array<[string, string]> {
+    if (p.jumpMode <= 0) return [];
+    const J = s.jump;
+    const mode = p.jumpMode >= 2 ? "full" : "hop";
+    const out: Array<[string, string]> = [];
+    if (J.phase === JUMP_PHASE.Load) {
+      out.push([`JUMP ${mode}  LOAD ${J.t.toFixed(2)}s  knee ${s.knee.toFixed(2)}`
+        + `${J.toeInLoad ? "  pick" : ""}${J.preRotation > 0 ? "  PRE-ROTATING" : ""}`, GOLD]);
+    } else if (J.phase === JUMP_PHASE.Air) {
+      out.push([`JUMP ${mode}  AIR ${(J.rotation / (2 * Math.PI)).toFixed(2)} rev  `
+        + `ω ${(J.angMomentum / J.inertia).toFixed(1)}  I ${J.inertia.toFixed(2)}  ${J.z.toFixed(2)} m`, JADE]);
+    } else {
+      out.push([`JUMP ${mode}  deep knee, then release`, DIM]);
+    }
+    const L = s.landed;
+    if (L.tick >= 0) {
+      const name = L.kind === JUMP_NONE ? "hop"
+        : `${L.revolutions}${JUMP_CODE[L.kind]}${ROTATION_MARK[L.rotationCall]}${EDGE_MARK[L.edgeCall]}`;
+      out.push([`LAST  ${name}  ${L.turned.toFixed(2)} rev  TQ ${L.takeoffQuality.toFixed(2)}  `
+        + `LQ ${L.landingQuality.toFixed(2)}${L.fall ? "  FALL" : L.stepOut ? "  step-out" : ""}`
+        + `${L.twoFoot && L.kind !== JUMP_NONE ? "  two-foot" : ""}`, L.fall ? "#ff4d6d" : INK]);
+    }
+    return out;
+  }
+
   private hud(s: SkaterState, p: Params, info: string[]): void {
     const ctx = this.ctx;
     const d = (r: number): string => (r * 180 / Math.PI).toFixed(1);
@@ -390,8 +433,9 @@ export class Renderer {
 
     const sb = s.blade[s.supportFoot];
     const skidLine = sb.inContact && Math.abs(sb.tilt) > p.flatThreshold;
+    const jumpLines = this.jumpLines(s, p);
     const height = 4 + 5 * 16 + 6 + 2 * 46 + 4 + (skidLine ? 16 : 0) + (s.fallen ? 16 : 0)
-      + 8 + info.length * 16 + 6;
+      + jumpLines.length * 16 + 8 + info.length * 16 + 6;
     ctx.fillStyle = "rgba(7,16,26,0.86)";
     ctx.fillRect(8, 8, Math.min(480, this.canvas.width - 16), height);
     ctx.fillStyle = JADE;
@@ -448,6 +492,7 @@ export class Renderer {
       line(`SKIDS ABOVE  ${onset.toFixed(1)} m/s at this edge`, DIM);
     }
     if (s.fallen) line(`DOWN — ${FALL_NAME[s.fallReason]} · A / Space to stand up`, "#ff4d6d");
+    for (const [text, col] of jumpLines) line(text, col);
 
     y += 8;
     for (const t of info) line(t, DIM);

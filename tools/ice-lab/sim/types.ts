@@ -32,11 +32,11 @@ export const REGIME_NAME = [
 ] as const;
 
 export const FALL = {
-  None: 0, LeanExceeded: 1, BalanceTimeout: 2, ToePickTrip: 3,
+  None: 0, LeanExceeded: 1, BalanceTimeout: 2, ToePickTrip: 3, Landing: 4,
 } as const;
-export type Fall = 0 | 1 | 2 | 3;
+export type Fall = 0 | 1 | 2 | 3 | 4;
 
-export const FALL_NAME = ["", "LEAN EXCEEDED", "BALANCE LOST", "TOE PICK"] as const;
+export const FALL_NAME = ["", "LEAN EXCEEDED", "BALANCE LOST", "TOE PICK", "LANDING"] as const;
 
 // ── the edge code ───────────────────────────────────────────────────────────
 
@@ -65,6 +65,78 @@ export function codeToString(c: number): string {
   const d = codeDir(c) === DIR.Forward ? "F" : codeDir(c) === DIR.Backward ? "B" : "-";
   const s = codeSide(c) === EDGE.Outside ? "O" : codeSide(c) === EDGE.Inside ? "I" : "-";
   return f + d + s;
+}
+
+// ── jumps ───────────────────────────────────────────────────────────────────
+
+/**
+ * A jump attempt, JumpResolver.cpp's FJumpAttempt in the rig.
+ *
+ * Plain numbers so it replays and digests like everything else. The fields
+ * set at takeoff — vz, airTime, height, angMomentum — are never written again
+ * until the next takeoff: ballistics are fixed at the instant the knee is
+ * released, and the only lever left in the air is `inertia`.
+ */
+export interface JumpState {
+  /** JUMP_PHASE: none, load, air. */
+  phase: number;
+  /** Seconds in the current phase. */
+  t: number;
+  peakKnee: number;
+  /** Accumulates when the load is held past the window: the edge rotates under you. */
+  preRotation: number;
+  /** Integral of outside-ness over the load, s. Its sign is the setup edge. */
+  setup: number;
+  /** Tick of the last toe-pick strike, -1 if none. */
+  toeTick: number;
+  /** A toe pick was struck at some point during this load. */
+  toeInLoad: boolean;
+  /** The support blade's edge code at the release tick. */
+  takeoffCode: number;
+  /** JUMP index, or JUMP_NONE for a hop or an unrecognised takeoff. */
+  kind: number;
+  /** 0 = on the required edge .. 1 = on the opposite one. */
+  edgeError: number;
+  /** Takeoff quality, 0..1. */
+  quality: number;
+  /** Blade height above the ice, m, and its rate. */
+  z: number;
+  vz: number;
+  height: number;
+  airTime: number;
+  /** kg m^2 / s about the vertical. Conserved from takeoff to landing. */
+  angMomentum: number;
+  /** kg m^2 about the vertical. The one control a skater has in the air. */
+  inertia: number;
+  /** Radians turned since takeoff. */
+  rotation: number;
+  peakOmega: number;
+}
+
+/** A landed jump, as data/calls-and-deductions.csv would describe it. */
+export interface JumpResult {
+  /** Tick of the landing, -1 before the first. */
+  tick: number;
+  kind: number;
+  /** The name-number: a triple is 3, a double axel is 2. 0 for a hop. */
+  revolutions: number;
+  /** Revolutions actually turned, axel's extra half included. */
+  turned: number;
+  /** Revolutions short of the called jump. Negative is over-rotated. */
+  shortBy: number;
+  /** ROTATION_CALL: clean, q, <, <<. */
+  rotationCall: number;
+  /** EDGE_CALL: clean, !, e. Flip and lutz only. */
+  edgeCall: number;
+  toe: boolean;
+  takeoffQuality: number;
+  landingQuality: number;
+  height: number;
+  airTime: number;
+  peakOmega: number;
+  twoFoot: boolean;
+  stepOut: boolean;
+  fall: boolean;
 }
 
 // ── state ───────────────────────────────────────────────────────────────────
@@ -148,6 +220,10 @@ export interface SkaterState {
    * button already held when the ice arrived is not a decision to get up.
    */
   pushHeld: boolean;
+  /** The jump in progress, if any. sim/jump.ts owns every field. */
+  jump: JumpState;
+  /** The last jump that came down, as the technical panel would read it. */
+  landed: JumpResult;
   fallReason: Fall;
   fallen: boolean;
   tick: number;
@@ -182,10 +258,20 @@ export interface SkatingInput {
   leanSplit: number;
   push: boolean;
   brake: boolean;
+  /**
+   * 0..1, how far the arms and free leg are held from the spin axis — the
+   * bible's right-stick "carriage". Read twice by a jump and never on the ice:
+   * at takeoff it is the whip that sets the angular momentum, and in the air
+   * its absence is the pull-in that sets the rate.
+   */
+  carriage: number;
+  /** A toe-pick strike, this tick. Toe jumps need one within `toeWindow` of the release. */
+  toe: boolean;
 }
 
 export const NEUTRAL_INPUT: SkatingInput = {
   lean: 0, knee: 0.35, weight: 0.5, pitch: 0, leanSplit: 0, push: false, brake: false,
+  carriage: 0, toe: false,
 };
 
 // ── events ──────────────────────────────────────────────────────────────────
@@ -193,12 +279,14 @@ export const NEUTRAL_INPUT: SkatingInput = {
 export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
   SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
+  Takeoff: 8, Landing: 9,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
   "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
+  "TAKEOFF", "LANDING",
 ] as const;
 
 export interface EdgeEvent {

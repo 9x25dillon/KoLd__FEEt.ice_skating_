@@ -12,6 +12,12 @@ code cannot drift. If you edit these, mirror the change into `docs/design-bible.
 | `SpinResolver.cpp` | [level-features.md](../../docs/level-features.md) | The segment model and level-feature detection for spins. Reduces most of the ISU feature list to queries over a list of segments. |
 | `TransitionSolver.cpp` | [composer-solver.md](../../docs/composer-solver.md) | The Composer's transition planner: bidirectional lattice A*, time fitting with slack-filling, whole-program DP chaining, and constraint-relaxation diagnostics. |
 
+**Two of them now run.** The Ice Lab carries `JumpResolver.cpp` as
+[`tools/ice-lab/sim/jump.ts`](../../tools/ice-lab/sim/jump.ts) and the jump half of
+`ScoreCalculator.cs` as [`sim/score.ts`](../../tools/ice-lab/sim/score.ts), which reads the
+scoring tables from `data/` instead of inlining them. Each file's header says where it departs
+from the excerpt and why; the tests hold the `.cs` table and the data to each other.
+
 ## These do not compile, and that is intentional
 
 They are **specifications as code**. Helper functions (`MoveTowards`, `WrapPi`,

@@ -41,7 +41,7 @@ const TRIGGER = 0.35;
  */
 const PITCH_BAND = 0.44;          // 25 deg
 
-const A = 0, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, BACK = 8, START = 9;
+const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, BACK = 8, START = 9, DPAD_UP = 12;
 
 /**
  * Hardware state, with the sticks shaped but not yet interpreted.
@@ -71,18 +71,31 @@ export interface Controls {
   weight: number;
   push: boolean;
   brake: boolean;
+  /**
+   * Arms held out, from the keyboard (C). The pad's carriage is the right
+   * stick, and which scheme may read it as carriage is schemes.ts's business.
+   */
+  carriage: number;
+  /**
+   * One-shot toe-pick strike: pad B, keyboard F. The bible puts the pick on an
+   * LT tap, but LT is this rig's brake, and a tap/hold split on one trigger is
+   * a second experiment nobody asked for.
+   */
+  toe: boolean;
   /** One-shot: true only on the frame the button went down. */
   reset: boolean;
   pause: boolean;
   cyclePreset: boolean;
   cycleScheme: boolean;
+  /** Off -> hop -> full jumps. Keyboard J, pad D-pad up. */
+  cycleJump: boolean;
 }
 
 const NOTHING: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
-  knee: 0.35, weight: 0.5, push: false, brake: false,
-  reset: false, pause: false, cyclePreset: false, cycleScheme: false,
+  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
+  reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
 };
 
 /**
@@ -167,6 +180,8 @@ export class Pad {
       out.pause = (gp.buttons[START]?.pressed ?? false) && !this.prevButtons.has(START);
       out.cyclePreset = (gp.buttons[X]?.pressed ?? false) && !this.prevButtons.has(X);
       out.cycleScheme = (gp.buttons[BACK]?.pressed ?? false) && !this.prevButtons.has(BACK);
+      out.toe = (gp.buttons[B]?.pressed ?? false) && !this.prevButtons.has(B);
+      out.cycleJump = (gp.buttons[DPAD_UP]?.pressed ?? false) && !this.prevButtons.has(DPAD_UP);
       this.prevButtons = new Set(gp.buttons.flatMap((b, i) => (b.pressed ? [i] : [])));
     }
 
@@ -190,6 +205,9 @@ export class Pad {
     if (this.pressed("p")) out.pause = true;
     if (this.pressed("t")) out.cyclePreset = true;
     if (this.pressed("m")) out.cycleScheme = true;
+    if (this.held("c")) out.carriage = 1;
+    if (this.pressed("f")) out.toe = true;
+    if (this.pressed("j")) out.cycleJump = true;
 
     this.prevKeys = new Set(this.keys);
     return out;

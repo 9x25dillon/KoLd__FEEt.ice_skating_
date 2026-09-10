@@ -39,6 +39,9 @@ is true only for flip and lutz, the two jumps that can draw an edge call.
 `rotations_actual`. These thresholds are the game's interpretation of a human judgement
 call and are the single most important balance lever in the technical score; expect to
 tune them during the vertical slice.
+The `e` row's `base_value_effect` said `reduced band`, which no implementation can compute. It
+is `0.80` since 2026-09-10 — the same factor as `<` — as a design decision pending the ISU
+verification this whole file awaits.
 
 **`segment-rules.csv`** — `component_factor` scales the three-component PCS total
 (Composition, Presentation, Skating Skills) so that short and free programs reach

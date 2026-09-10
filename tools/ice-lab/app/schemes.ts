@@ -122,11 +122,13 @@ function signedAngle(a: Vec2, b: Vec2): number {
 
 /**
  * A · Lean & Load. The left stick IS the lean: sideways is which edge and how
- * deep, fore/aft is where the contact sits along the rocker. The right stick
- * is left alone, because the bible reserves it for carriage, which this rig
- * does not model — and because A is the hypothesis under test as §2.1 wrote
- * it: "three simultaneous continuous analog channels is more than most players
- * carry." Giving the idle stick a job would test a different scheme.
+ * deep, fore/aft is where the contact sits along the rocker. On the ice the
+ * right stick is left alone, because A is the hypothesis under test as §2.1
+ * wrote it: "three simultaneous continuous analog channels is more than most
+ * players carry." Giving the idle stick a carving job would test a different
+ * scheme. It is the bible's carriage, and the only thing that reads carriage
+ * is a jump — the whip at takeoff and the pull-in in the air — so with jumps
+ * off, which is every preset, A still carves on three channels.
  */
 export function schemeA(c: Controls): SkatingInput {
   return {
@@ -135,7 +137,13 @@ export function schemeA(c: Controls): SkatingInput {
     pitch: c.ky !== 0 ? c.ky : c.pitch,
     leanSplit: 0,
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
+    carriage: carriage(c), toe: c.toe,
   };
+}
+
+/** The right stick's reach, or the keyboard's held C. Jumps only; see schemeA. */
+function carriage(c: Controls): number {
+  return clamp(Math.max(c.carriage, Math.hypot(c.rx, c.ry)), 0, 1);
 }
 
 /**
@@ -208,6 +216,7 @@ export function schemeB(
     pitch: c.ky,
     leanSplit: 0,
     knee: c.knee, weight, push: c.push, brake: c.brake,
+    carriage: carriage(c), toe: c.toe,
   };
 }
 
@@ -242,6 +251,9 @@ export function schemeC(c: Controls): SkatingInput {
     pitch: c.ky !== 0 ? c.ky
       : clamp((relievedPitch(c.lx, c.ly) + relievedPitch(c.rx, c.ry)) / 2, -1, 1),
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
+    // The right stick is the right blade here, so C's carriage is the
+    // keyboard's alone. A pad skating C can hop but not whip a rotation.
+    carriage: clamp(c.carriage, 0, 1), toe: c.toe,
   };
 }
 

@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 109 tests
+node --test test/*.test.ts     # 131 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -251,11 +251,21 @@ the next one**, and the entry tables above moved by 1–3° when it landed.
 
 Keyboard: **A/D** lean, **W/S** rocker fore-aft, **Shift** knee, **Q/E** weight,
 **Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **M** pad
-scheme.
+scheme. Jumps, when on: **J** cycles off / hop / full, **C** arms out, **F** toe
+pick.
 
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
-weight, **Y** reset, **X** preset, **Back** scheme. A browser hides a gamepad
+weight, **Y** reset, **X** preset, **Back** scheme; for jumps, **right stick**
+carriage, **B** toe pick, **D-pad ↑** jump mode. A browser hides a gamepad
 until a button is pressed, which reads exactly like a broken pad.
+
+**The input panel** (top right, toggle "input") shows the hardware as read —
+sticks, triggers, bumpers, buttons lit as they fire — beside the `SkatingInput`
+the live scheme turned it into. The gap between the two rows *is* the control
+scheme. Its stick captions explain each scheme, so it is forced off under
+`?playtest=1`. The skater figure is drawn from state alone: feet on the
+solver's own contacts, leg brightness the weight share, torso forward with the
+knee, arms swinging with the save and gold when it saturates.
 
 **Falling, and getting up.** A fallen skater slides until the tester does
 something about it. A fresh press of **A / Space** stands them up where they
@@ -273,7 +283,7 @@ mapping below is the developer's copy and belongs nowhere on screen:
 
 | | what the sticks do | what it trades |
 |---|---|---|
-| **A · Lean & Load** | left stick is the lean vector, fore/aft on it the rocker; right stick reserved for carriage, which the rig does not model | the bible's §2.1 proposal, and what ships if it wins |
+| **A · Lean & Load** | left stick is the lean vector, fore/aft on it the rocker; right stick is carriage, which only a jump reads | the bible's §2.1 proposal, and what ships if it wins |
 | **B · Steer & Load** | left stick is intended travel direction; the skater picks the edge and the lean; nothing on the pad addresses the blade | keeps the carve physics, gives up deliberate inside/outside edge choice — the sport's alphabet |
 | **C · Two-Foot** | left stick is the left blade's edge, right stick the right blade's; fore/aft on either stick is that blade's contact point, and the solver gets their mean | possibly unlearnable, possibly the most distinctive scheme in any sports game |
 
@@ -295,6 +305,55 @@ Two things B taught, both measured:
   with both feet down. Turn direction does not choose the foot — a left curve is
   an LFO *or* an RFI — so B keeps whichever foot the player chose and commits to
   it as the edge deepens.
+
+## Jumps, scoring, the Edge Ribbon and the edge tone
+
+Added 2026-09-10, **over [pre-production-plan.md §1](../../docs/pre-production-plan.md)**,
+which refuses jumps in the prototype so that "an exciting jump cannot rescue a
+boring foundation". The operator decided to have them in the rig anyway. They
+are contained rather than hidden: `jumpMode` is 0 in every preset, `?playtest=1`
+forces it to 0, and mode 1 is exactly the plan's week-9 hop — no rotation, no
+element, no call.
+
+**`sim/jump.ts` is `src/reference/JumpResolver.cpp`.** There is no jump button:
+hold the knee deep (Shift / RT past 0.7) and release it (below 0.45) — the
+release is the takeoff, 0.30 s is the ideal load, and a load held past 1 s was a
+carve and is cancelled. Vertical velocity, air time and angular momentum are set
+at that instant and never again (`test/jump.test.ts` checks L is constant in
+the air and that the arms cannot change the flight). The air has one lever:
+carriage held out keeps the body open at 4.0 kg·m², let go it draws in toward
+0.95 at 11 kg·m²/s, and ω = L / I. The whip — carriage held at the release —
+sets L.
+
+The panel reads the jump off the takeoff: foot, direction, the edge the *setup*
+was held on, and whether the toe picked within 90 ms. A lutz that rolls inside
+at the last moment is still a lutz, with an `e`. The attempted revolutions are
+inferred as the next one above what was cleanly turned (2.8 is a 3 with `q`, 2.4
+a 3 with `<<`), because there is no program sheet. Every jump lands RBO; an
+under-rotated one comes down crossways, the blade scrubs off the velocity it
+does not point along, and it usually goes down as `LANDING`.
+
+Measured on `responsive`, perfect 0.30 s load: v_y 2.94 m/s, 0.44 m, 0.59 s. A
+full whip and a tuck off RBO with a pick is a clean **3T** (3.04 rev); half a
+whip is a **2Lo<** and a fall. Those are the bible's own numbers doing what they
+say.
+
+**`sim/score.ts` is the jump half of `ScoreCalculator.cs`**, reading
+`data/scale-of-values.csv` and `data/calls-and-deductions.csv` (fetched beside
+the page; the single-file bundle has none and shows no score). Base value with
+`<` 80%, `<<` one revolution fewer, `e` 80%; nine seeded judges, trimmed. Where
+the reference and the data disagree — the reference caps an `e` at GOE −1, the
+data says −3 to −4 mandatory — the data wins. `test/score.test.ts` pins the SOV
+against the table the `.cs` inlines, and `rel_difficulty` against the SOV.
+
+**The Edge Ribbon** (bible §4.6) runs up from the bottom of the rink: curvature
+is the carve being traced, thickness the lean, a bead the knee, and the side is
+coded by shape as well as colour (outside solid, inside dashed, flat dotted,
+skid broken). **The edge tone** (bible §5.3) is the plan's crude version: a
+noise bed per foot, a partial that sings above 25° and rises with depth, a skid
+hiss, and a toe click, takeoff swell and landing "chk" that is dirtier the worse
+the landing. Both are in the plan's build list and both stay on in playtest.
+Audio starts on the first key or click; a gamepad press is not a gesture.
 
 ## What a session measures
 
@@ -450,7 +509,7 @@ require the exact schema, solver version, 120 Hz rate, complete finite tuning,
 bounded input axes, boolean buttons, at most 36,000 ticks and at most 64 MiB.
 Warnings about balance tuning are preserved so a bad tuning can be reproduced.
 
-`ice-lab-f64/2` is a JavaScript regression contract. CRC32 covers every state
+`ice-lab-f64/3` is a JavaScript regression contract. CRC32 covers every state
 field and event using canonical JSON, with straight-blade Infinity encoded
 explicitly; it is a diagnostic, not an authenticity signature. It does **not**
 establish bit-exact parity with another JS engine, platform math library, or
@@ -459,7 +518,9 @@ change and review fixture changes rather than regenerating them to pass CI.
 The bump from `/1` to `/2` added `pushHeld` to the state (standing up after a
 fall is edge-triggered) and the knee floor on strokes; the fixture was re-run
 from its own recorded inputs, and its kinematics matched the `/1` solver
-tick for tick, so only the digests changed.
+tick for tick, so only the digests changed. `/2` to `/3` added jumps: `jump` and
+`landed` on the state, `carriage` and `toe` on the input. With jumps off the
+fixture's 240 ticks matched the `/2` solver on every shared field and event.
 
 `test/fixtures/replay-v1.json` pins a 240-tick skating run with a tuning change
 at tick 121. PR checks run the tests, browser build and fixture verifier under
@@ -483,11 +544,16 @@ sim/classify.ts    continuous blade state -> the discrete edge vocabulary
 sim/telemetry.ts   fixed ring, CSV export, event log
 sim/session.ts     the plan's §6 metrics, computed from what the rig can see
 sim/replay.ts      bounded capture, strict import, full-state checks and playback
+sim/jump.ts        load, air, land: JumpResolver.cpp, and the panel's calls
+sim/score.ts       one jump's score, from the data files: ScoreCalculator.cs
 replay/verify.ts   command-line replay verification
 app/pad.ts         controller and keyboard: hardware, and nothing else
 app/schemes.ts     A, B and C — what an axis MEANS, as pure functions
 app/loop.ts        the 120 Hz accumulator and its dt clamp
-app/draw.ts        blades, carve circles, force vectors, tracings, HUD
+app/draw.ts        skater, blades, carve circles, force vectors, tracings, HUD
+app/padview.ts     the input panel: hardware as read beside the solver input
+app/ribbon.ts      the Edge Ribbon
+app/audio.ts       the edge tone and the jump one-shots
 app/panel.ts       the sliders
 app/lab.ts         wiring
 app/build.mjs      TypeScript -> browser JS, no dependencies
@@ -523,8 +589,9 @@ It is the edge cutting a groove and pushing sideways against the wall of it.
 
 ## What is deliberately not here
 
-Airborne flight, spins, turns and three-turns, falls beyond their trigger,
-animation, audio, networking, stamina, flow, and the ice grid (tracings are
+Spins, turns and three-turns (a skater gets backward by a waltz jump or by
+starting backward), falls beyond their trigger, animation, networking, stamina,
+flow, combinations and sequences, and the ice grid (tracings are
 drawn, but they do not yet feed friction or bite back into the solver as the
 bible's §05 requires). The stroke is the design bible's semi-analytic push, not
 a leg model.

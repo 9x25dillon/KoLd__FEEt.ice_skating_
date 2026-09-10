@@ -23,7 +23,8 @@ const sticks: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.45, weight: 1, push: false, brake: false,
-  reset: false, pause: false, cyclePreset: false, cycleScheme: false,
+  carriage: 0, toe: false,
+  reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
 };
 
 /** Hold a target heading with B for `secs`, reporting the error it settles to. */
@@ -56,19 +57,36 @@ test("A · the left stick is the lean, and only the lean", () => {
   assert.equal(schemeA({ ...sticks, lean: 0.8, kx: -1 }).lean, -1);
 });
 
-test("A and B · the right stick does nothing, because the bible reserves it", () => {
-  // §2.1 gives the right stick to carriage, which the rig does not model, and
-  // A is under test as written: three analog channels, not four. B is the
-  // one-stick fallback, and a rocker or weight channel on its spare stick
-  // would hand it a piece of A and blur the contrast the down-select needs.
+test("A and B · the right stick does nothing on the ice, because the bible reserves it", () => {
+  // §2.1 gives the right stick to carriage, and A is under test as written:
+  // three analog channels, not four. B is the one-stick fallback, and a rocker
+  // or weight channel on its spare stick would hand it a piece of A and blur
+  // the contrast the down-select needs.
+  //
+  // Carriage is now modelled, for jumps only: the stick reaches the solver as
+  // `carriage` and nothing else, and nothing on the ice reads it. So the rule
+  // is checked where it matters — the skater — with jumps off, as every preset
+  // has them.
   const idle = { ...sticks, lean: 0.4, pitch: 0.1, weight: 0.5 };
   const pushed = { ...idle, rx: 0.9, ry: -0.8 };
-  assert.deepEqual(schemeA(pushed), schemeA(idle), "A ignores the right stick entirely");
+  const { carriage: ca, ...a1 } = schemeA(pushed);
+  const { carriage: ca0, ...a0 } = schemeA(idle);
+  assert.deepEqual(a1, a0, "A maps the right stick to carriage and nothing else");
+  assert.ok(ca > 0.99 && ca0 === 0);
   const st = newSchemeState();
-  const b0 = schemeB({ ...idle, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
-  const b1 = schemeB({ ...pushed, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
-  assert.deepEqual(b1, b0, "B ignores it too");
+  const { carriage: _b0, ...b0 } = schemeB({ ...idle, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
+  const { carriage: _b1, ...b1 } = schemeB({ ...pushed, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
+  assert.deepEqual(b1, b0, "B ignores it too, apart from carriage");
   assert.equal(b0.pitch, 0, "and B has no rocker on the pad at all");
+
+  assert.equal(p.jumpMode, 0, "every preset skates with jumps off");
+  const still = createState(p, 5, 0), moved = createState(p, 5, 0);
+  for (let i = 0; i < 240; i++) {
+    const c = { ...idle, knee: i % 60 < 30 ? 0.95 : 0.1, push: i % 90 === 0 };
+    step(still, schemeA(c), p, SIM_DT, []);
+    step(moved, schemeA({ ...c, rx: 0.9, ry: -0.8 }), p, SIM_DT, []);
+  }
+  assert.deepEqual(moved, still, "with jumps off the right stick cannot move the skater");
 });
 
 test("B · steers to the heading it was pointed at, from 45 to 170 degrees", () => {

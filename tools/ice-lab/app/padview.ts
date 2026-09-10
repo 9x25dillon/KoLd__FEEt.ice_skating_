@@ -35,13 +35,13 @@ const FLASH_TICKS = 30;
 
 /** What each stick means under each scheme. Indexed by scheme, A B C. */
 export const STICK_ROLE = [
-  { left: "lean ↔ edge · ↕ rocker", right: "idle (carriage)" },
-  { left: "point where to go", right: "idle" },
+  { left: "lean ↔ edge · ↕ rocker", right: "carriage · jumps" },
+  { left: "point where to go", right: "carriage · jumps" },
   { left: "left blade · ↕ rocker", right: "right blade · ↕ rocker" },
 ] as const;
 
-type Flash = "push" | "reset" | "pause" | "cyclePreset" | "cycleScheme";
-const FLASHES: Flash[] = ["push", "reset", "pause", "cyclePreset", "cycleScheme"];
+type Flash = "push" | "toe" | "reset" | "pause" | "cyclePreset" | "cycleScheme" | "cycleJump";
+const FLASHES: Flash[] = ["push", "toe", "reset", "pause", "cyclePreset", "cycleScheme", "cycleJump"];
 
 /**
  * The two sticks as a scheme reads them, with the keyboard folded in.
@@ -70,7 +70,7 @@ export class PadView {
   private controls: Controls | null = null;
   private input: SkatingInput | null = null;
   private flash: Record<Flash, number> = {
-    push: 0, reset: 0, pause: 0, cyclePreset: 0, cycleScheme: 0,
+    push: 0, toe: 0, reset: 0, pause: 0, cyclePreset: 0, cycleScheme: 0, cycleJump: 0,
   };
 
   /**
@@ -84,8 +84,10 @@ export class PadView {
       if (controls?.[k]) this.flash[k] = FLASH_TICKS;
       else if (this.flash[k] > 0) this.flash[k]--;
     }
-    // A held push strokes on repeat, so it stays lit while held.
+    // A held push strokes on repeat, so it stays lit while held. A replay has
+    // no controls, but its inputs still say when the pick went in.
     if (input?.push) this.flash.push = Math.max(this.flash.push, 1);
+    if (input?.toe) this.flash.toe = FLASH_TICKS;
   }
 
   draw(ctx: CanvasRenderingContext2D, x: number, y: number, scheme: number, s: SkaterState): void {
@@ -128,6 +130,11 @@ export class PadView {
     };
     stick(x + 48, y + 66, sticks?.left ?? null, "LS", role.left);
     stick(x + 160, y + 66, sticks?.right ?? null, "RS", role.right);
+    // Carriage: a gold ring as wide as the arms are held out.
+    if (it && it.carriage > 0) {
+      ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x + 160, y + 66, 30 * it.carriage, 0, Math.PI * 2); ctx.stroke();
+    }
 
     // ── triggers: raw fill, and the knee the legs have actually reached ─────
     const trigger = (tx: number, frac: number, label: string, caption: string,
@@ -162,10 +169,12 @@ export class PadView {
     // ── buttons ─────────────────────────────────────────────────────────────
     const chips: Array<[string, string, boolean]> = [
       ["A", s.fallen ? "stand" : "stroke", this.flash.push > 0],
+      ["B", "toe", this.flash.toe > 0],
       ["Y", "reset", this.flash.reset > 0],
       ["X", "preset", this.flash.cyclePreset > 0],
       ["⧉", "scheme", this.flash.cycleScheme > 0],
       ["☰", "pause", this.flash.pause > 0],
+      ["▲", "jumps", this.flash.cycleJump > 0],
     ];
     // Five chips do not fit one 300 px row, so they wrap rather than run off
     // the panel.
@@ -184,8 +193,8 @@ export class PadView {
     if (it) {
       text(`→ lean ${sg(it.lean)}  pitch ${sg(it.pitch)}  split ${sg(it.leanSplit)}`,
         x + 10, y + 204, INK);
-      text(`  knee ${it.knee.toFixed(2)}  weight ${it.weight.toFixed(2)}`
-        + `${it.push ? "  PUSH" : ""}${it.brake ? "  BRAKE" : ""}`, x + 10, y + 220, INK);
+      text(`  knee ${it.knee.toFixed(2)}  wt ${it.weight.toFixed(2)}  arms ${it.carriage.toFixed(2)}`
+        + `${it.push ? " PUSH" : ""}${it.brake ? " BRK" : ""}${it.toe ? " TOE" : ""}`, x + 10, y + 220, INK);
     } else {
       text("→ waiting for the first tick", x + 10, y + 204);
     }

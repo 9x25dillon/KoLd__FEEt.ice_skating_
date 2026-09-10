@@ -100,6 +100,14 @@ emit("sim");
 emit("app");
 copyFileSync(join(root, "app/index.html"), join(out, "app/index.html"));
 
+// The scoring tables, as data beside the page rather than code inside it
+// (convention 3.2). The lab fetches them to score a landed jump; a host that
+// cannot serve them — the single-file bundle — simply shows no score.
+mkdirSync(join(out, "data"), { recursive: true });
+for (const f of ["scale-of-values.csv", "calls-and-deductions.csv"]) {
+  copyFileSync(join(root, "..", "..", "data", f), join(out, "data", f));
+}
+
 // A root entry point, because the page lives at build/app/ and its own script
 // tag is `./lab.js`. Served at "/", that resolves to /lab.js and 404s, and the
 // rink comes up blank with no error anywhere a user can see — which is exactly

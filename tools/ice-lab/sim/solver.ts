@@ -61,6 +61,7 @@ import type { Params } from "./params.ts";
 import { SIM_DT } from "./params.ts";
 import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean } from "./blade.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
+import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
 
 /**
  * A non-finite axis is a bug in the caller, and it must not be a quiet one.
@@ -94,6 +95,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     latAccel: 0, intAccel: 0, intHeld: 0, tiltCmd: lean, legLength: p.comHeight, legRate: 0,
     comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
     knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, pushHeld: false,
+    jump: newJump(p), landed: noResult(),
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -125,8 +127,9 @@ export function step(
   const freshPush = input.push && !s.pushHeld;
   s.pushHeld = input.push;
   if (s.fallen && freshPush) {
-    const { pos, heading, tick } = s;
-    Object.assign(s, createState(p), { pos, heading, tick, pushHeld: true });
+    // The last landing is kept: it is the record of why they are down.
+    const { pos, heading, tick, landed } = s;
+    Object.assign(s, createState(p), { pos, heading, tick, landed, pushHeld: true });
     for (const b of s.blade) {
       b.tangent = v2(heading.x, heading.y);
       b.contact = v2(pos.x, pos.y);
@@ -135,6 +138,15 @@ export function step(
       tick, type: EVENT.Recovered, foot: s.supportFoot,
       prevCode: EDGE_CODE_NONE, newCode: EDGE_CODE_NONE, prevDwell: 0, value: 0,
     });
+    return;
+  }
+
+  // ── 0b. in the air ────────────────────────────────────────────────────────
+  // Nothing below applies to a skater with no blade on the ice: no carve, no
+  // bite, no stroke, no balance loop to fall out of. sim/jump.ts flies the
+  // body and lands it. Unreachable while jumpMode is 0.
+  if (s.jump.phase === JUMP_PHASE.Air) {
+    jumpAir(s, input, p, dt, events);
     return;
   }
 
@@ -398,7 +410,11 @@ export function step(
       // Reaction to a push along the splayed blade's normal: forward by
       // sin(beta), sideways by cos(beta). The sideways halves cancel across
       // the two beats, which is what makes alternation the natural gait.
-      const dirv = mul(rotate(perpLeft(s.heading), outward * p.strokeBeta), -outward);
+      // Skating backward, the splay mirrors across the blade's normal and the
+      // push drives backward: a C-cut rather than a stroke. Unreachable before
+      // jumps, since nothing else can turn a skater around.
+      const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? -1 : 1;
+      const dirv = mul(rotate(perpLeft(s.heading), outward * back * p.strokeBeta), -outward);
       s.vel = add(s.vel, mul(dirv, (force / p.mass) * dt));
     }
   }
@@ -526,6 +542,9 @@ export function step(
       });
     }
   }
+
+  // ── 10. is the knee loading a jump, or releasing one? ─────────────────────
+  jumpGround(s, input, p, dt, events);
 }
 
 /** Run n ticks at the fixed rate. Convenience for tests and the replay path. */

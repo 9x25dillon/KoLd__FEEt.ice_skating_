@@ -164,6 +164,42 @@ export interface Params {
    */
   fallAuthorityCredit: number;
 
+  // ── jumps ─────────────────────────────────────────────────────────────────
+  // sim/jump.ts, after src/reference/JumpResolver.cpp. Every one of these is
+  // inert while jumpMode is 0, which it is in every preset: pre-production-
+  // plan.md §1 keeps jumps out of what the kill gate evaluates, and the lab
+  // additionally forces them off under ?playtest=1.
+  /** 0 off, 1 the plan's load-release hop (no rotation, no element), 2 full jumps. */
+  jumpMode: number;
+  /** Knee input at or above which a compression counts as a load. */
+  jumpLoadKnee: number;
+  /** Knee input below which a load is released: the release IS the takeoff. */
+  jumpReleaseKnee: number;
+  /** s. A deep knee held longer than this was a carve, not a load. */
+  jumpLoadMax: number;
+  /** m/s of vertical velocity at a perfect takeoff. Bible: 2.94 for a clean triple. */
+  jumpImpulse: number;
+  /** rad/s of spin a full carriage whip puts into an open body at takeoff. */
+  jumpWhip: number;
+  /** How much of the entry curve's yaw rate becomes rotation. */
+  jumpRotBias: number;
+  /** kg m^2 about the vertical, arms open and drawn in. Bible: 4.0 and 0.95. */
+  inertiaOpen: number;
+  inertiaTucked: number;
+  /** kg m^2 / s the arms can be drawn in or opened at. */
+  inertiaPullRate: number;
+  /** s either side of the release a toe strike counts as the pick. Bible: 90 ms. */
+  toeWindow: number;
+  /** rad/s of lean rate a zero-quality landing kicks into the body. */
+  landingShock: number;
+  /** Revolutions short that draw q, < and <<; data/calls-and-deductions.csv. */
+  callQuarter: number;
+  callUnder: number;
+  callDowngrade: number;
+  /** Takeoff-edge error that draws ! and e; the same file. */
+  callEdgeUnclear: number;
+  callEdgeWrong: number;
+
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
   comHeight: number;
@@ -224,6 +260,24 @@ export const DEFAULT_PARAMS: Params = {
   fallErrorTime: 0.35,
   fallAuthorityCredit: 0.0,   // the package credits none of it; see the field comment
 
+  jumpMode: 0,
+  jumpLoadKnee: 0.7,
+  jumpReleaseKnee: 0.45,
+  jumpLoadMax: 1.0,
+  jumpImpulse: 2.94,
+  jumpWhip: 9.5,             // JumpResolver.cpp
+  jumpRotBias: 1.0,
+  inertiaOpen: 4.0,
+  inertiaTucked: 0.95,
+  inertiaPullRate: 11.0,     // JumpResolver.cpp
+  toeWindow: 0.09,
+  landingShock: 1.5,
+  callQuarter: 0.125,
+  callUnder: 0.25,
+  callDowngrade: 0.5,
+  callEdgeUnclear: 0.25,
+  callEdgeWrong: 0.55,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -271,6 +325,15 @@ export function validate(p: Params): string[] {
   // the ceiling past about 2 m/s^2 costs more in oscillation than it buys in
   // authority. This is the check that stops an assist tier being written the
   // obvious wrong way in a UE5 tuning asset.
+  if (![0, 1, 2].includes(p.jumpMode)) errs.push("jumpMode is 0 (off), 1 (hop) or 2 (full jumps)");
+  if (p.jumpReleaseKnee >= p.jumpLoadKnee)
+    errs.push("jumpReleaseKnee must be below jumpLoadKnee, or a load is released the tick it starts");
+  if (p.inertiaTucked <= 0 || p.inertiaTucked > p.inertiaOpen)
+    errs.push("inertiaTucked must be positive and no more than inertiaOpen");
+  if (!(p.callQuarter < p.callUnder && p.callUnder < p.callDowngrade))
+    errs.push("rotation call thresholds must rise q < under < downgrade");
+  if (p.callEdgeUnclear >= p.callEdgeWrong)
+    errs.push("callEdgeUnclear must be below callEdgeWrong");
   if (p.internalMax > 2.0 && p.internalRateGain <= 0)
     errs.push("internalMax above 2 with no internalRateGain: a proportional gain with no damping "
       + "makes balance worse, not easier — raise internalRateGain first");

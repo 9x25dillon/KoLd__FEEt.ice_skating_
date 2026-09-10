@@ -76,6 +76,19 @@ const GROUPS: Array<{ title: string; note: string; sliders: Slider[] }> = [
     note: "",
   },
   {
+    title: "Jumps",
+    note: "Off in every preset and forced off under ?playtest=1 — pre-production-plan §1 keeps jumps out of the gate. 1 is the plan's hop; 2 is JumpResolver: deep knee, release, whip the arms, tuck. J cycles it.",
+    sliders: [
+      { key: "jumpMode", label: "0 off · 1 hop · 2 full", min: 0, max: 2, step: 1 },
+      { key: "jumpImpulse", label: "impulse v_y (m/s)", min: 1, max: 4, step: 0.02 },
+      { key: "jumpWhip", label: "whip (rad/s)", min: 0, max: 15, step: 0.1 },
+      { key: "inertiaTucked", label: "tucked I (kg·m²)", min: 0.5, max: 4, step: 0.05 },
+      { key: "jumpLoadMax", label: "longest load (s)", min: 0.3, max: 2, step: 0.05 },
+      { key: "toeWindow", label: "toe-pick window (s)", min: 0.02, max: 0.3, step: 0.005 },
+      { key: "landingShock", label: "landing shock (rad/s)", min: 0, max: 4, step: 0.05 },
+    ],
+  },
+  {
     title: "Edge classification",
     note: "Scoring reads the ESTABLISHED timestamp, not the first tick over a threshold.",
     sliders: [

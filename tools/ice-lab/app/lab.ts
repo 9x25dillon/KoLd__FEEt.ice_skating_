@@ -19,6 +19,9 @@ import { Pad } from "./pad.ts";
 import { applyScheme, newSchemeState, SCHEME_LABEL } from "./schemes.ts";
 import type { Scheme } from "./schemes.ts";
 import { FixedStep } from "./loop.ts";
+import { EdgeAudio } from "./audio.ts";
+import { loadTables, scoreJump } from "../sim/score.ts";
+import type { ScoreTables, JumpScore } from "../sim/score.ts";
 
 const PRESET_NAMES = Object.keys(PRESETS);
 
@@ -67,6 +70,12 @@ export class Lab {
   private replayMessage = "";
   private recordingError = "";
   private loadId = 0;
+  private audio = new EdgeAudio();
+  private sound = true;
+  /** The SOV and calls tables, fetched beside the page. Null: no scores shown. */
+  private tables: ScoreTables | null = null;
+  private scored: JumpScore | null = null;
+  private scoredTick = -1;
 
   constructor(canvas: HTMLCanvasElement, panelRoot: HTMLElement) {
     this.state = createState(this.params, this.startSpeed, 0);
@@ -86,6 +95,14 @@ export class Lab {
     // The input panel captions what each scheme does with each stick, which
     // is an explanation; §7 keeps those from testers and observers alike.
     if (this.playtest) this.options.pad = false;
+    // Jumps were added to the rig over pre-production-plan §1's refusal, on the
+    // operator's say-so. They are contained: off in every preset, and off here
+    // for certain, so no measured block can have a jump rescue the carve.
+    if (this.playtest) this.params.jumpMode = 0;
+    // Audio may only start from a gesture; a gamepad press is not one.
+    window.addEventListener("keydown", () => { if (this.sound) this.audio.unlock(); });
+    window.addEventListener("pointerdown", () => { if (this.sound) this.audio.unlock(); });
+    void this.loadScoreTables();
     this.clock.start();
   }
 
@@ -116,6 +133,7 @@ export class Lab {
         try {
           this.player.advance();
           this.renderer.pad.note(null, this.player.input);
+          this.audio.onTick(this.player.input, this.player.events, this.player.state);
           this.telemetry.capture(this.player.state);
           this.telemetry.pushEvents(this.player.events);
           this.renderer.recordTrace(this.player.state);
@@ -129,6 +147,10 @@ export class Lab {
       return; // Playback never contributes to live playtest metrics or capture.
     }
     if (c.cycleScheme) this.scheme = ((this.scheme + 1) % 3) as Scheme;
+    if (c.cycleJump && !this.playtest) {
+      this.params.jumpMode = (this.params.jumpMode + 1) % 3;
+      this.panel.refresh();
+    }
     if (c.cyclePreset && !this.playtest) {
       this.presetIndex = (this.presetIndex + 1) % PRESET_NAMES.length;
       this.panel.load(PRESETS[PRESET_NAMES[this.presetIndex]]);
@@ -142,6 +164,7 @@ export class Lab {
     this.renderer.pad.note(c, it);
     this.events.length = 0;
     step(this.state, it, this.params, SIM_DT, this.events);
+    this.audio.onTick(it, this.events, this.state);
     this.meter.sample(this.state, it, this.events, SIM_DT);
     this.telemetry.capture(this.state);
     this.telemetry.pushEvents(this.events);
@@ -186,11 +209,48 @@ export class Lab {
           : `Playing ${this.player.index} / ${this.player.total} ticks. Recorded tuning is in use.`
       : `Recorded ${(this.recorder.ticks / SIM_HZ).toFixed(1)} s / 300 s`
         + (this.recorder.full ? " — clip full; export, then reset for a new clip." : " since reset."));
+    const shown = this.player?.state ?? this.state;
+    const score = this.playtest ? "" : this.scoreLine(shown);
+    if (score) info.splice(1, 0, score);
+    this.audio.update(shown, this.player?.params ?? this.params, this.sound && !this.clock.paused);
     const scheme = this.player
       ? Math.max(0, SCHEME_LABEL.indexOf(this.player.scheme as "A" | "B" | "C"))
       : this.scheme;
     this.renderer.draw(this.player?.state ?? this.state, this.player?.params ?? this.params,
       this.options, info, scheme);
+  }
+
+  /**
+   * The last landed jump, scored from the data the way ScoreCalculator.cs
+   * would score it. Seeded by the landing tick, so a replay shows the same.
+   */
+  private scoreLine(s: SkaterState): string {
+    if (!this.tables || s.landed.tick < 0) return "";
+    if (s.landed.tick !== this.scoredTick) {
+      this.scored = scoreJump(this.tables, s.landed);
+      this.scoredTick = s.landed.tick;
+    }
+    const j = this.scored;
+    if (!j) return "";
+    return `SCORE ${j.label}${j.scoredAs && !j.label.startsWith(j.scoredAs) ? ` (as ${j.scoredAs})` : ""}  `
+      + `BV ${j.baseValue.toFixed(2)}  GOE ${j.goe >= 0 ? "+" : ""}${j.goe.toFixed(2)} × ${j.goeStep.toFixed(2)}`
+      + `  → ${j.score.toFixed(2)}`;
+  }
+
+  /** Only over http: file:// and the test stub have nothing to fetch from. */
+  private async loadScoreTables(): Promise<void> {
+    if (typeof location === "undefined" || !/^https?:$/.test(location.protocol ?? "")) return;
+    try {
+      const get = async (f: string): Promise<string> => {
+        const r = await fetch(`../data/${f}`);
+        if (!r.ok) throw new Error(`${f}: ${r.status}`);
+        return r.text();
+      };
+      const [sov, calls] = await Promise.all([get("scale-of-values.csv"), get("calls-and-deductions.csv")]);
+      this.tables = loadTables(sov, calls);
+    } catch {
+      this.tables = null;   // no data beside the page: skate without scores
+    }
   }
 
   private reset(): void {
@@ -209,6 +269,8 @@ export class Lab {
     this.recorder = new ReplayRecorder(this.params, this.startSpeed);
     this.telemetry.reset();
     this.renderer.clearTrace();
+    this.scored = null;
+    this.scoredTick = -1;
   }
 
   private wireButtons(): void {
@@ -239,6 +301,15 @@ export class Lab {
       if (!el) continue;
       el.checked = this.options[key];
       el.addEventListener("change", () => { this.options[key] = el.checked; });
+    }
+
+    const snd = document.getElementById("opt-sound") as HTMLInputElement | null;
+    if (snd) {
+      snd.checked = this.sound;
+      snd.addEventListener("change", () => {
+        this.sound = snd.checked;
+        if (snd.checked) this.audio.unlock();
+      });
     }
 
     const speed = document.getElementById("start-speed") as HTMLInputElement | null;

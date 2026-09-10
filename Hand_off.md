@@ -1,13 +1,14 @@
 # Hand-off
 
-**Last session: 2026-09-09 (fifth), landed after the 2026-09-10-dated replay PR. Repo state: complete
-specification, plus a running Ice Lab with replay, fall recovery and three finished control schemes.**
+**Last session: 2026-09-10 (sixth). Repo state: complete specification, plus a running Ice Lab with
+replay, fall recovery, three control schemes, an input panel and skater figure, and — off by default —
+jumps, jump scoring from `data/`, the Edge Ribbon and the edge tone.**
 
 Read this before touching anything. It covers what exists, what is decided, the conventions that
 hold the document set together, and the things most likely to trip you up.
 
 > **This line changed.** Until 2026-09-08 this file said *"zero implementation."* That is no longer
-> true: `tools/ice-lab/` is real, runs, and has 105 passing tests, including replay
+> true: `tools/ice-lab/` is real, runs, and has 131 passing tests, including replay
 > capture/playback and a command-line verifier. The UE5 runtime has not been built.
 
 ---
@@ -33,7 +34,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Data files | 12 in `data/` — 5 CSV, 6 JSON, 1 README |
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
-| Implementation | `tools/ice-lab/` — 105 tests, zero dependencies, replay capture/playback and verification |
+| Implementation | `tools/ice-lab/` — 131 tests, zero dependencies, replay, jumps (off by default), scoring from `data/` |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 
@@ -69,7 +70,7 @@ transcription rather than as discovery. **It is not the game and it is not an en
 
 ```sh
 cd tools/ice-lab
-node --test test/*.test.ts     # 105 pass, ~2 s
+node --test test/*.test.ts     # 131 pass, ~4 s
 node app/serve.mjs             # http://localhost:8123/
 ```
 
@@ -94,6 +95,22 @@ RT released previously had zero push force. Scheme C gained the rocker on both s
 were**: a draft that gave both a right-stick weight/rocker channel was reverted, because A is under
 test as §2.1 wrote it (three channels, not five) and a blade channel on B hands it a piece of A and
 narrows the contrast the down-select measures. The commit message of `fb87c52` has the reasoning.
+
+**Jumps, over the plan's refusal (added 2026-09-10, sixth session).** pre-production-plan §1 refuses
+jumps, rotation, scoring and named elements in the prototype, admitting only a rotation-free hop from
+W9. The operator was shown that and chose to have full jumps in the rig anyway, alongside the hop,
+headless-testable scoring, the Edge Ribbon and the edge tone. **That is their decision; do not reopen
+it, and do not loosen the containment either**: `jumpMode` is 0 in every preset, `?playtest=1` forces
+it to 0, so no M2 or gate session can contain a jump. `sim/jump.ts` is `JumpResolver.cpp` (no jump
+button — release the knee; ballistics fixed at takeoff; carriage the one air lever); `sim/score.ts` is
+the jump half of `ScoreCalculator.cs`, reading the CSVs, with the data winning where the two disagree.
+Replay contract is now `ice-lab-f64/3`; the fixture was re-recorded from its own inputs after its
+kinematics were proven identical to `/2` (§5 item 14's procedure).
+
+**Seeing the controls.** The operator asked for "something to visualize while running the engine" to
+learn what each button does. The skater figure is drawn from state (feet on the solver's contacts,
+arms from the save, tuck in the air), and the input panel shows hardware beside the mapped
+`SkatingInput`. The panel is developer-only (off in playtest); the figure is not.
 
 Read [`tools/ice-lab/README.md`](tools/ice-lab/README.md) before changing any of it.
 
@@ -408,6 +425,21 @@ If you add a sixth page, copy the head from `docs/web/production.html`.
 16. **A leading `=` in a shell argument is a command lookup.** `echo =====X` fails with
    "=====X not found". Quote separators or start them with another character.
 
+17. **The balance overlay was mirrored until 2026-09-10.** It drew the COM at
+   `base − perpLeft·L·sin(lean)`, outside every turn. Any screenshot or play note about "the purple
+   line" from before `7f113ca` described the mirror image. `pendulum()` in `app/draw.ts` now reads
+   the COM off `pos`, and `test/draw.test.ts` holds it there.
+
+18. **The Edge Ribbon and edge tone are on in playtest**, because the plan builds them as channels
+   under test. Sessions recorded before 2026-09-10 had neither, so they are a different condition —
+   do not pool them with later M2 data.
+
+19. **A jump's landing inherits the `EdgeChanged` caveat.** Contact returns as NONE→edge, like a
+   stand-up. Irrelevant while jumps are off in playtest; fix it with the other one if that changes.
+
+20. **The canvas stub in `test/app-loads.test.ts` has no `measureText`** and returns `undefined` for
+   every call. Anything in `app/` that reads a return value from the 2D context throws there first.
+
 ---
 
 ## 6 · Where to go next
@@ -461,8 +493,8 @@ In descending order of value:
 
 ### Not in the rig, deliberately
 
-Turns and three-turns, spins, jumps, airborne flight, stamina, flow, animation, audio, networking,
-and ice-grid feedback — tracings are drawn but do not yet feed friction or bite back into the
+Turns and three-turns, spins, jump combinations and sequences, stamina, flow, animation,
+networking, and ice-grid feedback — tracings are drawn but do not yet feed friction or bite back into the
 solver as the bible's §05 requires. The stroke is the bible's semi-analytic push, not a leg model.
 
 ### Known gaps, all deliberate
@@ -493,6 +525,7 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-10 (sixth) | Reviewed and finished an uncommitted reskin: skater figure rebuilt on the solver's contacts, new input panel, mirrored COM overlay fixed (`7f113ca`). Then, on the operator's explicit choice over pre-production §1: `sim/jump.ts` (hop + full jumps, off by default and in playtest), `sim/score.ts` from `data/`, Edge Ribbon, edge tone, toe pick and carriage inputs. Replay `/3`, fixture re-recorded with kinematics proven identical. `e` given a numeric 0.80 factor in the calls CSV. 131 tests, tsc 7.0.2 clean. |
 | 2026-09-09 (fifth) | Review of an unreviewed six-file draft against the kill-gate experiment, not just the tests. Kept and finished: fall recovery (fresh-press, in place, consumed), knee floor on strokes, C's shared rocker. Reverted: right-stick weight/rocker on A and B, for narrowing the A-vs-B contrast. Failing session test kept its assertions; only the stimulus changed. Replay contract bumped to `ice-lab-f64/2` for the new state field, fixture regenerated with kinematics proven identical. 105 tests. `fb87c52`, rebased onto PR #3. |
 | 2026-09-10 | Replay milestone: exact mapped inputs, tuning snapshots, full-state/event digests, bounded five-minute capture, browser playback and a headless verifier. Pause/resume fixed. A 240-tick fixture and PR checks cover the regression contract. 97 tests pass locally on Node 24.19; browser visual QA was blocked by the environment's localhost access restriction. C++/UE5 remains the next port, not an implemented runtime. |
 | 2026-09-02 → 03 | Specification completed. D2, D3, D4, D6 closed. Five Artifacts published and mirrored. |
