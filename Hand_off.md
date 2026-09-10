@@ -13,6 +13,57 @@ hold the document set together, and the things most likely to trip you up.
 
 ---
 
+## 0 · Start here (written at the close of 2026-09-10, sixth session)
+
+**Repo:** `main` at `34fecd8`, pushed, both CI workflows green, Pages redeployed. This hand-off
+edit is the only uncommitted change of ours; `edgework-*.json` at the repo root are the operator's
+play data — untracked on purpose, do not commit or delete them without asking.
+
+**What the operator is doing:** generating play sessions with the rig and handing them over as
+files **in the repo root** (`edgework-session*.json` cards, `edgework-replay-*.json` clips). **Use
+only those.** Clips in `~/Downloads` were declared "no good" — do not analyse them. A card and a
+clip only belong together if their `ticks` match; ask if they do not.
+
+**Data so far:**
+
+| | where | what it says |
+|---|---|---|
+| Session 1 card | pasted in chat; also `edgework-session.json` | 175 s, scheme A, hop mode, 8 falls, 241 strokes, 311 edge changes/min, top 4.9 m/s, no skids |
+| Session 2 card | pasted in chat | 113 s, 4 falls, 90% on an edge, top 6.7 m/s, first skids (0.2%), 297 edge changes/min |
+| `edgework-replay-4.json` | repo root, 4,742 ticks | one hop at 34.76 s off RFI (load 0.30 s, TQ 0.98, 0.43 m), landed two-foot on a straight knee (LQ 0.38), fell 1.5 s later. J was pressed three times in 0.44 s, so the jump was in hop mode and the run ended with jumps off |
+
+**The three things to do next, in order:**
+
+1. **`edgeChangesPerMinute` mostly counts strokes.** Every stroke rolls the pushing blade onto its
+   inside edge and back: two `EdgeChanged` events. Measured over 60 s: 2/min gliding, **161/min**
+   stroking every 0.75 s with no lean; the operator's 297/min was ~294 from strokes alone. Add the
+   known stand-up/landing NONE→edge transitions and the §6 metric measures stroking, not
+   exploring. Fix in `sim/session.ts` before any friendly-external (M2) data: count only a change
+   on a blade that is not pushing, and not from NONE. Test it against the two numbers above.
+2. **Firefox clips do not verify in Node.** The operator plays in Firefox 155. `replay-4` verifies
+   all 4,742 ticks **in Firefox** and diverges in Node at tick 1437, a few ticks into the first
+   non-trivial input. On a second clip, a one-ulp change to `cos(0.65)` at its first stroke
+   reproduced the recorded digest exactly. So the rig is deterministic per engine, and
+   `replay/verify.ts` and CI cannot check a Firefox recording. The fix is ADR-EDGE-007's: one
+   deterministic implementation of sin/cos/tan/atan2/asin in `sim/math.ts`, every solver
+   transcendental routed through it (several call `Math.*` directly today), `REPLAY_SOLVER` → `/4`,
+   fixture proven per §5 item 14. It is required for the C++ port anyway.
+3. **The session card knows nothing about jumps**, and the card and the clip are exported
+   separately. If jumps are to be studied, add jump counts, calls and landing quality to the card
+   (a real `edgework-session/2`), and consider one button that exports both.
+
+**Until item 2 lands, verify a Firefox clip in Firefox**, headless, against the running server
+(`node app/serve.mjs`): put a page in `build/app/` that sync-XHRs the clip, runs `ReplayPlayer`,
+and writes the result into a `<pre>`; then
+`firefox --headless --no-remote --profile $(mktemp -d) --screenshot out.png http://localhost:8123/app/check.html`
+and read the PNG. Remove the page and the clip from `build/` afterwards.
+
+**Tips the operator may need again:** J cycles off → hop → full → off, so stop at `JUMP full`;
+only the axel leaves forwards (left foot, outside edge — Q and A); land with the knee bent
+(Shift / RT) or the landing costs a fall; export the replay with its button, never by pasting.
+
+---
+
 ## 1 · What this is
 
 **Edgework** — a physics-first figure skating simulation. Mostly design specification; the first
@@ -440,6 +491,18 @@ If you add a sixth page, copy the head from `docs/web/production.html`.
 20. **The canvas stub in `test/app-loads.test.ts` has no `measureText`** and returns `undefined` for
    every call. Anything in `app/` that reads a return value from the 2D context throws there first.
 
+21. **A replay recorded in one JS engine may not verify in another** — see §0 item 2. A divergence
+   on a Firefox clip is not evidence of a solver bug until it has been replayed in Firefox.
+
+22. **A pasted clip gets a newline every 10,000 characters.** `replay-4` arrived that way and failed
+   `JSON.parse`. The recorder never writes newlines, so stripping every `\n` restores it, and the
+   per-tick digests prove the repair was lossless. Repair a copy in the scratchpad; the operator's
+   file stays as they left it.
+
+23. **`schema` on a session card is a format version, not a session counter.** One card arrived
+   hand-edited to `edgework-session/2`. The collector rebuilds cards and treats the field as the
+   format; number sessions in the filename.
+
 ---
 
 ## 6 · Where to go next
@@ -525,6 +588,7 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-10 (sixth, after push) | Served the lab for the operator's first play sessions. Found the stroke-inflated edge-change metric (measured), the Firefox-vs-Node replay divergence (confirmed by verifying in headless Firefox), and a paste-wrapped clip (repaired losslessly in scratch). No code changed after `34fecd8`. |
 | 2026-09-10 (sixth) | Reviewed and finished an uncommitted reskin: skater figure rebuilt on the solver's contacts, new input panel, mirrored COM overlay fixed (`7f113ca`). Then, on the operator's explicit choice over pre-production §1: `sim/jump.ts` (hop + full jumps, off by default and in playtest), `sim/score.ts` from `data/`, Edge Ribbon, edge tone, toe pick and carriage inputs. Replay `/3`, fixture re-recorded with kinematics proven identical. `e` given a numeric 0.80 factor in the calls CSV. 131 tests, tsc 7.0.2 clean. |
 | 2026-09-09 (fifth) | Review of an unreviewed six-file draft against the kill-gate experiment, not just the tests. Kept and finished: fall recovery (fresh-press, in place, consumed), knee floor on strokes, C's shared rocker. Reverted: right-stick weight/rocker on A and B, for narrowing the A-vs-B contrast. Failing session test kept its assertions; only the stimulus changed. Replay contract bumped to `ice-lab-f64/2` for the new state field, fixture regenerated with kinematics proven identical. 105 tests. `fb87c52`, rebased onto PR #3. |
 | 2026-09-10 | Replay milestone: exact mapped inputs, tuning snapshots, full-state/event digests, bounded five-minute capture, browser playback and a headless verifier. Pause/resume fixed. A 240-tick fixture and PR checks cover the regression contract. 97 tests pass locally on Node 24.19; browser visual QA was blocked by the environment's localhost access restriction. C++/UE5 remains the next port, not an implemented runtime. |
@@ -557,6 +621,15 @@ authority order (bible and `data/` over README over `big_reffg.txt`), the invari
 contrast and the §6 metric definitions), and what "done" meant, then asked for one uninterrupted
 pass. The test that failed was protecting a stimulus assumption, not a metric; changing the
 stimulus and keeping every assertion is the right move when the mechanic is sound.
+
+The sixth session's shape: **finish what is on the table, then ask once where the plan pushes
+back.** The draft was reviewed and committed before anything new began; the request to "continue
+building any code in the reference bible" collided with pre-production §1, so the conflict was put
+as one question with a recommendation, the operator chose all four options including the override,
+and the override was built with containment rather than argued. Data analysis worked best as
+*measure the claim in the sim, then report* — the edge-change finding is two numbers, not a theory.
+What cost time: reading files the operator had not pointed at (Downloads) before confirming which
+files were meant.
 
 Two habits worth keeping:
 
