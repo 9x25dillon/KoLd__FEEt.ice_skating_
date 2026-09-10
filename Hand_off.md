@@ -1,12 +1,13 @@
 # Hand-off
 
-**Last session: 2026-09-10. Repo state: complete specification, plus a running Ice Lab with replay.**
+**Last session: 2026-09-09 (fifth), landed after the 2026-09-10-dated replay PR. Repo state: complete
+specification, plus a running Ice Lab with replay, fall recovery and three finished control schemes.**
 
 Read this before touching anything. It covers what exists, what is decided, the conventions that
 hold the document set together, and the things most likely to trip you up.
 
 > **This line changed.** Until 2026-09-08 this file said *"zero implementation."* That is no longer
-> true: `tools/ice-lab/` is real, runs, and has 97 passing tests, including replay
+> true: `tools/ice-lab/` is real, runs, and has 105 passing tests, including replay
 > capture/playback and a command-line verifier. The UE5 runtime has not been built.
 
 ---
@@ -32,7 +33,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Data files | 12 in `data/` — 5 CSV, 6 JSON, 1 README |
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
-| Implementation | `tools/ice-lab/` — 97 tests, zero dependencies, replay capture/playback and verification |
+| Implementation | `tools/ice-lab/` — 105 tests, zero dependencies, replay capture/playback and verification |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 
@@ -68,7 +69,7 @@ transcription rather than as discovery. **It is not the game and it is not an en
 
 ```sh
 cd tools/ice-lab
-node --test test/*.test.ts     # 97 pass, ~2 s
+node --test test/*.test.ts     # 105 pass, ~2 s
 node app/serve.mjs             # http://localhost:8123/
 ```
 
@@ -79,7 +80,20 @@ price is **erasable syntax only** — no `enum`, no `namespace`, no constructor 
 never imports `app/`, never touches the DOM, a clock, or `Math.random`.
 
 `tsconfig.json` exists for editors and an optional `tsc --noEmit`. It is the only thing in the rig
-that wants anything installed. Tests and build do not need it.
+that wants anything installed. Tests and build do not need it. **On this machine nothing provides
+`tsc`** — see §5 item 13 for the working recipe.
+
+**Falling and getting up (added 2026-09-09, fifth session).** A fallen skater slides until the
+tester does something. A *fresh* press of A / Space stands them up where they fell, at rest; the
+press is consumed (not a stroke) and a button held through the fall does not count (new state field
+`pushHeld`). This makes the plan's time-to-retry — "seconds from fall to next input" — the same
+event as the sim's response. `downSeconds` is time on the ice until stand-up or reset. A stroke
+also floors the knee at the neutral stance 0.35, because a straight leg cannot push and a pad with
+RT released previously had zero push force. Scheme C gained the rocker on both sticks' fore/aft
+(mean of the two, with A's sideways-bleed relief). **Schemes A and B were deliberately left as they
+were**: a draft that gave both a right-stick weight/rocker channel was reverted, because A is under
+test as §2.1 wrote it (three channels, not five) and a blade channel on B hands it a piece of A and
+narrows the contrast the down-select measures. The commit message of `fb87c52` has the reasoning.
 
 Read [`tools/ice-lab/README.md`](tools/ice-lab/README.md) before changing any of it.
 
@@ -374,6 +388,26 @@ If you add a sixth page, copy the head from `docs/web/production.html`.
    that the code runs. A missing binding used in a class field linked cleanly and threw in the
    browser.
 
+13. **The npx cache holds a decoy `tsc`.** `npx tsc` prints "This is not the tsc command you are
+   looking for" and the only real TypeScript on disk is 5.5.4 in Trash, too old for
+   `erasableSyntaxOnly`. Working recipe: `npm install typescript @types/node` in a scratch dir,
+   then from `tools/ice-lab`: `<scratch>/node_modules/.bin/tsc --noEmit -p . --typeRoots
+   <scratch>/node_modules/@types`. TS 7.0.2 checked the tree clean on 2026-09-09.
+
+14. **The replay digest hashes the whole `SkaterState`.** Adding a field, even one with no effect
+   on kinematics, moves every digest and fails `test/replay.test.ts` on tick 1. The rule in
+   `sim/replay.ts` is: bump `REPLAY_SOLVER`, re-run the fixture from its own recorded inputs, and
+   prove whether kinematics changed by replaying through the previous solver
+   (`git archive origin/main tools/ice-lab/sim | tar -x -C /tmp/oldsim`, then compare final
+   state). Never regenerate just to make CI pass. `/1 → /2` was done this way for `pushHeld`.
+
+15. **Fetch before you push.** The first push of `fb87c52` was rejected because PR #3 had landed
+   on `main` mid-session. A clean rebase followed, but the fixture test then failed for the reason
+   in item 14. `git fetch && git log HEAD..origin/main` before committing would have surfaced it.
+
+16. **A leading `=` in a shell argument is a command lookup.** `echo =====X` fails with
+   "=====X not found". Quote separators or start them with another character.
+
 ---
 
 ## 6 · Where to go next
@@ -401,6 +435,11 @@ In descending order of value:
      a letter.
    - **The session export** is the five §6 metrics the rig can compute, under that document's
      definitions, plus the scheme and the parameters. No names, no accounts, no free text.
+   - **Two pre-existing metric caveats to settle before gate data exists** (found 2026-09-09,
+     fifth, left alone on purpose): B's LB/RB pick the foot, and for a given turn direction foot
+     choice *is* inside/outside edge choice, so B's stated trade is partly leaky; and
+     `EdgeChanged` counts the NONE→edge transitions after every reset and stand-up (~2 per fall).
+     Both change what a number means, neither is hard to fix.
    - **W8's M2 is the milestone this serves**: *"eight team members plus eight friendly externals,
      blind A/B/C, ranked. Soft gate: down-select 3 → 2."* Friends and family are friendly
      externals, and their data legitimately chooses a scheme. It can **never** feed the W16 kill
@@ -454,6 +493,7 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-09 (fifth) | Review of an unreviewed six-file draft against the kill-gate experiment, not just the tests. Kept and finished: fall recovery (fresh-press, in place, consumed), knee floor on strokes, C's shared rocker. Reverted: right-stick weight/rocker on A and B, for narrowing the A-vs-B contrast. Failing session test kept its assertions; only the stimulus changed. Replay contract bumped to `ice-lab-f64/2` for the new state field, fixture regenerated with kinematics proven identical. 105 tests. `fb87c52`, rebased onto PR #3. |
 | 2026-09-10 | Replay milestone: exact mapped inputs, tuning snapshots, full-state/event digests, bounded five-minute capture, browser playback and a headless verifier. Pause/resume fixed. A 240-tick fixture and PR checks cover the regression contract. 97 tests pass locally on Node 24.19; browser visual QA was blocked by the environment's localhost access restriction. C++/UE5 remains the next port, not an implemented runtime. |
 | 2026-09-02 → 03 | Specification completed. D2, D3, D4, D6 closed. Five Artifacts published and mirrored. |
 | 2026-09-08 → 09 | `big_reffg.txt` reviewed and committed with its defects recorded. `tools/ice-lab/` built, 56 tests. Six defects found in the engineering package, each captured as a test. D2 re-raised and re-closed. Merged as PR #1 (`fbbf83c`). |
@@ -475,6 +515,15 @@ binding clamp per tick, before any parameter was moved. Two hypotheses died that
 twenty minutes — that the entry failure was a step-command transient (slewing the command changes
 nothing) and that the tick-77 collapse was an oscillation (it is a detector firing at 2.6° of lean).
 Both would have survived a parameter sweep, and both would have been fixed in the wrong place.
+
+The fifth session's shape: **review a diff against the experiment it serves, not against the
+suite.** Every file in the draft type-checked and 81 of 82 tests passed, and two of its three
+ideas would still have damaged the month-four gate — by giving scheme A channels §2.1 never gave
+it, and scheme B a channel that made it partly A. The brief that made this possible named the
+authority order (bible and `data/` over README over `big_reffg.txt`), the invariant (the A/B/C
+contrast and the §6 metric definitions), and what "done" meant, then asked for one uninterrupted
+pass. The test that failed was protecting a stimulus assumption, not a metric; changing the
+stimulus and keeping every assertion is the right move when the mechanic is sound.
 
 Two habits worth keeping:
 
