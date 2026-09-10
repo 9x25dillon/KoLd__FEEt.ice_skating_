@@ -109,8 +109,18 @@ function stick(x: number, y: number): { x: number; y: number } {
  */
 export function leanVector(rawX: number, rawY: number): { lean: number; pitch: number } {
   const l = stick(rawX, rawY);
-  const bleed = Math.tan(PITCH_BAND) * Math.abs(l.x);
-  return { lean: l.x, pitch: Math.sign(l.y) * Math.max(0, Math.abs(l.y) - bleed) };
+  return { lean: l.x, pitch: relievedPitch(l.x, l.y) };
+}
+
+/**
+ * The fore/aft of an already-shaped stick, relieved of the bleed its sideways
+ * component carries. Scheme A applies it to the left stick through
+ * `leanVector`; scheme C applies it to both sticks, since there each stick is a
+ * blade and a sideways push on a blade is an edge and nothing else.
+ */
+export function relievedPitch(x: number, y: number): number {
+  const bleed = Math.tan(PITCH_BAND) * Math.abs(x);
+  return Math.sign(y) * Math.max(0, Math.abs(y) - bleed);
 }
 
 export class Pad {

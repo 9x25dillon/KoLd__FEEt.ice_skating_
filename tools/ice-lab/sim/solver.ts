@@ -93,7 +93,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     lean, leanRate: 0, leanEq: 0, balanceError: 0, balanceErrorTime: 0,
     latAccel: 0, intAccel: 0, intHeld: 0, tiltCmd: lean, legLength: p.comHeight, legRate: 0,
     comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
-    knee: 0, strokeTime: 0, strokeFoot: FOOT.Left,
+    knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, pushHeld: false,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -107,11 +107,53 @@ export function step(
   const g = p.gravity;
   s.tick++;
 
+  // ── 0. getting up ─────────────────────────────────────────────────────────
+  // The bible's §3.4 machine goes Fall -> grounded -> GetUp -> locomotion. The
+  // rig's GetUp is a FRESH press of the push button: the skater stands where
+  // they fell, facing the way they were facing, at rest, with the clock still
+  // running — so the session, its traces and its fall counts carry on, and the
+  // seconds between the fall and this press are what §6 calls time-to-retry.
+  //
+  // Fresh, because a button already held when the ice arrived is not a
+  // decision to get up. Push is otherwise level-triggered (held, it keeps
+  // stroking), so without this a skater who fell mid-stroke with the button
+  // down would be back up the next tick and never see the fall. session.ts
+  // applies the same rule before it counts a retry, and for the same reason.
+  //
+  // The press is consumed: standing up is not also a stroke. The one
+  // allocation here is a reset, and a reset is allowed to allocate.
+  const freshPush = input.push && !s.pushHeld;
+  s.pushHeld = input.push;
+  if (s.fallen && freshPush) {
+    const { pos, heading, tick } = s;
+    Object.assign(s, createState(p), { pos, heading, tick, pushHeld: true });
+    for (const b of s.blade) {
+      b.tangent = v2(heading.x, heading.y);
+      b.contact = v2(pos.x, pos.y);
+    }
+    events.push({
+      tick, type: EVENT.Recovered, foot: s.supportFoot,
+      prevCode: EDGE_CODE_NONE, newCode: EDGE_CODE_NONE, prevDwell: 0, value: 0,
+    });
+    return;
+  }
+
   const alive = !s.fallen;
   const leanCmd = clamp(axis(input.lean, 0), -1, 1) * p.maxLean;
   // Rate-limited: a leg takes time to bend, and a step command would unload
   // the blades entirely for a tick and read as a jump.
-  s.knee = moveToward(s.knee, clamp(axis(input.knee, 0.35), 0, 1), p.kneeRate * dt);
+  //
+  // Floored during a push: a straight leg cannot push, so a stroke bends the
+  // knee whether or not the trigger asked it to. 0.35 is the neutral stance
+  // (NEUTRAL_INPUT, and what the keyboard rests at), so a pad with RT released
+  // strokes at close to keyboard strength — the leg still has to bend from
+  // straight at the start of each push, which costs about an eighth of the
+  // speed. Before this, a released trigger read as a straight leg, the push
+  // force (strokePower * knee) was zero, and a pad could not get moving at
+  // all. Deeper RT is still a stronger push; the floor only sets where zero is.
+  const kneeTarget = Math.max(axis(input.knee, 0.35),
+    alive && (input.push || s.strokeTime > 0) ? 0.35 : 0);
+  s.knee = moveToward(s.knee, clamp(kneeTarget, 0, 1), p.kneeRate * dt);
   const knee = s.knee;
   const weightR = clamp(axis(input.weight, 0.5), 0, 1);
   const split = clamp(axis(input.leanSplit, 0), -1, 1);
@@ -476,6 +518,7 @@ export function step(
     if (reason !== FALL.None) {
       s.fallReason = reason;
       s.fallen = true;
+      s.strokeTime = 0;
       events.push({
         tick: s.tick, type: EVENT.Fall, foot: s.supportFoot,
         prevCode: s.blade[s.supportFoot].code, newCode: reason,

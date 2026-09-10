@@ -26,6 +26,7 @@ import type { SkatingInput } from "../sim/types.ts";
 import type { Params } from "../sim/params.ts";
 import type { Vec2 } from "../sim/math.ts";
 import { clamp, len } from "../sim/math.ts";
+import { relievedPitch } from "./pad.ts";
 import type { Controls } from "./pad.ts";
 
 export const SCHEME = { A: 0, B: 1, C: 2 } as const;
@@ -122,7 +123,10 @@ function signedAngle(a: Vec2, b: Vec2): number {
 /**
  * A · Lean & Load. The left stick IS the lean: sideways is which edge and how
  * deep, fore/aft is where the contact sits along the rocker. The right stick
- * is left alone, because the bible reserves it for carriage.
+ * is left alone, because the bible reserves it for carriage, which this rig
+ * does not model — and because A is the hypothesis under test as §2.1 wrote
+ * it: "three simultaneous continuous analog channels is more than most players
+ * carry." Giving the idle stick a job would test a different scheme.
  */
 export function schemeA(c: Controls): SkatingInput {
   return {
@@ -198,6 +202,9 @@ export function schemeB(
     lean: clamp(cmd / p.maxLean, -1, 1),
     // Fore/aft is not a steering channel here — B's whole premise is that the
     // player does not think about the blade — so only the keyboard moves it.
+    // The right stick stays idle for the same reason: a rocker channel on it
+    // would hand B a piece of A and blur the one contrast the down-select is
+    // there to measure.
     pitch: c.ky,
     leanSplit: 0,
     knee: c.knee, weight, push: c.push, brake: c.brake,
@@ -208,11 +215,20 @@ export function schemeB(
  * C · Two-Foot. One stick per blade, which is what a crossover, a mohawk and a
  * choctaw actually are.
  *
- * The solver carries one body lean and one tilt per blade, so the two sticks
- * are read as their mean and their difference — an exact reparametrization of
- * controlling each blade, with the balance loop still solving for the mean
- * rather than being bypassed by it. Push both the same way and it is a lean;
- * push them apart and the blades go onto opposite edges.
+ * The solver carries one body lean and one tilt per blade, so the two sticks'
+ * sideways axes are read as their mean and their difference — an exact
+ * reparametrization of controlling each blade, with the balance loop still
+ * solving for the mean rather than being bypassed by it. Push both the same
+ * way and it is a lean; push them apart and the blades go onto opposite edges.
+ *
+ * Fore/aft on a blade's stick is where that blade's contact sits along its
+ * rocker. The solver carries ONE contact point for both blades, so it gets the
+ * mean of the two — the same rule the sideways axes follow, with no split
+ * because there is nothing to split. (An earlier comment here said both
+ * vertical axes were spent on edges and the rocker had to be keyboard-only;
+ * it is the horizontal axes that are spent, and the vertical ones were idle.)
+ * Each stick's fore/aft is relieved of its sideways bleed exactly as A's left
+ * stick is, so holding an edge does not walk the contact point.
  */
 export function schemeC(c: Controls): SkatingInput {
   const l = c.kPrimaryX !== 0 ? c.kPrimaryX : c.lx;     // left blade:  A/D
@@ -223,9 +239,8 @@ export function schemeC(c: Controls): SkatingInput {
     ...NEUTRAL_INPUT,
     lean: clamp(mean, -1, 1),
     leanSplit: clamp(apart, -1, 1),
-    // Both vertical axes are spent on edges here, so the rocker is keyboard
-    // only. A scheme that needs three sticks is a finding, not a bug.
-    pitch: c.ky,
+    pitch: c.ky !== 0 ? c.ky
+      : clamp((relievedPitch(c.lx, c.ly) + relievedPitch(c.rx, c.ry)) / 2, -1, 1),
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
   };
 }

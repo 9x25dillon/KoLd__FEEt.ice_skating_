@@ -297,7 +297,7 @@ export class Renderer {
       const onset = skidOnsetSpeed(b.tilt, effectiveRocker(b.contactS, p), p);
       line(`SKIDS ABOVE  ${onset.toFixed(1)} m/s at this edge`, DIM);
     }
-    if (s.fallen) line(`DOWN — ${FALL_NAME[s.fallReason]}`, "#ff4d6d");
+    if (s.fallen) line(`DOWN — ${FALL_NAME[s.fallReason]} · A / Space to stand up`, "#ff4d6d");
 
     y += 8;
     for (const t of info) line(t, DIM);

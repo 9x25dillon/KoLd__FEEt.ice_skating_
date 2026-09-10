@@ -56,6 +56,21 @@ test("A · the left stick is the lean, and only the lean", () => {
   assert.equal(schemeA({ ...sticks, lean: 0.8, kx: -1 }).lean, -1);
 });
 
+test("A and B · the right stick does nothing, because the bible reserves it", () => {
+  // §2.1 gives the right stick to carriage, which the rig does not model, and
+  // A is under test as written: three analog channels, not four. B is the
+  // one-stick fallback, and a rocker or weight channel on its spare stick
+  // would hand it a piece of A and blur the contrast the down-select needs.
+  const idle = { ...sticks, lean: 0.4, pitch: 0.1, weight: 0.5 };
+  const pushed = { ...idle, rx: 0.9, ry: -0.8 };
+  assert.deepEqual(schemeA(pushed), schemeA(idle), "A ignores the right stick entirely");
+  const st = newSchemeState();
+  const b0 = schemeB({ ...idle, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
+  const b1 = schemeB({ ...pushed, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
+  assert.deepEqual(b1, b0, "B ignores it too");
+  assert.equal(b0.pitch, 0, "and B has no rocker on the pad at all");
+});
+
 test("B · steers to the heading it was pointed at, from 45 to 170 degrees", () => {
   // Measured, one-footed: about a degree of standing error at every target.
   for (const target of [45, 90, 135, -120]) {
@@ -112,6 +127,26 @@ test("C · the two sticks are the mean and the difference of the blades", () => 
   const one = schemeC({ ...sticks, lx: -1, rx: 0 });
   assert.equal(one.lean, -0.5);
   assert.equal(one.leanSplit, 0.5, "one blade alone is half a lean and half a split");
+});
+
+test("C · fore/aft on either stick is the rocker, and the solver gets their mean", () => {
+  // Each stick is a blade, so each stick's fore/aft is where that blade's
+  // contact sits. The solver carries one contact point, so it gets the mean —
+  // the same rule the sideways axes follow.
+  assert.equal(schemeC({ ...sticks, ly: 1, ry: 1 }).pitch, 1, "both forward is full toe");
+  assert.equal(schemeC({ ...sticks, ly: 1, ry: 0 }).pitch, 0.5, "one forward is half");
+  assert.equal(schemeC({ ...sticks, ly: 1, ry: -1 }).pitch, 0, "opposed cancels: there is no pitch split");
+  assert.equal(schemeC({ ...sticks, ly: 1, ry: 1, ky: -1 }).pitch, -1, "the keyboard wins when held");
+
+  // A sideways push on a blade is an edge and nothing else — the same relief
+  // A's left stick gets, or holding a curve walks the contact point.
+  for (const y of [0.05, 0.1, 0.2, 0.3]) {
+    const bled = schemeC({ ...sticks, lx: 0.9, ly: y, rx: 0.9, ry: y });
+    assert.equal(bled.pitch, 0, `${y} of stray fore/aft on a sideways push must not reach the rocker`);
+    assert.equal(bled.lean, 0.9, "while the edge survives it");
+  }
+  assert.ok(schemeC({ ...sticks, lx: 0.7, ly: 0.7, rx: 0.7, ry: 0.7 }).pitch > 0.3,
+    "a deliberate diagonal still pitches");
 });
 
 test("C · actually puts the two blades on separate edges", () => {

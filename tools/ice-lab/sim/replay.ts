@@ -9,7 +9,13 @@ import type { SkaterState, SkatingInput, EdgeEvent } from "./types.ts";
 export const REPLAY_SCHEMA = "edgework-replay/1";
 // Bump when input/state semantics or solver arithmetic change. This exact JS
 // regression check does NOT promise float32 C++ or cross-engine parity.
-export const REPLAY_SOLVER = "ice-lab-f64/1";
+//
+//   /1  first contract.
+//   /2  SkaterState gained `pushHeld` (standing up after a fall is
+//       edge-triggered) and strokes floor the knee at the neutral stance.
+//       Every digest moved because the state shape did; the fixture's
+//       kinematics were replayed under both and matched exactly.
+export const REPLAY_SOLVER = "ice-lab-f64/2";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

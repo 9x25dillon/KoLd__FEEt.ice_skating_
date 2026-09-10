@@ -142,6 +142,12 @@ export interface SkaterState {
   strokeTime: number;
   /** Which foot is pushing. Alternates, so a stroke sequence is two-beat. */
   strokeFoot: Foot;
+  /**
+   * Whether push was down last tick. Strokes are level-triggered (hold it and
+   * you keep stroking); standing up after a fall is edge-triggered, because a
+   * button already held when the ice arrived is not a decision to get up.
+   */
+  pushHeld: boolean;
   fallReason: Fall;
   fallen: boolean;
   tick: number;
@@ -186,13 +192,13 @@ export const NEUTRAL_INPUT: SkatingInput = {
 
 export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
-  SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6,
+  SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
-  "SKID BEGIN", "SKID END", "TOE PICK", "FALL",
+  "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
 ] as const;
 
 export interface EdgeEvent {

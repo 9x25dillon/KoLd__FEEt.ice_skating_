@@ -232,6 +232,13 @@ the next one**, and the entry tables above moved by 1–3° when it landed.
   asks the leg spring for more than g of downward acceleration, the normal load
   goes to zero, and the solver reports a skater who has jumped. The knee
   command is rate-limited.
+- **A straight leg cannot push.** A stroke bends the knee to at least the
+  neutral stance (0.35, where the keyboard rests) whether or not the trigger
+  asked it to, so a pad with RT released strokes at close to keyboard strength
+  instead of not moving at all — the push force is `strokePower × knee`, and
+  a released trigger used to read as a straight leg. Deeper RT is still a
+  stronger push; the floor only sets where zero is, and it applies in every
+  scheme alike.
 - **An ideal edge does no work.** Projecting the lateral component out of the
   velocity, as the package does, bleeds `cos(ω dt)` of speed every tick — about
   1% per second at 4 m/s and 20°, scaling with the timestep. Rotating the
@@ -240,7 +247,7 @@ the next one**, and the entry tables above moved by 1–3° when it landed.
 
 ---
 
-## Controls, and the two schemes
+## Controls, and the three schemes
 
 Keyboard: **A/D** lean, **W/S** rocker fore-aft, **Shift** knee, **Q/E** weight,
 **Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **M** pad
@@ -250,6 +257,15 @@ Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
 weight, **Y** reset, **X** preset, **Back** scheme. A browser hides a gamepad
 until a button is pressed, which reads exactly like a broken pad.
 
+**Falling, and getting up.** A fallen skater slides until the tester does
+something about it. A fresh press of **A / Space** stands them up where they
+fell, facing the way they were facing, at rest — the bible's §3.4 `GetUp`, with
+the tester choosing the moment. The session, its trace and its fall count carry
+on; the event log records `RECOVERED`. The press is consumed, so it is not also
+a stroke, and a button already held when the ice arrived does not count: the
+skater who fell mid-stroke with A down is not back up the next tick. **R**
+still resets to the start position and speed, and wipes the trace.
+
 **Three schemes, labelled A, B and C**, cycled with **M** or **Back**. The
 labels are all a tester ever sees, and all an *observer* sees too, because
 [pre-production-plan.md §7](../../docs/pre-production-plan.md) requires it. The
@@ -257,9 +273,9 @@ mapping below is the developer's copy and belongs nowhere on screen:
 
 | | what the sticks do | what it trades |
 |---|---|---|
-| **A · Lean & Load** | left stick is the lean vector; right stick reserved for carriage | the bible's §2.1 proposal, and what ships if it wins |
-| **B · Steer & Load** | left stick is intended travel direction; the skater picks the edge and the lean | keeps the carve physics, gives up deliberate inside/outside edge choice — the sport's alphabet |
-| **C · Two-Foot** | left stick is the left blade's edge, right stick the right blade's | possibly unlearnable, possibly the most distinctive scheme in any sports game |
+| **A · Lean & Load** | left stick is the lean vector, fore/aft on it the rocker; right stick reserved for carriage, which the rig does not model | the bible's §2.1 proposal, and what ships if it wins |
+| **B · Steer & Load** | left stick is intended travel direction; the skater picks the edge and the lean; nothing on the pad addresses the blade | keeps the carve physics, gives up deliberate inside/outside edge choice — the sport's alphabet |
+| **C · Two-Foot** | left stick is the left blade's edge, right stick the right blade's; fore/aft on either stick is that blade's contact point, and the solver gets their mean | possibly unlearnable, possibly the most distinctive scheme in any sports game |
 
 Three, not one, because the bible's own risk 1 says so: *"no shipped game has
 used analog lean plus analog knee as its primary verb … keep two fallback
@@ -304,6 +320,13 @@ watching, which the plan says outright.
 None of it counts while the skater is down. A fallen body lies at about 89° and
 keeps sliding, so the first version of this module reported a mean lean depth of
 80° with total confidence.
+
+A fall ends when the tester stands up (a fresh push) or resets. **Time to
+retry** is the seconds from the fall to whichever came first, so with the
+stand-up it measures exactly what §6 says: fall to next input. **Down seconds**
+is the time spent on the ice until then; a fall never got up from counts there
+and contributes no retry sample. The stand-up press is neither a stroke nor a
+skating tick.
 
 **The export is numbers about a simulation and nothing else** — no names, no
 accounts, no free text. That is a privacy position, and it is also what makes
@@ -427,12 +450,16 @@ require the exact schema, solver version, 120 Hz rate, complete finite tuning,
 bounded input axes, boolean buttons, at most 36,000 ticks and at most 64 MiB.
 Warnings about balance tuning are preserved so a bad tuning can be reproduced.
 
-`ice-lab-f64/1` is a JavaScript regression contract. CRC32 covers every state
+`ice-lab-f64/2` is a JavaScript regression contract. CRC32 covers every state
 field and event using canonical JSON, with straight-blade Infinity encoded
 explicitly; it is a diagnostic, not an authenticity signature. It does **not**
 establish bit-exact parity with another JS engine, platform math library, or
 the future C++ float32 solver. Version the contract when solver semantics
 change and review fixture changes rather than regenerating them to pass CI.
+The bump from `/1` to `/2` added `pushHeld` to the state (standing up after a
+fall is edge-triggered) and the knee floor on strokes; the fixture was re-run
+from its own recorded inputs, and its kinematics matched the `/1` solver
+tick for tick, so only the digests changed.
 
 `test/fixtures/replay-v1.json` pins a 240-tick skating run with a tuning change
 at tick 121. PR checks run the tests, browser build and fixture verifier under
