@@ -83,6 +83,9 @@ export class Lab {
     window.addEventListener("resize", fit);
     this.wireButtons();
     if (this.playtest) this.hideEverythingATesterShouldNotSee();
+    // The input panel captions what each scheme does with each stick, which
+    // is an explanation; §7 keeps those from testers and observers alike.
+    if (this.playtest) this.options.pad = false;
     this.clock.start();
   }
 
@@ -112,6 +115,7 @@ export class Lab {
       if (!this.player.done) {
         try {
           this.player.advance();
+          this.renderer.pad.note(null, this.player.input);
           this.telemetry.capture(this.player.state);
           this.telemetry.pushEvents(this.player.events);
           this.renderer.recordTrace(this.player.state);
@@ -135,6 +139,7 @@ export class Lab {
     const it = applyScheme(this.scheme, c, this.state.heading, this.state.vel, this.state.yawRate,
       this.params, this.schemeState);
 
+    this.renderer.pad.note(c, it);
     this.events.length = 0;
     step(this.state, it, this.params, SIM_DT, this.events);
     this.meter.sample(this.state, it, this.events, SIM_DT);
@@ -181,7 +186,11 @@ export class Lab {
           : `Playing ${this.player.index} / ${this.player.total} ticks. Recorded tuning is in use.`
       : `Recorded ${(this.recorder.ticks / SIM_HZ).toFixed(1)} s / 300 s`
         + (this.recorder.full ? " — clip full; export, then reset for a new clip." : " since reset."));
-    this.renderer.draw(this.player?.state ?? this.state, this.player?.params ?? this.params, this.options, info);
+    const scheme = this.player
+      ? Math.max(0, SCHEME_LABEL.indexOf(this.player.scheme as "A" | "B" | "C"))
+      : this.scheme;
+    this.renderer.draw(this.player?.state ?? this.state, this.player?.params ?? this.params,
+      this.options, info, scheme);
   }
 
   private reset(): void {

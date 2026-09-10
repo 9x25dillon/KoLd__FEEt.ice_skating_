@@ -170,6 +170,8 @@ export class ReplayPlayer {
 
   get total(): number { return this.clip.frames.length; }
   get done(): boolean { return this.index >= this.total || this.divergence !== null; }
+  /** The input the last advanced frame fed the solver; null before the first. */
+  get input(): SkatingInput | null { return this.index > 0 ? this.clip.frames[this.index - 1].input : null; }
 
   advance(): void {
     if (this.done) return;

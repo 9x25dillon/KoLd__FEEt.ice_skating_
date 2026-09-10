@@ -14,12 +14,13 @@ import type { Params } from "../sim/params.ts";
 import { effectiveRocker, carveRadius, skidOnsetSpeed, equilibriumLean } from "../sim/blade.ts";
 import { perpLeft, len } from "../sim/math.ts";
 import type { Vec2 } from "../sim/math.ts";
+import { PadView } from "./padview.ts";
 
 const PX = 26;                    // pixels per metre at zoom 1
 
 const INK = "#dce9f2";
 const DIM = "#5b7386";
-const FAINT = "#26323d";
+const FAINT = "#182e3d";
 const OUTSIDE = "#5aa9ff";        // blue: outside edge
 const INSIDE = "#ff5d7a";         // red: inside edge
 const FLATC = "#9fb3c2";
@@ -37,11 +38,38 @@ export interface DrawOptions {
   balance: boolean;
   tracing: boolean;
   hud: boolean;
+  /** The overhead athlete. Off leaves the bare blades, as the rig began. */
+  skater: boolean;
+  /** Controller and solver-input panel. Developer-facing; off in playtest. */
+  pad: boolean;
 }
 
 export const DEFAULT_OPTIONS: DrawOptions = {
   blades: true, carveCircle: true, forces: true, balance: true, tracing: true, hud: true,
+  skater: true, pad: true,
 };
+
+/**
+ * The pendulum as the solver has it: the base the blades hang off, the centre
+ * of mass above it, and where the COM would have to be for the arc it is on.
+ *
+ * Read off the state rather than recomputed — the COM is `pos`, and the base is
+ * the midpoint of the blade contacts, which is where step() put them. An
+ * earlier version drew the COM at base - perpLeft * L sin(lean): the mirror
+ * image, outside the turn, so the one overlay meant to show the balance
+ * problem showed it inverted. test/draw.test.ts holds it to the solver.
+ */
+export function pendulum(s: SkaterState): { base: Vec2; com: Vec2; eq: Vec2 } {
+  const a = s.blade[0].contact, b = s.blade[1].contact;
+  const base = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const left = perpLeft(s.heading);
+  const r = s.legLength * Math.sin(s.leanEq);
+  return {
+    base,
+    com: { x: s.pos.x, y: s.pos.y },
+    eq: { x: base.x + left.x * r, y: base.y + left.y * r },
+  };
+}
 
 const edgeColour = (b: BladeState): string => {
   if (b.regime === REGIME.Skid) return SKIDC;
@@ -56,6 +84,8 @@ export class Renderer {
   private maxTrace = 4000;
 
   private canvas: HTMLCanvasElement;
+  /** Fed once per tick by the lab; drawn when `opt.pad` is on. */
+  readonly pad = new PadView();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -84,7 +114,7 @@ export class Renderer {
     }
   }
 
-  draw(s: SkaterState, p: Params, opt: DrawOptions, info: string[]): void {
+  draw(s: SkaterState, p: Params, opt: DrawOptions, info: string[], scheme = 0): void {
     const { ctx, canvas } = this;
     const w = canvas.width, h = canvas.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -101,12 +131,14 @@ export class Renderer {
     this.grid(s, w, h);
     if (opt.tracing) this.tracings();
     if (opt.carveCircle) this.carveCircles(s, p);
+    if (opt.skater) this.skater(s, p);
     if (opt.blades) this.blades(s);
     if (opt.forces) this.forces(s);
     if (opt.balance) this.balance(s);
 
     ctx.restore();
     if (opt.hud) this.hud(s, p, info);
+    if (opt.pad && w > 640) this.pad.draw(ctx, w - 312, 48, scheme, s);
   }
 
   // ── ice ───────────────────────────────────────────────────────────────────
@@ -116,15 +148,41 @@ export class Renderer {
     const halfW = w / (2 * PX), halfH = h / (2 * PX);
     const x0 = Math.floor(s.pos.x - halfW), x1 = Math.ceil(s.pos.x + halfW);
     const y0 = Math.floor(s.pos.y - halfH), y1 = Math.ceil(s.pos.y + halfH);
-    ctx.lineWidth = 1 / PX;
+    // World-anchored ice grain: stable under camera movement and replay.
+    ctx.fillStyle = "#102330";
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    // One path for the lot: a stroke per square metre is ~3000 draw calls a
+    // frame on a wide window, for a texture nobody is reading.
+    ctx.lineWidth = 0.6 / PX;
+    ctx.strokeStyle = "rgba(165,221,240,0.055)";
+    ctx.beginPath();
     for (let x = x0; x <= x1; x++) {
-      ctx.strokeStyle = x % 5 === 0 ? "#1c2731" : FAINT;
+      for (let y = y0; y <= y1; y++) {
+        const seed = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+        const f = seed - Math.floor(seed);
+        ctx.moveTo(x + f, y + f);
+        ctx.lineTo(x + f + 0.25, y + f + 0.06);
+      }
+    }
+    ctx.stroke();
+    // Training markings repeat across the unbounded simulation surface.
+    ctx.strokeStyle = FAINT;
+    ctx.lineWidth = 1 / PX;
+    for (let x = Math.floor(x0 / 10) * 10; x <= x1; x += 10) {
       ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
+      for (let y = Math.floor(y0 / 10) * 10; y <= y1; y += 10) {
+        ctx.strokeStyle = "rgba(116,204,226,0.14)";
+        ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - 0.2, y); ctx.lineTo(x + 0.2, y);
+        ctx.moveTo(x, y - 0.2); ctx.lineTo(x, y + 0.2); ctx.stroke();
+        ctx.strokeStyle = FAINT;
+      }
     }
-    for (let y = y0; y <= y1; y++) {
-      ctx.strokeStyle = y % 5 === 0 ? "#1c2731" : FAINT;
-      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
-    }
+    // Not red: red on this rink means an inside edge, and a red line under an
+    // outside-edge tracing reads as a wrong call.
+    ctx.strokeStyle = "rgba(116,204,226,0.20)";
+    ctx.lineWidth = 0.08;
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x1, 0); ctx.stroke();
   }
 
   private tracings(): void {
@@ -146,14 +204,107 @@ export class Renderer {
 
   // ── the skater ────────────────────────────────────────────────────────────
 
+  /**
+   * The overhead athlete. Every part of the pose is a field of the state, so
+   * the figure is a reading of what the controls did rather than decoration:
+   *
+   *   feet     at the solver's own blade contacts — lean shows as the feet
+   *            sliding out from under the body, which is what a lean IS
+   *   legs     brightness is the weight share (LB / RB, Q / E)
+   *   torso    moves forward as the knee bends (RT, Shift)
+   *   arms     swing with the internal authority; gold when it saturates,
+   *            which is the save the HUD's SAVE line is counting
+   *   free leg the unloaded foot, lifted behind, in a one-foot glide
+   *   stroke   the pushing foot reaching out for strokeTime (A, Space)
+   *   brake    spray off the blades (LT, X)
+   */
+  private skater(s: SkaterState, p: Params): void {
+    const ctx = this.ctx;
+    const h = s.heading, left = perpLeft(h);
+    const local = (v: Vec2): [number, number] => {
+      const dx = v.x - s.pos.x, dy = v.y - s.pos.y;
+      return [dx * h.x + dy * h.y, dx * left.x + dy * left.y];
+    };
+    ctx.save();
+    ctx.translate(s.pos.x, s.pos.y);
+    ctx.rotate(Math.atan2(h.y, h.x));
+    ctx.lineCap = "round";
+    const stroke = (pts: number[], color: string, width: number): void => {
+      ctx.strokeStyle = color; ctx.lineWidth = width;
+      ctx.beginPath(); ctx.moveTo(pts[0], pts[1]);
+      for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
+      ctx.stroke();
+    };
+    ctx.fillStyle = "rgba(0,5,15,0.35)";
+    ctx.beginPath(); ctx.ellipse(-0.08, -0.10, 0.65, 0.39, 0, 0, Math.PI * 2); ctx.fill();
+
+    if (s.fallen) {
+      stroke([-0.65, -0.25, -0.25, 0, 0.30, 0.12], "#24384d", 0.22);
+      stroke([-0.6, 0.35, -0.25, 0, 0.30, 0.12], "#24384d", 0.20);
+      stroke([0.1, -0.45, 0.15, 0.04, 0.5, 0.40], "#ee7790", 0.14);
+      ctx.fillStyle = "#ee7790";
+      ctx.beginPath(); ctx.ellipse(0.08, 0, 0.30, 0.24, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#17263b";
+      ctx.beginPath(); ctx.arc(0.33, 0, 0.14, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    const torsoX = 0.04 + 0.14 * s.knee;
+    const beat = s.strokeTime > 0 ? Math.sin(Math.min(1, s.strokeTime / 0.3) * Math.PI) : 0;
+    const braking = s.blade[0].regime === REGIME.Brake || s.blade[1].regime === REGIME.Brake;
+    const support = local(s.blade[s.supportFoot].contact);
+
+    for (let i = 0; i < 2; i++) {
+      const b = s.blade[i];
+      const side = i === FOOT.Left ? 1 : -1;
+      let [fx, fy] = b.inContact ? local(b.contact) : [support[0] - 0.42, support[1] + side * 0.16];
+      if (s.strokeFoot === i && beat > 0) { fx -= 0.25 * beat; fy += side * 0.35 * beat; }
+      const load = b.inContact ? 0.35 + 0.65 * b.weight : 0.25;
+      const leg = `rgba(84,124,160,${load.toFixed(2)})`;
+      stroke([torsoX - 0.06, side * 0.11, (torsoX + fx) / 2 - 0.05 * s.knee, (side * 0.11 + fy) / 2, fx, fy],
+        leg, 0.15);
+      stroke([fx - 0.16, fy, fx + 0.14, fy], `rgba(238,248,255,${(0.35 + 0.65 * load).toFixed(2)})`, 0.09);
+      if (braking && b.inContact) {
+        ctx.fillStyle = "rgba(230,245,255,0.55)";
+        for (let k = 0; k < 5; k++) {
+          const jitter = Math.sin((s.tick + k * 7) * 12.9898 + i) * 0.5 + 0.5;
+          ctx.beginPath();
+          ctx.arc(fx + 0.18 + 0.1 * k, fy + side * (0.05 + 0.12 * jitter), 0.035, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // Arms: swung fore and aft against each other by the save, like a skater
+    // windmilling to stay up. Normalized by the ceiling, so full swing means
+    // the arms have nothing left to give.
+    const save = clampUnit(s.intAccel / Math.max(p.internalMax, 1e-3));
+    const armCol = Math.abs(save) > 0.95 ? GOLD : "#60d9ce";
+    stroke([torsoX, 0.18, torsoX - 0.05 + 0.3 * save, 0.48, torsoX + 0.1 + 0.45 * save, 0.66], armCol, 0.11);
+    stroke([torsoX, -0.18, torsoX - 0.05 - 0.3 * save, -0.48, torsoX + 0.1 - 0.45 * save, -0.66], armCol, 0.11);
+
+    ctx.fillStyle = "#69e3d3";
+    ctx.beginPath(); ctx.ellipse(torsoX, 0, 0.28, 0.23, 0, 0, Math.PI * 2); ctx.fill();
+    stroke([torsoX - 0.16, 0, torsoX + 0.18, 0], "#d4fff3", 0.04);
+    ctx.fillStyle = "#ebbd9e";
+    ctx.beginPath(); ctx.arc(torsoX + 0.3, 0, 0.14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#17263b";
+    ctx.beginPath(); ctx.arc(torsoX + 0.26, 0, 0.135, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
   private blades(s: SkaterState): void {
     const ctx = this.ctx;
     for (let i = 0; i < 2; i++) {
       const b = s.blade[i];
       if (!b.inContact) continue;
-      const t = b.tangent;
-      const heel = { x: b.contact.x - t.x * 0.12, y: b.contact.y - t.y * 0.12 };
-      const toe = { x: b.contact.x + t.x * 0.13, y: b.contact.y + t.y * 0.13 };
+      // The blade is drawn around its contact, which pitch (W / S, or the
+      // stick's fore/aft) walks from heel to toe — so the rocker input shows
+      // as the pressure point moving along the steel.
+      const t = b.tangent, BL = 0.28;
+      const heel = { x: b.contact.x - t.x * BL * b.contactS, y: b.contact.y - t.y * BL * b.contactS };
+      const toe = { x: b.contact.x + t.x * BL * (1 - b.contactS), y: b.contact.y + t.y * BL * (1 - b.contactS) };
       ctx.strokeStyle = edgeColour(b);
       ctx.lineWidth = (i === s.supportFoot ? 3.2 : 1.8) / PX;
       ctx.beginPath(); ctx.moveTo(heel.x, heel.y); ctx.lineTo(toe.x, toe.y); ctx.stroke();
@@ -210,27 +361,19 @@ export class Renderer {
 
   private balance(s: SkaterState): void {
     const ctx = this.ctx;
-    const base = s.blade[s.supportFoot].contact;
-    const right = perpLeft(s.heading);
-    const L = s.legLength;
-    // The COM, drawn where the pendulum actually puts it.
-    const comx = base.x - right.x * (L * Math.sin(s.lean));
-    const comy = base.y - right.y * (L * Math.sin(s.lean));
+    const { base, com, eq } = pendulum(s);
     ctx.strokeStyle = s.fallen ? "#ff4d6d" : "#d38bff";
     ctx.lineWidth = 2.4 / PX;
-    ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(comx, comy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(com.x, com.y); ctx.stroke();
     ctx.fillStyle = s.fallen ? "#ff4d6d" : "#d38bff";
-    ctx.beginPath(); ctx.arc(comx, comy, 0.075, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(com.x, com.y, 0.075, 0, Math.PI * 2); ctx.fill();
 
     // Where the COM would have to be for the arc it is on. The gap between
     // this line and the last one is the whole balance problem.
-    const eq = s.leanEq;
-    const ex = base.x - right.x * (L * Math.sin(eq));
-    const ey = base.y - right.y * (L * Math.sin(eq));
     ctx.strokeStyle = "rgba(255,201,74,0.85)";
     ctx.lineWidth = 1.4 / PX;
     ctx.setLineDash([0.12, 0.1]);
-    ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(eq.x, eq.y); ctx.stroke();
     ctx.setLineDash([]);
   }
 
@@ -245,6 +388,14 @@ export class Renderer {
       ctx.fillStyle = DIM; ctx.fillRect(x + wpx / 1.2, y - 2, 1, 10);   // the 1.0 mark
     };
 
+    const sb = s.blade[s.supportFoot];
+    const skidLine = sb.inContact && Math.abs(sb.tilt) > p.flatThreshold;
+    const height = 4 + 5 * 16 + 6 + 2 * 46 + 4 + (skidLine ? 16 : 0) + (s.fallen ? 16 : 0)
+      + 8 + info.length * 16 + 6;
+    ctx.fillStyle = "rgba(7,16,26,0.86)";
+    ctx.fillRect(8, 8, Math.min(480, this.canvas.width - 16), height);
+    ctx.fillStyle = JADE;
+    ctx.fillRect(8, 8, 3, height);
     ctx.font = `12px ${MONO}`;
     ctx.textBaseline = "top";
     let y = 12;
@@ -292,9 +443,8 @@ export class Renderer {
     }
 
     y += 4;
-    const b = s.blade[s.supportFoot];
-    if (b.inContact && Math.abs(b.tilt) > p.flatThreshold) {
-      const onset = skidOnsetSpeed(b.tilt, effectiveRocker(b.contactS, p), p);
+    if (skidLine) {
+      const onset = skidOnsetSpeed(sb.tilt, effectiveRocker(sb.contactS, p), p);
       line(`SKIDS ABOVE  ${onset.toFixed(1)} m/s at this edge`, DIM);
     }
     if (s.fallen) line(`DOWN — ${FALL_NAME[s.fallReason]} · A / Space to stand up`, "#ff4d6d");
@@ -303,3 +453,5 @@ export class Renderer {
     for (const t of info) line(t, DIM);
   }
 }
+
+const clampUnit = (x: number): number => (x < -1 ? -1 : x > 1 ? 1 : x);
