@@ -44,16 +44,18 @@ export class FixedStep {
       if (!Number.isFinite(dt) || dt < 0) dt = 0;
       if (dt > 0.25) dt = 0.25;
 
+      this.lastSteps = 0;
       if (!this.paused) {
         this.accumulator += dt;
         let steps = 0;
-        while (this.accumulator >= SIM_DT && steps < this.maxStepsPerFrame) {
+        while (!this.paused && this.accumulator >= SIM_DT && steps < this.maxStepsPerFrame) {
           this.stepOnce();
           this.accumulator -= SIM_DT;
           steps++;
         }
         // Spiral-of-death guard: drop TIME, never change what a step means.
         if (steps === this.maxStepsPerFrame && this.accumulator >= SIM_DT) this.accumulator = 0;
+        if (this.paused) this.accumulator = 0;
         this.lastSteps = steps;
       }
       this.alpha = this.accumulator / SIM_DT;

@@ -7,7 +7,8 @@
 
 import { PRESETS, SIM_DT, SIM_HZ } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
-import { createState, step, checksum } from "../sim/solver.ts";
+import { createState, step } from "../sim/solver.ts";
+import { ReplayRecorder, ReplayPlayer, parseReplay, MAX_REPLAY_BYTES } from "../sim/replay.ts";
 import { Telemetry } from "../sim/telemetry.ts";
 import { SessionMeter } from "../sim/session.ts";
 import type { SkaterState, EdgeEvent } from "../sim/types.ts";
@@ -32,7 +33,7 @@ const PRESET_NAMES = Object.keys(PRESETS);
  */
 const BOOT_PRESET = "responsive";
 
-class Lab {
+export class Lab {
   private params: Params = { ...PRESETS[BOOT_PRESET] };
   private state: SkaterState;
   private pad = new Pad();
@@ -60,7 +61,12 @@ class Lab {
   private playtest = typeof location !== "undefined"
     && new URLSearchParams(location.search).has("playtest");
   private startSpeed = 4.0;
-  private checksums: number[] = [];
+  private recorder = new ReplayRecorder(this.params, this.startSpeed);
+  private player: ReplayPlayer | null = null;
+  private replaySource: string | null = null;
+  private replayMessage = "";
+  private recordingError = "";
+  private loadId = 0;
 
   constructor(canvas: HTMLCanvasElement, panelRoot: HTMLElement) {
     this.state = createState(this.params, this.startSpeed, 0);
@@ -101,7 +107,23 @@ class Lab {
   private tick(): void {
     const c = this.pad.read();
     if (c.reset) this.reset();
-    if (c.pause) this.clock.paused = !this.clock.paused;
+    if (c.pause) { this.clock.paused = true; return; }
+    if (this.player) {
+      if (!this.player.done) {
+        try {
+          this.player.advance();
+          this.telemetry.capture(this.player.state);
+          this.telemetry.pushEvents(this.player.events);
+          this.renderer.recordTrace(this.player.state);
+        } catch (error) {
+          this.replayMessage = `Replay stopped: ${error instanceof Error ? error.message : String(error)}`;
+          this.clock.paused = true;
+          return;
+        }
+      }
+      if (this.player.done) this.clock.paused = true;
+      return; // Playback never contributes to live playtest metrics or capture.
+    }
     if (c.cycleScheme) this.scheme = ((this.scheme + 1) % 3) as Scheme;
     if (c.cyclePreset && !this.playtest) {
       this.presetIndex = (this.presetIndex + 1) % PRESET_NAMES.length;
@@ -119,11 +141,23 @@ class Lab {
     this.telemetry.capture(this.state);
     this.telemetry.pushEvents(this.events);
     this.renderer.recordTrace(this.state);
-    this.checksums.push(checksum(this.state));
-    if (this.checksums.length > SIM_HZ * 30) this.checksums.shift();
+    if (!this.recordingError) {
+      try {
+        this.recorder.capture(it, this.params, this.state, this.events, SCHEME_LABEL[this.scheme]);
+      } catch (error) {
+        this.recordingError = `Recording stopped: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
   }
 
   private render(): void {
+    // Physics stops while paused; hardware must not. Otherwise P/Start can
+    // enter pause but can never leave it. Discard skating inputs while paused.
+    if (this.clock.paused) {
+      const c = this.pad.read();
+      if (c.reset) this.reset();
+      else if (c.pause && !this.player?.done) this.clock.paused = false;
+    }
     const log = this.telemetry.eventLog();
     const recent = log ? log.split("\n").slice(-6).reverse() : [];
     const info = this.playtest
@@ -133,16 +167,39 @@ class Lab {
         + (this.clock.paused ? "PAUSED" : `${this.clock.lastSteps} steps/frame`),
         ...recent.map((line) => `· ${line}`),
       ];
-    this.renderer.draw(this.state, this.params, this.options, info);
+    if (this.player) {
+      const d = this.player.divergence;
+      info.splice(0, info.length, `REPLAY   scheme ${this.player.scheme}   `
+        + `${this.player.index}/${this.player.total} ticks`,
+      d ? `DIVERGED at tick ${d.tick}: expected ${d.expected}, actual ${d.actual}`
+        : this.player.done ? "VERIFIED — reset skater to return to live" : "P / Start: pause or resume");
+    }
+    const status = document.getElementById("replay-status");
+    if (status) status.textContent = this.replayMessage || this.recordingError || (this.player
+      ? this.player.divergence ? info[1]
+        : this.player.done ? `Verified ${this.player.total} ticks. Reset returns to live.`
+          : `Playing ${this.player.index} / ${this.player.total} ticks. Recorded tuning is in use.`
+      : `Recorded ${(this.recorder.ticks / SIM_HZ).toFixed(1)} s / 300 s`
+        + (this.recorder.full ? " — clip full; export, then reset for a new clip." : " since reset."));
+    this.renderer.draw(this.player?.state ?? this.state, this.player?.params ?? this.params, this.options, info);
   }
 
   private reset(): void {
     // The meter is NOT reset here. A session is everything the tester did,
     // falls included; resetting the skater is part of playing, not a new run.
+    this.loadId++;
+    this.player = null;
+    this.replaySource = null;
+    this.replayMessage = "";
+    this.recordingError = "";
+    this.clock.paused = false;
+    const panel = document.getElementById("panel");
+    if (panel) panel.style.display = "";
     this.state = createState(this.params, this.startSpeed, 0);
+    this.schemeState = newSchemeState();
+    this.recorder = new ReplayRecorder(this.params, this.startSpeed);
     this.telemetry.reset();
     this.renderer.clearTrace();
-    this.checksums = [];
   }
 
   private wireButtons(): void {
@@ -155,6 +212,17 @@ class Lab {
     on("export-events", () => this.download("edgework-events.txt", this.telemetry.eventLog()));
     on("export-params", () => this.download("edgework-params.json", this.panel.exportJson()));
     on("export-session", () => this.download("edgework-session.json", this.sessionCard()));
+    on("export-replay", () => {
+      if (this.replaySource || this.recorder.ticks > 0)
+        this.download("edgework-replay.json", this.replaySource ?? this.recorder.toJson());
+    });
+    const file = document.getElementById("replay-file") as HTMLInputElement | null;
+    on("import-replay", () => file?.click());
+    file?.addEventListener("change", () => {
+      const selected = file.files?.[0];
+      if (selected) void this.loadReplay(selected);
+      file.value = ""; // The same clip can be opened again after it ends.
+    });
     on("send-session", () => { void this.sendSession(); });
 
     for (const key of Object.keys(this.options) as Array<keyof DrawOptions>) {
@@ -172,6 +240,31 @@ class Lab {
         const out = document.getElementById("start-speed-val");
         if (out) out.textContent = `${this.startSpeed.toFixed(1)} m/s`;
       });
+    }
+  }
+
+  private async loadReplay(file: File): Promise<void> {
+    const id = ++this.loadId;
+    const wasPaused = this.clock.paused;
+    this.clock.paused = true;
+    try {
+      if (file.size > MAX_REPLAY_BYTES) throw new Error("Replay exceeds the 64 MiB file limit");
+      const source = await file.text();
+      if (id !== this.loadId) return; // A reset or a newer import won the race.
+      const player = new ReplayPlayer(parseReplay(source));
+      this.player = player;
+      this.replaySource = source;
+      this.replayMessage = "";
+      this.recordingError = "";
+      this.telemetry.reset();
+      this.renderer.clearTrace();
+      const panel = document.getElementById("panel");
+      if (panel) panel.style.display = "none";
+      this.clock.paused = false;
+    } catch (error) {
+      if (id !== this.loadId) return;
+      this.replayMessage = `Could not open replay: ${error instanceof Error ? error.message : String(error)}`;
+      this.clock.paused = wasPaused;
     }
   }
 

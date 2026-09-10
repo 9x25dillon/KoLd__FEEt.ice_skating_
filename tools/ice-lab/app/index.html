@@ -107,6 +107,16 @@
         <button id="export-session">session.json</button>
       </div>
     </section>
+    <section>
+      <h3>Replay a run</h3>
+      <p class="note">Captures the first five minutes after reset, including tuning changes. Open a clip to watch and verify it. Reset returns to live skating. Replay files stay on your device.</p>
+      <div class="actions">
+        <button id="export-replay">replay.json</button>
+        <button id="import-replay">open replay</button>
+        <input id="replay-file" type="file" accept=".json,application/json" hidden aria-label="Open a replay file">
+      </div>
+      <p id="replay-status" class="status" aria-live="off"></p>
+    </section>
   </aside>
   <script type="module" src="./lab.js"></script>
 </body>
