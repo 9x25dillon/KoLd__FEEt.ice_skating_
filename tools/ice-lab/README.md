@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 81 tests, ~2 s
+node --test test/*.test.ts     # 97 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -22,7 +22,7 @@ node app/serve.mjs             # -> http://localhost:8123/
 the only thing in the rig that wants anything installed (`typescript` and
 `@types/node`). Nothing else does, and the tests and the build do not need it.
 
-**Zero dependencies.** No `npm install`, no `node_modules`, no network. Node 26
+**Zero dependencies.** No `npm install`, no `node_modules`, no network. Node 24.19+ or Node 26
 strips TypeScript types natively and exposes the same stripper as an API, which
 is the entire build step. The cost is that only *erasable* syntax is allowed —
 no `enum`, no `namespace`, no constructor parameter properties — and
@@ -394,6 +394,56 @@ Caddy is carefully providing.
 client addresses stripped from the access log, and a runbook that takes about
 twenty minutes on a fresh box — [`deploy/README.md`](deploy/README.md).
 
+## Reproducible bug reports
+
+The **replay.json** button exports the current run from its most recent reset.
+It records the first five minutes of simulation time (36,000 ticks); at the cap
+the clip stays intact and the status asks you to export and reset. Pause time
+is excluded. Reset starts a new clip while retaining the live session metrics.
+
+Each `edgework-replay/1` file contains the initial speed, lean, complete tuning,
+the actual floating-point solver input for every tick after scheme mapping,
+the scheme letter, tuning changes before their tick, and a checksum of the full
+state and that tick's events. No names, hardware IDs, timestamps or network
+requests are involved. **send session** still sends only its existing summary;
+replays are exported explicitly and are not uploaded by that button.
+
+Use **open replay** to watch the run. Live skating input and slider edits do
+not drive playback; recorded tuning does. Playback pauses on completion or on
+the first differing tick. **P / Start** pauses and resumes; **reset skater**
+returns to a fresh live run. Playback does not enter the playtest session meter.
+In `?playtest=1` the replay controls remain hidden with the rest of the panel.
+
+For a bug report, attach the replay and verify it without opening a browser:
+
+```sh
+node replay/verify.ts /path/to/edgework-replay.json
+# or: npm run replay -- /path/to/edgework-replay.json
+```
+
+Exit codes: **0** verified, **1** state/event divergence (with the first 1-based
+tick and expected/actual digest), **2** invalid or incompatible file. Imports
+require the exact schema, solver version, 120 Hz rate, complete finite tuning,
+bounded input axes, boolean buttons, at most 36,000 ticks and at most 64 MiB.
+Warnings about balance tuning are preserved so a bad tuning can be reproduced.
+
+`ice-lab-f64/1` is a JavaScript regression contract. CRC32 covers every state
+field and event using canonical JSON, with straight-blade Infinity encoded
+explicitly; it is a diagnostic, not an authenticity signature. It does **not**
+establish bit-exact parity with another JS engine, platform math library, or
+the future C++ float32 solver. Version the contract when solver semantics
+change and review fixture changes rather than regenerating them to pass CI.
+
+`test/fixtures/replay-v1.json` pins a 240-tick skating run with a tuning change
+at tick 121. PR checks run the tests, browser build and fixture verifier under
+Node 24 and 26. The fixture uses mapped inputs; it does not validate hardware
+mapping, which has its own scheme/pad tests.
+
+Local measurement on Node 24.19 (36,000 ticks, after warmup): about 29 µs per
+tick for solver plus capture and 5.3 MB of JSON for five minutes of a scripted
+run. This measures the headless JS instrument, not browser rendering or the
+future C++ performance gate; recording allocates outside the solver.
+
 ## Layout
 
 ```
@@ -405,6 +455,8 @@ sim/solver.ts      one skater, one fixed tick, a pure function
 sim/classify.ts    continuous blade state -> the discrete edge vocabulary
 sim/telemetry.ts   fixed ring, CSV export, event log
 sim/session.ts     the plan's §6 metrics, computed from what the rig can see
+sim/replay.ts      bounded capture, strict import, full-state checks and playback
+replay/verify.ts   command-line replay verification
 app/pad.ts         controller and keyboard: hardware, and nothing else
 app/schemes.ts     A, B and C — what an axis MEANS, as pure functions
 app/loop.ts        the 120 Hz accumulator and its dt clamp
@@ -455,10 +507,11 @@ a leg model.
 The whole point. `sim/` is written to be transcribed:
 
 - SI throughout — metres, seconds, kilograms, newtons, radians.
-- Plain data, no classes in the hot path, no allocation inside `step`.
+- Plain data and no engine objects. The current TypeScript `step` allocates
+  vector objects and arrays; the C++ port still needs an allocation-free hot loop.
 - `step(state, input, params, dt, events)` is a pure function.
-- Every transcendental goes through `sim/math.ts`, so a bit-exact
-  cross-platform library is a substitution rather than an audit.
+- Math helpers live in `sim/math.ts`, but direct `Math.*` calls remain in the
+  solver and blade model. Audit them when choosing the C++ math contract.
 - The checksum quantizes by truncation, which is exact in IEEE-754 and
   identical on every target; rounding modes are not.
 - The edge code's bit layout and its `RFO` spelling are already what

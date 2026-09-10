@@ -15,6 +15,11 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import type { Controls, Pad } from "../app/pad.ts";
+import type { FixedStep } from "../app/loop.ts";
+import type { ReplayRecorder, ReplayPlayer } from "../sim/replay.ts";
+import type { SessionMeter } from "../sim/session.ts";
+import type { SkaterState } from "../sim/types.ts";
 
 const root = new URL("..", import.meta.url).pathname;
 
@@ -134,4 +139,89 @@ test("the three control schemes are labelled A, B and C and nothing else", async
   // this rig shipped one for an hour, so it is asserted rather than trusted.
   assert.deepEqual([...SCHEME_LABEL], ["A", "B", "C"]);
   assert.deepEqual(Object.keys(SCHEME), ["A", "B", "C"]);
+});
+
+interface LabHarness {
+  tick(): void;
+  render(): void;
+  reset(): void;
+  loadReplay(file: File): Promise<void>;
+  clock: FixedStep;
+  pad: Pad;
+  state: SkaterState;
+  recorder: ReplayRecorder;
+  player: ReplayPlayer | null;
+  meter: SessionMeter;
+  replayMessage: string;
+}
+
+async function makeLab(): Promise<LabHarness> {
+  installDom();
+  const { Lab } = await import("../app/lab.ts");
+  return new Lab(new El("canvas") as unknown as HTMLCanvasElement,
+    new El("aside") as unknown as HTMLElement) as unknown as LabHarness;
+}
+
+test("pause and resume both read the controller, and reset starts a fresh replay", async () => {
+  const lab = await makeLab();
+  let controls: Controls = lab.pad.read();
+  lab.pad.read = () => controls;
+  lab.tick();
+  assert.equal(lab.recorder.ticks, 1);
+  controls = { ...controls, pause: true };
+  lab.tick();
+  assert.equal(lab.clock.paused, true);
+  assert.equal(lab.state.tick, 1, "pausing must not advance physics");
+  controls = { ...controls, pause: false }; lab.render();
+  controls = { ...controls, pause: true }; lab.render();
+  assert.equal(lab.clock.paused, false, "resume must be polled even when physics is stopped");
+  controls = { ...controls, pause: false }; lab.tick();
+  assert.equal(lab.recorder.ticks, 2);
+  lab.reset();
+  assert.equal(lab.state.tick, 0);
+  assert.equal(lab.recorder.ticks, 0);
+  assert.equal(lab.meter.summary().ticks, 2, "resetting a clip does not erase playtest history");
+});
+
+test("replay playback verifies without contaminating live session metrics or recording", async () => {
+  const lab = await makeLab();
+  for (let i = 0; i < 8; i++) lab.tick();
+  const before = lab.meter.summary();
+  await lab.loadReplay(new File([lab.recorder.toJson()], "clip.json"));
+  assert.ok(lab.player);
+  for (let i = 0; i < 12; i++) lab.tick();
+  assert.equal(lab.player.index, 8);
+  assert.equal(lab.player.divergence, null);
+  assert.equal(lab.clock.paused, true);
+  assert.deepEqual(lab.meter.summary(), before);
+  assert.equal(lab.recorder.ticks, 8);
+  lab.render();
+  assert.match(document.getElementById("replay-status")!.textContent!, /Verified 8 ticks/);
+  lab.reset(); lab.tick();
+  assert.equal(lab.player, null);
+  assert.equal(lab.recorder.ticks, 1);
+  assert.equal(lab.meter.summary().ticks, 9);
+});
+
+test("an invalid replay leaves live recording usable and reports the error", async () => {
+  const lab = await makeLab();
+  lab.tick();
+  await lab.loadReplay(new File(["{}"], "bad.json"));
+  assert.equal(lab.player, null);
+  assert.equal(lab.clock.paused, false);
+  assert.match(lab.replayMessage, /Could not open replay/);
+  lab.tick();
+  assert.equal(lab.recorder.ticks, 2);
+});
+
+test("reset cancels a pending file read rather than entering stale playback", async () => {
+  const lab = await makeLab(); lab.tick();
+  const source = lab.recorder.toJson();
+  let finish!: (text: string) => void;
+  const pending = lab.loadReplay({ size: source.length,
+    text: () => new Promise<string>(resolve => { finish = resolve; }) } as File);
+  lab.reset(); finish(source); await pending;
+  assert.equal(lab.player, null);
+  assert.equal(lab.clock.paused, false);
+  assert.equal(lab.recorder.ticks, 0);
 });

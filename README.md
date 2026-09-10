@@ -106,8 +106,23 @@ that question.
 
 ## Status
 
-Pre-production, month 0. The bible is complete and buildable as written; nothing has been
-implemented yet.
+Pre-production. [`tools/ice-lab/`](tools/ice-lab/README.md) is a working browser
+instrument: a 120 Hz blade–ice solver, three control schemes, telemetry, session
+metrics, and replay capture/playback with first-divergence checks. Its automated
+suite currently has **97 tests**. The Unreal project and C++ runtime have not
+been built yet; `src/reference/` remains non-compiling specification code.
+
+Run the instrument with Node 24.19+ or Node 26, with no dependency installation:
+
+```sh
+cd tools/ice-lab
+node --test test/*.test.ts
+node app/build.mjs
+node app/serve.mjs
+```
+
+Open `http://localhost:8123/`. See the [replay guide](tools/ice-lab/README.md#reproducible-bug-reports)
+for capturing a run and verifying it headlessly.
 
 **Next artefacts**, in the order they are most useful:
 
@@ -116,7 +131,8 @@ implemented yet.
 3. ~~The Composer transition solver~~ → [`docs/composer-solver.md`](docs/composer-solver.md)
 
 All three are written, and the phase plan series is complete: pre-production → vertical slice
-→ production → beta. **The specification is finished. The next artefact is a build.**
+→ production → beta. The immediate work is playtesting the Ice Lab controls,
+then porting the measured model into UE5's `KoLdSimCore` against a replay corpus.
 
 Total planned development cost to launch: **~$11.9M** over 30 months. Content volumes in the
 production plan are deliberately provisional until the

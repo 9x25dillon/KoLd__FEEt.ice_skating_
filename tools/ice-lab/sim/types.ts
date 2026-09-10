@@ -150,9 +150,9 @@ export interface SkaterState {
 
 /**
  * The rig takes floats where the shipping build will take quantized ints.
- * Quantization is applied at the boundary in `quantizeInput` so the tuning
- * surface stays readable while the replay stream stays honest about what a
- * gamepad can actually express.
+ * The tuning rig and its replay files preserve these actual floating-point
+ * inputs after scheme mapping. There is no input quantizer in this rig yet;
+ * a shipping quantized-input contract belongs to the C++ port.
  */
 export interface SkatingInput {
   lean: number;   // -1..1, desired lean as a fraction of maxLean
