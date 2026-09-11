@@ -16,9 +16,9 @@ import { perpLeft, len } from "../sim/math.ts";
 import type { Vec2 } from "../sim/math.ts";
 import { PadView } from "./padview.ts";
 import { drawRibbon } from "./ribbon.ts";
+import { Camera, PX } from "./camera.ts";
 import { JUMP_PHASE, JUMP_CODE, JUMP_NONE, ROTATION_MARK, EDGE_MARK } from "../sim/jump.ts";
 
-const PX = 26;                    // pixels per metre at zoom 1
 
 const INK = "#dce9f2";
 const DIM = "#5b7386";
@@ -88,6 +88,10 @@ export class Renderer {
   private maxTrace = 4000;
 
   private canvas: HTMLCanvasElement;
+  /** Pixels per metre this frame, so widths set as "n / px" stay n pixels. */
+  private px = PX;
+  /** The view when the caller brings none: the rig's original camera. */
+  private still = new Camera();
   /** Fed once per tick by the lab; drawn when `opt.pad` is on. */
   readonly pad = new PadView();
 
@@ -118,21 +122,25 @@ export class Renderer {
     }
   }
 
-  draw(s: SkaterState, p: Params, opt: DrawOptions, info: string[], scheme = 0): void {
+  draw(s: SkaterState, p: Params, opt: DrawOptions, info: string[], scheme = 0,
+    cam?: Camera): void {
     const { ctx, canvas } = this;
     const w = canvas.width, h = canvas.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#0b1016";
     ctx.fillRect(0, 0, w, h);
 
-    // Camera: centred on the skater, y up.
+    // Camera: app/camera.ts decides where we look from; everything below draws
+    // in metres on the ice. Without one, the rig's original: north up, zoom 1.
+    if (!cam) { cam = this.still; cam.snap(s); }
     ctx.save();
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(PX, -PX);
-    ctx.translate(-s.pos.x, -s.pos.y);
-    ctx.lineWidth = 1 / PX;
+    const m = cam.groundMatrix(w, h);
+    ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    // Line widths stay in screen pixels whatever the zoom.
+    this.px = cam.px;
+    ctx.lineWidth = 1 / this.px;
 
-    this.grid(s, w, h);
+    this.grid(cam, w, h);
     if (opt.tracing) this.tracings();
     if (opt.carveCircle) this.carveCircles(s, p);
     if (opt.skater) this.skater(s, p);
@@ -148,31 +156,36 @@ export class Renderer {
 
   // ── ice ───────────────────────────────────────────────────────────────────
 
-  private grid(s: SkaterState, w: number, h: number): void {
+  private grid(cam: Camera, w: number, h: number): void {
     const ctx = this.ctx;
-    const halfW = w / (2 * PX), halfH = h / (2 * PX);
-    const x0 = Math.floor(s.pos.x - halfW), x1 = Math.ceil(s.pos.x + halfW);
-    const y0 = Math.floor(s.pos.y - halfH), y1 = Math.ceil(s.pos.y + halfH);
+    // Everything the view can reach, whichever way it is turned.
+    const r = cam.visibleRadius(w, h);
+    const x0 = Math.floor(cam.cx - r), x1 = Math.ceil(cam.cx + r);
+    const y0 = Math.floor(cam.cy - r), y1 = Math.ceil(cam.cy + r);
     // World-anchored ice grain: stable under camera movement and replay.
     ctx.fillStyle = "#102330";
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     // One path for the lot: a stroke per square metre is ~3000 draw calls a
     // frame on a wide window, for a texture nobody is reading.
-    ctx.lineWidth = 0.6 / PX;
-    ctx.strokeStyle = "rgba(165,221,240,0.055)";
-    ctx.beginPath();
-    for (let x = x0; x <= x1; x++) {
-      for (let y = y0; y <= y1; y++) {
-        const seed = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-        const f = seed - Math.floor(seed);
-        ctx.moveTo(x + f, y + f);
-        ctx.lineTo(x + f + 0.25, y + f + 0.06);
+    // Zoomed far out the grain is sub-pixel and tens of thousands of strokes:
+    // skip it, the markings still say where the ice is.
+    if ((x1 - x0) * (y1 - y0) < 12000) {
+      ctx.lineWidth = 0.6 / this.px;
+      ctx.strokeStyle = "rgba(165,221,240,0.055)";
+      ctx.beginPath();
+      for (let x = x0; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) {
+          const seed = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+          const f = seed - Math.floor(seed);
+          ctx.moveTo(x + f, y + f);
+          ctx.lineTo(x + f + 0.25, y + f + 0.06);
+        }
       }
+      ctx.stroke();
     }
-    ctx.stroke();
     // Training markings repeat across the unbounded simulation surface.
     ctx.strokeStyle = FAINT;
-    ctx.lineWidth = 1 / PX;
+    ctx.lineWidth = 1 / this.px;
     for (let x = Math.floor(x0 / 10) * 10; x <= x1; x += 10) {
       ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
       for (let y = Math.floor(y0 / 10) * 10; y <= y1; y += 10) {
@@ -201,7 +214,7 @@ export class Renderer {
           : b.side === EDGE.Outside ? "rgba(90,169,255,0.42)"
             : b.side === EDGE.Inside ? "rgba(255,93,122,0.42)"
               : "rgba(159,179,194,0.20)";
-        ctx.lineWidth = (0.6 + 0.5 * b.depth) / PX;
+        ctx.lineWidth = (0.6 + 0.5 * b.depth) / this.px;
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       }
     }
@@ -323,7 +336,7 @@ export class Renderer {
       const heel = { x: b.contact.x - t.x * BL * b.contactS, y: b.contact.y - t.y * BL * b.contactS };
       const toe = { x: b.contact.x + t.x * BL * (1 - b.contactS), y: b.contact.y + t.y * BL * (1 - b.contactS) };
       ctx.strokeStyle = edgeColour(b);
-      ctx.lineWidth = (i === s.supportFoot ? 3.2 : 1.8) / PX;
+      ctx.lineWidth = (i === s.supportFoot ? 3.2 : 1.8) / this.px;
       ctx.beginPath(); ctx.moveTo(heel.x, heel.y); ctx.lineTo(toe.x, toe.y); ctx.stroke();
 
       // Contact point, sized by load.
@@ -344,7 +357,7 @@ export class Renderer {
     const cx = b.contact.x + n.x * Math.sign(b.tilt) * r;
     const cy = b.contact.y + n.y * Math.sign(b.tilt) * r;
     ctx.strokeStyle = b.regime === REGIME.Skid ? "rgba(255,201,74,0.30)" : "rgba(125,255,196,0.28)";
-    ctx.lineWidth = 1.2 / PX;
+    ctx.lineWidth = 1.2 / this.px;
     ctx.setLineDash([0.25, 0.2]);
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
@@ -362,7 +375,7 @@ export class Renderer {
     const ctx = this.ctx;
     const arrow = (from: Vec2, dx: number, dy: number, col: string, wpx: number): void => {
       if (Math.abs(dx) + Math.abs(dy) < 1e-4) return;
-      ctx.strokeStyle = col; ctx.lineWidth = wpx / PX;
+      ctx.strokeStyle = col; ctx.lineWidth = wpx / this.px;
       ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(from.x + dx, from.y + dy); ctx.stroke();
     };
     // Velocity, 1 m of arrow per 4 m/s.
@@ -380,7 +393,7 @@ export class Renderer {
     const ctx = this.ctx;
     const { base, com, eq } = pendulum(s);
     ctx.strokeStyle = s.fallen ? "#ff4d6d" : "#d38bff";
-    ctx.lineWidth = 2.4 / PX;
+    ctx.lineWidth = 2.4 / this.px;
     ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(com.x, com.y); ctx.stroke();
     ctx.fillStyle = s.fallen ? "#ff4d6d" : "#d38bff";
     ctx.beginPath(); ctx.arc(com.x, com.y, 0.075, 0, Math.PI * 2); ctx.fill();
@@ -388,7 +401,7 @@ export class Renderer {
     // Where the COM would have to be for the arc it is on. The gap between
     // this line and the last one is the whole balance problem.
     ctx.strokeStyle = "rgba(255,201,74,0.85)";
-    ctx.lineWidth = 1.4 / PX;
+    ctx.lineWidth = 1.4 / this.px;
     ctx.setLineDash([0.12, 0.1]);
     ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(eq.x, eq.y); ctx.stroke();
     ctx.setLineDash([]);

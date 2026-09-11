@@ -14,6 +14,7 @@ import { SessionMeter } from "../sim/session.ts";
 import type { SkaterState, EdgeEvent } from "../sim/types.ts";
 import { Renderer, DEFAULT_OPTIONS } from "./draw.ts";
 import type { DrawOptions } from "./draw.ts";
+import { Camera, VIEW_NAME } from "./camera.ts";
 import { Panel } from "./panel.ts";
 import { Pad } from "./pad.ts";
 import { applyScheme, newSchemeState, SCHEME_LABEL } from "./schemes.ts";
@@ -46,6 +47,7 @@ export class Lab {
   private clock: FixedStep;
   private events: EdgeEvent[] = [];
   private options: DrawOptions = { ...DEFAULT_OPTIONS };
+  private camera = new Camera();
   private presetIndex = Math.max(0, PRESET_NAMES.indexOf(BOOT_PRESET));
   private scheme: Scheme = 0;
   private schemeState = newSchemeState();
@@ -91,6 +93,14 @@ export class Lab {
     fit();
     window.addEventListener("resize", fit);
     this.wireButtons();
+    // The wheel zooms. Line-mode wheels (Firefox) report about 3 per notch,
+    // pixel-mode ones about 100; both come out near one step a notch.
+    canvas.addEventListener("wheel", (e) => {
+      if (this.playtest) return;
+      const w = e as WheelEvent;
+      w.preventDefault();
+      this.camera.zoomBy(-(w.deltaMode === 1 ? w.deltaY * 33 : w.deltaY) / 100);
+    }, { passive: false });
     if (this.playtest) this.hideEverythingATesterShouldNotSee();
     // The input panel captions what each scheme does with each stick, which
     // is an explanation; §7 keeps those from testers and observers alike.
@@ -127,11 +137,13 @@ export class Lab {
   private tick(): void {
     const c = this.pad.read();
     if (c.reset) this.reset();
+    this.viewControls(c);
     if (c.pause) { this.clock.paused = true; return; }
     if (this.player) {
       if (!this.player.done) {
         try {
           this.player.advance();
+          this.camera.update(this.player.state, SIM_DT);
           this.renderer.pad.note(null, this.player.input);
           this.audio.onTick(this.player.input, this.player.events, this.player.state);
           this.telemetry.capture(this.player.state);
@@ -166,6 +178,7 @@ export class Lab {
     step(this.state, it, this.params, SIM_DT, this.events);
     this.audio.onTick(it, this.events, this.state);
     this.meter.sample(this.state, it, this.events, SIM_DT);
+    this.camera.update(this.state, SIM_DT);
     this.telemetry.capture(this.state);
     this.telemetry.pushEvents(this.events);
     this.renderer.recordTrace(this.state);
@@ -178,6 +191,17 @@ export class Lab {
     }
   }
 
+  /**
+   * V / D-pad down turns the view, + / - / D-pad left-right zoom. Locked in
+   * playtest: the view is part of the stimulus, and every tester gets the one
+   * the rig always had.
+   */
+  private viewControls(c: { cycleView: boolean; zoom: number }): void {
+    if (this.playtest) return;
+    if (c.cycleView) this.camera.cycleView();
+    if (c.zoom !== 0) this.camera.zoomBy(c.zoom);
+  }
+
   private render(): void {
     // Physics stops while paused; hardware must not. Otherwise P/Start can
     // enter pause but can never leave it. Discard skating inputs while paused.
@@ -185,6 +209,7 @@ export class Lab {
       const c = this.pad.read();
       if (c.reset) this.reset();
       else if (c.pause && !this.player?.done) this.clock.paused = false;
+      this.viewControls(c);
     }
     const log = this.telemetry.eventLog();
     const recent = log ? log.split("\n").slice(-6).reverse() : [];
@@ -192,7 +217,8 @@ export class Lab {
       ? [`scheme ${SCHEME_LABEL[this.scheme]}` + (this.clock.paused ? "   PAUSED" : "")]
       : [
         `preset ${PRESET_NAMES[this.presetIndex]}   scheme ${SCHEME_LABEL[this.scheme]}   `
-        + (this.clock.paused ? "PAUSED" : `${this.clock.lastSteps} steps/frame`),
+        + (this.clock.paused ? "PAUSED" : `${this.clock.lastSteps} steps/frame`)
+        + `   view ${VIEW_NAME[this.camera.view]} ${this.camera.zoom.toFixed(2)}×`,
         ...recent.map((line) => `· ${line}`),
       ];
     if (this.player) {
@@ -217,7 +243,7 @@ export class Lab {
       ? Math.max(0, SCHEME_LABEL.indexOf(this.player.scheme as "A" | "B" | "C"))
       : this.scheme;
     this.renderer.draw(this.player?.state ?? this.state, this.player?.params ?? this.params,
-      this.options, info, scheme);
+      this.options, info, scheme, this.camera);
   }
 
   /**
@@ -265,6 +291,7 @@ export class Lab {
     const panel = document.getElementById("panel");
     if (panel) panel.style.display = "";
     this.state = createState(this.params, this.startSpeed, 0);
+    this.camera.snap(this.state);
     this.schemeState = newSchemeState();
     this.recorder = new ReplayRecorder(this.params, this.startSpeed);
     this.telemetry.reset();

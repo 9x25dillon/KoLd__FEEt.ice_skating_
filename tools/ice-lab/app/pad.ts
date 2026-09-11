@@ -41,7 +41,8 @@ const TRIGGER = 0.35;
  */
 const PITCH_BAND = 0.44;          // 25 deg
 
-const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, BACK = 8, START = 9, DPAD_UP = 12;
+const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, BACK = 8, START = 9, DPAD_UP = 12,
+  DPAD_DOWN = 13, DPAD_LEFT = 14, DPAD_RIGHT = 15;
 
 /**
  * Hardware state, with the sticks shaped but not yet interpreted.
@@ -89,6 +90,10 @@ export interface Controls {
   cycleScheme: boolean;
   /** Off -> hop -> full jumps. Keyboard J, pad D-pad up. */
   cycleJump: boolean;
+  /** North up -> travel up. Keyboard V, pad D-pad down. Ignored in playtest. */
+  cycleView: boolean;
+  /** Zoom steps this frame: + and - on the keyboard, D-pad right and left. */
+  zoom: number;
 }
 
 const NOTHING: Controls = {
@@ -96,6 +101,7 @@ const NOTHING: Controls = {
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
+  cycleView: false, zoom: 0,
 };
 
 /**
@@ -182,6 +188,9 @@ export class Pad {
       out.cycleScheme = (gp.buttons[BACK]?.pressed ?? false) && !this.prevButtons.has(BACK);
       out.toe = (gp.buttons[B]?.pressed ?? false) && !this.prevButtons.has(B);
       out.cycleJump = (gp.buttons[DPAD_UP]?.pressed ?? false) && !this.prevButtons.has(DPAD_UP);
+      out.cycleView = (gp.buttons[DPAD_DOWN]?.pressed ?? false) && !this.prevButtons.has(DPAD_DOWN);
+      if ((gp.buttons[DPAD_RIGHT]?.pressed ?? false) && !this.prevButtons.has(DPAD_RIGHT)) out.zoom += 1;
+      if ((gp.buttons[DPAD_LEFT]?.pressed ?? false) && !this.prevButtons.has(DPAD_LEFT)) out.zoom -= 1;
       this.prevButtons = new Set(gp.buttons.flatMap((b, i) => (b.pressed ? [i] : [])));
     }
 
@@ -208,6 +217,9 @@ export class Pad {
     if (this.held("c")) out.carriage = 1;
     if (this.pressed("f")) out.toe = true;
     if (this.pressed("j")) out.cycleJump = true;
+    if (this.pressed("v")) out.cycleView = true;
+    if (this.pressed("=") || this.pressed("+")) out.zoom += 1;
+    if (this.pressed("-") || this.pressed("_")) out.zoom -= 1;
 
     this.prevKeys = new Set(this.keys);
     return out;
