@@ -417,16 +417,25 @@ export class Lab {
   }
 
   /**
-   * V / D-pad down cycles north up, travel up, chase; + / - / D-pad
-   * left-right zoom; [ and ] lower and raise the chase camera. Locked in
-   * playtest: the view is part of the stimulus, and every tester gets the one
-   * the rig always had.
+   * V / D-pad down cycles north up, travel up, chase; + / - zoom, and so do
+   * D-pad left-right — except in the jump challenge, where they step through
+   * the six jumps, so a pad can pick one; [ and ] lower and raise the chase
+   * camera. Locked in playtest: the view is part of the stimulus, and every
+   * tester gets the one the rig always had.
    */
-  private viewControls(c: { cycleView: boolean; zoom: number; tilt: number }): void {
+  private viewControls(c: { cycleView: boolean; zoom: number; tilt: number; dpadStep: number }): void {
     if (this.playtest) return;
     if (c.cycleView) this.camera.cycleView();
     if (c.zoom !== 0) this.camera.zoomBy(c.zoom);
     if (c.tilt !== 0) this.camera.tiltBy(5 * c.tilt);
+    if (c.dpadStep !== 0) {
+      if (this.courseKind === "jumps") {
+        this.jumpTarget = (this.jumpTarget + c.dpadStep + 6 * 6) % 6;
+        this.reset();   // a new target starts the way that jump leaves the ice
+      } else {
+        this.camera.zoomBy(c.dpadStep);
+      }
+    }
   }
 
   private render(): void {

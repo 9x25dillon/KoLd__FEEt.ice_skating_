@@ -41,8 +41,8 @@ const TRIGGER = 0.35;
  */
 const PITCH_BAND = 0.44;          // 25 deg
 
-const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, BACK = 8, START = 9, DPAD_UP = 12,
-  DPAD_DOWN = 13, DPAD_LEFT = 14, DPAD_RIGHT = 15;
+const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, BACK = 8, START = 9, L3 = 10, R3 = 11,
+  DPAD_UP = 12, DPAD_DOWN = 13, DPAD_LEFT = 14, DPAD_RIGHT = 15;
 
 /**
  * Hardware state, with the sticks shaped but not yet interpreted.
@@ -92,13 +92,18 @@ export interface Controls {
   cycleJump: boolean;
   /** North up -> travel up. Keyboard V, pad D-pad down. Ignored in playtest. */
   cycleView: boolean;
-  /** Zoom steps this frame: + and - on the keyboard, D-pad right and left. */
+  /** Zoom steps this frame: + and - on the keyboard. */
   zoom: number;
+  /**
+   * D-pad right (+1) or left (-1), one-shot. The lab decides what it means:
+   * the next or previous jump in the jump challenge, a zoom step anywhere else.
+   */
+  dpadStep: number;
   /** Chase camera up (+1) or down (-1) a step: ] and [. Keyboard only. */
   tilt: number;
-  /** The Figure Eight on and off: G. Ignored in playtest. */
+  /** Next course — off, Figure Eight, edge course, jumps: G, or click the left stick. Ignored in playtest. */
   toggleGame: boolean;
-  /** Which ghost to race — best, last, a file, none: H. */
+  /** Which ghost to race — best, last, a file, none: H, or click the right stick. */
   cycleGhost: boolean;
   /** The jump challenge's target, 0..5, from keys 1-6; -1 when none was pressed. */
   pickJump: number;
@@ -109,7 +114,7 @@ const NOTHING: Controls = {
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
-  cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1,
+  cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0,
 };
 
 /**
@@ -197,8 +202,11 @@ export class Pad {
       out.toe = (gp.buttons[B]?.pressed ?? false) && !this.prevButtons.has(B);
       out.cycleJump = (gp.buttons[DPAD_UP]?.pressed ?? false) && !this.prevButtons.has(DPAD_UP);
       out.cycleView = (gp.buttons[DPAD_DOWN]?.pressed ?? false) && !this.prevButtons.has(DPAD_DOWN);
-      if ((gp.buttons[DPAD_RIGHT]?.pressed ?? false) && !this.prevButtons.has(DPAD_RIGHT)) out.zoom += 1;
-      if ((gp.buttons[DPAD_LEFT]?.pressed ?? false) && !this.prevButtons.has(DPAD_LEFT)) out.zoom -= 1;
+      if ((gp.buttons[DPAD_RIGHT]?.pressed ?? false) && !this.prevButtons.has(DPAD_RIGHT)) out.dpadStep += 1;
+      if ((gp.buttons[DPAD_LEFT]?.pressed ?? false) && !this.prevButtons.has(DPAD_LEFT)) out.dpadStep -= 1;
+      // The stick clicks were the pad's last free buttons: the game layer's two choices.
+      out.toggleGame = (gp.buttons[L3]?.pressed ?? false) && !this.prevButtons.has(L3);
+      out.cycleGhost = (gp.buttons[R3]?.pressed ?? false) && !this.prevButtons.has(R3);
       this.prevButtons = new Set(gp.buttons.flatMap((b, i) => (b.pressed ? [i] : [])));
     }
 

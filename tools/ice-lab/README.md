@@ -256,7 +256,10 @@ pick.
 
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
 weight, **Y** reset, **X** preset, **Back** scheme; for jumps, **right stick**
-carriage, **B** toe pick, **D-pad ↑** jump mode. A browser hides a gamepad
+carriage, **B** toe pick, **D-pad ↑** jump mode, **D-pad ↓** camera view, **D-pad ← →**
+zoom — or, in the jump challenge, the previous / next jump. The courses are on
+the stick clicks: **left stick click** next course, **right stick click** next
+ghost. The chase camera's tilt stays on **[ / ]**. A browser hides a gamepad
 until a button is pressed, which reads exactly like a broken pad.
 
 **The input panel** (top right, toggle "input") shows the hardware as read —
