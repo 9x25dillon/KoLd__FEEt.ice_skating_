@@ -141,6 +141,67 @@ test("a blade that pushes off one edge and comes back on the other made one chan
   assert.equal(counted() - before, 3);
 });
 
+/**
+ * test/jump.test.ts's attempt, fed to a meter: skate, hold the knee deep for
+ * the resolver's ideal 0.30 s, release. The outcomes asserted below are that
+ * file's measured ones — the meter's job is to record them, not re-derive them.
+ */
+function jumpSession(mode: number, speed: number, weight: number, lean: number,
+  toe: boolean, whip: number): { summary: ReturnType<SessionMeter["summary"]>; state: SkaterState } {
+  const LOAD_AT = 180, RELEASE = LOAD_AT + 36;
+  const jp = { ...p, jumpMode: mode };
+  const m = new SessionMeter();
+  const s = createState(jp, speed);
+  const ev: EdgeEvent[] = [];
+  for (let i = 0; i < 600; i++) {
+    const loading = i >= LOAD_AT && i < RELEASE;
+    const inp = {
+      ...NEUTRAL_INPUT, lean, weight,
+      knee: loading ? 0.95 : i >= RELEASE && i < RELEASE + 3 ? 0 : i >= RELEASE ? 0.8 : 0.35,
+      carriage: loading || i === RELEASE ? whip : 0,
+      toe: toe && i === RELEASE - 2,
+    };
+    ev.length = 0;
+    step(s, inp, jp, SIM_DT, ev);
+    m.sample(s, inp, ev, SIM_DT);
+  }
+  return { summary: m.summary(), state: s };
+}
+
+test("the card records jumps: a hop, a clean triple, and a fall on landing", () => {
+  const hop = jumpSession(1, 5, 0.5, 0, false, 1).summary;
+  assert.equal(hop.takeoffs, 1);
+  assert.equal(hop.hops, 1);
+  assert.equal(hop.jumps, 0);
+  assert.equal(hop.landings.length, 1);
+  assert.equal(hop.landings[0].kind, 255, "a hop has no element");
+  assert.ok(Math.abs(hop.landings[0].height - 0.44) < 0.005);
+  assert.ok(Math.abs(hop.landings[0].second - (180 + 36 + 1 + 71) / 120) < 0.02,
+    `landed ${hop.landings[0].second.toFixed(3)} s in`);
+
+  const triple = jumpSession(2, -5, 1, -0.25, true, 1).summary;
+  assert.equal(triple.jumps, 1);
+  assert.equal(triple.hops, 0);
+  assert.deepEqual(
+    [triple.landings[0].kind, triple.landings[0].revolutions, triple.landings[0].rotationCall,
+      triple.landings[0].toe, triple.landings[0].fall],
+    [0, 3, 0, 1, 0], "3T, clean, toe-assisted, stood up");
+  assert.equal(triple.meanTakeoffQuality, triple.landings[0].takeoffQuality);
+  assert.ok(Math.abs(triple.meanTakeoffQuality - 1) < 1e-9);
+  assert.equal(triple.landingFalls, 0);
+
+  const short = jumpSession(2, -5, 1, -0.25, false, 0.5).summary;
+  assert.equal(short.landingFalls, 1);
+  assert.equal(short.falls, 1, "a fall on landing is a fall, counted once");
+  assert.equal(short.landings[0].fall, 1);
+  assert.equal(short.landings[0].rotationCall, 2, "under-rotated");
+
+  const none = jumpSession(0, 5, 0.5, 0, false, 1).summary;
+  assert.equal(none.takeoffs, 0, "jumps off: a deep knee is only a deep knee");
+  assert.equal(none.meanLandingQuality, -1, "no landings is unmeasured, not zero");
+  assert.deepEqual(none.landings, []);
+});
+
 test("skid ratio is zero on a held edge and rises when the edge lets go", () => {
   const held = play(600, () => ({ ...NEUTRAL_INPUT, weight: 1, knee: 0.45, lean: 0.2 }));
   assert.equal(held.summary.skidRatio, 0, "an edge that holds never skids");

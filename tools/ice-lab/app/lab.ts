@@ -283,6 +283,7 @@ export class Lab {
     on("export-events", () => this.download("edgework-events.txt", this.telemetry.eventLog()));
     on("export-params", () => this.download("edgework-params.json", this.panel.exportJson()));
     on("export-session", () => this.download("edgework-session.json", this.sessionCard()));
+    on("export-both", () => this.exportBoth());
     on("export-replay", () => {
       if (this.replaySource || this.recorder.ticks > 0)
         this.download("edgework-replay.json", this.replaySource ?? this.recorder.toJson());
@@ -358,12 +359,33 @@ export class Lab {
    */
   private sessionCard(): string {
     return JSON.stringify({
-      schema: "edgework-session/1",
+      schema: "edgework-session/2",
       scheme: SCHEME_LABEL[this.scheme],
       preset: PRESET_NAMES[this.presetIndex],
       params: JSON.parse(this.panel.exportJson()).changed,
+      // The clip this card belongs with. A card covers the whole session and a
+      // clip only the run since the last reset, so their tick counts match only
+      // when nobody reset; the clip's final digest names it either way.
+      clip: this.recorder.ticks > 0
+        ? { ticks: this.recorder.ticks, digest: this.recorder.lastDigest } : null,
       metrics: this.meter.summary(),
     }, null, 2);
+  }
+
+  /**
+   * The card and the clip in one press, under one name: the stamp is the
+   * clip's final digest, so a pair is a pair by filename rather than by
+   * someone checking tick counts. Staggered, because a browser handing over
+   * two files from one click is the case most likely to ask permission.
+   */
+  private exportBoth(): void {
+    const has = this.recorder.ticks > 0;
+    const stamp = has ? (this.recorder.lastDigest >>> 0).toString(16).padStart(8, "0") : "noclip";
+    this.download(`edgework-session-${stamp}.json`, this.sessionCard());
+    if (has) {
+      const clip = this.recorder.toJson();
+      setTimeout(() => this.download(`edgework-replay-${stamp}.json`, clip), 300);
+    }
   }
 
   /**

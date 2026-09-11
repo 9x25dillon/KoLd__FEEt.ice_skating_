@@ -23,7 +23,37 @@
 
 import type { SkaterState, SkatingInput, EdgeEvent } from "./types.ts";
 import { EVENT, EDGE_CODE_NONE } from "./types.ts";
+import { JUMP_NONE } from "./jump.ts";
 import { len } from "./math.ts";
+
+/**
+ * Landings kept on a card. A card is posted whole and the collector refuses
+ * bodies over 64 KB; a hundred of these, pretty-printed, is about half that.
+ */
+export const MAX_LANDINGS = 100;
+
+/**
+ * One landing, numbers only, as sim/jump.ts scored it. Booleans are 0/1 so the
+ * card stays a table of numbers — nothing a person typed, nothing about them.
+ */
+export interface LandingRecord {
+  /** Seconds into the session. */
+  second: number;
+  /** JUMP index (T S Lo F Lz A = 0..5), or 255 for a hop. */
+  kind: number;
+  revolutions: number;
+  shortBy: number;
+  rotationCall: number;
+  edgeCall: number;
+  toe: number;
+  takeoffQuality: number;
+  landingQuality: number;
+  height: number;
+  airTime: number;
+  twoFoot: number;
+  stepOut: number;
+  fall: number;
+}
 
 /** Speed above which the skater counts as moving, m/s. */
 const MOVING = 0.5;
@@ -74,6 +104,22 @@ export interface SessionSummary {
   deepestLean: number;
   timeOnEdgeRatio: number;
   ticks: number;
+
+  // Jumps. Not §6 metrics — the plan refuses jumps in the prototype, and
+  // playtest forces them off — so in any measured block every one of these is
+  // zero, which is itself worth being able to see on the card.
+  takeoffs: number;
+  /** Landings of a named jump: kind is not JUMP_NONE. */
+  jumps: number;
+  /** Landings of a hop, or of a takeoff no jump leaves from. */
+  hops: number;
+  /** Landings that ended on the ice. Also counted in `falls`. */
+  landingFalls: number;
+  /** Means over every landing, 0..1; -1 when there were none. */
+  meanTakeoffQuality: number;
+  meanLandingQuality: number;
+  /** Every landing in order, up to MAX_LANDINGS. */
+  landings: LandingRecord[];
 }
 
 export class SessionMeter {
@@ -104,6 +150,13 @@ export class SessionMeter {
   private pushRoll = [0, 0];
   /** Per blade, its edge code at the last sample before a push roll began. */
   private rollFrom = [EDGE_CODE_NONE, EDGE_CODE_NONE];
+  private takeoffCount = 0;
+  private landingCount = 0;
+  private jumpCount = 0;
+  private landingFallCount = 0;
+  private tqSum = 0;
+  private lqSum = 0;
+  private landingList: LandingRecord[] = [];
 
   reset(): void {
     this.ticks = 0; this.movingTicks = 0; this.skidTicks = 0; this.edgeTicks = 0;
@@ -112,6 +165,8 @@ export class SessionMeter {
     this.downTicks = 0;
     this.downSince = -1; this.retries = []; this.lastPush = false;
     this.pushRoll = [0, 0]; this.rollFrom = [EDGE_CODE_NONE, EDGE_CODE_NONE];
+    this.takeoffCount = 0; this.landingCount = 0; this.jumpCount = 0;
+    this.landingFallCount = 0; this.tqSum = 0; this.lqSum = 0; this.landingList = [];
   }
 
   /** Feed one tick, after `step`. `events` is that tick's events only. */
@@ -128,6 +183,9 @@ export class SessionMeter {
         && !(stroking && e.foot === s.strokeFoot)) this.edgeChanges++;
       if (e.type === EVENT.Fall) { this.fallsCount++; this.downSince = this.ticks; }
       if (e.type === EVENT.Recovered) stoodUp = true;
+      if (e.type === EVENT.Takeoff) this.takeoffCount++;
+      // The resolver writes `landed` on the landing tick, before this sample.
+      if (e.type === EVENT.Landing) this.land(s);
     }
     // A push roll is skipped, not erased: if the lean crossed over while the
     // blade was pushing, it comes back on a different edge than it left, and
@@ -201,6 +259,23 @@ export class SessionMeter {
     this.lastPush = input.push;
   }
 
+  private land(s: SkaterState): void {
+    const j = s.landed;
+    this.landingCount++;
+    if (j.kind !== JUMP_NONE) this.jumpCount++;
+    if (j.fall) this.landingFallCount++;
+    this.tqSum += j.takeoffQuality;
+    this.lqSum += j.landingQuality;
+    if (this.landingList.length >= MAX_LANDINGS) return;
+    this.landingList.push({
+      second: this.dtSum, kind: j.kind, revolutions: j.revolutions, shortBy: j.shortBy,
+      rotationCall: j.rotationCall, edgeCall: j.edgeCall, toe: j.toe ? 1 : 0,
+      takeoffQuality: j.takeoffQuality, landingQuality: j.landingQuality,
+      height: j.height, airTime: j.airTime,
+      twoFoot: j.twoFoot ? 1 : 0, stepOut: j.stepOut ? 1 : 0, fall: j.fall ? 1 : 0,
+    });
+  }
+
   summary(): SessionSummary {
     const seconds = this.dtSum;
     const skating = Math.max(this.ticks - this.downTicks, 1);
@@ -222,6 +297,13 @@ export class SessionMeter {
       deepestLean: this.deepest,
       timeOnEdgeRatio: this.edgeTicks / skating,
       ticks: this.ticks,
+      takeoffs: this.takeoffCount,
+      jumps: this.jumpCount,
+      hops: this.landingCount - this.jumpCount,
+      landingFalls: this.landingFallCount,
+      meanTakeoffQuality: this.landingCount > 0 ? this.tqSum / this.landingCount : -1,
+      meanLandingQuality: this.landingCount > 0 ? this.lqSum / this.landingCount : -1,
+      landings: this.landingList.map((l) => ({ ...l })),
     };
   }
 }

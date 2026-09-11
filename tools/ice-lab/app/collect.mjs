@@ -31,6 +31,9 @@ import { createServer } from "node:http";
 import { readFile, appendFile, mkdir } from "node:fs/promises";
 import { join, extname, dirname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+// The card's shape lives in card.ts, so a test can hold it without a server.
+// Node runs the .ts directly (type stripping, Node 22.18+ / 23.6+).
+import { clean, MAX_BODY } from "./card.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "build");
@@ -53,50 +56,6 @@ const TYPES = {
   ".html": "text/html", ".js": "text/javascript",
   ".css": "text/css", ".json": "application/json",
 };
-
-/** 64 KB is about sixty times the size of an honest session card. */
-const MAX_BODY = 64 * 1024;
-
-const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const str = (v, max = 40) =>
-  (typeof v === "string" ? v.slice(0, max).replace(/[^\w .:+-]/g, "") : null);
-
-/**
- * Rebuild the card from scratch. Nothing reaches disk that this function did
- * not put there, which is the only input-validation strategy worth trusting.
- */
-function clean(card) {
-  if (!card || typeof card !== "object") return null;
-  const m = card.metrics;
-  if (!m || typeof m !== "object") return null;
-  const metrics = {};
-  for (const k of [
-    "freePlaySeconds", "skidRatio", "meanLeanDepth", "edgeChangesPerMinute",
-    "medianTimeToRetrySeconds", "downSeconds", "falls", "strokes",
-    "distanceMetres", "topSpeed", "deepestLean", "timeOnEdgeRatio", "ticks",
-  ]) {
-    const v = num(m[k]);
-    if (v !== null) metrics[k] = Math.round(v * 1e4) / 1e4;
-  }
-  if (metrics.ticks === undefined) return null;
-
-  const params = {};
-  if (card.params && typeof card.params === "object") {
-    for (const [k, v] of Object.entries(card.params).slice(0, 60)) {
-      const n = num(v);
-      if (n !== null && /^[A-Za-z][\w]{0,40}$/.test(k)) params[k] = n;
-    }
-  }
-  return {
-    schema: "edgework-session/1",
-    at: new Date().toISOString(),
-    scheme: str(card.scheme, 2) ?? "?",
-    preset: str(card.preset, 24) ?? "?",
-    note: str(card.note, 280) ?? "",
-    params,
-    metrics,
-  };
-}
 
 function send(res, code, body, type = "application/json") {
   res.writeHead(code, {

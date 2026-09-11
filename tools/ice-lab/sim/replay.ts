@@ -82,6 +82,11 @@ export class ReplayRecorder {
 
   get ticks(): number { return this.clip.frames.length; }
   get full(): boolean { return this.ticks >= MAX_REPLAY_TICKS; }
+  /** The last captured tick's digest, which names the clip; -1 before the first. */
+  get lastDigest(): number {
+    const f = this.clip.frames;
+    return f.length > 0 ? f[f.length - 1].digest : -1;
+  }
 
   /** Immediately after step, with ONLY that step's events. */
   capture(input: SkatingInput, params: Params, state: SkaterState,
