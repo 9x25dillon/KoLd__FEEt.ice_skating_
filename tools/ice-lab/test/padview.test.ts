@@ -14,7 +14,7 @@ const idle: Controls = {
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.35, weight: 0.5, push: false, brake: false,
   carriage: 0, toe: false,
-  reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0, tilt: 0,
+  reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0, tilt: 0, toggleGame: false,
 };
 
 test("every scheme has a caption for both sticks", () => {

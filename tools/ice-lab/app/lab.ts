@@ -13,8 +13,18 @@ import { Telemetry } from "../sim/telemetry.ts";
 import { SessionMeter } from "../sim/session.ts";
 import type { SkaterState, EdgeEvent } from "../sim/types.ts";
 import { Renderer, DEFAULT_OPTIONS } from "./draw.ts";
-import type { DrawOptions } from "./draw.ts";
+import type { DrawOptions, DrawExtras } from "./draw.ts";
 import { Camera, VIEW, VIEW_NAME } from "./camera.ts";
+import {
+  FigureEight, START_SPEED as FIGURE_SPEED, drawFigure, drawFigureLabels, drawFigurePanel,
+  loadBest, saveBest,
+} from "./figure8.ts";
+import type { Best } from "./figure8.ts";
+
+/** localStorage, or nothing: private windows and the test stub have none. */
+const storage = (): Storage | undefined => {
+  try { return typeof localStorage === "undefined" ? undefined : localStorage; } catch { return undefined; }
+};
 import { Panel } from "./panel.ts";
 import { Pad } from "./pad.ts";
 import { applyScheme, newSchemeState, SCHEME_LABEL } from "./schemes.ts";
@@ -48,6 +58,17 @@ export class Lab {
   private events: EdgeEvent[] = [];
   private options: DrawOptions = { ...DEFAULT_OPTIONS };
   private camera = new Camera();
+  /**
+   * The Figure Eight (G): a game on top of the rig, reading the state and never
+   * writing it. Off in playtest, like jumps — the week-16 gate is about carving
+   * with no score and no art.
+   */
+  private figureOn = false;
+  private figure: FigureEight | null = null;
+  private figureBest: Best | null = loadBest(storage());
+  private figureNewBest = false;
+  /** The best run's replay, re-run beside the live one. Its own player. */
+  private ghost: ReplayPlayer | null = null;
   private presetIndex = Math.max(0, PRESET_NAMES.indexOf(BOOT_PRESET));
   private scheme: Scheme = 0;
   private schemeState = newSchemeState();
@@ -159,6 +180,10 @@ export class Lab {
       return; // Playback never contributes to live playtest metrics or capture.
     }
     if (c.cycleScheme) this.scheme = ((this.scheme + 1) % 3) as Scheme;
+    if (c.toggleGame && !this.playtest) {
+      this.figureOn = !this.figureOn;
+      this.reset();   // on: a run starts from the crossing; off: back to the plain rink
+    }
     if (c.cycleJump && !this.playtest) {
       this.params.jumpMode = (this.params.jumpMode + 1) % 3;
       this.panel.refresh();
@@ -179,6 +204,7 @@ export class Lab {
     this.audio.onTick(it, this.events, this.state);
     this.meter.sample(this.state, it, this.events, SIM_DT);
     this.camera.update(this.state, SIM_DT);
+    if (this.figure) this.figureTick();
     this.telemetry.capture(this.state);
     this.telemetry.pushEvents(this.events);
     this.renderer.recordTrace(this.state);
@@ -189,6 +215,41 @@ export class Lab {
         this.recordingError = `Recording stopped: ${error instanceof Error ? error.message : String(error)}`;
       }
     }
+  }
+
+  /**
+   * One tick of the game layer, after the solver's. The run reads the state;
+   * the ghost is a separate replay player stepping its own copy. A finished
+   * run that beats the best becomes the best, and its clip — the recorder has
+   * held exactly this run since the reset that started it — the next ghost.
+   */
+  private figureTick(): void {
+    const run = this.figure!;
+    const was = run.state;
+    run.sample(this.state, SIM_DT);
+    if (this.ghost && !this.ghost.done) {
+      try { this.ghost.advance(); } catch { this.ghost = null; }
+    }
+    if (was !== "running" || run.state !== "done") return;
+    const r = run.result();
+    if (this.figureBest && r.score <= this.figureBest.score) return;
+    this.figureBest = { score: r.score, seconds: r.seconds, rms: r.rms, edgeShare: r.edgeShare,
+      clip: this.recorder.toJson() };
+    this.figureNewBest = true;
+    saveBest(storage(), this.figureBest);
+  }
+
+  private figureExtras(): DrawExtras {
+    const run = this.figure;
+    const ghost = this.ghost && !this.ghost.done ? this.ghost : null;
+    return {
+      ground: (ctx, px) => drawFigure(ctx, px, run),
+      ghost: ghost ? { s: ghost.state, p: ghost.params } : null,
+      screen: (ctx, cam, _w, h) => {
+        drawFigureLabels(ctx, cam, run);
+        drawFigurePanel(ctx, h, run?.result() ?? null, this.figureBest, this.figureNewBest, !!ghost);
+      },
+    };
   }
 
   /**
@@ -247,7 +308,8 @@ export class Lab {
       ? Math.max(0, SCHEME_LABEL.indexOf(this.player.scheme as "A" | "B" | "C"))
       : this.scheme;
     this.renderer.draw(this.player?.state ?? this.state, this.player?.params ?? this.params,
-      this.options, info, scheme, this.camera);
+      this.options, info, scheme, this.camera,
+      this.figureOn && !this.player ? this.figureExtras() : undefined);
   }
 
   /**
@@ -294,10 +356,20 @@ export class Lab {
     this.clock.paused = false;
     const panel = document.getElementById("panel");
     if (panel) panel.style.display = "";
-    this.state = createState(this.params, this.startSpeed, 0);
+    // A figure run always starts at the course's own speed, so two scores are
+    // two skaters on the same task — and the ghost started there too.
+    const speed = this.figureOn ? FIGURE_SPEED : this.startSpeed;
+    this.state = createState(this.params, speed, 0);
     this.camera.snap(this.state);
     this.schemeState = newSchemeState();
-    this.recorder = new ReplayRecorder(this.params, this.startSpeed);
+    this.recorder = new ReplayRecorder(this.params, speed);
+    this.figure = this.figureOn ? new FigureEight(this.state) : null;
+    this.figureNewBest = false;
+    this.ghost = null;
+    if (this.figureOn && this.figureBest) {
+      // A best recorded under another solver version no longer parses: no ghost.
+      try { this.ghost = new ReplayPlayer(parseReplay(this.figureBest.clip)); } catch { this.ghost = null; }
+    }
     this.telemetry.reset();
     this.renderer.clearTrace();
     this.scored = null;

@@ -24,7 +24,7 @@ const sticks: Controls = {
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.45, weight: 1, push: false, brake: false,
   carriage: 0, toe: false,
-  reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0, tilt: 0,
+  reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0, tilt: 0, toggleGame: false,
 };
 
 /** Hold a target heading with B for `secs`, reporting the error it settles to. */

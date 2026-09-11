@@ -48,6 +48,19 @@ export interface DrawOptions {
   ribbon: boolean;
 }
 
+/**
+ * A game layer's hooks into the frame (app/figure8.ts). All optional; none of
+ * them is handed anything it could use to change the state.
+ */
+export interface DrawExtras {
+  /** On the ice, under the skater, in metres: the ice transform is current. */
+  ground?: (ctx: CanvasRenderingContext2D, px: number) => void;
+  /** Over everything, in screen pixels, with the camera to place things by. */
+  screen?: (ctx: CanvasRenderingContext2D, cam: Camera, w: number, h: number) => void;
+  /** A second skater, faint: a best run racing the live one. */
+  ghost?: { s: SkaterState; p: Params } | null;
+}
+
 export const DEFAULT_OPTIONS: DrawOptions = {
   blades: true, carveCircle: true, forces: true, balance: true, tracing: true, hud: true,
   skater: true, pad: true, ribbon: true,
@@ -213,7 +226,7 @@ export class Renderer {
   }
 
   draw(s: SkaterState, p: Params, opt: DrawOptions, info: string[], scheme = 0,
-    cam?: Camera): void {
+    cam?: Camera, extras?: DrawExtras): void {
     const { ctx, canvas } = this;
     const w = canvas.width, h = canvas.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -237,6 +250,11 @@ export class Renderer {
     this.grid(cam, w, h);
     if (opt.tracing) this.tracings();
     if (opt.carveCircle) this.carveCircles(s, p);
+    extras?.ground?.(ctx, this.px);
+    const ghost = extras?.ghost;
+    if (ghost && (!tilted || ghost.s.fallen)) {
+      ctx.save(); ctx.globalAlpha = 0.35; this.skater(ghost.s, ghost.p); ctx.restore();
+    }
     if (opt.skater && (!tilted || s.fallen)) this.skater(s, p);
     else if (opt.skater) this.shadow(s);
     if (opt.blades) this.blades(s);
@@ -244,11 +262,15 @@ export class Renderer {
     if (opt.balance && !tilted) this.balance(s);
 
     ctx.restore();
+    if (tilted && ghost && !ghost.s.fallen) {
+      ctx.save(); ctx.globalAlpha = 0.35; this.skater3d(ghost.s, ghost.p, cam); ctx.restore();
+    }
     if (tilted && opt.skater && !s.fallen) this.skater3d(s, p, cam);
     if (tilted && opt.balance) this.balance3d(s, cam);
     if (opt.hud) this.hud(s, p, info);
     if (opt.pad && w > 640) this.pad.draw(ctx, w - 312, 48, scheme, s);
     if (opt.ribbon) drawRibbon(ctx, w, h, s, p);
+    extras?.screen?.(ctx, cam, w, h);
   }
 
   // ── ice ───────────────────────────────────────────────────────────────────

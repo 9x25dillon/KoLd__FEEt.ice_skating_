@@ -280,6 +280,21 @@ solved from two 0.5 m segments), with the balance lines in 3D beside it. The
 camera steps with the simulation, so a replay is framed as it was played, and it
 is locked to north up in `?playtest=1`, because the view is part of the stimulus.
 
+**The Figure Eight** (**G**, `app/figure8.ts`) is a game on top of the rig — the
+design bible's The Patch in miniature. Skate the outside eight: right forward
+outside clockwise round the right circle, then left forward outside round the
+left, from the crossing where a reset puts you, at a fixed 5 m/s so every run is
+the same task. It scores how far the tracing strays from the figure — the
+pre-production plan's figure-eight deviation, RMS metres from the reference
+curve (§6) — how much of each lobe you held the edge it asks for, and your pace,
+all three shown. Your best run is kept in the browser with its replay, and that
+replay skates beside you as a ghost; a solver version bump orphans it rather
+than let it skate physics that no longer exist. The circles are 6 m because a
+steering bot finishes them from 5 m/s and falls on the second lobe of a 5 m
+eight (the test says so); a push at the crossing is part of the figure, since
+75 m is too far to glide. It reads the state and never writes it, and like jumps
+it is unreachable in `?playtest=1`.
+
 **Falling, and getting up.** A fallen skater slides until the tester does
 something about it. A fresh press of **A / Space** stands them up where they
 fell, facing the way they were facing, at rest — the bible's §3.4 `GetUp`, with

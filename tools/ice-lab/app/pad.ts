@@ -96,6 +96,8 @@ export interface Controls {
   zoom: number;
   /** Chase camera up (+1) or down (-1) a step: ] and [. Keyboard only. */
   tilt: number;
+  /** The Figure Eight on and off: G. Ignored in playtest. */
+  toggleGame: boolean;
 }
 
 const NOTHING: Controls = {
@@ -103,7 +105,7 @@ const NOTHING: Controls = {
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
-  cycleView: false, zoom: 0, tilt: 0,
+  cycleView: false, zoom: 0, tilt: 0, toggleGame: false,
 };
 
 /**
@@ -224,6 +226,7 @@ export class Pad {
     if (this.pressed("-") || this.pressed("_")) out.zoom -= 1;
     if (this.pressed("]")) out.tilt += 1;
     if (this.pressed("[")) out.tilt -= 1;
+    if (this.pressed("g")) out.toggleGame = true;
 
     this.prevKeys = new Set(this.keys);
     return out;
