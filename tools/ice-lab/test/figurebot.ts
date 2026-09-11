@@ -13,6 +13,7 @@ import { createState, step } from "../sim/solver.ts";
 import { NEUTRAL_INPUT } from "../sim/types.ts";
 import type { EdgeEvent, SkaterState, SkatingInput } from "../sim/types.ts";
 import { FigureEight, CENTRES, RADIUS, START_SPEED } from "../app/figure8.ts";
+import { EdgeCourse, GATES, GATE_SPACING, WEAVE, START_SPEED as EDGE_SPEED } from "../app/edges.ts";
 
 export function figureBot(p: Params = PRESETS.responsive,
   each?: (input: SkatingInput, s: SkaterState, events: EdgeEvent[]) => void): { s: SkaterState; run: FigureEight } {
@@ -33,6 +34,43 @@ export function figureBot(p: Params = PRESETS.responsive,
     const pushing = k === 1 && since < 40;
     const input = { ...NEUTRAL_INPUT, weight: pushing ? 0.5 : k === 0 ? 1 : 0, knee: 0.45,
       lean: (k === 0 ? -1 : 1) * phi / p.maxLean, push: k === 1 && since === 0 };
+    since++;
+    ev.length = 0;
+    step(s, input, p, SIM_DT, ev);
+    run.sample(s, SIM_DT);
+    each?.(input, s, ev);
+  }
+  return { s, run };
+}
+
+/**
+ * The edge course's bot. The Figure Eight's steering would not do: a slalom
+ * reverses the lean every gate, the lean arrives about half a second after it
+ * is asked for, and the blade first carves the other way (a bicycle's
+ * countersteer). A bot that only reacts to its error overcorrects and spins.
+ * This one asks for the lean the weave will need half a second ahead, and
+ * corrects gently; it takes the foot each gate's edge names, and pushes
+ * two-footed after a gate when it has slowed. Crude on purpose, like the other.
+ */
+export function edgeBot(p: Params = PRESETS.responsive,
+  each?: (input: SkatingInput, s: SkaterState, events: EdgeEvent[]) => void): { s: SkaterState; run: EdgeCourse } {
+  const s = createState(p, EDGE_SPEED);
+  const run = new EdgeCourse(s);
+  const ev: EdgeEvent[] = [];
+  const k = Math.PI / GATE_SPACING, A = WEAVE, ahead = 0.5, ke = 0.03, kh = 0.2;
+  let gate = 0, since = 999;
+  for (let t = 0; t < 60 * 120 && run.state === "running"; t++) {
+    if (run.next !== gate) { gate = run.next; since = 0; }
+    const v = Math.hypot(s.vel.x, s.vel.y) || 1e-6, x = s.pos.x, y = s.pos.y, xa = x + v * ahead;
+    const curve = -A * k * k * Math.sin(k * xa) / Math.pow(1 + (A * k * Math.cos(k * xa)) ** 2, 1.5);
+    const heading = Math.atan2(s.vel.y, s.vel.x) - Math.atan(A * k * Math.cos(k * x));
+    const most = Math.atan(v * v / (9.81 * 3));
+    const phi = Math.max(-most, Math.min(most,
+      Math.atan(v * v * curve / 9.81) - ke * (y - A * Math.sin(k * x)) - kh * heading));
+    const edge = GATES[Math.min(gate, GATES.length - 1)].edge;
+    const pushing = since < 40 && v < 4.8;
+    const input = { ...NEUTRAL_INPUT, knee: 0.45, weight: pushing ? 0.5 : edge[0] === "R" ? 1 : 0,
+      lean: phi / p.maxLean, push: since === 0 && v < 4.8 };
     since++;
     ev.length = 0;
     step(s, input, p, SIM_DT, ev);

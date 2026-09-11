@@ -8,8 +8,9 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import {
-  FigureEight, CENTRES, RADIUS, deviation, loadBest, saveBest, BEST_KEY,
+  FigureEight, CENTRES, RADIUS, deviation, BEST_KEY,
 } from "../app/figure8.ts";
+import { loadBest, saveBest } from "../app/course.ts";
 import { figureBot } from "./figurebot.ts";
 import { PRESETS, SIM_DT } from "../sim/params.ts";
 import { createState } from "../sim/solver.ts";
@@ -128,15 +129,15 @@ test("the game layer reads the state and never writes it", () => {
 test("the best run survives a reload, and junk in storage is no best at all", () => {
   const box = new Map<string, string>();
   const store = { getItem: (k: string) => box.get(k) ?? null, setItem: (k: string, v: string) => { box.set(k, v); } };
-  assert.equal(loadBest(store), null);
+  assert.equal(loadBest(store, BEST_KEY), null);
   const best = { score: 81, seconds: 17.5, rms: 0.31, edgeShare: 0.9, clip: "{}" };
-  saveBest(store, best);
-  assert.deepEqual(loadBest(store), best);
+  saveBest(store, BEST_KEY, best);
+  assert.deepEqual(loadBest(store, BEST_KEY), best);
   box.set(BEST_KEY, "{not json");
-  assert.equal(loadBest(store), null);
+  assert.equal(loadBest(store, BEST_KEY), null);
   box.set(BEST_KEY, JSON.stringify({ score: "81" }));
-  assert.equal(loadBest(store), null);
-  assert.equal(loadBest(undefined), null, "no storage: a private window, or the test stub");
+  assert.equal(loadBest(store, BEST_KEY), null);
+  assert.equal(loadBest(undefined, BEST_KEY), null, "no storage: a private window, or the test stub");
 });
 
 test("the solver as tuned can finish the course: a steering bot skates it", () => {

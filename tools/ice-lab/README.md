@@ -305,6 +305,21 @@ a ghost recorded under other parameters races them against yours, and the panel
 names the parameters that differ: a race between two tunings, which is the
 comparison the rig exists for.
 
+**The edge course** (**G** again, `app/edges.ts`) teaches the edge names. A
+slalom of eight gates, 14 m apart and 1.5 m either side of the line, each asking
+for one named edge — *LFI, left forward inside* — checked against the support
+blade as it crosses the gate line: clean, wrong edge (and which one you were
+on), or missed. The weave alternates turn direction and each gate's edge turns
+its way, so the name tells you the foot and the lean: RFO and LFI turn right,
+LFO and RFI turn left, every forward edge twice (a test holds each against the
+solver's own classifier). The panel shows the gate ahead in words and the edge
+you are on now, green when it matches. Backward edges are not on it — nothing
+short of a jump turns the skater round. Best score, ghost and races work as on
+the Figure Eight; **G** cycles off, Figure Eight, edge course. The spacing is
+14 m because the lean arrives about half a second after it is asked for, and
+the blade carves the other way first: a steering bot finishes 12 m and 14 m and
+falls on the last gate of 16 m, where the course bleeds speed to 2 m/s.
+
 **Falling, and getting up.** A fallen skater slides until the tester does
 something about it. A fresh press of **A / Space** stands them up where they
 fell, facing the way they were facing, at rest — the bible's §3.4 `GetUp`, with

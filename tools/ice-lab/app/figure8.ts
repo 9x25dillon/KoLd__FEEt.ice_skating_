@@ -23,6 +23,10 @@
 import type { SkaterState } from "../sim/types.ts";
 import { codeToString } from "../sim/types.ts";
 import type { Camera } from "./camera.ts";
+import type { Course, CourseResult, RunState, Best, PanelLine } from "./course.ts";
+import { INK, DIM, GOLD, JADE, RED } from "./course.ts";
+
+export type { RunState };
 
 // ── balance levers ──────────────────────────────────────────────────────────
 // Every number below is a design decision, not a rule (hand-off §3.3). They
@@ -49,9 +53,7 @@ const WEIGHT = { accuracy: 0.45, edge: 0.40, pace: 0.15 } as const;
 
 export const CENTRES = [{ x: 0, y: -RADIUS }, { x: 0, y: RADIUS }] as const;
 
-export type RunState = "running" | "done" | "fell";
-
-export interface FigureResult {
+export interface FigureResult extends CourseResult {
   state: RunState;
   seconds: number;
   /** §6's figure-eight deviation: RMS of the tracing from the figure, m. */
@@ -84,7 +86,7 @@ const wrap = (a: number): number => {
   return x;
 };
 
-export class FigureEight {
+export class FigureEight implements Course {
   state: RunState = "running";
   lobe = 0;
   /** Radians round the current lobe, in its direction. Backwards unwinds. */
@@ -97,6 +99,9 @@ export class FigureEight {
   private dt = 0;
 
   constructor(s: SkaterState) { this.prev = angleAt(s.pos.x, s.pos.y, 0); }
+
+  /** Back at the crossing and on the second lobe: halfway. */
+  get pastHalf(): boolean { return this.lobe === 1 || this.state === "done"; }
 
   /** Once per simulation tick, after step. Reads the state; never writes it. */
   sample(s: SkaterState, dt: number): void {
@@ -144,34 +149,8 @@ export class FigureEight {
 
 // ── the best run, kept ──────────────────────────────────────────────────────
 
-/** The best finished run, and its replay: the ghost is that replay, re-run. */
-export interface Best { score: number; seconds: number; rms: number; edgeShare: number; clip: string }
-
-/**
- * Per browser, per course version. A ghost is a replay, so a solver bump
- * (sim/replay.ts) orphans it — the clip no longer parses and there is simply
- * no ghost, rather than one skating somewhere the new physics would not go.
- */
+/** Per browser, per course version. Storage itself is app/course.ts. */
 export const BEST_KEY = "edgework-figure8-best/1";
-
-interface KeyValue { getItem(k: string): string | null; setItem(k: string, v: string): void }
-
-export function loadBest(store: KeyValue | undefined): Best | null {
-  try {
-    const raw = store?.getItem(BEST_KEY);
-    if (!raw) return null;
-    const b = JSON.parse(raw) as Partial<Best>;
-    const ok = typeof b.score === "number" && typeof b.seconds === "number" && typeof b.rms === "number"
-      && typeof b.edgeShare === "number" && typeof b.clip === "string";
-    return ok ? b as Best : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveBest(store: KeyValue | undefined, best: Best): void {
-  try { store?.setItem(BEST_KEY, JSON.stringify(best)); } catch { /* full or blocked: keep it for this session */ }
-}
 
 // ── drawing ─────────────────────────────────────────────────────────────────
 
@@ -214,35 +193,22 @@ export function drawFigureLabels(ctx: CanvasRenderingContext2D, cam: Camera, run
   ctx.textBaseline = "top";
 }
 
-/** The run, and the best, bottom left. */
-export function drawFigurePanel(ctx: CanvasRenderingContext2D, h: number, r: FigureResult | null,
-  best: Best | null, newBest: boolean, race: Array<[string, string]> = []): void {
-  const lines: Array<[string, string]> = [["FIGURE EIGHT (G) · the outside eight", "#7dffc4"]];
+/** The panel's course lines for the Figure Eight: the run, and the best. */
+export function figureLines(r: FigureResult | null, best: Best | null, newBest: boolean): PanelLine[] {
+  const lines: PanelLine[] = [["FIGURE EIGHT (G) · the outside eight", JADE]];
   if (r?.state === "running") {
     const lobe = Math.min(1, Math.floor(r.progress));
-    lines.push([`lobe ${lobe + 1} of 2 · hold ${LOBE_EDGE[lobe]} · ${r.seconds.toFixed(1)} s`, "#dce9f2"]);
-    lines.push([`off the line ${r.rms.toFixed(2)} m · on the edge ${Math.round(100 * r.edgeShare)}%`, "#dce9f2"]);
+    lines.push([`lobe ${lobe + 1} of 2 · hold ${LOBE_EDGE[lobe]} · ${r.seconds.toFixed(1)} s`, INK]);
+    lines.push([`off the line ${r.rms.toFixed(2)} m · on the edge ${Math.round(100 * r.edgeShare)}%`, INK]);
   } else if (r?.state === "done") {
-    lines.push([`SCORE ${r.score}${newBest ? "   NEW BEST" : ""}`, "#ffc94a"]);
+    lines.push([`SCORE ${r.score}${newBest ? "   NEW BEST" : ""}`, GOLD]);
     lines.push([`line ${Math.round(r.accuracy)} · edge ${Math.round(r.edge)} · pace ${Math.round(r.pace)}`
-      + ` · ${r.seconds.toFixed(1)} s · ${r.rms.toFixed(2)} m`, "#dce9f2"]);
+      + ` · ${r.seconds.toFixed(1)} s · ${r.rms.toFixed(2)} m`, INK]);
   } else if (r?.state === "fell") {
-    lines.push([`down on lobe ${Math.min(2, Math.floor(r.progress) + 1)} · R to go again`, "#ff4d6d"]);
-    lines.push([`off the line ${r.rms.toFixed(2)} m · on the edge ${Math.round(100 * r.edgeShare)}%`, "#5b7386"]);
+    lines.push([`down on lobe ${Math.min(2, Math.floor(r.progress) + 1)} · R to go again`, RED]);
+    lines.push([`off the line ${r.rms.toFixed(2)} m · on the edge ${Math.round(100 * r.edgeShare)}%`, DIM]);
   }
-  lines.push([best ? `best ${best.score} · ${best.seconds.toFixed(1)} s · ${best.rms.toFixed(2)} m`
-    : "no best yet: finish one", "#5b7386"]);
-  lines.push(...race);
-  lines.push(["E/Q foot · Space push · R again · H ghost", "#5b7386"]);
-  // Narrow enough to clear the ribbon at bottom centre on a 1000 px window.
-  const width = 360, height = 10 + lines.length * 17;
-  const x = 8, y = h - 8 - height;
-  ctx.fillStyle = "rgba(7,16,26,0.86)";
-  ctx.fillRect(x, y, width, height);
-  ctx.fillStyle = "#ffc94a";
-  ctx.fillRect(x, y, 3, height);
-  ctx.font = '12px "IBM Plex Mono", ui-monospace, Menlo, monospace';
-  ctx.textBaseline = "top";
-  ctx.textAlign = "left";
-  lines.forEach(([text, col], i) => { ctx.fillStyle = col; ctx.fillText(text, x + 10, y + 6 + i * 17); });
+  lines.push([best ? `best ${best.score} · ${best.seconds.toFixed(1)} s`
+    + (best.rms !== undefined ? ` · ${best.rms.toFixed(2)} m` : "") : "no best yet: finish one", DIM]);
+  return lines;
 }

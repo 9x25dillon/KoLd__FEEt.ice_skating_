@@ -16,12 +16,25 @@ import { Renderer, DEFAULT_OPTIONS } from "./draw.ts";
 import type { DrawOptions, DrawExtras } from "./draw.ts";
 import { Camera, VIEW, VIEW_NAME } from "./camera.ts";
 import {
-  FigureEight, START_SPEED as FIGURE_SPEED, drawFigure, drawFigureLabels, drawFigurePanel,
-  loadBest, saveBest,
+  FigureEight, START_SPEED as FIGURE_SPEED, BEST_KEY as FIGURE_KEY, drawFigure, drawFigureLabels, figureLines,
 } from "./figure8.ts";
-import type { Best } from "./figure8.ts";
+import {
+  EdgeCourse, START_SPEED as EDGES_SPEED, EDGES_BEST_KEY, drawGates, drawGateLabels, edgeLines,
+} from "./edges.ts";
+import { loadBest, saveBest, drawPanel, DIM } from "./course.ts";
+import type { Best, Course, PanelLine } from "./course.ts";
 import { GHOST_SOURCES, ghostRun, timeGap, raceLines } from "./race.ts";
 import type { GhostRun, GhostSource } from "./race.ts";
+
+/** The game courses, in the order G cycles them after "off". */
+const COURSES = ["figure8", "edges"] as const;
+type CourseKind = typeof COURSES[number];
+const COURSE = {
+  figure8: { speed: FIGURE_SPEED, key: FIGURE_KEY, make: (s: SkaterState): Course => new FigureEight(s),
+    hint: "E/Q foot · Space push · R again · H ghost" },
+  edges: { speed: EDGES_SPEED, key: EDGES_BEST_KEY, make: (s: SkaterState): Course => new EdgeCourse(s),
+    hint: "E right foot · Q left · R again · H ghost" },
+} as const;
 
 /** localStorage, or nothing: private windows and the test stub have none. */
 const storage = (): Storage | undefined => {
@@ -61,26 +74,28 @@ export class Lab {
   private options: DrawOptions = { ...DEFAULT_OPTIONS };
   private camera = new Camera();
   /**
-   * The Figure Eight (G): a game on top of the rig, reading the state and never
-   * writing it. Off in playtest, like jumps — the week-16 gate is about carving
-   * with no score and no art.
+   * The game courses (G: off, Figure Eight, edge course): layers on top of the
+   * rig, reading the state and never writing it. Off in playtest, like jumps —
+   * the week-16 gate is about carving with no score and no art.
    */
-  private figureOn = false;
-  private figure: FigureEight | null = null;
-  private figureBest: Best | null = loadBest(storage());
-  private figureNewBest = false;
+  private courseKind: CourseKind | null = null;
+  private course: Course | null = null;
+  private bests: Record<CourseKind, Best | null> = {
+    figure8: loadBest(storage(), COURSE.figure8.key), edges: loadBest(storage(), COURSE.edges.key),
+  };
+  private newBest = false;
   /** The ghost's replay, re-run beside the live one. Its own player. */
   private ghost: ReplayPlayer | null = null;
   /** The same replay skated once in advance, for the gap. See app/race.ts. */
   private ghostAhead: GhostRun | null = null;
   private ghostLabel = "";
   private ghostSource: GhostSource = "best";
-  /** Clips a ghost can come from besides the best. */
-  private lastClip: string | null = null;
+  /** Each course's last finished run, besides its best; and a chosen file. */
+  private lastClips: Record<CourseKind, string | null> = { figure8: null, edges: null };
   private fileClip: { name: string; clip: string } | null = null;
-  /** One precomputed ghost, keyed by its clip, so R does not re-skate it. */
-  private ghostCache: { clip: string; run: GhostRun } | null = null;
-  /** Your gap at the crossing, once you have reached it. */
+  /** One precomputed ghost, keyed by course and clip, so R does not re-skate it. */
+  private ghostCache: { kind: CourseKind; clip: string; run: GhostRun } | null = null;
+  /** Your gap at halfway, once you have reached it. */
   private splitGap: number | null = null;
   private presetIndex = Math.max(0, PRESET_NAMES.indexOf(BOOT_PRESET));
   private scheme: Scheme = 0;
@@ -194,10 +209,12 @@ export class Lab {
     }
     if (c.cycleScheme) this.scheme = ((this.scheme + 1) % 3) as Scheme;
     if (c.toggleGame && !this.playtest) {
-      this.figureOn = !this.figureOn;
-      this.reset();   // on: a run starts from the crossing; off: back to the plain rink
+      // Off -> Figure Eight -> edge course -> off, each from its own start line.
+      const i = this.courseKind === null ? 0 : COURSES.indexOf(this.courseKind) + 1;
+      this.courseKind = i < COURSES.length ? COURSES[i] : null;
+      this.reset();
     }
-    if (c.cycleGhost && this.figureOn && !this.playtest) {
+    if (c.cycleGhost && this.courseKind && !this.playtest) {
       this.cycleGhost();
       this.reset();   // a race starts level
     }
@@ -221,7 +238,7 @@ export class Lab {
     this.audio.onTick(it, this.events, this.state);
     this.meter.sample(this.state, it, this.events, SIM_DT);
     this.camera.update(this.state, SIM_DT);
-    if (this.figure) this.figureTick();
+    if (this.course) this.courseTick();
     this.telemetry.capture(this.state);
     this.telemetry.pushEvents(this.events);
     this.renderer.recordTrace(this.state);
@@ -235,35 +252,41 @@ export class Lab {
   }
 
   /**
-   * One tick of the game layer, after the solver's. The run reads the state;
-   * the ghost is a separate replay player stepping its own copy. A finished
-   * run that beats the best becomes the best, and its clip — the recorder has
-   * held exactly this run since the reset that started it — the next ghost.
+   * One tick of the game layer, after the solver's. The course reads the state;
+   * the ghost is a separate replay player stepping its own copy. A finished run
+   * becomes the course's last run, and if it beats the best, the best — its
+   * clip (the recorder has held exactly this run since the reset that started
+   * it) is the next ghost.
    */
-  private figureTick(): void {
-    const run = this.figure!;
-    const was = run.state, wasLobe = run.lobe;
+  private courseTick(): void {
+    const run = this.course!, kind = this.courseKind!;
+    const was = run.state, wasHalf = run.pastHalf;
     run.sample(this.state, SIM_DT);
     if (this.ghost && !this.ghost.done) {
       try { this.ghost.advance(); } catch { this.ghost = null; }
     }
-    if (wasLobe === 0 && run.lobe === 1 && this.ghostAhead) {
-      this.splitGap = timeGap(this.ghostAhead, 1, run.ticks);
+    if (!wasHalf && run.pastHalf && this.ghostAhead) {
+      this.splitGap = timeGap(this.ghostAhead, run.result().progress, run.ticks);
     }
     if (was !== "running" || run.state !== "done") return;
-    const r = run.result();
+    const r = run.result() as ReturnType<Course["result"]> & { rms?: number; edgeShare?: number; clean?: number };
     const clip = this.recorder.toJson();
-    this.lastClip = clip;
-    if (this.figureBest && r.score <= this.figureBest.score) return;
-    this.figureBest = { score: r.score, seconds: r.seconds, rms: r.rms, edgeShare: r.edgeShare, clip };
-    this.figureNewBest = true;
-    saveBest(storage(), this.figureBest);
+    this.lastClips[kind] = clip;
+    const best = this.bests[kind];
+    if (best && r.score <= best.score) return;
+    const next: Best = { score: r.score, seconds: r.seconds, clip, rms: r.rms, edgeShare: r.edgeShare, clean: r.clean };
+    this.bests[kind] = next;
+    this.newBest = true;
+    saveBest(storage(), COURSE[kind].key, next);
   }
 
-  /** The clip the chosen source names, if it has one yet. */
+  /** The clip the chosen source names on this course, if it has one yet. */
   private ghostClip(source: GhostSource): { label: string; clip: string } | null {
-    if (source === "best" && this.figureBest) return { label: "your best", clip: this.figureBest.clip };
-    if (source === "last" && this.lastClip) return { label: "your last run", clip: this.lastClip };
+    const kind = this.courseKind;
+    if (!kind) return null;
+    const best = this.bests[kind], last = this.lastClips[kind];
+    if (source === "best" && best) return { label: "your best", clip: best.clip };
+    if (source === "last" && last) return { label: "your last run", clip: last };
     if (source === "file" && this.fileClip) return { label: this.fileClip.name, clip: this.fileClip.clip };
     return null;
   }
@@ -281,12 +304,15 @@ export class Lab {
   /** Put the chosen ghost on the start line beside a fresh run. */
   private startGhost(): void {
     this.ghost = null; this.ghostAhead = null; this.splitGap = null;
-    const g = this.figureOn ? this.ghostClip(this.ghostSource) : null;
-    if (!g) return;
+    const kind = this.courseKind;
+    const g = kind ? this.ghostClip(this.ghostSource) : null;
+    if (!kind || !g) return;
     try {
       // A clip recorded under another solver version no longer parses: no ghost.
       const clip = parseReplay(g.clip);
-      if (this.ghostCache?.clip !== g.clip) this.ghostCache = { clip: g.clip, run: ghostRun(clip) };
+      if (this.ghostCache?.clip !== g.clip || this.ghostCache.kind !== kind) {
+        this.ghostCache = { kind, clip: g.clip, run: ghostRun(clip, COURSE[kind].make) };
+      }
       this.ghost = new ReplayPlayer(clip);
       this.ghostAhead = this.ghostCache.run;
       this.ghostLabel = g.label;
@@ -304,7 +330,7 @@ export class Lab {
       parseReplay(text);
       this.fileClip = { name: file.name.replace(/\.json$/, ""), clip: text };
       this.ghostSource = "file";
-      this.figureOn = true;
+      if (!this.courseKind) this.courseKind = "figure8";
       this.replayMessage = "";
       this.reset();
     } catch (error) {
@@ -312,19 +338,26 @@ export class Lab {
     }
   }
 
-  private figureExtras(): DrawExtras {
-    const run = this.figure;
+  private courseExtras(): DrawExtras {
+    const kind = this.courseKind!, run = this.course;
+    const fig = kind === "figure8" ? run as FigureEight | null : null;
+    const gates = kind === "edges" ? run as EdgeCourse | null : null;
     const ghost = this.ghost && !this.ghost.done ? this.ghost : null;
     const ahead = this.ghostAhead;
     return {
-      ground: (ctx, px) => drawFigure(ctx, px, run),
+      ground: (ctx, px) => { if (fig || kind === "figure8") drawFigure(ctx, px, fig); else drawGates(ctx, px, gates); },
       ghost: ghost ? { s: ghost.state, p: ghost.params } : null,
       screen: (ctx, cam, _w, h) => {
-        drawFigureLabels(ctx, cam, run);
-        const r = run?.result() ?? null;
-        const race = ahead ? raceLines(ahead, this.ghostLabel, r, run?.ticks ?? 0, this.params, this.splitGap)
-          : [[this.ghostSource === "off" ? "no ghost · H for one" : "no ghost yet: finish one", "#5b7386"] as [string, string]];
-        drawFigurePanel(ctx, h, r, this.figureBest, this.figureNewBest, race);
+        if (kind === "figure8") drawFigureLabels(ctx, cam, fig); else drawGateLabels(ctx, cam, gates);
+        const best = this.bests[kind];
+        const lines: PanelLine[] = kind === "figure8"
+          ? figureLines(fig?.result() ?? null, best, this.newBest)
+          : edgeLines(gates, this.state, best, this.newBest);
+        lines.push(...(ahead
+          ? raceLines(ahead, this.ghostLabel, run?.result() ?? null, run?.ticks ?? 0, this.params, this.splitGap)
+          : [[this.ghostSource === "off" ? "no ghost · H for one" : "no ghost yet: finish one", DIM] as PanelLine]));
+        lines.push([COURSE[kind].hint, DIM]);
+        drawPanel(ctx, h, lines);
       },
     };
   }
@@ -386,7 +419,7 @@ export class Lab {
       : this.scheme;
     this.renderer.draw(this.player?.state ?? this.state, this.player?.params ?? this.params,
       this.options, info, scheme, this.camera,
-      this.figureOn && !this.player ? this.figureExtras() : undefined);
+      this.courseKind && !this.player ? this.courseExtras() : undefined);
   }
 
   /**
@@ -433,15 +466,15 @@ export class Lab {
     this.clock.paused = false;
     const panel = document.getElementById("panel");
     if (panel) panel.style.display = "";
-    // A figure run always starts at the course's own speed, so two scores are
+    // A course run always starts at the course's own speed, so two scores are
     // two skaters on the same task — and the ghost started there too.
-    const speed = this.figureOn ? FIGURE_SPEED : this.startSpeed;
+    const speed = this.courseKind ? COURSE[this.courseKind].speed : this.startSpeed;
     this.state = createState(this.params, speed, 0);
     this.camera.snap(this.state);
     this.schemeState = newSchemeState();
     this.recorder = new ReplayRecorder(this.params, speed);
-    this.figure = this.figureOn ? new FigureEight(this.state) : null;
-    this.figureNewBest = false;
+    this.course = this.courseKind ? COURSE[this.courseKind].make(this.state) : null;
+    this.newBest = false;
     this.startGhost();
     this.telemetry.reset();
     this.renderer.clearTrace();

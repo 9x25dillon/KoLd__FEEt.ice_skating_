@@ -1,4 +1,4 @@
-// app/race.ts — racing a ghost round the Figure Eight.
+// app/race.ts — racing a ghost round a course: the Figure Eight, the edge course.
 //
 // A ghost is a replay, and a replay verifies tick for tick, so the ghost is not
 // an approximation of the run: it is the run, re-simulated. That also means its
@@ -19,40 +19,42 @@ import type { Replay } from "../sim/replay.ts";
 import { DEFAULT_PARAMS, SIM_DT } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import { FigureEight } from "./figure8.ts";
-import type { FigureResult } from "./figure8.ts";
+import type { Course, CourseResult } from "./course.ts";
+import type { SkaterState } from "../sim/types.ts";
 
 /** Where the ghost comes from. H cycles through the ones that exist. */
 export const GHOST_SOURCES = ["best", "last", "file", "off"] as const;
 export type GhostSource = typeof GHOST_SOURCES[number];
 
 export interface GhostRun {
-  /** Furthest round the figure (0..2) by the end of each tick. Never falls back. */
+  /** Furthest round the course, on its own scale, by the end of each tick. Never falls back. */
   reach: Float64Array;
   /** Tick the ghost finished the figure, counted from 1 like the recorder; -1 if it never did. */
   finishTick: number;
-  /** Tick it came back to the crossing and began the second lobe; -1 if never. */
+  /** Tick it passed halfway — the crossing, the fourth gate; -1 if never. */
   splitTick: number;
-  result: FigureResult;
+  result: CourseResult;
   /** A replay that stops verifying is not the run it claims to be. */
   diverged: boolean;
   params: Params;
 }
 
-const progressOf = (run: FigureEight): number =>
-  (run.state === "done" ? 2 : run.lobe + Math.max(0, run.swept) / (2 * Math.PI));
-
-/** Skate the clip once, now, through the tracker the live run uses. */
-export function ghostRun(clip: Replay): GhostRun {
+/**
+ * Skate the clip once, now, through the tracker the live run uses — any course,
+ * the Figure Eight unless told otherwise.
+ */
+export function ghostRun(clip: Replay,
+  make: (s: SkaterState) => Course = (s) => new FigureEight(s)): GhostRun {
   const player = new ReplayPlayer(clip);
-  const run = new FigureEight(player.state);
+  const run = make(player.state);
   const reach = new Float64Array(player.total);
   let furthest = 0, split = -1, finish = -1;
   while (!player.done) {
     player.advance();
     run.sample(player.state, SIM_DT);
-    furthest = Math.max(furthest, progressOf(run));
+    furthest = Math.max(furthest, run.result().progress);
     reach[player.index - 1] = furthest;
-    if (split < 0 && run.lobe === 1) split = player.index;
+    if (split < 0 && run.pastHalf) split = player.index;
     if (finish < 0 && run.state === "done") finish = player.index;
   }
   return {
@@ -86,12 +88,12 @@ const BEHIND = "#ff4d6d", AHEAD = "#7dffc4", DIM = "#5b7386", GOLD = "#ffc94a";
 const signed = (s: number): string => `${s >= 0 ? "+" : "−"}${Math.abs(s).toFixed(2)} s`;
 
 /** The race, as panel lines: who the ghost is, the gap now, the split, the verdict. */
-export function raceLines(g: GhostRun, label: string, live: FigureResult | null, liveTick: number,
+export function raceLines(g: GhostRun, label: string, live: CourseResult | null, liveTick: number,
   liveParams: Params, splitGap: number | null, dt = SIM_DT): Array<[string, string]> {
   const name = label.length > 18 ? `${label.slice(0, 17)}…` : label;
   const out: Array<[string, string]> = [[
     `ghost: ${name}` + (g.finishTick > 0
-      ? ` · ${(g.finishTick * dt).toFixed(1)} s · ${g.result.score} pts` : " · never finished the eight")
+      ? ` · ${(g.finishTick * dt).toFixed(1)} s · ${g.result.score} pts` : " · never finished the course")
       + (g.diverged ? " · DIVERGED" : ""), DIM]];
   const differs = tuningDiffers(g.params, liveParams);
   if (differs.length > 0) {
@@ -103,7 +105,7 @@ export function raceLines(g: GhostRun, label: string, live: FigureResult | null,
     out.push(gap === null ? ["past where the ghost ever got", AHEAD]
       : [`${signed(gap)} ${gap > 0 ? "behind" : "ahead of"} the ghost`, gap > 0 ? BEHIND : AHEAD]);
   }
-  if (splitGap !== null) out.push([`at the crossing ${signed(splitGap)}`, splitGap > 0 ? BEHIND : AHEAD]);
+  if (splitGap !== null) out.push([`at halfway ${signed(splitGap)}`, splitGap > 0 ? BEHIND : AHEAD]);
   if (live.state === "done") {
     if (g.finishTick < 0) out.push([`the ghost never finished: you win · ${live.score} pts`, AHEAD]);
     else {
