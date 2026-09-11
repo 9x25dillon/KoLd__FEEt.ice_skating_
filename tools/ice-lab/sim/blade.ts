@@ -3,7 +3,7 @@
 // Four small functions, separated from the solver because they are the ones
 // the tests interrogate directly and the ones a tuning session actually moves.
 
-import { clamp, lerp, smoothstep } from "./math.ts";
+import { clamp, lerp, smoothstep, sin, cos, atan2 } from "./math.ts";
 import type { Params } from "./params.ts";
 
 /**
@@ -34,7 +34,7 @@ export function effectiveRocker(contactS: number, p: Params): number {
  * rather than allowed to run to infinity.
  */
 export function carveRadius(tilt: number, rhoEff: number): number {
-  const s = Math.abs(Math.sin(tilt));
+  const s = Math.abs(sin(tilt));
   return s > 1e-4 ? rhoEff / s : 1e6;
 }
 
@@ -50,13 +50,13 @@ export function carveRadius(tilt: number, rhoEff: number): number {
  * wrong, which is why the rig puts it on a slider.
  */
 export function biteCapacity(normalLoad: number, tilt: number, p: Params): number {
-  return normalLoad * (p.biteC0 + p.biteC1 * Math.abs(Math.sin(tilt)))
+  return normalLoad * (p.biteC0 + p.biteC1 * Math.abs(sin(tilt)))
     * p.sharpness * p.iceHardness;
 }
 
 /** Longitudinal friction coefficient. A deep edge costs speed; a skid costs more. */
 export function muLong(tilt: number, skidding: boolean, p: Params): number {
-  const mu = p.muGlide * (1 + p.muEdgeGain * (1 - Math.cos(tilt)));
+  const mu = p.muGlide * (1 + p.muEdgeGain * (1 - cos(tilt)));
   return skidding ? mu + p.muSkid : mu;
 }
 
@@ -68,7 +68,7 @@ export function muLong(tilt: number, skidding: boolean, p: Params): number {
  * tick by tick, and it is the quantity every wobble, save and fall comes out of.
  */
 export function equilibriumLean(latAccel: number, gravity: number): number {
-  return Math.atan2(latAccel, gravity);
+  return atan2(latAccel, gravity);
 }
 
 /**
@@ -80,7 +80,7 @@ export function equilibriumLean(latAccel: number, gravity: number): number {
  * which is a claim the rig lets you check against a stopwatch and your eyes.
  */
 export function skidOnsetSpeed(tilt: number, rhoEff: number, p: Params): number {
-  const s = Math.abs(Math.sin(tilt));
+  const s = Math.abs(sin(tilt));
   if (s < 1e-4) return Infinity;
   return Math.sqrt(p.gravity * rhoEff * (p.biteC0 + p.biteC1 * s) / s);
 }

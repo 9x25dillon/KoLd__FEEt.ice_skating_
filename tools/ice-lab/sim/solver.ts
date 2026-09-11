@@ -49,10 +49,7 @@
 // residual slip velocity, which is the same idea one derivative apart, but the
 // bible's version is the project's own and reads more directly on screen.
 
-import {
-  add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped,
-  moveToward, quantize, crc32, v2,
-} from "./math.ts";
+import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos } from "./math.ts";
 import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT } from "./types.ts";
 import type {
   SkaterState, BladeState, SkatingInput, EdgeEvent, Foot, Fall,
@@ -209,10 +206,10 @@ export function step(
   const rhoSupport = effectiveRocker(s.blade[s.supportFoot].contactS, p);
   if (alive) {
     const v2sq = Math.max(dot(s.vel, s.vel), p.minSpeedForCurv * p.minSpeedForCurv);
-    const aCmd = g * Math.tan(leanCmd)
+    const aCmd = g * tan(leanCmd)
       + p.balanceKp * (s.lean - leanCmd)
       + p.balanceKd * s.leanRate;
-    const kappaMax = Math.sin(p.maxTilt) / rhoSupport;
+    const kappaMax = sin(p.maxTilt) / rhoSupport;
     const kappa = clamp(aCmd / v2sq, -kappaMax, kappaMax);
     let tiltTarget = asinClamped(kappa * rhoSupport);
     // Angulation: the blade may run deeper than the body leans, but only so
@@ -461,14 +458,14 @@ export function step(
     }
   }
   s.intAccel = aInt;
-  const leanAccel = (g * Math.sin(s.lean) - (s.latAccel + aInt) * Math.cos(s.lean)) / L;
+  const leanAccel = (g * sin(s.lean) - (s.latAccel + aInt) * cos(s.lean)) / L;
   s.leanRate += leanAccel * dt;
   s.lean = clamp(s.lean + s.leanRate * dt, -1.55, 1.55);
-  s.comZ = L * Math.cos(s.lean);
+  s.comZ = L * cos(s.lean);
 
   // Blade contacts hang off the base of the pendulum, not off the COM.
   const right = mul(perpLeft(s.heading), -1);
-  const base = add(s.pos, mul(right, L * Math.sin(s.lean)));
+  const base = add(s.pos, mul(right, L * sin(s.lean)));
   for (let i = 0; i < 2; i++) {
     const off = s.supportMode === 2 ? p.stanceHalfWidth : 0;
     s.blade[i].contact = add(base,

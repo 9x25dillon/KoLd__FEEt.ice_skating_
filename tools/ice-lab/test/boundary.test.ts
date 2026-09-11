@@ -58,6 +58,20 @@ test("the simulation never touches the DOM, a clock, or the network", () => {
   }
 });
 
+test("every transcendental in the simulation goes through sim/math.ts", () => {
+  // The engine's own Math.sin and friends are not specified to the bit, and
+  // they differ: a Firefox recording diverged in Node at tick 1437 over one
+  // ulp of a cosine. sim/math.ts implements them from + - * / and sqrt, which
+  // ARE specified to the bit. One raw call anywhere in sim/ and a replay is
+  // back to verifying only in the engine that recorded it. `**` is Math.pow.
+  const inexact = /\bMath\s*\.\s*(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log1p|log2|log10|pow|cbrt|hypot)\b|\*\*/;
+  for (const { file, text } of sourcesIn("sim")) {
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const hit = code.match(inexact);
+    assert.ok(!hit, `${file} uses ${hit?.[0]}: route it through sim/math.ts`);
+  }
+});
+
 test("the simulation allocates no engine types and declares no enums", () => {
   // `enum` is not erasable syntax, and this rig runs on Node's native type
   // stripping with zero dependencies. One enum and nothing runs at all.

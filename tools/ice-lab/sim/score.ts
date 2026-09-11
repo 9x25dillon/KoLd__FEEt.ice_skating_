@@ -17,7 +17,7 @@
 
 import type { JumpResult } from "./types.ts";
 import { JUMP_CODE, JUMP_NONE, ROTATION_CALL, ROTATION_MARK, EDGE_CALL, EDGE_MARK } from "./jump.ts";
-import { rng, clamp, lerp, saturate } from "./math.ts";
+import { rng, clamp, lerp, saturate, cos, log } from "./math.ts";
 
 /** Fields in order, quoted fields and doubled quotes honoured. No type coercion. */
 export function parseCsv(text: string): Array<Record<string, string>> {
@@ -157,7 +157,7 @@ export function jumpValue(t: ScoreTables, r: JumpResult): JumpValue | null {
 /** A standard normal from two uniforms, for judge noise. */
 function gaussian(u: () => number): number {
   const a = Math.max(u(), 1e-12), b = u();
-  return Math.sqrt(-2 * Math.log(a)) * Math.cos(2 * Math.PI * b);
+  return Math.sqrt(-2 * log(a)) * cos(2 * Math.PI * b);
 }
 
 /**

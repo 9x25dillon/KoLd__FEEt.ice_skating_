@@ -509,18 +509,29 @@ require the exact schema, solver version, 120 Hz rate, complete finite tuning,
 bounded input axes, boolean buttons, at most 36,000 ticks and at most 64 MiB.
 Warnings about balance tuning are preserved so a bad tuning can be reproduced.
 
-`ice-lab-f64/3` is a JavaScript regression contract. CRC32 covers every state
+`ice-lab-f64/4` is a JavaScript regression contract. CRC32 covers every state
 field and event using canonical JSON, with straight-blade Infinity encoded
-explicitly; it is a diagnostic, not an authenticity signature. It does **not**
-establish bit-exact parity with another JS engine, platform math library, or
-the future C++ float32 solver. Version the contract when solver semantics
-change and review fixture changes rather than regenerating them to pass CI.
+explicitly; it is a diagnostic, not an authenticity signature. **A clip
+verifies in any JavaScript engine**, not only the one that recorded it: every
+transcendental the solver uses is `sim/math.ts`'s own, built from `+ - * /` and
+`sqrt`, which IEEE-754 fixes to the bit. Up to `/3` the solver called the
+engine's `Math.sin` and friends, and a Firefox recording diverged in Node at
+tick 1437 over one ulp of a cosine; under `/4` the same inputs give the same
+4,742 digests in Firefox 155 and Node 26. `test/boundary.test.ts` keeps raw
+`Math.*` transcendentals out of `sim/`, and `test/math.test.ts` pins the bits.
+It does **not** establish parity with the future C++ float32 solver. Version
+the contract when solver semantics change and review fixture changes rather
+than regenerating them to pass CI.
 The bump from `/1` to `/2` added `pushHeld` to the state (standing up after a
 fall is edge-triggered) and the knee floor on strokes; the fixture was re-run
 from its own recorded inputs, and its kinematics matched the `/1` solver
 tick for tick, so only the digests changed. `/2` to `/3` added jumps: `jump` and
 `landed` on the state, `carriage` and `toe` on the input. With jumps off the
 fixture's 240 ticks matched the `/2` solver on every shared field and event.
+`/3` to `/4` swapped the transcendentals: kinematics moved by ulps (fixture
+positions within 2.2e-16 m of `/3`, a 4,742-tick play clip within 6.5e-12 m,
+same falls on the same ticks), so the fixture was re-run from its own inputs.
+`/3` clips no longer load; verify one against a checkout of `34fecd8`.
 
 `test/fixtures/replay-v1.json` pins a 240-tick skating run with a tuning change
 at tick 121. PR checks run the tests, browser build and fixture verifier under

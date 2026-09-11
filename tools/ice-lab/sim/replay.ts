@@ -19,7 +19,14 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       SkatingInput gained `carriage` and `toe`. With jumpMode 0 — every
 //       preset — nothing kinematic changed; the fixture was replayed through
 //       /2 and /3 and matched to the bit.
-export const REPLAY_SOLVER = "ice-lab-f64/3";
+//   /4  Every transcendental through sim/math.ts's own sin/cos/tan/asin/atan2
+//       (ADR-EDGE-007), so a clip verifies in any JS engine, not only the one
+//       that recorded it — /3 clips from Firefox diverged in Node. Kinematics
+//       moved by ulps, not by physics: replayed through /3 and /4, the
+//       fixture's positions agree to 2.2e-16 m and a 4,742-tick play clip's to
+//       6.5e-12 m, with the same falls on the same ticks.
+//       /3 clips no longer load; verify one against a checkout of 34fecd8.
+export const REPLAY_SOLVER = "ice-lab-f64/4";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
