@@ -98,6 +98,8 @@ export interface Controls {
   tilt: number;
   /** The Figure Eight on and off: G. Ignored in playtest. */
   toggleGame: boolean;
+  /** Which ghost to race — best, last, a file, none: H. */
+  cycleGhost: boolean;
 }
 
 const NOTHING: Controls = {
@@ -105,7 +107,7 @@ const NOTHING: Controls = {
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
-  cycleView: false, zoom: 0, tilt: 0, toggleGame: false,
+  cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false,
 };
 
 /**
@@ -227,6 +229,7 @@ export class Pad {
     if (this.pressed("]")) out.tilt += 1;
     if (this.pressed("[")) out.tilt -= 1;
     if (this.pressed("g")) out.toggleGame = true;
+    if (this.pressed("h")) out.cycleGhost = true;
 
     this.prevKeys = new Set(this.keys);
     return out;

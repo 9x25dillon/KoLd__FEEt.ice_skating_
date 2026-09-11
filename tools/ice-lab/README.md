@@ -295,6 +295,16 @@ eight (the test says so); a push at the crossing is part of the figure, since
 75 m is too far to glide. It reads the state and never writes it, and like jumps
 it is unreachable in `?playtest=1`.
 
+**Ghost races** (`app/race.ts`). The ghost is a replay re-simulated, so its
+whole run is known the moment it is picked: it is skated once through the same
+tracker, and the panel shows how far ahead or behind you are *at this point of
+the figure*, your split at the crossing, and the verdict at the finish. **H**
+cycles the ghost — your best, your last finished run, a replay file chosen with
+**race a replay**, or none — and restarts. A replay carries its own tuning, so
+a ghost recorded under other parameters races them against yours, and the panel
+names the parameters that differ: a race between two tunings, which is the
+comparison the rig exists for.
+
 **Falling, and getting up.** A fallen skater slides until the tester does
 something about it. A fresh press of **A / Space** stands them up where they
 fell, facing the way they were facing, at rest — the bible's §3.4 `GetUp`, with

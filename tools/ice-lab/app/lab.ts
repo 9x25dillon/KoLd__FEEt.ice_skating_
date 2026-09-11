@@ -20,6 +20,8 @@ import {
   loadBest, saveBest,
 } from "./figure8.ts";
 import type { Best } from "./figure8.ts";
+import { GHOST_SOURCES, ghostRun, timeGap, raceLines } from "./race.ts";
+import type { GhostRun, GhostSource } from "./race.ts";
 
 /** localStorage, or nothing: private windows and the test stub have none. */
 const storage = (): Storage | undefined => {
@@ -67,8 +69,19 @@ export class Lab {
   private figure: FigureEight | null = null;
   private figureBest: Best | null = loadBest(storage());
   private figureNewBest = false;
-  /** The best run's replay, re-run beside the live one. Its own player. */
+  /** The ghost's replay, re-run beside the live one. Its own player. */
   private ghost: ReplayPlayer | null = null;
+  /** The same replay skated once in advance, for the gap. See app/race.ts. */
+  private ghostAhead: GhostRun | null = null;
+  private ghostLabel = "";
+  private ghostSource: GhostSource = "best";
+  /** Clips a ghost can come from besides the best. */
+  private lastClip: string | null = null;
+  private fileClip: { name: string; clip: string } | null = null;
+  /** One precomputed ghost, keyed by its clip, so R does not re-skate it. */
+  private ghostCache: { clip: string; run: GhostRun } | null = null;
+  /** Your gap at the crossing, once you have reached it. */
+  private splitGap: number | null = null;
   private presetIndex = Math.max(0, PRESET_NAMES.indexOf(BOOT_PRESET));
   private scheme: Scheme = 0;
   private schemeState = newSchemeState();
@@ -184,6 +197,10 @@ export class Lab {
       this.figureOn = !this.figureOn;
       this.reset();   // on: a run starts from the crossing; off: back to the plain rink
     }
+    if (c.cycleGhost && this.figureOn && !this.playtest) {
+      this.cycleGhost();
+      this.reset();   // a race starts level
+    }
     if (c.cycleJump && !this.playtest) {
       this.params.jumpMode = (this.params.jumpMode + 1) % 3;
       this.panel.refresh();
@@ -225,29 +242,89 @@ export class Lab {
    */
   private figureTick(): void {
     const run = this.figure!;
-    const was = run.state;
+    const was = run.state, wasLobe = run.lobe;
     run.sample(this.state, SIM_DT);
     if (this.ghost && !this.ghost.done) {
       try { this.ghost.advance(); } catch { this.ghost = null; }
     }
+    if (wasLobe === 0 && run.lobe === 1 && this.ghostAhead) {
+      this.splitGap = timeGap(this.ghostAhead, 1, run.ticks);
+    }
     if (was !== "running" || run.state !== "done") return;
     const r = run.result();
+    const clip = this.recorder.toJson();
+    this.lastClip = clip;
     if (this.figureBest && r.score <= this.figureBest.score) return;
-    this.figureBest = { score: r.score, seconds: r.seconds, rms: r.rms, edgeShare: r.edgeShare,
-      clip: this.recorder.toJson() };
+    this.figureBest = { score: r.score, seconds: r.seconds, rms: r.rms, edgeShare: r.edgeShare, clip };
     this.figureNewBest = true;
     saveBest(storage(), this.figureBest);
+  }
+
+  /** The clip the chosen source names, if it has one yet. */
+  private ghostClip(source: GhostSource): { label: string; clip: string } | null {
+    if (source === "best" && this.figureBest) return { label: "your best", clip: this.figureBest.clip };
+    if (source === "last" && this.lastClip) return { label: "your last run", clip: this.lastClip };
+    if (source === "file" && this.fileClip) return { label: this.fileClip.name, clip: this.fileClip.clip };
+    return null;
+  }
+
+  /** H: the next source that has a clip, or none. */
+  private cycleGhost(): void {
+    let i = GHOST_SOURCES.indexOf(this.ghostSource);
+    for (let n = 0; n < GHOST_SOURCES.length; n++) {
+      i = (i + 1) % GHOST_SOURCES.length;
+      if (GHOST_SOURCES[i] === "off" || this.ghostClip(GHOST_SOURCES[i])) break;
+    }
+    this.ghostSource = GHOST_SOURCES[i];
+  }
+
+  /** Put the chosen ghost on the start line beside a fresh run. */
+  private startGhost(): void {
+    this.ghost = null; this.ghostAhead = null; this.splitGap = null;
+    const g = this.figureOn ? this.ghostClip(this.ghostSource) : null;
+    if (!g) return;
+    try {
+      // A clip recorded under another solver version no longer parses: no ghost.
+      const clip = parseReplay(g.clip);
+      if (this.ghostCache?.clip !== g.clip) this.ghostCache = { clip: g.clip, run: ghostRun(clip) };
+      this.ghost = new ReplayPlayer(clip);
+      this.ghostAhead = this.ghostCache.run;
+      this.ghostLabel = g.label;
+    } catch {
+      this.ghost = null; this.ghostAhead = null;
+    }
+  }
+
+  /** "race a replay": any saved clip becomes the ghost, and the race starts. */
+  private async loadRaceClip(file: File): Promise<void> {
+    if (this.playtest) return;
+    try {
+      if (file.size > MAX_REPLAY_BYTES) throw new Error("Replay exceeds the 64 MiB file limit");
+      const text = await file.text();
+      parseReplay(text);
+      this.fileClip = { name: file.name.replace(/\.json$/, ""), clip: text };
+      this.ghostSource = "file";
+      this.figureOn = true;
+      this.replayMessage = "";
+      this.reset();
+    } catch (error) {
+      this.replayMessage = `Could not race that replay: ${error instanceof Error ? error.message : String(error)}`;
+    }
   }
 
   private figureExtras(): DrawExtras {
     const run = this.figure;
     const ghost = this.ghost && !this.ghost.done ? this.ghost : null;
+    const ahead = this.ghostAhead;
     return {
       ground: (ctx, px) => drawFigure(ctx, px, run),
       ghost: ghost ? { s: ghost.state, p: ghost.params } : null,
       screen: (ctx, cam, _w, h) => {
         drawFigureLabels(ctx, cam, run);
-        drawFigurePanel(ctx, h, run?.result() ?? null, this.figureBest, this.figureNewBest, !!ghost);
+        const r = run?.result() ?? null;
+        const race = ahead ? raceLines(ahead, this.ghostLabel, r, run?.ticks ?? 0, this.params, this.splitGap)
+          : [[this.ghostSource === "off" ? "no ghost · H for one" : "no ghost yet: finish one", "#5b7386"] as [string, string]];
+        drawFigurePanel(ctx, h, r, this.figureBest, this.figureNewBest, race);
       },
     };
   }
@@ -365,11 +442,7 @@ export class Lab {
     this.recorder = new ReplayRecorder(this.params, speed);
     this.figure = this.figureOn ? new FigureEight(this.state) : null;
     this.figureNewBest = false;
-    this.ghost = null;
-    if (this.figureOn && this.figureBest) {
-      // A best recorded under another solver version no longer parses: no ghost.
-      try { this.ghost = new ReplayPlayer(parseReplay(this.figureBest.clip)); } catch { this.ghost = null; }
-    }
+    this.startGhost();
     this.telemetry.reset();
     this.renderer.clearTrace();
     this.scored = null;
@@ -399,6 +472,13 @@ export class Lab {
       file.value = ""; // The same clip can be opened again after it ends.
     });
     on("send-session", () => { void this.sendSession(); });
+    const raceFile = document.getElementById("race-file") as HTMLInputElement | null;
+    on("race-replay", () => raceFile?.click());
+    raceFile?.addEventListener("change", () => {
+      const chosen = raceFile.files?.[0];
+      if (chosen) void this.loadRaceClip(chosen);
+      raceFile.value = "";
+    });
 
     for (const key of Object.keys(this.options) as Array<keyof DrawOptions>) {
       const el = document.getElementById(`opt-${key}`) as HTMLInputElement | null;

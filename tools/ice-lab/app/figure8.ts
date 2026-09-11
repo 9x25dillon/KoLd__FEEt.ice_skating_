@@ -216,8 +216,8 @@ export function drawFigureLabels(ctx: CanvasRenderingContext2D, cam: Camera, run
 
 /** The run, and the best, bottom left. */
 export function drawFigurePanel(ctx: CanvasRenderingContext2D, h: number, r: FigureResult | null,
-  best: Best | null, newBest: boolean, ghost: boolean): void {
-  const lines: Array<[string, string]> = [["FIGURE EIGHT · the outside eight", "#7dffc4"]];
+  best: Best | null, newBest: boolean, race: Array<[string, string]> = []): void {
+  const lines: Array<[string, string]> = [["FIGURE EIGHT (G) · the outside eight", "#7dffc4"]];
   if (r?.state === "running") {
     const lobe = Math.min(1, Math.floor(r.progress));
     lines.push([`lobe ${lobe + 1} of 2 · hold ${LOBE_EDGE[lobe]} · ${r.seconds.toFixed(1)} s`, "#dce9f2"]);
@@ -231,8 +231,9 @@ export function drawFigurePanel(ctx: CanvasRenderingContext2D, h: number, r: Fig
     lines.push([`off the line ${r.rms.toFixed(2)} m · on the edge ${Math.round(100 * r.edgeShare)}%`, "#5b7386"]);
   }
   lines.push([best ? `best ${best.score} · ${best.seconds.toFixed(1)} s · ${best.rms.toFixed(2)} m`
-    + (ghost ? " · ghost skating" : "") : "no best yet: finish one", "#5b7386"]);
-  lines.push(["E / Q foot · Space push · R again · G leave", "#5b7386"]);
+    : "no best yet: finish one", "#5b7386"]);
+  lines.push(...race);
+  lines.push(["E/Q foot · Space push · R again · H ghost", "#5b7386"]);
   // Narrow enough to clear the ribbon at bottom centre on a 1000 px window.
   const width = 360, height = 10 + lines.length * 17;
   const x = 8, y = h - 8 - height;

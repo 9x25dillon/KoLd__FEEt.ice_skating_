@@ -8,12 +8,13 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import {
-  FigureEight, CENTRES, RADIUS, START_SPEED, deviation, loadBest, saveBest, BEST_KEY,
+  FigureEight, CENTRES, RADIUS, deviation, loadBest, saveBest, BEST_KEY,
 } from "../app/figure8.ts";
+import { figureBot } from "./figurebot.ts";
 import { PRESETS, SIM_DT } from "../sim/params.ts";
-import { createState, step } from "../sim/solver.ts";
-import { makeCode, FOOT, DIR, EDGE, NEUTRAL_INPUT } from "../sim/types.ts";
-import type { SkaterState, Foot, EdgeEvent } from "../sim/types.ts";
+import { createState } from "../sim/solver.ts";
+import { makeCode, FOOT, DIR, EDGE } from "../sim/types.ts";
+import type { SkaterState, Foot } from "../sim/types.ts";
 
 const RFO = makeCode(FOOT.Right, DIR.Forward, EDGE.Outside);
 const LFO = makeCode(FOOT.Left, DIR.Forward, EDGE.Outside);
@@ -139,36 +140,12 @@ test("the best run survives a reload, and junk in storage is no best at all", ()
 });
 
 test("the solver as tuned can finish the course: a steering bot skates it", () => {
-  // How RADIUS and START_SPEED were chosen, 2026-09-11. A bot steering on
-  // distance from the line and heading error, lean capped at what it can hold,
-  // one foot per lobe, one two-footed push at the crossing as a school figure
-  // pushes: at 5 m it fell on the second lobe from 4 and 5 m/s; at 6 m from
-  // 5 m/s it finished. Without the push nothing finished — 75 m is too far to
-  // glide (hand-off §5 item 5). If a tuning change fails this, the course's
-  // radius and start speed are the levers, not this test.
-  const p = PRESETS.responsive;
-  const s = createState(p, START_SPEED);
-  const run = new FigureEight(s);
-  const ev: EdgeEvent[] = [];
-  let lobe = 0, since = 999;
-  for (let t = 0; t < 60 * 120 && run.state === "running"; t++) {
-    const k = run.lobe;
-    if (k !== lobe) { lobe = k; since = 0; }
-    const c = CENTRES[k], dx = s.pos.x - c.x, dy = s.pos.y - c.y, dist = Math.hypot(dx, dy);
-    const v = Math.hypot(s.vel.x, s.vel.y) || 1e-6, dir = k === 0 ? -1 : 1;
-    const tx = (dir < 0 ? dy : -dy) / dist, ty = (dir < 0 ? -dx : dx) / dist;
-    const vx = s.vel.x / v, vy = s.vel.y / v;
-    const out = Math.atan2(vx * dx / dist + vy * dy / dist, vx * tx + vy * ty);
-    const most = Math.atan(v * v / (9.81 * Math.max(RADIUS * 0.55, 1)));
-    const phi = Math.max(0, Math.min(most, Math.atan(v * v / (9.81 * RADIUS)) + 0.04 * (dist - RADIUS) + 0.4 * out));
-    const pushing = k === 1 && since < 40;
-    const input = { ...NEUTRAL_INPUT, weight: pushing ? 0.5 : k === 0 ? 1 : 0, knee: 0.45,
-      lean: (k === 0 ? -1 : 1) * phi / p.maxLean, push: k === 1 && since === 0 };
-    since++;
-    ev.length = 0;
-    step(s, input, p, SIM_DT, ev);
-    run.sample(s, SIM_DT);
-  }
+  // How RADIUS and START_SPEED were chosen, 2026-09-11, with test/figurebot.ts:
+  // at 5 m it fell on the second lobe from 4 and 5 m/s; at 6 m from 5 m/s it
+  // finished. Without the push at the crossing nothing finished — 75 m is too
+  // far to glide (hand-off §5 item 5). If a tuning change fails this, the
+  // course's radius and start speed are the levers, not this test.
+  const { run } = figureBot();
   const r = run.result();
   assert.equal(r.state, "done", `the bot ${r.state} at ${r.progress.toFixed(2)} lobes`);
   assert.ok(r.score > 0 && r.edgeShare > 0.5, `score ${r.score}, edge ${r.edgeShare.toFixed(2)}, rms ${r.rms.toFixed(2)}`);
