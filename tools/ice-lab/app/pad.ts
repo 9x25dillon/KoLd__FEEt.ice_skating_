@@ -100,6 +100,8 @@ export interface Controls {
   toggleGame: boolean;
   /** Which ghost to race — best, last, a file, none: H. */
   cycleGhost: boolean;
+  /** The jump challenge's target, 0..5, from keys 1-6; -1 when none was pressed. */
+  pickJump: number;
 }
 
 const NOTHING: Controls = {
@@ -107,7 +109,7 @@ const NOTHING: Controls = {
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
-  cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false,
+  cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1,
 };
 
 /**
@@ -230,6 +232,7 @@ export class Pad {
     if (this.pressed("[")) out.tilt -= 1;
     if (this.pressed("g")) out.toggleGame = true;
     if (this.pressed("h")) out.cycleGhost = true;
+    for (let n = 1; n <= 6; n++) if (this.pressed(String(n))) out.pickJump = n - 1;
 
     this.prevKeys = new Set(this.keys);
     return out;

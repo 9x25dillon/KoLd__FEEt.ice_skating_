@@ -23,18 +23,26 @@ import {
 } from "./edges.ts";
 import { loadBest, saveBest, drawPanel, DIM } from "./course.ts";
 import type { Best, Course, PanelLine } from "./course.ts";
+import { JumpAttempt, startSpeed as jumpStart, jumpBestKey, jumpLines } from "./jumps.ts";
 import { GHOST_SOURCES, ghostRun, timeGap, raceLines } from "./race.ts";
 import type { GhostRun, GhostSource } from "./race.ts";
 
-/** The game courses, in the order G cycles them after "off". */
-const COURSES = ["figure8", "edges"] as const;
+/**
+ * The game courses, in the order G cycles them after "off". The jump
+ * challenge is only offered while jumps are on (J to full): off by default,
+ * like jumps.
+ */
+const COURSES = ["figure8", "edges", "jumps"] as const;
 type CourseKind = typeof COURSES[number];
-const COURSE = {
-  figure8: { speed: FIGURE_SPEED, key: FIGURE_KEY, make: (s: SkaterState): Course => new FigureEight(s),
-    hint: "E/Q foot · Space push · R again · H ghost" },
-  edges: { speed: EDGES_SPEED, key: EDGES_BEST_KEY, make: (s: SkaterState): Course => new EdgeCourse(s),
-    hint: "E right foot · Q left · R again · H ghost" },
-} as const;
+const HINT: Record<CourseKind, string> = {
+  figure8: "E/Q foot · Space push · R again · H ghost",
+  edges: "E right foot · Q left · R again · H ghost",
+  jumps: "1-6 jump · F toe · C arms, let go · R again",
+};
+
+/** Where a best is stored: a course, or one jump of the challenge ("jumps:4"). */
+const keyOf = (slot: string): string =>
+  slot === "figure8" ? FIGURE_KEY : slot === "edges" ? EDGES_BEST_KEY : jumpBestKey(Number(slot.split(":")[1]));
 
 /** localStorage, or nothing: private windows and the test stub have none. */
 const storage = (): Storage | undefined => {
@@ -80,10 +88,11 @@ export class Lab {
    */
   private courseKind: CourseKind | null = null;
   private course: Course | null = null;
-  private bests: Record<CourseKind, Best | null> = {
-    figure8: loadBest(storage(), COURSE.figure8.key), edges: loadBest(storage(), COURSE.edges.key),
-  };
+  /** Bests by slot — a course, or one jump of the challenge — loaded when first asked for. */
+  private bests: Record<string, Best | null> = {};
   private newBest = false;
+  /** The jump the challenge asks for, 0..5: keys 1-6. */
+  private jumpTarget = 0;
   /** The ghost's replay, re-run beside the live one. Its own player. */
   private ghost: ReplayPlayer | null = null;
   /** The same replay skated once in advance, for the gap. See app/race.ts. */
@@ -91,10 +100,10 @@ export class Lab {
   private ghostLabel = "";
   private ghostSource: GhostSource = "best";
   /** Each course's last finished run, besides its best; and a chosen file. */
-  private lastClips: Record<CourseKind, string | null> = { figure8: null, edges: null };
+  private lastClips: Record<string, string | null> = {};
   private fileClip: { name: string; clip: string } | null = null;
   /** One precomputed ghost, keyed by course and clip, so R does not re-skate it. */
-  private ghostCache: { kind: CourseKind; clip: string; run: GhostRun } | null = null;
+  private ghostCache: { slot: string; clip: string; run: GhostRun } | null = null;
   /** Your gap at halfway, once you have reached it. */
   private splitGap: number | null = null;
   private presetIndex = Math.max(0, PRESET_NAMES.indexOf(BOOT_PRESET));
@@ -209,14 +218,20 @@ export class Lab {
     }
     if (c.cycleScheme) this.scheme = ((this.scheme + 1) % 3) as Scheme;
     if (c.toggleGame && !this.playtest) {
-      // Off -> Figure Eight -> edge course -> off, each from its own start line.
-      const i = this.courseKind === null ? 0 : COURSES.indexOf(this.courseKind) + 1;
+      // Off -> Figure Eight -> edge course -> jump challenge -> off, each from
+      // its own start line; the challenge only while jumps are on.
+      let i = this.courseKind === null ? 0 : COURSES.indexOf(this.courseKind) + 1;
+      if (COURSES[i] === "jumps" && this.params.jumpMode !== 2) i++;
       this.courseKind = i < COURSES.length ? COURSES[i] : null;
       this.reset();
     }
     if (c.cycleGhost && this.courseKind && !this.playtest) {
       this.cycleGhost();
       this.reset();   // a race starts level
+    }
+    if (c.pickJump >= 0 && this.courseKind === "jumps" && !this.playtest) {
+      this.jumpTarget = c.pickJump;
+      this.reset();   // a new target starts the way that jump leaves the ice
     }
     if (c.cycleJump && !this.playtest) {
       this.params.jumpMode = (this.params.jumpMode + 1) % 3;
@@ -259,7 +274,7 @@ export class Lab {
    * it) is the next ghost.
    */
   private courseTick(): void {
-    const run = this.course!, kind = this.courseKind!;
+    const run = this.course!;
     const was = run.state, wasHalf = run.pastHalf;
     run.sample(this.state, SIM_DT);
     if (this.ghost && !this.ghost.done) {
@@ -271,20 +286,45 @@ export class Lab {
     if (was !== "running" || run.state !== "done") return;
     const r = run.result() as ReturnType<Course["result"]> & { rms?: number; edgeShare?: number; clean?: number };
     const clip = this.recorder.toJson();
-    this.lastClips[kind] = clip;
-    const best = this.bests[kind];
+    this.lastClips[this.slot()] = clip;
+    // A jump goes on the board under the jump it WAS, not the one asked for;
+    // a hop, or a jump with no tables to score it, goes nowhere.
+    const slot = run instanceof JumpAttempt
+      ? (run.landed && run.scored ? `jumps:${run.landed.kind}` : null) : this.slot();
+    if (slot === null) return;
+    const best = this.best(slot);
     if (best && r.score <= best.score) return;
     const next: Best = { score: r.score, seconds: r.seconds, clip, rms: r.rms, edgeShare: r.edgeShare, clean: r.clean };
-    this.bests[kind] = next;
+    this.bests[slot] = next;
     this.newBest = true;
-    saveBest(storage(), COURSE[kind].key, next);
+    saveBest(storage(), keyOf(slot), next);
+  }
+
+  /** Where this course's best and last run live: the course, or the target jump. */
+  private slot(): string {
+    return this.courseKind === "jumps" ? `jumps:${this.jumpTarget}` : this.courseKind ?? "";
+  }
+
+  private best(slot: string): Best | null {
+    if (!(slot in this.bests)) this.bests[slot] = loadBest(storage(), keyOf(slot));
+    return this.bests[slot];
+  }
+
+  private makeCourse(kind: CourseKind, s: SkaterState): Course {
+    if (kind === "figure8") return new FigureEight(s);
+    if (kind === "edges") return new EdgeCourse(s);
+    return new JumpAttempt(s, this.jumpTarget, this.tables);
+  }
+
+  /** Each course's own start, so two scores are the same task — and the ghost's too. */
+  private courseSpeed(kind: CourseKind): number {
+    return kind === "figure8" ? FIGURE_SPEED : kind === "edges" ? EDGES_SPEED : jumpStart(this.jumpTarget);
   }
 
   /** The clip the chosen source names on this course, if it has one yet. */
   private ghostClip(source: GhostSource): { label: string; clip: string } | null {
-    const kind = this.courseKind;
-    if (!kind) return null;
-    const best = this.bests[kind], last = this.lastClips[kind];
+    if (!this.courseKind) return null;
+    const best = this.best(this.slot()), last = this.lastClips[this.slot()] ?? null;
     if (source === "best" && best) return { label: "your best", clip: best.clip };
     if (source === "last" && last) return { label: "your last run", clip: last };
     if (source === "file" && this.fileClip) return { label: this.fileClip.name, clip: this.fileClip.clip };
@@ -310,8 +350,9 @@ export class Lab {
     try {
       // A clip recorded under another solver version no longer parses: no ghost.
       const clip = parseReplay(g.clip);
-      if (this.ghostCache?.clip !== g.clip || this.ghostCache.kind !== kind) {
-        this.ghostCache = { kind, clip: g.clip, run: ghostRun(clip, COURSE[kind].make) };
+      const slot = this.slot();
+      if (this.ghostCache?.clip !== g.clip || this.ghostCache.slot !== slot) {
+        this.ghostCache = { slot, clip: g.clip, run: ghostRun(clip, (s) => this.makeCourse(kind, s)) };
       }
       this.ghost = new ReplayPlayer(clip);
       this.ghostAhead = this.ghostCache.run;
@@ -340,23 +381,36 @@ export class Lab {
 
   private courseExtras(): DrawExtras {
     const kind = this.courseKind!, run = this.course;
-    const fig = kind === "figure8" ? run as FigureEight | null : null;
-    const gates = kind === "edges" ? run as EdgeCourse | null : null;
+    const fig = run instanceof FigureEight ? run : null;
+    const gates = run instanceof EdgeCourse ? run : null;
+    const leap = run instanceof JumpAttempt ? run : null;
     const ghost = this.ghost && !this.ghost.done ? this.ghost : null;
     const ahead = this.ghostAhead;
     return {
-      ground: (ctx, px) => { if (fig || kind === "figure8") drawFigure(ctx, px, fig); else drawGates(ctx, px, gates); },
+      ground: (ctx, px) => {
+        if (kind === "figure8") drawFigure(ctx, px, fig);
+        else if (kind === "edges") drawGates(ctx, px, gates);
+      },
       ghost: ghost ? { s: ghost.state, p: ghost.params } : null,
       screen: (ctx, cam, _w, h) => {
-        if (kind === "figure8") drawFigureLabels(ctx, cam, fig); else drawGateLabels(ctx, cam, gates);
-        const best = this.bests[kind];
-        const lines: PanelLine[] = kind === "figure8"
-          ? figureLines(fig?.result() ?? null, best, this.newBest)
-          : edgeLines(gates, this.state, best, this.newBest);
-        lines.push(...(ahead
-          ? raceLines(ahead, this.ghostLabel, run?.result() ?? null, run?.ticks ?? 0, this.params, this.splitGap)
-          : [[this.ghostSource === "off" ? "no ghost · H for one" : "no ghost yet: finish one", DIM] as PanelLine]));
-        lines.push([COURSE[kind].hint, DIM]);
+        if (kind === "figure8") drawFigureLabels(ctx, cam, fig);
+        else if (kind === "edges") drawGateLabels(ctx, cam, gates);
+        const best = this.best(this.slot());
+        let lines: PanelLine[];
+        if (kind === "jumps") {
+          lines = jumpLines(leap, this.state, this.jumpTarget, (k) => this.best(`jumps:${k}`), this.newBest,
+            this.params.jumpMode === 2, this.tables !== null);
+          // A jump is not a race against the clock: the ghost is there to watch.
+          lines.push([ahead ? `ghost: ${this.ghostLabel} at this jump · ${ahead.result.score.toFixed(2)}`
+            : this.ghostSource === "off" ? "no ghost · H for one" : "no ghost yet: land one", DIM]);
+        } else {
+          lines = kind === "figure8" ? figureLines(fig?.result() ?? null, best, this.newBest)
+            : edgeLines(gates, this.state, best, this.newBest);
+          lines.push(...(ahead
+            ? raceLines(ahead, this.ghostLabel, run?.result() ?? null, run?.ticks ?? 0, this.params, this.splitGap)
+            : [[this.ghostSource === "off" ? "no ghost · H for one" : "no ghost yet: finish one", DIM] as PanelLine]));
+        }
+        lines.push([HINT[kind], DIM]);
         drawPanel(ctx, h, lines);
       },
     };
@@ -468,12 +522,12 @@ export class Lab {
     if (panel) panel.style.display = "";
     // A course run always starts at the course's own speed, so two scores are
     // two skaters on the same task — and the ghost started there too.
-    const speed = this.courseKind ? COURSE[this.courseKind].speed : this.startSpeed;
+    const speed = this.courseKind ? this.courseSpeed(this.courseKind) : this.startSpeed;
     this.state = createState(this.params, speed, 0);
     this.camera.snap(this.state);
     this.schemeState = newSchemeState();
     this.recorder = new ReplayRecorder(this.params, speed);
-    this.course = this.courseKind ? COURSE[this.courseKind].make(this.state) : null;
+    this.course = this.courseKind ? this.makeCourse(this.courseKind, this.state) : null;
     this.newBest = false;
     this.startGhost();
     this.telemetry.reset();

@@ -320,6 +320,18 @@ the Figure Eight; **G** cycles off, Figure Eight, edge course. The spacing is
 the blade carves the other way first: a steering bot finishes 12 m and 14 m and
 falls on the last gate of 16 m, where the course bleeds speed to 2 m/s.
 
+**The jump challenge** (**G** once more, `app/jumps.ts`) — offered only while
+jumps are on (**J** to full), so it is off by default the way jumps are. **1–6**
+picks the target — toe loop, Salchow, loop, flip, Lutz, axel — and each attempt
+starts the way that jump leaves the ice: backward at 5 m/s, forward for the
+axel. The panel gives the takeoff from `data/jump-definitions.csv` in words
+("left backward outside, toe pick (F)") and the edge you are on now. The landing
+is scored by `sim/score.ts` from the data — base value, rotation and edge calls,
+the seeded nine-judge GOE — less the data's fall deduction if it came down, and
+goes on a board of six bests under the jump it *was*: mean a Lutz, take off an
+inside edge, and the board files a flip and says so. Each jump keeps its best
+attempt as a ghost to watch; the board's total is the sum of the six.
+
 **Falling, and getting up.** A fallen skater slides until the tester does
 something about it. A fresh press of **A / Space** stands them up where they
 fell, facing the way they were facing, at rest — the bible's §3.4 `GetUp`, with
