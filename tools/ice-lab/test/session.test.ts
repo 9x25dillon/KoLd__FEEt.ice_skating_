@@ -89,6 +89,58 @@ test("standing up is the retry, ends the down time, and is not a stroke", () => 
   assert.ok(summary.meanLeanDepth < 0.5, "and lying there still did not count as skating");
 });
 
+test("edge changes count the skater's choices, not the strokes", () => {
+  // The first version counted every EdgeChanged. A stroke rolls the pushing
+  // blade onto its inside edge and back, two events, so stroking every 0.75 s
+  // with no lean at all read 161/min against a first tester's 297 — and the
+  // NONE -> edge at the first tick read 2/min on a straight glide. Both
+  // numbers are asserted on the raw stream first, so this test fails if the
+  // stimulus stops producing what it is here to filter.
+  const two = { ...NEUTRAL_INPUT };
+  for (const [name, at] of [
+    ["glide", (): SkatingInput => two],
+    ["stroke", (i: number): SkatingInput => ({ ...two, push: i % 90 === 0 })],
+  ] as const) {
+    const m = new SessionMeter();
+    const s = createState(p, 4.0, 0);
+    const ev: EdgeEvent[] = [];
+    let raw = 0;
+    for (let i = 0; i < 7200; i++) {
+      const inp = at(i);
+      ev.length = 0;
+      step(s, inp, p, SIM_DT, ev);
+      m.sample(s, inp, ev, SIM_DT);
+      raw += ev.filter((e) => e.type === 0).length;   // EVENT.EdgeChanged
+    }
+    assert.equal(raw, name === "glide" ? 2 : 161, `${name}: the raw stream, measured`);
+    assert.equal(m.summary().edgeChangesPerMinute, 0, `${name}: and none of it was chosen`);
+  }
+});
+
+test("a blade that pushes off one edge and comes back on the other made one change", () => {
+  // A push roll is skipped, not erased. Lean right, stroke on the right foot,
+  // flip the lean mid-push: that blade leaves its outside edge, pushes on its
+  // inside, and stays there because the new lean wants it there — no roll-back
+  // event ever fires. Measured: the only events in the window are the roll-in
+  // (skipped) and two on the left blade, which was not pushing. The right
+  // blade's net change is the third, and a meter that only filtered would
+  // report two.
+  const m = new SessionMeter();
+  const s = createState(p, 4.0, 0);
+  const ev: EdgeEvent[] = [];
+  const counted = () => Math.round(m.summary().edgeChangesPerMinute * m.summary().freePlaySeconds / 60);
+  let before = 0;
+  for (let i = 0; i < 300; i++) {
+    if (i === 240) before = counted();
+    const inp = { ...NEUTRAL_INPUT, lean: i < 250 ? 0.2 : -0.2, push: i === 240 };
+    ev.length = 0;
+    step(s, inp, p, SIM_DT, ev);
+    m.sample(s, inp, ev, SIM_DT);
+  }
+  assert.ok(!s.fallen && s.strokeTime <= 0, "up, and the stroke is over");
+  assert.equal(counted() - before, 3);
+});
+
 test("skid ratio is zero on a held edge and rises when the edge lets go", () => {
   const held = play(600, () => ({ ...NEUTRAL_INPUT, weight: 1, knee: 0.45, lean: 0.2 }));
   assert.equal(held.summary.skidRatio, 0, "an edge that holds never skids");

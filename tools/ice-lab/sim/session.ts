@@ -22,7 +22,7 @@
 // are not measuring the same thing.
 
 import type { SkaterState, SkatingInput, EdgeEvent } from "./types.ts";
-import { EVENT } from "./types.ts";
+import { EVENT, EDGE_CODE_NONE } from "./types.ts";
 import { len } from "./math.ts";
 
 /** Speed above which the skater counts as moving, m/s. */
@@ -35,7 +35,16 @@ export interface SessionSummary {
   skidRatio: number;
   /** §6: mean |lean| while moving, radians. Best proxy for trusting the ice. */
   meanLeanDepth: number;
-  /** §6: signed edge transitions per minute. Exploring vs surviving. */
+  /**
+   * §6: signed edge transitions per minute. Exploring vs surviving.
+   *
+   * Counts only transitions the skater chose. Two kinds are left out, because
+   * the rig produces them for every tester alike and they swamped the rest:
+   * the pushing blade's roll onto its inside edge and back, two per stroke —
+   * measured, 161/min from stroking every 0.75 s with no lean at all, against
+   * a first tester's 297 — and NONE -> edge, which is a blade coming back to
+   * the ice after a reset, a stand-up or a jump, not a change of edge.
+   */
   edgeChangesPerMinute: number;
   /**
    * §6: median seconds from a fall to the next input. Under 3 s means the
@@ -86,6 +95,15 @@ export class SessionMeter {
   private downSince = -1;
   private retries: number[] = [];
   private lastPush = false;
+  /**
+   * Per blade, ticks it is still on a push roll after its stroke ran out. The
+   * solver snaps the pushing blade back to the body's tilt on the tick AFTER
+   * strokeTime reaches zero, so the roll back off the inside edge lands one
+   * sample later than the last sample that still shows the stroke running.
+   */
+  private pushRoll = [0, 0];
+  /** Per blade, its edge code at the last sample before a push roll began. */
+  private rollFrom = [EDGE_CODE_NONE, EDGE_CODE_NONE];
 
   reset(): void {
     this.ticks = 0; this.movingTicks = 0; this.skidTicks = 0; this.edgeTicks = 0;
@@ -93,6 +111,7 @@ export class SessionMeter {
     this.distance = 0; this.top = 0; this.deepest = 0; this.dtSum = 0;
     this.downTicks = 0;
     this.downSince = -1; this.retries = []; this.lastPush = false;
+    this.pushRoll = [0, 0]; this.rollFrom = [EDGE_CODE_NONE, EDGE_CODE_NONE];
   }
 
   /** Feed one tick, after `step`. `events` is that tick's events only. */
@@ -101,10 +120,29 @@ export class SessionMeter {
     this.dtSum += dt;
 
     let stoodUp = false;
+    const stroking = s.strokeTime > 0;
     for (const e of events) {
-      if (e.type === EVENT.EdgeChanged && !s.fallen) this.edgeChanges++;
+      if (e.type === EVENT.EdgeChanged && !s.fallen
+        && e.prevCode !== EDGE_CODE_NONE
+        && this.pushRoll[e.foot] === 0
+        && !(stroking && e.foot === s.strokeFoot)) this.edgeChanges++;
       if (e.type === EVENT.Fall) { this.fallsCount++; this.downSince = this.ticks; }
       if (e.type === EVENT.Recovered) stoodUp = true;
+    }
+    // A push roll is skipped, not erased: if the lean crossed over while the
+    // blade was pushing, it comes back on a different edge than it left, and
+    // that is one transition the skater made. Without this, stroking hides
+    // real changes instead — 54/min gliding became 36/min stroking, measured
+    // on the same oscillating lean.
+    for (let i = 0; i < 2; i++) {
+      const was = this.pushRoll[i];
+      if (was > 0) this.pushRoll[i]--;
+      if (stroking && i === s.strokeFoot) this.pushRoll[i] = 2;
+      if (this.pushRoll[i] > 0) continue;
+      const code = s.blade[i].code;
+      if (was > 0 && !s.fallen && code !== EDGE_CODE_NONE
+        && this.rollFrom[i] !== EDGE_CODE_NONE && code !== this.rollFrom[i]) this.edgeChanges++;
+      this.rollFrom[i] = code;
     }
 
     // NOTHING BELOW THIS LINE COUNTS WHILE THE SKATER IS DOWN.
