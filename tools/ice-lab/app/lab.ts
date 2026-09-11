@@ -14,7 +14,7 @@ import { SessionMeter } from "../sim/session.ts";
 import type { SkaterState, EdgeEvent } from "../sim/types.ts";
 import { Renderer, DEFAULT_OPTIONS } from "./draw.ts";
 import type { DrawOptions } from "./draw.ts";
-import { Camera, VIEW_NAME } from "./camera.ts";
+import { Camera, VIEW, VIEW_NAME } from "./camera.ts";
 import { Panel } from "./panel.ts";
 import { Pad } from "./pad.ts";
 import { applyScheme, newSchemeState, SCHEME_LABEL } from "./schemes.ts";
@@ -192,14 +192,16 @@ export class Lab {
   }
 
   /**
-   * V / D-pad down turns the view, + / - / D-pad left-right zoom. Locked in
+   * V / D-pad down cycles north up, travel up, chase; + / - / D-pad
+   * left-right zoom; [ and ] lower and raise the chase camera. Locked in
    * playtest: the view is part of the stimulus, and every tester gets the one
    * the rig always had.
    */
-  private viewControls(c: { cycleView: boolean; zoom: number }): void {
+  private viewControls(c: { cycleView: boolean; zoom: number; tilt: number }): void {
     if (this.playtest) return;
     if (c.cycleView) this.camera.cycleView();
     if (c.zoom !== 0) this.camera.zoomBy(c.zoom);
+    if (c.tilt !== 0) this.camera.tiltBy(5 * c.tilt);
   }
 
   private render(): void {
@@ -218,7 +220,9 @@ export class Lab {
       : [
         `preset ${PRESET_NAMES[this.presetIndex]}   scheme ${SCHEME_LABEL[this.scheme]}   `
         + (this.clock.paused ? "PAUSED" : `${this.clock.lastSteps} steps/frame`)
-        + `   view ${VIEW_NAME[this.camera.view]} ${this.camera.zoom.toFixed(2)}×`,
+        + `   view ${VIEW_NAME[this.camera.view]}`
+        + (this.camera.view === VIEW.Chase ? ` ${this.camera.chaseElevation}°` : "")
+        + ` ${this.camera.zoom.toFixed(2)}×`,
         ...recent.map((line) => `· ${line}`),
       ];
     if (this.player) {

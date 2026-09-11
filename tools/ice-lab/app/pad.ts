@@ -94,6 +94,8 @@ export interface Controls {
   cycleView: boolean;
   /** Zoom steps this frame: + and - on the keyboard, D-pad right and left. */
   zoom: number;
+  /** Chase camera up (+1) or down (-1) a step: ] and [. Keyboard only. */
+  tilt: number;
 }
 
 const NOTHING: Controls = {
@@ -101,7 +103,7 @@ const NOTHING: Controls = {
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
-  cycleView: false, zoom: 0,
+  cycleView: false, zoom: 0, tilt: 0,
 };
 
 /**
@@ -220,6 +222,8 @@ export class Pad {
     if (this.pressed("v")) out.cycleView = true;
     if (this.pressed("=") || this.pressed("+")) out.zoom += 1;
     if (this.pressed("-") || this.pressed("_")) out.zoom -= 1;
+    if (this.pressed("]")) out.tilt += 1;
+    if (this.pressed("[")) out.tilt -= 1;
 
     this.prevKeys = new Set(this.keys);
     return out;

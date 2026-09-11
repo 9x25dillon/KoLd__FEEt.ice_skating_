@@ -75,6 +75,96 @@ export function pendulum(s: SkaterState): { base: Vec2; com: Vec2; eq: Vec2 } {
   };
 }
 
+export interface V3 { x: number; y: number; z: number }
+
+const go = (o: V3, v: { x: number; y: number; z?: number }, k: number): V3 =>
+  ({ x: o.x + v.x * k, y: o.y + v.y * k, z: o.z + (v.z ?? 0) * k });
+const dist3 = (a: V3, b: V3): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+/**
+ * Thigh and shin, m. Two of them just outreach the hip of a skater standing
+ * at comHeight, so the knee is soft even standing — as a skater's is.
+ */
+export const SEGMENT = 0.5;
+
+/** Index 0 is the left foot, as everywhere in the solver. */
+export interface Body {
+  base: V3; com: V3; hip: V3; shoulder: V3; head: V3;
+  feet: [V3, V3]; knees: [V3, V3]; hips: [V3, V3];
+  shoulders: [V3, V3]; hands: [V3, V3];
+  /** The save, -1..1: the arms swing by it, gold at the ceiling. */
+  save: number;
+}
+
+/**
+ * The skater in three dimensions, for a camera that is not straight overhead.
+ *
+ * Built on the pendulum, so it cannot disagree with the solver: the base is
+ * the blade contacts' midpoint, the COM is `pos` at `comZ`, and the line
+ * between them is the leg length at the lean — the body tips exactly as far as
+ * the solver says it does. The rest hangs off that line. The knee is SOLVED,
+ * not placed: two fixed segments between hip and foot, bending forward, so a
+ * deep knee (RT, Shift) reads as a deep bend rather than a shorter stick.
+ */
+export function bodyPoints(s: SkaterState, p: Params): Body {
+  const t = s.heading, n = perpLeft(t);
+  const air = s.jump.phase === JUMP_PHASE.Air;
+  const lift = air ? Math.max(0, s.jump.z) : 0;
+  const { base } = pendulum(s);
+  const B: V3 = { x: base.x, y: base.y, z: lift };
+  const C: V3 = { x: s.pos.x, y: s.pos.y, z: s.comZ + lift };
+  const L = dist3(C, B) || 1;
+  const u: V3 = { x: (C.x - B.x) / L, y: (C.y - B.y) / L, z: (C.z - B.z) / L };
+
+  // The COM sits just above the hips; the torso pitches forward as the knee
+  // bends, which is how a skater keeps the COM over a bent leg.
+  const hip = go(C, u, -0.08);
+  const pitch = 0.15 + 0.35 * s.knee;
+  const dl = Math.hypot(u.x + t.x * pitch, u.y + t.y * pitch, u.z);
+  const d: V3 = { x: (u.x + t.x * pitch) / dl, y: (u.y + t.y * pitch) / dl, z: u.z / dl };
+  const shoulder = go(hip, d, 0.5);
+  const head = go(shoulder, d, 0.22);
+
+  const beat = s.strokeTime > 0 ? Math.sin(Math.min(1, s.strokeTime / 0.3) * Math.PI) : 0;
+  const support = s.blade[s.supportFoot].contact;
+  const side = (i: number): number => (i === FOOT.Left ? 1 : -1);
+  const foot = (i: number): V3 => {
+    const b = s.blade[i];
+    let f: V3;
+    if (air) f = go(B, n, side(i) * 0.08);
+    else if (b.inContact) f = { x: b.contact.x, y: b.contact.y, z: 0 };
+    else f = go(go({ x: support.x, y: support.y, z: 0.28 }, t, -0.45), n, side(i) * 0.1);  // free leg, behind
+    if (s.strokeFoot === i && beat > 0) f = go(go(f, n, side(i) * 0.35 * beat), t, -0.2 * beat);
+    return f;
+  };
+  const feet: [V3, V3] = [foot(0), foot(1)];
+  const hips: [V3, V3] = [go(hip, n, 0.1), go(hip, n, -0.1)];
+  const knee = (i: number): V3 => {
+    const h = hips[i], f = feet[i], dd = dist3(h, f) || 1;
+    const a: V3 = { x: (h.x - f.x) / dd, y: (h.y - f.y) / dd, z: (h.z - f.z) / dd };
+    // Forward, made square to the leg, so both segments keep their length.
+    const along = t.x * a.x + t.y * a.y;
+    let k: V3 = { x: t.x - a.x * along, y: t.y - a.y * along, z: -a.z * along };
+    const kl = Math.hypot(k.x, k.y, k.z);
+    k = kl > 1e-6 ? { x: k.x / kl, y: k.y / kl, z: k.z / kl } : { x: 0, y: 0, z: 1 };
+    const bend = Math.sqrt(Math.max(0, SEGMENT * SEGMENT - dd * dd / 4));
+    return go({ x: (h.x + f.x) / 2, y: (h.y + f.y) / 2, z: (h.z + f.z) / 2 }, k, bend);
+  };
+  const knees: [V3, V3] = [knee(0), knee(1)];
+
+  const save = air ? 0 : clampUnit(s.intAccel / Math.max(p.internalMax, 1e-3));
+  const tuck = air
+    ? clampUnit((p.inertiaOpen - s.jump.inertia) / Math.max(p.inertiaOpen - p.inertiaTucked, 1e-3)) : 0;
+  const reach = 1 - 0.8 * Math.max(0, tuck);
+  const shoulders: [V3, V3] = [go(shoulder, n, 0.19), go(shoulder, n, -0.19)];
+  const hand = (i: number): V3 =>
+    go(go(go(shoulders[i], n, side(i) * (0.1 + 0.45 * reach)), t, side(i) * 0.35 * save), d, -(0.3 - 0.15 * reach));
+  return {
+    base: B, com: C, hip, shoulder, head, feet, knees, hips, shoulders,
+    hands: [hand(0), hand(1)], save,
+  };
+}
+
 const edgeColour = (b: BladeState): string => {
   if (b.regime === REGIME.Skid) return SKIDC;
   const side = b.code === EDGE_CODE_NONE ? EDGE.Flat : codeSide(b.code);
@@ -140,15 +230,22 @@ export class Renderer {
     this.px = cam.px;
     ctx.lineWidth = 1 / this.px;
 
+    // Tilted, the ice is still this transform but the body is not flat on it:
+    // the figure and the balance lines go up in z, drawn after the ice in
+    // screen space. A fallen skater IS flat on the ice, so they stay here.
+    const tilted = cam.elevation < 89.5;
     this.grid(cam, w, h);
     if (opt.tracing) this.tracings();
     if (opt.carveCircle) this.carveCircles(s, p);
-    if (opt.skater) this.skater(s, p);
+    if (opt.skater && (!tilted || s.fallen)) this.skater(s, p);
+    else if (opt.skater) this.shadow(s);
     if (opt.blades) this.blades(s);
     if (opt.forces) this.forces(s);
-    if (opt.balance) this.balance(s);
+    if (opt.balance && !tilted) this.balance(s);
 
     ctx.restore();
+    if (tilted && opt.skater && !s.fallen) this.skater3d(s, p, cam);
+    if (tilted && opt.balance) this.balance3d(s, cam);
     if (opt.hud) this.hud(s, p, info);
     if (opt.pad && w > 640) this.pad.draw(ctx, w - 312, 48, scheme, s);
     if (opt.ribbon) drawRibbon(ctx, w, h, s, p);
@@ -322,6 +419,82 @@ export class Renderer {
     ctx.fillStyle = "#17263b";
     ctx.beginPath(); ctx.arc(torsoX + 0.26, 0, 0.135, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
+  }
+
+  /** Where the body is over the ice. In the air it stays down and fades. */
+  private shadow(s: SkaterState): void {
+    const ctx = this.ctx;
+    const lift = s.jump.phase === JUMP_PHASE.Air ? Math.max(0, s.jump.z) : 0;
+    ctx.fillStyle = `rgba(0,5,15,${(0.45 - 0.3 * Math.min(1, lift)).toFixed(2)})`;
+    ctx.beginPath();
+    ctx.ellipse(s.pos.x, s.pos.y, 0.5, 0.32, Math.atan2(s.heading.y, s.heading.x), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /**
+   * The body from a camera off the vertical. Screen space, through
+   * `cam.project`; widths are metres times the zoom, so the figure scales
+   * with the ice under it. Painter's order: the far leg and arm, the torso,
+   * the head, the near leg and arm.
+   */
+  private skater3d(s: SkaterState, p: Params, cam: Camera): void {
+    const ctx = this.ctx, px = cam.px, b = bodyPoints(s, p), t = s.heading;
+    const line = (pts: V3[], col: string, metres: number): void => {
+      ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, metres * px);
+      ctx.beginPath();
+      pts.forEach((q, i) => {
+        const [x, y] = cam.project(q.x, q.y, q.z);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    };
+    ctx.lineCap = "round";
+    const farFirst = (a: V3, c: V3): [number, number] =>
+      (cam.depth(a.x, a.y) >= cam.depth(c.x, c.y) ? [0, 1] : [1, 0]);
+    const legs = farFirst(b.feet[0], b.feet[1]), arms = farFirst(b.hands[0], b.hands[1]);
+    const armCol = Math.abs(b.save) > 0.95 ? GOLD : "#60d9ce";
+    const leg = (i: number): void => {
+      const bl = s.blade[i];
+      const load = bl.inContact ? 0.35 + 0.65 * bl.weight : 0.25;
+      line([b.feet[i], b.knees[i], b.hips[i]], `rgba(96,140,180,${Math.max(0.55, load).toFixed(2)})`, 0.12);
+      line([go(b.feet[i], t, -0.14), go(b.feet[i], t, 0.16)],
+        `rgba(238,248,255,${(0.35 + 0.65 * load).toFixed(2)})`, 0.05);
+    };
+    const arm = (i: number): void => line([b.shoulders[i], b.hands[i]], armCol, 0.08);
+    leg(legs[0]); arm(arms[0]);
+    line([b.hips[0], b.hips[1]], "#69e3d3", 0.12);
+    line([b.hip, b.shoulder], "#69e3d3", 0.3);
+    line([b.shoulders[0], b.shoulders[1]], "#69e3d3", 0.12);
+    const [hx, hy] = cam.project(b.head.x, b.head.y, b.head.z);
+    ctx.fillStyle = "#ebbd9e";
+    ctx.beginPath(); ctx.arc(hx, hy, Math.max(2, 0.12 * px), 0, Math.PI * 2); ctx.fill();
+    leg(legs[1]); arm(arms[1]);
+  }
+
+  /**
+   * The balance overlay with its height back: base to COM is the body as the
+   * solver tilts it, and the amber line is where the arc it is on would need
+   * the body to be. Seen from behind, the gap between them is a lean.
+   */
+  private balance3d(s: SkaterState, cam: Camera): void {
+    const ctx = this.ctx;
+    const lift = s.jump.phase === JUMP_PHASE.Air ? Math.max(0, s.jump.z) : 0;
+    const { base, com } = pendulum(s);
+    const n = perpLeft(s.heading), L = s.legLength;
+    const P = (x: number, y: number, z: number): [number, number] => cam.project(x, y, z);
+    const [bx, by] = P(base.x, base.y, lift);
+    const [cx, cy] = P(com.x, com.y, s.comZ + lift);
+    const r = L * Math.sin(s.leanEq);
+    const [ex, ey] = P(base.x + n.x * r, base.y + n.y * r, lift + L * Math.cos(s.leanEq));
+    const col = s.fallen ? "#ff4d6d" : "#d38bff";
+    ctx.strokeStyle = col; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(cx, cy); ctx.stroke();
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(cx, cy, Math.max(2.5, 0.075 * cam.px), 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,201,74,0.85)"; ctx.lineWidth = 1.4;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   private blades(s: SkaterState): void {

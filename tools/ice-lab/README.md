@@ -267,6 +267,19 @@ scheme. Its stick captions explain each scheme, so it is forced off under
 solver's own contacts, leg brightness the weight share, torso forward with the
 knee, arms swinging with the save and gold when it saturates.
 
+**The camera** (`app/camera.ts`) is a debug camera, not the game's — that is
+design-bible §4.5's Broadcast Director, in UE5. **V** / **D-pad ↓** cycles
+*north up* (the original view), *travel up* and *chase*; **+ / −**, the wheel or
+**D-pad ← →** zoom; **[ / ]** lower and raise the chase camera, 15° to 85°.
+Travel up and chase turn with the direction of **travel**, not the body, so in
+the air — velocity fixed at takeoff, body spinning — the view holds still, which
+is §4.5's never-cut rule for its reason. Chase is orthographic: the ice tilts
+away, height lifts by the cosine, and the skater stands up as a figure built on
+the solver's pendulum (base at the blade contacts, COM at `pos` and `comZ`, knee
+solved from two 0.5 m segments), with the balance lines in 3D beside it. The
+camera steps with the simulation, so a replay is framed as it was played, and it
+is locked to north up in `?playtest=1`, because the view is part of the stimulus.
+
 **Falling, and getting up.** A fallen skater slides until the tester does
 something about it. A fresh press of **A / Space** stands them up where they
 fell, facing the way they were facing, at rest — the bible's §3.4 `GetUp`, with

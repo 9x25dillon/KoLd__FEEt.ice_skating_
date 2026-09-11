@@ -8,7 +8,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { Camera, PX, VIEW, ZOOM_MAX, ZOOM_MIN } from "../app/camera.ts";
+import { Camera, PX, VIEW, ZOOM_MAX, ZOOM_MIN, CHASE_MAX, CHASE_MIN } from "../app/camera.ts";
 import type { Matrix } from "../app/camera.ts";
 import { PRESETS, SIM_DT } from "../sim/params.ts";
 import { createState } from "../sim/solver.ts";
@@ -103,4 +103,46 @@ test("zoom is multiplicative and bounded", () => {
   cam.zoomBy(-100);
   assert.equal(cam.zoom, ZOOM_MIN);
   assert.equal(cam.px, PX * ZOOM_MIN);
+});
+
+test("chase tilts the ice away and lifts what stands on it", () => {
+  const s = skater(0, 0, 5, 0);
+  const cam = new Camera();
+  cam.snap(s); cam.cycleView(); cam.cycleView();
+  assert.equal(cam.view, VIEW.Chase);
+  for (let i = 0; i < 600; i++) cam.update(s, SIM_DT);
+  assert.equal(cam.elevation, cam.chaseElevation, "the glide lands exactly; it does not creep for ever");
+  const m = cam.groundMatrix(W, H), e = cam.elevation * Math.PI / 180;
+  const [bx, by] = cam.project(s.pos.x, s.pos.y, 0);
+  const g = apply(m, s.pos.x, s.pos.y);
+  assert.ok(Math.abs(bx - g[0]) < 1e-9 && Math.abs(by - g[1]) < 1e-9, "z = 0 is the ice transform");
+  const [ux, uy] = cam.project(s.pos.x, s.pos.y, 1);
+  assert.ok(Math.abs(ux - bx) < 1e-9, "up is straight up the screen");
+  assert.ok(Math.abs(by - uy - PX * Math.cos(e)) < 1e-6, "a metre up is PX cos(elevation) pixels");
+  const [, fy] = cam.project(s.pos.x + 1, s.pos.y, 0);    // a metre ahead: travel is +x
+  assert.ok(Math.abs(by - fy - PX * Math.sin(e)) < 1e-6, "a metre ahead is foreshortened by sin(elevation)");
+  assert.ok(by > H / 2, "the skater sits low, with the ice they are heading for above");
+  assert.ok(cam.depth(s.pos.x + 1, 0) > cam.depth(s.pos.x, 0), "ahead is farther");
+});
+
+test("back to north up is the original camera again, exactly", () => {
+  const s = skater(3, 4, 2, -4);
+  const cam = new Camera();
+  cam.snap(s); cam.cycleView(); cam.cycleView();
+  for (let i = 0; i < 600; i++) cam.update(s, SIM_DT);
+  cam.cycleView();
+  assert.equal(cam.view, VIEW.NorthUp);
+  for (let i = 0; i < 1200; i++) cam.update(s, SIM_DT);
+  assert.equal(cam.elevation, 90);
+  assert.equal(cam.yaw, Math.PI / 2);
+  const want = [PX, 0, 0, -PX, W / 2 - PX * 3, H / 2 + PX * 4];
+  cam.groundMatrix(W, H).forEach((v, i) => assert.ok(Math.abs(v - want[i]) < 1e-9, `m[${i}] ${v} vs ${want[i]}`));
+});
+
+test("the chase camera stays between 15 and 85 degrees", () => {
+  const cam = new Camera();
+  cam.tiltBy(100);
+  assert.equal(cam.chaseElevation, CHASE_MAX);
+  cam.tiltBy(-100);
+  assert.equal(cam.chaseElevation, CHASE_MIN);
 });
