@@ -1,66 +1,82 @@
 # Hand-off
 
-**Last session: 2026-09-10 (sixth). Repo state: complete specification, plus a running Ice Lab with
-replay, fall recovery, three control schemes, an input panel and skater figure, and — off by default —
-jumps, jump scoring from `data/`, the Edge Ribbon and the edge tone.**
+**Last session: 2026-09-11 (eighth). Repo state: complete specification, plus a running Ice Lab with
+replay that verifies in any engine, three control schemes, a debug camera, three courses with ghost
+races, and — new today — a skater profile layer: body, blade wear and five trainable stats baked over
+a preset. The first piece of the career game.**
 
 Read this before touching anything. It covers what exists, what is decided, the conventions that
 hold the document set together, and the things most likely to trip you up.
 
 > **This line changed.** Until 2026-09-08 this file said *"zero implementation."* That is no longer
-> true: `tools/ice-lab/` is real, runs, and has 131 passing tests, including replay
-> capture/playback and a command-line verifier. The UE5 runtime has not been built.
+> true: `tools/ice-lab/` is real, runs, and has 194 passing tests, including replay
+> capture/pla## 0 · Start here (written at the close of 2026-09-11, eighth session)
+
+**Repo:** `main` at `00ec259`, pushed. This hand-off edit is the only uncommitted change of ours.
+The operator's play data has moved: it now lives in **`E_W_replays_sessions_eng_bld/`** at the repo
+root (cards, clips, params exports, event logs), untracked on purpose. Use only what is there; do not
+commit or delete it without asking. The stray `Ice Lab — KoLd__FEEt edgework.html` at the root is a
+browser "save page" of the lab, also untracked — not a source file.
+
+**Two sessions happened on 2026-09-11.** The seventh (before this one) closed all three items the
+sixth left open and then built the game layers; the eighth built the profile layer. Read the §8 log
+rows for both. In one breath, the seventh landed: edge changes counting the skater's choices rather
+than strokes (`f1cb2b4`), deterministic transcendentals so a Firefox clip verifies in Node
+(`0b4636b`, ADR-EDGE-007 done, `test/boundary.test.ts` bans raw `Math.sin`/`pow`/`**` in `sim/`),
+session card `/2` with jumps and a clip link (`87607af`), a debug camera with a chase view, the
+Figure Eight, ghost races, the edge course, the jump challenge, and the courses on a pad.
+
+**What the eighth session built — `sim/profile.ts`.** The operator's direction, in their words:
+*"skaters weight increasing or decreasing speed angle and blade edge sharpness and ice carve depth,
+skater strength parameters and stamina pool that can be leveled up through training and practice
+mini games, and professional career progression."* The profile layer is the first piece:
+
+- A `SkaterProfile` (mass, height, blade wear, five stats 0..100, XP) is **baked** by
+  `applyProfile(preset, profile)` into an ordinary `Params`. The solver never sees a profile. Fifty
+  on every stat is the reference skater and bakes to the preset **bit for bit** — tested over every
+  preset — so no recording, fixture or measurement has moved.
+- The balance is one table, `STAT_EFFECTS`, and one curve: linear below 50, diminishing returns
+  above (`t^0.75`, written as square roots because `sim/` may not call `Math.pow`), XP price
+  quadratic in the stat. `train`, `overall`, `tierOf` (club → regionals → nationals → grand prix →
+  worlds, bible §1) and `level` are the hooks the career module will call. All pure.
+- **Stamina moves nothing yet** and a test says so. The rig has no Wind/Legs pool (bible §2.8); the
+  solver's stroke has no stamina term. Filling that row is a solver change and the next physics step.
+- Mass does less than a player expects — stroke, bite and lean all scale with normal load, so it
+  cancels. It moves drag per kilogram and jump impulse (scaled by `sqrt(55 / mass)`).
+- **K** cycles four sample skaters in the lab over the loaded preset; the HUD names them.
+  Measured, `responsive` at 4 m/s: edge entry 21° / 27° / 27° at stat 0 / 50 / 100 (the top half
+  buys settling, not depth — the lean loop binds first); stroking from 1 m/s reaches
+  3.0 / 3.9 / 4.9 m/s in six seconds.
+
+**The operator's next asks, stated 2026-09-11 and not started, in their order:**
+
+1. **The carve as a feature.** Two ideas in their words: *"adding a ghost line to follow"* and
+   *"being able to use the carved lines as a performance tool."* The tracing is drawn but feeds
+   nothing back (bible §05 wants friction and bite to read it). A ghost line already half-exists:
+   `app/race.ts` re-simulates any replay beside the live run. The new part is the tracing as
+   data — a buffer the solver reads (carve depth → ice damage → glide friction, as
+   `SkateSolver.cpp` does with `Ice.GlideFriction`) and the game reads (did you hold the line).
+   Decide first whether the ground-truth line is a replay's tracing or a designed curve; both are
+   cheap once the tracing is a buffer rather than pixels.
+2. **A career module** holding training and the practice mini-games. The courses (Figure Eight,
+   edge course, jump challenge) are the mini-games already; what is missing is a `CareerState` that
+   earns XP from them and calls `train`. Keep it in `sim/` or a new `career/` that imports only
+   `sim/`, so a career is replayable like a run.
+3. **Stat balance tied to the competitive scoring.** `overall` and the tier floors are the
+   attachment points. `sim/score.ts` scores one jump from `data/`; a field of rivals needs
+   profiles → expected scores, which is a calibration to do against the tier ladder once (1) and (2)
+   exist. Not before.
+4. **Stamina pools in the solver** (bible §2.8, `SkateSolver.cpp` `UpdateStamina`/`StaminaGain`).
+   Required before the stamina stat means anything. It changes solver output only when a pool is
+   below full, but bump `REPLAY_SOLVER` anyway and re-prove the fixture.
+
+**Toolchain reminders:** `npm run typecheck` still fails (no tsc on the box). Scratch-install
+`typescript @types/node` and run `tsc --noEmit -p . --typeRoots <scratch>/node_modules/@types`
+from `tools/ice-lab/`; TypeScript 7.0.2 was clean today. The README's test count line is 194.
 
 ---
 
-## 0 · Start here (written at the close of 2026-09-10, sixth session)
-
-**Repo:** `main` at `34fecd8`, pushed, both CI workflows green, Pages redeployed. This hand-off
-edit is the only uncommitted change of ours; `edgework-*.json` at the repo root are the operator's
-play data — untracked on purpose, do not commit or delete them without asking.
-
-**What the operator is doing:** generating play sessions with the rig and handing them over as
-files **in the repo root** (`edgework-session*.json` cards, `edgework-replay-*.json` clips). **Use
-only those.** Clips in `~/Downloads` were declared "no good" — do not analyse them. A card and a
-clip only belong together if their `ticks` match; ask if they do not.
-
-**Data so far:**
-
-| | where | what it says |
-|---|---|---|
-| Session 1 card | pasted in chat; also `edgework-session.json` | 175 s, scheme A, hop mode, 8 falls, 241 strokes, 311 edge changes/min, top 4.9 m/s, no skids |
-| Session 2 card | pasted in chat | 113 s, 4 falls, 90% on an edge, top 6.7 m/s, first skids (0.2%), 297 edge changes/min |
-| `edgework-replay-4.json` | repo root, 4,742 ticks | one hop at 34.76 s off RFI (load 0.30 s, TQ 0.98, 0.43 m), landed two-foot on a straight knee (LQ 0.38), fell 1.5 s later. J was pressed three times in 0.44 s, so the jump was in hop mode and the run ended with jumps off |
-
-**The three things to do next, in order:**
-
-1. **`edgeChangesPerMinute` mostly counts strokes.** Every stroke rolls the pushing blade onto its
-   inside edge and back: two `EdgeChanged` events. Measured over 60 s: 2/min gliding, **161/min**
-   stroking every 0.75 s with no lean; the operator's 297/min was ~294 from strokes alone. Add the
-   known stand-up/landing NONE→edge transitions and the §6 metric measures stroking, not
-   exploring. Fix in `sim/session.ts` before any friendly-external (M2) data: count only a change
-   on a blade that is not pushing, and not from NONE. Test it against the two numbers above.
-2. **Firefox clips do not verify in Node.** The operator plays in Firefox 155. `replay-4` verifies
-   all 4,742 ticks **in Firefox** and diverges in Node at tick 1437, a few ticks into the first
-   non-trivial input. On a second clip, a one-ulp change to `cos(0.65)` at its first stroke
-   reproduced the recorded digest exactly. So the rig is deterministic per engine, and
-   `replay/verify.ts` and CI cannot check a Firefox recording. The fix is ADR-EDGE-007's: one
-   deterministic implementation of sin/cos/tan/atan2/asin in `sim/math.ts`, every solver
-   transcendental routed through it (several call `Math.*` directly today), `REPLAY_SOLVER` → `/4`,
-   fixture proven per §5 item 14. It is required for the C++ port anyway.
-3. **The session card knows nothing about jumps**, and the card and the clip are exported
-   separately. If jumps are to be studied, add jump counts, calls and landing quality to the card
-   (a real `edgework-session/2`), and consider one button that exports both.
-
-**Until item 2 lands, verify a Firefox clip in Firefox**, headless, against the running server
-(`node app/serve.mjs`): put a page in `build/app/` that sync-XHRs the clip, runs `ReplayPlayer`,
-and writes the result into a `<pre>`; then
-`firefox --headless --no-remote --profile $(mktemp -d) --screenshot out.png http://localhost:8123/app/check.html`
-and read the PNG. Remove the page and the clip from `build/` afterwards.
-
-**Tips the operator may need again:** J cycles off → hop → full → off, so stop at `JUMP full`;
-only the axel leaves forwards (left foot, outside edge — Q and A); land with the knee bent
-(Shift / RT) or the landing costs a fall; export the replay with its button, never by pasting.
+ing costs a fall; export the replay with its button, never by pasting.
 
 ---
 
@@ -85,7 +101,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Data files | 12 in `data/` — 5 CSV, 6 JSON, 1 README |
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
-| Implementation | `tools/ice-lab/` — 131 tests, zero dependencies, replay, jumps (off by default), scoring from `data/` |
+| Implementation | `tools/ice-lab/` — 194 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps (off by default), scoring from `data/`, skater profiles |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 
@@ -121,7 +137,7 @@ transcription rather than as discovery. **It is not the game and it is not an en
 
 ```sh
 cd tools/ice-lab
-node --test test/*.test.ts     # 131 pass, ~4 s
+node --test test/*.test.ts     # 194 pass, ~6 s
 node app/serve.mjs             # http://localhost:8123/
 ```
 
@@ -556,9 +572,10 @@ In descending order of value:
 
 ### Not in the rig, deliberately
 
-Turns and three-turns, spins, jump combinations and sequences, stamina, flow, animation,
-networking, and ice-grid feedback — tracings are drawn but do not yet feed friction or bite back into the
-solver as the bible's §05 requires. The stroke is the bible's semi-analytic push, not a leg model.
+Turns and three-turns, spins, jump combinations and sequences, stamina pools, flow, animation,
+networking, a career state, and ice-grid feedback — tracings are drawn but do not yet feed friction or
+bite back into the solver as the bible's §05 requires. The stroke is the bible's semi-analytic push,
+not a leg model. The profile layer (2026-09-11) exists but nothing moves its stats yet; see §0.
 
 ### Known gaps, all deliberate
 
@@ -588,6 +605,8 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-11 (eighth) | The skater profile layer, on the operator's direction toward a career game: `sim/profile.ts` — body, blade wear, five stats baked over a preset by `applyProfile`, one balance table and curve, XP pricing, `train`/`overall`/`tierOf`/`level`. Reference skater bakes bit-for-bit to every preset. Stamina listed and inert, recorded by a test. K cycles four samples in the lab. 194 tests, tsc 7.0.2 clean. `00ec259`. |
+| 2026-09-11 (seventh) | Closed the sixth's three items: edge changes count choices not strokes (`f1cb2b4`), deterministic sin/cos/tan/atan2/asin/log in `sim/math.ts` with a boundary test banning raw `Math.*` transcendentals and `**` in `sim/` (`0b4636b`), session card `/2` with jumps and a clip digest (`87607af`). Then the game layers: debug camera and chase view, the Figure Eight with best-run ghosts, ghost races on any course, the edge course, the jump challenge from `data/`, and all of it on a pad. Every layer reads state and never writes it, tested; all unreachable in `?playtest=1`. |
 | 2026-09-10 (sixth, after push) | Served the lab for the operator's first play sessions. Found the stroke-inflated edge-change metric (measured), the Firefox-vs-Node replay divergence (confirmed by verifying in headless Firefox), and a paste-wrapped clip (repaired losslessly in scratch). No code changed after `34fecd8`. |
 | 2026-09-10 (sixth) | Reviewed and finished an uncommitted reskin: skater figure rebuilt on the solver's contacts, new input panel, mirrored COM overlay fixed (`7f113ca`). Then, on the operator's explicit choice over pre-production §1: `sim/jump.ts` (hop + full jumps, off by default and in playtest), `sim/score.ts` from `data/`, Edge Ribbon, edge tone, toe pick and carriage inputs. Replay `/3`, fixture re-recorded with kinematics proven identical. `e` given a numeric 0.80 factor in the calls CSV. 131 tests, tsc 7.0.2 clean. |
 | 2026-09-09 (fifth) | Review of an unreviewed six-file draft against the kill-gate experiment, not just the tests. Kept and finished: fall recovery (fresh-press, in place, consumed), knee floor on strokes, C's shared rocker. Reverted: right-stick weight/rocker on A and B, for narrowing the A-vs-B contrast. Failing session test kept its assertions; only the stimulus changed. Replay contract bumped to `ice-lab-f64/2` for the new state field, fixture regenerated with kinematics proven identical. 105 tests. `fb87c52`, rebased onto PR #3. |
@@ -630,6 +649,14 @@ and the override was built with containment rather than argued. Data analysis wo
 *measure the claim in the sim, then report* — the edge-change finding is two numbers, not a theory.
 What cost time: reading files the operator had not pointed at (Downloads) before confirming which
 files were meant.
+
+The eighth session's shape: **a roadmap stated as prose became one bounded layer.** The operator
+listed six future systems in one message; the useful first move was to map each onto what
+`params.ts` already had (mass, sharpness, strokePower existed; carve depth and a career state did
+not) and recommend the cheapest layer that made every later item a matter of tuning numbers. The
+operator picked it and added three asks in the same message; the layer was built, the asks were
+written down verbatim (§0) and not started. One cost: the README's measured span was written from
+the test's *bounds* before the numbers were run, and had to be corrected — measure, then write.
 
 Two habits worth keeping:
 
