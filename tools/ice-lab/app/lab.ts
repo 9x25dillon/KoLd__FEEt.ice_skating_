@@ -7,6 +7,8 @@
 
 import { PRESETS, SIM_DT, SIM_HZ } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
+import { SAMPLE_PROFILES, applyProfile, overall, tierOf, level } from "../sim/profile.ts";
+import type { SkaterProfile } from "../sim/profile.ts";
 import { createState, step } from "../sim/solver.ts";
 import { ReplayRecorder, ReplayPlayer, parseReplay, MAX_REPLAY_BYTES } from "../sim/replay.ts";
 import { Telemetry } from "../sim/telemetry.ts";
@@ -107,6 +109,13 @@ export class Lab {
   /** Your gap at halfway, once you have reached it. */
   private splitGap: number | null = null;
   private presetIndex = Math.max(0, PRESET_NAMES.indexOf(BOOT_PRESET));
+  /**
+   * Who is skating. Baked over the preset on every preset or profile change
+   * (sim/profile.ts); the solver only ever sees the baked Params. Index 0 is
+   * the reference skater, which bakes to the preset untouched, so the lab
+   * boots exactly as it did before profiles existed.
+   */
+  private profileIndex = 0;
   private scheme: Scheme = 0;
   private schemeState = newSchemeState();
   private meter = new SessionMeter();
@@ -192,6 +201,13 @@ export class Lab {
     if (stage) stage.style.width = "100vw";
   }
 
+  private get profile(): SkaterProfile { return SAMPLE_PROFILES[this.profileIndex]; }
+
+  /** The current preset with the current skater baked over it, into the panel. */
+  private loadPreset(): void {
+    this.panel.load(applyProfile(PRESETS[PRESET_NAMES[this.presetIndex]], this.profile));
+  }
+
   private tick(): void {
     const c = this.pad.read();
     if (c.reset) this.reset();
@@ -239,7 +255,12 @@ export class Lab {
     }
     if (c.cyclePreset && !this.playtest) {
       this.presetIndex = (this.presetIndex + 1) % PRESET_NAMES.length;
-      this.panel.load(PRESETS[PRESET_NAMES[this.presetIndex]]);
+      this.loadPreset();
+    }
+    if (c.cycleProfile && !this.playtest) {
+      this.profileIndex = (this.profileIndex + 1) % SAMPLE_PROFILES.length;
+      this.loadPreset();
+      this.reset();   // a different body starts from the start line
     }
 
     // Hardware in, intent out. Which of the three schemes is doing that
@@ -457,6 +478,10 @@ export class Lab {
         + `   view ${VIEW_NAME[this.camera.view]}`
         + (this.camera.view === VIEW.Chase ? ` ${this.camera.chaseElevation}°` : "")
         + ` ${this.camera.zoom.toFixed(2)}×`,
+        this.profileIndex === 0 ? "skater reference (K for a sample skater)"
+          : `skater ${this.profile.name}   ${this.profile.massKg} kg   `
+            + `overall ${overall(this.profile).toFixed(0)}   ${tierOf(this.profile)}   `
+            + `level ${level(this.profile)}   blade ${((1 - this.profile.bladeWear) * 100).toFixed(0)}%`,
         ...recent.map((line) => `· ${line}`),
       ];
     if (this.player) {

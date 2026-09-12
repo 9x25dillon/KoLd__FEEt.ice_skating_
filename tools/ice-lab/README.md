@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 131 tests
+node --test test/*.test.ts     # 194 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -250,8 +250,8 @@ the next one**, and the entry tables above moved by 1–3° when it landed.
 ## Controls, and the three schemes
 
 Keyboard: **A/D** lean, **W/S** rocker fore-aft, **Shift** knee, **Q/E** weight,
-**Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **M** pad
-scheme. Jumps, when on: **J** cycles off / hop / full, **C** arms out, **F** toe
+**Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **K** sample
+skater, **M** pad scheme. Jumps, when on: **J** cycles off / hop / full, **C** arms out, **F** toe
 pick.
 
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
@@ -373,6 +373,45 @@ Two things B taught, both measured:
   with both feet down. Turn direction does not choose the foot — a left curve is
   an LFO *or* an RFI — so B keeps whichever foot the player chose and commits to
   it as the edge deepens.
+
+## Who is skating — the profile layer
+
+`sim/profile.ts` is the first piece of the career game, and it changes nothing
+about the solver: a `SkaterProfile` is **baked** over a preset by
+`applyProfile` into an ordinary `Params`, the way a UE5 tuning asset would be,
+and the solver never learns the numbers came from a person. Three kinds of
+thing live on a profile, moving at three speeds: the **body** (mass, height),
+the **blade** (wear since the last sharpening, which ice time grows and
+`sharpen` resets) and five **stats**, 0..100 — strength, spring, edge control,
+balance, stamina — which only training moves.
+
+The balance is in one table, `STAT_EFFECTS`, and one curve. Fifty is the
+reference skater on every axis and bakes to the preset **bit for bit**, so
+nothing recorded so far has moved. The bottom half of a stat buys back a
+handicap linearly; the top half buys a bonus with diminishing returns, so the
+90th point is worth less than the 60th. The XP price of a point rises
+quadratically, so the same curve is paid for on the way up. Strength moves
+`strokePower`; spring the jump impulse and the pull-in rate; edge control the
+angulation limit and the control latency; balance the lean damping and the
+arms' authority. **Stamina moves nothing yet** — the rig has no Wind or Legs
+pool (design bible §2.8) — and `test/profile.test.ts` records that emptiness
+rather than hiding it. Mass goes straight in and does less than a player will
+expect, because stroke, bite and lean all scale with the normal load: what it
+moves is drag per kilogram and the jump, where the same leg drive lifts more
+kilograms less high.
+
+`overall` is a weighted mean of the five, `tierOf` puts it on the bible's ladder
+(club, regionals, nationals, grand prix, worlds), `level` counts XP invested,
+and `train` spends XP on one stat without overspending or passing the cap. All
+pure, all in `sim/`, so a career state can be replayed and checked like a run.
+**K** cycles four sample skaters — reference, a club novice on dull blades, a
+nationals senior, a worlds medallist — over whatever preset is loaded, and the
+HUD names them. The measured span, `responsive` preset at 4 m/s: a stat-0
+skater enters a 21° edge from upright, the reference and a stat-100 skater
+both 27° — the top half of edge control and balance buys settling, not depth,
+because entry depth at that speed is bounded by the lean loop and not by the
+stats (§4 above). Six seconds of stroking from 1 m/s reaches 3.0 / 3.9 / 4.9
+m/s at strength 0 / 50 / 100.
 
 ## Jumps, scoring, the Edge Ribbon and the edge tone
 
@@ -625,6 +664,7 @@ sim/session.ts     the plan's §6 metrics, computed from what the rig can see
 sim/replay.ts      bounded capture, strict import, full-state checks and playback
 sim/jump.ts        load, air, land: JumpResolver.cpp, and the panel's calls
 sim/score.ts       one jump's score, from the data files: ScoreCalculator.cs
+sim/profile.ts     who is skating: body, blade wear, five stats, baked over a preset
 replay/verify.ts   command-line replay verification
 app/pad.ts         controller and keyboard: hardware, and nothing else
 app/schemes.ts     A, B and C — what an axis MEANS, as pure functions
