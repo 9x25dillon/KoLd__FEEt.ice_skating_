@@ -3,7 +3,8 @@
 // Four small functions, separated from the solver because they are the ones
 // the tests interrogate directly and the ones a tuning session actually moves.
 
-import { clamp, lerp, smoothstep, sin, cos, atan2 } from "./math.ts";
+import { clamp, lerp, smoothstep, sin, cos, atan2, v2 } from "./math.ts";
+import type { Vec2 } from "./math.ts";
 import type { Params } from "./params.ts";
 
 /**
@@ -83,4 +84,22 @@ export function skidOnsetSpeed(tilt: number, rhoEff: number, p: Params): number 
   const s = Math.abs(sin(tilt));
   if (s < 1e-4) return Infinity;
   return Math.sqrt(p.gravity * rhoEff * (p.biteC0 + p.biteC1 * s) / s);
+}
+
+/**
+ * The pull of the rink's shape along the ice, m/s^2, world frame.
+ *
+ *   h = relief (1 - (x/a)^2 - (y/b)^2),   a = -g grad h = 2 g relief (x/a^2, y/b^2)
+ *
+ * Downhill is outward on a crown and toward centre ice in a bowl. Each axis
+ * is flat beyond its boards. The slopes are small enough (a thousandth or so)
+ * that sin and tan of them are the slope itself.
+ */
+export function rinkSlopeAccel(pos: Vec2, p: Params): Vec2 {
+  const k = 2 * p.gravity * p.rinkRelief;
+  const a = p.rinkHalfLength, b = p.rinkHalfWidth;
+  return v2(
+    Math.abs(pos.x) <= a ? k * pos.x / (a * a) : 0,
+    Math.abs(pos.y) <= b ? k * pos.y / (b * b) : 0,
+  );
 }

@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 249 tests
+node --test test/*.test.ts     # 258 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -664,6 +664,30 @@ onto LBI, a lutz off clockwise back crossovers and a long LBO, an axel from back
 crossovers through an outside mohawk onto LFO — each identified by the resolver
 from how it left the ice (`test/entries.test.ts`). In the jump challenge, with the
 moves on, the panel shows the entry speed the target wants beside your own.
+
+## The rink's shape
+
+The ice is not a plane. `rinkRelief` is centre ice minus the boards, on a 60 × 30 m sheet centred on the
+origin: positive is a crown, negative a bowl, and the surface between is a paraboloid that is flat past
+the boards. **O** cycles the named shapes in `RINKS`:
+
+- **flat:** a competition sheet, and every preset
+- **public:** a +4.5 mm crown, from session skating wearing the outer ice down
+- **barn:** a −9 mm bowl, from an old thin slab settling
+
+The shapes are the operator's field observations. Their sizes are chosen, not measured (L3), to be
+barely perceivable: at the side boards, the pull is a tenth (public) or a fifth (barn) of flat-glide
+friction.
+
+Gravity along the ice is applied only along the travel, in the losses (`sim/solver.ts` §5). Across the
+travel the edge holds, and that load is under a thousandth of g. A skater standing still stays still.
+The rink is not applied in the air or through a turn's pivot. At 0 relief the solver skips the rink
+entirely.
+
+Replay contract `/7` added these three levers and nothing else. Replayed through `/6` and `/7`, the
+fixture and four operator clips (49,539 ticks, twelve falls, two jumps) matched on every state field
+and event on every tick. `test/rink.test.ts` holds the pull's direction and closed form, the paired-glide
+rule the validation cases rely on, and the bit-for-bit flat sheet. `?playtest=1` never leaves flat.
 
 ## What a session measures
 

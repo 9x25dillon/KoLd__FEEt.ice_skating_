@@ -25,7 +25,7 @@ const sticks: Controls = {
   knee: 0.45, weight: 1, push: false, brake: false,
   carriage: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
-  cycleMoves: false,
+  cycleMoves: false, cycleRink: false,
 };
 
 /** Hold a target heading with B for `secs`, reporting the error it settles to. */

@@ -91,6 +91,13 @@ const GROUPS: Array<{ title: string; note: string; sliders: Slider[] }> = [
     ],
   },
   {
+    title: "Rink",
+    note: "The ice is not a plane. Relief is centre ice minus the boards: + a crown (a public rink, worn at the edges), − a bowl (a barn on a settling slab). Flat in every preset; O cycles the named shapes. A few mm is a tenth of glide friction at the boards.",
+    sliders: [
+      { key: "rinkRelief", label: "relief (m) · + crown · − bowl", min: -0.02, max: 0.02, step: 0.0005 },
+    ],
+  },
+  {
     title: "Moves",
     note: "Off in every preset and forced off under ?playtest=1, like jumps. At 1 a push on a curve is a crossover: the outside foot pushes out, the inside foot pushes under on its outside edge, and both pushes hold the arc instead of weaving off it. L toggles it; J steps to it after full jumps.",
     sliders: [

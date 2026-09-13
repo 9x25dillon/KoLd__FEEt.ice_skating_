@@ -108,8 +108,11 @@ recovery authority, which change transient behaviour and the reachable carve env
 - **The mode switches:** `jumpMode` and `movesMode`, since an element cannot be skated with them off.
 
 A case **may not override any tuned constant.** A case that sets its own bite coefficient can be made
-to pass anything. The one exception is **air density** at a known venue. That is a property of the
-room, not a choice made in the model ([open-constants §11](open-constants.md#11--not-open-physical-or-rule-derived)). If a case genuinely needs different ice, such as an outdoor rink or a known hardness,
+to pass anything. The exceptions are properties of the venue, not choices made in the model: **air density**
+([open-constants §11](open-constants.md#11--not-open-physical-or-rule-derived)), and a **measured
+surface relief** and sheet size ([open-constants §1](open-constants.md#rink-shape)). An unmeasured
+relief is not an input. The lab's named rink shapes are L3 defaults, and no case may use them in place of
+a survey. If a case genuinely needs different ice, such as an outdoor rink or a known hardness,
 that is a constant of the model, and it belongs in `docs/open-constants.md` with a measurement plan,
 not in one case file.
 
@@ -170,6 +173,11 @@ a failure can be traced to a specific structure ([§7.3](#73--structural-failure
   ω = L<sub>ang</sub> / I, and I moves between `inertiaOpen` and `inertiaTucked` (`jump.ts`). Ballistic
   flight and conservation of angular momentum are **L0**. Treating the arms as the only lever in the air
   is **L0** in the sense that no external torque acts. The two-value inertia model is **L2**.
+- **S8 — the rink's shape.** The ice is a paraboloid, h = relief (1 − (x/a)² − (y/b)²), flat
+  beyond the boards. Gravity along it, −g∇h, is applied along the travel only (`rinkSlopeAccel`, `solver.ts`
+  §5). The pull of a slope is **L0**. The paraboloid form is **L3**. Neglecting the across-travel
+  component is **L1**: it is under a thousandth of g at any relief the range allows. Relief is 0 in every
+  preset.
 - **S7 — the turn scrape.** The speed a turn costs is μ<sub>turn</sub> g |sin α| integrated over the
   pivot (`moves.ts`). **L3**, calibrated only to project data.
 

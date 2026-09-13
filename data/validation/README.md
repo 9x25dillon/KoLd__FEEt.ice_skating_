@@ -151,6 +151,10 @@ The difference measures it.
   follows it.
 - **Competition rinks** are closest to flat.
 
+**In the solver.** `rinkRelief` (`sim/params.ts`) is this shape. A case with a measured `relief_mm`
+runs with that relief, divided by 1000, as a venue input. The lab's named shapes (`RINKS`: public
++4.5 mm, barn −9 mm) are L3 defaults for skating, never case inputs.
+
 An unsourced competing observation, **L3**, is that resurfacing can build ice *up* along the boards. That
 would push a rink toward concave. Both mechanisms can act at once, so a rink's relief is measured, not
 assumed from its type.

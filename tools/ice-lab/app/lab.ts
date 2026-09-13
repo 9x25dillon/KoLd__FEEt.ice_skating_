@@ -5,7 +5,7 @@
 // with your hands instead of a rebuild. Everything here is presentation and
 // glue; no physics is decided in this file.
 
-import { PRESETS, SIM_DT, SIM_HZ } from "../sim/params.ts";
+import { PRESETS, RINKS, SIM_DT, SIM_HZ } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import { SAMPLE_PROFILES, applyProfile, overall, tierOf, level } from "../sim/profile.ts";
 import type { SkaterProfile } from "../sim/profile.ts";
@@ -60,6 +60,7 @@ import { loadTables, scoreJump } from "../sim/score.ts";
 import type { ScoreTables, JumpScore } from "../sim/score.ts";
 
 const PRESET_NAMES = Object.keys(PRESETS);
+const RINK_NAMES = Object.keys(RINKS);
 
 /**
  * What the lab boots on — `responsive`, not `spec`.
@@ -116,6 +117,13 @@ export class Lab {
    * boots exactly as it did before profiles existed.
    */
   private profileIndex = 0;
+  /**
+   * Which rink shape is under the skater (RINKS): flat, a public rink's crown,
+   * a barn's bowl. Laid over the preset after the skater is baked, so a preset
+   * or profile change keeps the rink. Index 0 is flat, which every preset is,
+   * and ?playtest=1 never leaves it: a measured block is skated on a plane.
+   */
+  private rinkIndex = 0;
   private scheme: Scheme = 0;
   private schemeState = newSchemeState();
   private meter = new SessionMeter();
@@ -208,7 +216,10 @@ export class Lab {
 
   /** The current preset with the current skater baked over it, into the panel. */
   private loadPreset(): void {
-    this.panel.load(applyProfile(PRESETS[PRESET_NAMES[this.presetIndex]], this.profile));
+    this.panel.load({
+      ...applyProfile(PRESETS[PRESET_NAMES[this.presetIndex]], this.profile),
+      rinkRelief: RINKS[RINK_NAMES[this.rinkIndex]],
+    });
   }
 
   private tick(): void {
@@ -266,6 +277,10 @@ export class Lab {
     }
     if (c.cyclePreset && !this.playtest) {
       this.presetIndex = (this.presetIndex + 1) % PRESET_NAMES.length;
+      this.loadPreset();
+    }
+    if (c.cycleRink && !this.playtest) {
+      this.rinkIndex = (this.rinkIndex + 1) % RINK_NAMES.length;
       this.loadPreset();
     }
     if (c.cycleProfile && !this.playtest) {
@@ -489,6 +504,9 @@ export class Lab {
         + `   view ${VIEW_NAME[this.camera.view]}`
         + (this.camera.view === VIEW.Chase ? ` ${this.camera.chaseElevation}°` : "")
         + ` ${this.camera.zoom.toFixed(2)}×`,
+        `rink ${RINK_NAMES[this.rinkIndex]}`
+        + (this.params.rinkRelief === 0 ? "" : ` ${this.params.rinkRelief > 0 ? "crown" : "bowl"} ${(this.params.rinkRelief * 1000).toFixed(1)} mm`)
+        + "   (O for the next rink)",
         this.profileIndex === 0 ? "skater reference (K for a sample skater)"
           : `skater ${this.profile.name}   ${this.profile.massKg} kg   `
             + `overall ${overall(this.profile).toFixed(0)}   ${tierOf(this.profile)}   `

@@ -347,6 +347,26 @@ export interface Params {
    */
   jumpSpeedShare: number;
 
+  // ── rink ──────────────────────────────────────────────────────────────────
+  /**
+   * m: the ice at centre ice minus the ice at the side and end boards. Positive
+   * is a crown (convex), negative a bowl (concave), 0 a flat sheet — which it
+   * is in every preset, and the solver then skips the rink entirely.
+   *
+   * The shape is h = relief (1 - (x/a)^2 - (y/b)^2) inside the boards and flat
+   * beyond them, a and b the half-length and half-width, centred on the origin;
+   * the corners sit twice as far from centre height as the board midpoints.
+   * Gravity along the ice is -g grad h (sim/blade.ts `rinkSlopeAccel`).
+   *
+   * It is here because a rink is not a plane, and a glide measured on a shaped
+   * one measures the slope as much as the friction (data/validation/README.md,
+   * the venue record). Named shapes are in RINKS below. Every value is L3.
+   */
+  rinkRelief: number;
+  /** m, half the rink's length (along x) and width (along y). */
+  rinkHalfLength: number;
+  rinkHalfWidth: number;
+
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
   comHeight: number;
@@ -456,6 +476,10 @@ export const DEFAULT_PARAMS: Params = {
   inaBauerScrub: 0.13,
   jumpSpeedShare: 0.2,
 
+  rinkRelief: 0,
+  rinkHalfLength: 30,        // a 60 x 30 m sheet
+  rinkHalfWidth: 15,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -533,11 +557,39 @@ export function validate(p: Params): string[] {
     errs.push("backPushScale is a fraction of the forward push, in (0, 1]");
   if (p.crossoverLean < p.flatThreshold)
     errs.push("crossoverLean is below flatThreshold, so a push on a flat blade would count as a crossover");
+  if (Math.abs(p.rinkRelief) > 0.05)
+    errs.push("rinkRelief is over 5 cm: that is not a rink's shape, it is a hill");
+  if (p.rinkHalfLength <= 0 || p.rinkHalfWidth <= 0)
+    errs.push("rinkHalfLength and rinkHalfWidth must be positive");
   if (p.internalMax > 2.0 && p.internalRateGain <= 0)
     errs.push("internalMax above 2 with no internalRateGain: a proportional gain with no damping "
       + "makes balance worse, not easier — raise internalRateGain first");
   return errs;
 }
+
+/**
+ * Named rink shapes, as `rinkRelief` in metres. The lab cycles them (O) over
+ * whatever preset is loaded; every preset itself is flat.
+ *
+ * ALL L3, and chosen, not measured. The shapes are the operator's field
+ * observations: a public rink skated in laps near the boards wears its outer
+ * ice down and crowns; an old barn on a thin poured slab settles and bowls. The
+ * magnitudes are "barely perceivable", made concrete as the slope's pull at
+ * the side boards against flat-glide friction (muGlide g, 0.059 m/s^2 in spec):
+ *
+ *   flat     0        a competition sheet
+ *   public   +4.5 mm  a crown: 2 g relief / halfWidth = 10% of that friction
+ *   barn     -9 mm    a bowl: 20% of it, since a settling slab is not bounded
+ *                     by wear the way a crown is
+ *
+ * A measured relief (data/validation/README.md, `surface.relief_mm`) replaces
+ * any of these for the case it was measured in.
+ */
+export const RINKS: Readonly<Record<string, number>> = {
+  flat: 0,
+  public: 0.0045,
+  barn: -0.009,
+};
 
 /**
  * Damping ratio of the linearized lean loop, for the tuning panel.

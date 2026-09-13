@@ -40,7 +40,14 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       new levers at 0, the fixture and three operator clips matched on every
 //       state field and event; the fixture was re-recorded from its own inputs.
 //       /5 clips no longer load; verify one against a checkout of 8d89af2.
-export const REPLAY_SOLVER = "ice-lab-f64/6";
+//   /7  The rink's shape (rinkRelief, rinkHalfLength, rinkHalfWidth): Params
+//       gained them, SkaterState did not. rinkRelief is 0 in every preset and
+//       the solver skips the rink at 0, so replayed through /6 and /7 the
+//       fixture and four operator clips matched on every state field and
+//       event on every tick; the fixture's digests are unchanged and it was
+//       re-recorded from its own inputs only for the new keys. /6 clips no
+//       longer load; verify one against a checkout of c926f39.
+export const REPLAY_SOLVER = "ice-lab-f64/7";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
@@ -141,7 +148,11 @@ function params(value: unknown, path: string): Params {
   const obj = object(value, path, Object.keys(DEFAULT_PARAMS));
   // Keep tunings the panel warns about: reproducing a BAD tuning is a reason
   // to record it. No substitution of current defaults or assist presets.
-  for (const key of Object.keys(DEFAULT_PARAMS)) number(obj[key], `${path}.${key}`, 0, 1e6);
+  for (const key of Object.keys(DEFAULT_PARAMS)) {
+    if (key !== "rinkRelief") number(obj[key], `${path}.${key}`, 0, 1e6);
+  }
+  // The one signed lever: a bowl is negative. Bounded as validate() bounds it.
+  number(obj.rinkRelief, `${path}.rinkRelief`, -0.05, 0.05);
   for (const key of ["mass", "gravity", "comHeight", "rocker", "rockerToeFraction", "minSpeedForCurv"])
     number(obj[key], `${path}.${key}`, 1e-6, 1e6);
   for (const key of ["maxLean", "maxTilt", "fallLean"])

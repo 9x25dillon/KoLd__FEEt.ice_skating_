@@ -38,8 +38,8 @@ not fidelity, and the difference is the whole of the next phase.
   from `data/` — and the moves (crossovers, the three-turn and mohawk, twizzles, spins, the Ina
   Bauer, jumps from their entries) are in, and **off by default**, each behind its own switch.
 - **Replay.** Capture a run, verify it headlessly in another JavaScript engine, and get the first
-  tick where two runs diverge. The replay contract is `ice-lab-f64/6`.
-- **249 tests** (as of 2026-09-13), all passing.
+  tick where two runs diverge. The replay contract is `ice-lab-f64/7`.
+- **258 tests** (as of 2026-09-13), all passing.
 - **A public build** at **<https://9x25dillon.github.io/KoLd__FEEt.ice_skating_/>**, deployed by
   [`pages.yml`](.github/workflows/pages.yml) on every push to `main` that touches the instrument.
   The tests gate the deploy.
@@ -49,6 +49,8 @@ not fidelity, and the difference is the whole of the next phase.
 - **A native foundation**, [`tools/ice-lab/native/`](tools/ice-lab/native/README.md): C++17 wire
   types, math and serialization, checked byte for byte against a pinned `/5` oracle. It is
   **not** a solver. There is no native simulation and no Unreal project.
+- **Rink shape.** The ice can be a public rink's slight crown or an old barn's slight bowl, instead of a
+  flat sheet (**O** in the lab). The shapes are L3 and flat in every preset.
 - **A session collector**, `app/collect.mjs`, with a [runbook](tools/ice-lab/deploy/README.md) for
   putting it on a box. It stores numbers about a simulation and nothing about a person.
 
@@ -131,7 +133,7 @@ tools/ice-lab/             The current work — see its README
   sim/                     The solver: pure, deterministic, written to be transcribed to C++
   app/                     The browser rig, build, local server and session collector
   replay/                  Headless replay verification
-  test/                    249 tests
+  test/                    258 tests
   native/                  C++17 wire, math and serialization foundation — not a solver
   deploy/                  systemd unit, Caddyfile and runbook for the collector
 docs/

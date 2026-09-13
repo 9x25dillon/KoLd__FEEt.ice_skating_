@@ -132,6 +132,8 @@ export interface Controls {
   cycleProfile: boolean;
   /** The moves on or off (movesMode): L. The pad reaches them through D-pad up. Ignored in playtest. */
   cycleMoves: boolean;
+  /** Next rink shape — flat, public (a crown), barn (a bowl): O. Keyboard only. Ignored in playtest. */
+  cycleRink: boolean;
 }
 
 const NOTHING: Controls = {
@@ -140,7 +142,7 @@ const NOTHING: Controls = {
   knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
   cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
-  cycleMoves: false,
+  cycleMoves: false, cycleRink: false,
 };
 
 /**
@@ -297,6 +299,7 @@ export class Pad {
     if (this.pressed("h")) out.cycleGhost = true;
     if (this.pressed("k")) out.cycleProfile = true;
     if (this.pressed("l")) out.cycleMoves = true;
+    if (this.pressed("o")) out.cycleRink = true;
     for (let n = 1; n <= 6; n++) if (this.pressed(String(n))) out.pickJump = n - 1;
 
     this.prevKeys = new Set(this.keys);

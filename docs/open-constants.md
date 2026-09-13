@@ -122,6 +122,25 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
     tests it directly.
   - Source: the engineering package
 
+### Rink shape
+
+- **`rinkRelief`** — centre ice minus the boards: + a crown (convex), − a bowl (concave)
+  - Value: `0` in every preset. The lab's named shapes (`RINKS`): public `+0.0045` m, barn `−0.009` m.
+  - Used: `blade.ts` `rinkSlopeAccel`; `solver.ts` `step` §5, along the travel only, skipped at 0
+  - Level: **L3**. The shapes are the owner's field observations. The magnitudes were chosen as "barely
+    perceivable": the pull at the side boards is 10% (public) and 20% (barn) of flat-glide friction.
+  - Range: ±0.05 m (`validate`, `parseReplay`)
+  - Fixed by: a surface survey of a named rink (laser level, water level, or string line), and paired
+    opposite-direction glide cases on it. A **measured** relief is a venue input to its case, like air
+    density ([gate §3](fidelity-gate.md#3--the-configuration-under-test)), not a tuning.
+
+- **`rinkHalfLength`**, **`rinkHalfWidth`** — the sheet, centred on the origin
+  - Value: `30`, `15` m (a 60 × 30 m sheet)
+  - Used: `blade.ts` `rinkSlopeAccel`. Inert while `rinkRelief` is 0.
+  - Level: L1 as a sheet size. The paraboloid shape between the boards is **L3**.
+  - Range: > 0
+  - Fixed by: the venue's dimensions, as a case input
+
 ---
 
 ## 2 · Air and body
