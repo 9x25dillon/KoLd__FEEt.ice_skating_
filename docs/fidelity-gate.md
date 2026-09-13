@@ -103,7 +103,8 @@ recovery authority, which change transient behaviour and the reachable carve env
 - **The mode switches:** `jumpMode` and `movesMode`, since an element cannot be skated with them off.
 
 A case **may not override any tuned constant.** A case that sets its own bite coefficient can be made
-to pass anything. If a case genuinely needs different ice, such as an outdoor rink or a known hardness,
+to pass anything. The one exception is **air density** at a known venue. That is a property of the
+room, not a choice made in the model ([open-constants §11](open-constants.md#11--not-open-physical-or-rule-derived)). If a case genuinely needs different ice, such as an outdoor rink or a known hardness,
 that is a constant of the model, and it belongs in `docs/open-constants.md` with a measurement plan,
 not in one case file.
 
@@ -169,7 +170,7 @@ a failure can be traced to a specific structure ([§7.3](#73--structural-failure
 
 ### 4.3 · The observable classes
 
-Each case names exactly one observable. There are six classes.
+Each case names exactly one observable. There are seven classes.
 
 #### O1 · Carve relation
 
@@ -201,6 +202,7 @@ they measured, and convert with r<sub>c</sub> = r<sub>b</sub> − L sin φ, whic
 | --- | --- | --- | --- |
 | `turn_entry_angle_deg`, `turn_exit_angle_deg` | the tracing tangent's angle to the line through the cusp, 0.5 m either side | tracing footage, or the ice itself photographed after the turn | three-turn, mohawk: modelled |
 | `turn_speed_loss_ms` | v before minus v after, at 0.5 s either side of the cusp | footage timing | three-turn, mohawk: modelled |
+| `twizzle_rate_rps` | revolutions per second over whole revolutions of a travelling twizzle, arms in | frame count | modelled |
 | — | rocker, counter, bracket, choctaw | — | **unmodelled** |
 
 #### O4 · Speed decay
@@ -209,6 +211,12 @@ they measured, and convert with r<sub>c</sub> = r<sub>b</sub> − L sin φ, whic
 | --- | --- | --- | --- |
 | `glide_decel_ms2` | −dv/dt on a held edge, no push, over a steady window | glide test: timing gates or footage over marked distances | modelled |
 | `glide_loss_per_m` | −dv/dx over the same window | the same | modelled |
+| `ina_bauer_speed_loss_ms` | v at entry minus v 1.0 s later, no push | footage timing over marked distances | modelled |
+
+**Glide decay needs more than one speed.** Blade friction gives a deceleration independent of
+speed. Air drag gives one proportional to v². At the model's current values the two are about
+equal near 3 m/s, which is **L0** arithmetic on the constants in `docs/open-constants.md`. A single
+glide test cannot separate them. Cases at low and high speed on the same ice can.
 
 The ice state is recorded with the case wherever it is known: indoor or outdoor, temperature,
 time since resurfacing. Friction depends on it, and the model's single `iceHardness` cannot yet
@@ -235,11 +243,24 @@ information-dense external evidence the corpus can hold.
 | --- | --- | --- | --- |
 | `pull_in_ratio` | ω<sub>tucked</sub> / ω<sub>open</sub> at constant angular momentum, in the air or in a centred spin | revolution period from frame counts before and after the pull-in | modelled |
 | `spin_rate_rps` | revolutions per second in a named position | frame count over whole revolutions | modelled |
+| `spin_decay_per_s` | fractional loss of ω per second in a centred spin, no change of position | frame counts over successive revolutions | modelled |
 
 With angular momentum conserved, the ratio of angular velocities equals the inverse ratio of
 inertias. That is **L0**, and it is why a camera can measure inertia. In a spin, blade friction
 drains angular momentum (`spinDecay`), so the measurement window has to be short relative to the
 decay, or the decay has to be corrected for.
+
+#### O7 · Propulsion
+
+| Observable | Definition | Real measurement | Model status |
+| --- | --- | --- | --- |
+| `stroke_gain_ms` | v after minus v before one stroke, at a given starting speed | footage timing over marked distances | modelled |
+| `crossover_gain_ms` | the same for one crossover on a curve, forward or back | the same | modelled |
+| `propulsion_reachable` | whether some input within the model's limits produces the measured gain | the same | modelled, one-sided |
+
+How hard a real skater pushed is not an input the model has, just as with jumps. So a push measured on
+one skater is tested **one-sided** with `propulsion_reachable`. The two-sided gains are for literature
+cases that report the effort alongside the result.
 
 ### 4.4 · Steady windows
 
@@ -276,14 +297,17 @@ except in a commit that changes nothing else and cites a reason in the source ([
 | `trace_radius_m`, `trace_lobe_radius_m` | ±10% of expected | L2 | A skater watching their own figure would notice a lobe that is visibly larger or smaller. 10% is a starting claim, not a perception threshold. |
 | `turn_entry_angle_deg`, `turn_exit_angle_deg` | ±10° | L2 | A starting claim. Measuring angles from tracings is itself uncertain at this scale. |
 | `turn_speed_loss_ms` | ±0.15 m/s | L2 | About a third of the modelled three-turn loss. Tighter than that, the band would be testing the calibration data rather than the ice. |
-| `glide_decel_ms2`, `glide_loss_per_m` | ±25% of expected | L2 | Rink friction varies with temperature, resurfacing and blade condition, none of which the model represents separately yet. |
+| `twizzle_rate_rps` | ±15% of expected | L2 | Arms-in rate is a single constant in the model. The band is a range claim. |
+| `glide_decel_ms2`, `glide_loss_per_m`, `ina_bauer_speed_loss_ms` | ±25% of expected | L2 | Rink friction varies with temperature, resurfacing and blade condition, none of which the model represents separately yet. |
 | `air_time_s` | ±0.05 s | L2 | Close to one frame at each end of a 50 fps interval. |
 | `air_time_height_residual_m` | ±0.05 m | L1 | Allows for the centre of mass landing lower than it took off, which the ballistic relation does not assume. |
 | `revolutions_turned` | ±0.125 rev | L1 | The smallest rotation boundary in `data/calls-and-deductions.csv`. A larger error could change the call. That file is itself pending verification against current ISU publications ([`data/README.md`](../data/README.md)). |
 | `rotation_call` | exact | L1 | Categorical. See [§5.2](#52--categorical-and-one-sided-cases). |
 | `pull_in_ratio` | ±15% of expected | L2 | Arms and free leg are not a two-value inertia, so the claim is about range, not trajectory. |
 | `spin_rate_rps` | ±15% of expected | L2 | The same. |
-| `carve_held`, `jump_reachable` | — | — | One-sided. See [§5.2](#52--categorical-and-one-sided-cases). |
+| `spin_decay_per_s` | ±30% of expected | L2 | A slow exponential measured over few revolutions has a wide spread, and the model's decay is one constant. |
+| `stroke_gain_ms`, `crossover_gain_ms` | ±20% of expected | L2 | A push is the least constrained thing in the model: a semi-analytic impulse, not a leg. |
+| `carve_held`, `jump_reachable`, `propulsion_reachable` | — | — | One-sided. See [§5.2](#52--categorical-and-one-sided-cases). |
 
 All of these are hypotheses. A band tightens only when cases show the model consistently within a
 smaller one, and the tighter band then gets its own justification in this table.
@@ -295,7 +319,7 @@ boundaries, then compares it with the protocol. If the shortfall, including its 
 boundary, **either neighbouring call passes**. A protocol call cannot be more precise than the
 footage measurement it is paired with.
 
-**One-sided.** `carve_held` and `jump_reachable` pass when the model can do what the skater did, with
+**One-sided.** `carve_held`, `jump_reachable` and `propulsion_reachable` pass when the model can do what the skater did, with
 u<sub>m</sub> applied in the skater's favour. They fail when no input within the model's limits achieves
 it. The case supplies the input script that attempts it, so a failing case is reproducible by
 anyone.
@@ -331,9 +355,9 @@ claim, so it carries no confidence level. It changes only by a recorded decision
 [open-decisions.md](open-decisions.md).
 
 1. **No failing sourced case**, as in [§6.2](#62--no-regression).
-2. **Coverage.** Each of O1, O2, O4, O5 and O6 has **at least three passing external cases** —
+2. **Coverage.** Each of O1, O2, O4, O5, O6 and O7 has **at least three passing external cases** —
    literature, protocol or footage, not derived — drawn from **at least two independent sources**.
-   O3 needs the same for the three-turn and the mohawk. Unmodelled turns do not block it.
+   O3 needs the same for the three-turn and the mohawk. Twizzles and unmodelled turns do not block it.
 3. **Clean evidence.** No case counted in item 2 is marked `calibration`.
 4. **Reproduced.** CI has produced the report from a clean checkout, and it is byte-identical to the
    committed `docs/fidelity-report.md`.
@@ -404,7 +428,7 @@ Structures most exposed today, in order:
 
 | Artefact | Does | Status |
 | --- | --- | --- |
-| `docs/open-constants.md` | Every tuned constant: value, use, level, plausible range, the measurement that fixes it | not written |
+| [`docs/open-constants.md`](open-constants.md) | Every tuned constant: value, use, level, plausible range, the measurement that fixes it | written |
 | `data/validation/README.md` | Case schema, including `role` (validation or calibration), one-sided and categorical comparisons, u<sub>m</sub>, radius convention and ice state | not written |
 | `data/validation/cases/` | Derived cases for S1 and S6, and stubs for everything needing measurement | not written |
 | `tools/ice-lab/validate.mjs` | Implements §3–§6, zero dependencies, `--json` | not written |

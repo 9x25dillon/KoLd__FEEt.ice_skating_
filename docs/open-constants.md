@@ -1,0 +1,633 @@
+# Open constants
+
+**Every number in Ice Lab's model that was chosen rather than measured.**
+
+This is the register [fidelity-gate.md](fidelity-gate.md) refers to. A constant listed here can be
+moved to fix a failing case, but only under the rules in
+[§7.2](fidelity-gate.md#72--permitted-moves). A constant not listed here cannot be moved that way at
+all. Every entry has six fields:
+
+- **Value.** `spec`, and `responsive` where they differ. `responsive` is the preset under test
+  ([gate §3](fidelity-gate.md#3--the-configuration-under-test)). `assisted` is not under test and is
+  not listed.
+- **Used.** File and function in `tools/ice-lab/sim/`.
+- **Level.** L0–L3, as defined in [gate §2.1](fidelity-gate.md#21--confidence-levels). An
+  unsourced number is **L2** by default. **L3** is used only where the code itself calls the form a
+  caricature or a balance lever.
+- **Range.** The plausible range it may move within. **"None recorded"** means the constant may not
+  move under the gate until a range is written here, with its basis, in a commit of its own.
+- **Fixed by.** The observable from [gate §4.3](fidelity-gate.md#43--the-observable-classes), and the
+  measurement that would turn the number into evidence.
+- **Source.** Where the current value came from, where that is known. A value taken from the design
+  bible, `src/reference/`, the engineering package or `data/` is **not** a measurement
+  ([gate §2.3](fidelity-gate.md#23--what-is-not-evidence)). Recording where it came from is not
+  provenance.
+
+> **Nothing here has been validated.** Every level below is L2 or L3, except the handful in
+> [§11](#11--not-open-physical-or-rule-derived) that come from physics or the rules. A level goes up
+> only with the case ids that justify it, in a commit that changes nothing else.
+
+Scope: the model in `tools/ice-lab/sim/`. The rig in `app/` (camera, drawing, audio, gamepad schemes)
+is left out, because cases drive the solver with `SkatingInput` directly and never go through it.
+Career, scoring and session constants are listed by name in [§12](#12--outside-the-gate) so their
+absence is deliberate, not an oversight.
+
+---
+
+## 1 · Blade and ice
+
+These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-solver-relates-these-read-from-the-code).
+
+- **`rocker`** — the longitudinal rocker radius
+  - Value: `2.05` m
+  - Used: `blade.ts` `effectiveRocker`; `moves.ts` `beginPivot`
+  - Level: L2
+  - Range: 1.8–2.4 m, the design bible's span. That is a specification, not evidence, and is recorded
+    only so the constant is not frozen.
+  - Fixed by: a rocker gauge or profile template against real figure blades, at several points
+    along the blade. Indirectly, `trace_radius_m` against `carve_lean_deg` at known speed.
+  - Source: the bible and `SkateSolver.cpp` (the engineering package said 2.2 or 2.4)
+
+- **`rockerToeFraction`** — the effective rocker at the toe, as a share of `rocker`
+  - Value: `0.55`
+  - Used: `blade.ts` `effectiveRocker`
+  - Level: L2
+  - Range: (0, 1] by definition. No physical range recorded.
+  - Fixed by: blade profile measurement near the toe; turn cusp geometry (`turn_entry_angle_deg`,
+    `turn_exit_angle_deg`)
+  - Source: `SkateSolver.cpp`
+
+- **`rockerToeOnset`** — where along the blade, 0 heel to 1 toe, the tighter front rocker begins
+  - Value: `0.55`
+  - Used: `blade.ts` `effectiveRocker`
+  - Level: L2
+  - Range: (0, 1) by definition. No physical range recorded.
+  - Fixed by: blade profile measurement
+
+- **`sharpness`**, **`iceHardness`** — multipliers on bite capacity
+  - Value: `1.0`, `1.0`. These are the reference: they define the unit rather than measuring it.
+  - Used: `blade.ts` `biteCapacity`. `sharpness` is also baked from blade wear by `profile.ts`
+    `applyProfile`.
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: `carve_held` cases on known fresh versus worn blades, and on hard versus soft ice. A
+    reference value of 1.0 is only meaningful once a case pins what 1.0 is.
+
+- **`muGlide`** — longitudinal blade friction on a flat blade
+  - Value: `0.006`
+  - Used: `blade.ts` `muLong`; `moves.ts` `pivotStep`; `solver.ts` `step` §5
+  - Level: L2
+  - Range: none recorded. A published measurement of skate-on-ice friction should be found and cited
+    first. Speed-skating work exists, but on a different blade, which would make the transfer L1.
+  - Fixed by: `glide_decel_ms2` at low speed (below about 3 m/s, where drag is the smaller term), on
+    ice with a recorded temperature and time since resurfacing
+  - Note: this gives 0.059 m/s² of deceleration on a flat blade. Air drag gives the same at about
+    3.2 m/s ([gate O4](fidelity-gate.md#o4--speed-decay)).
+
+- **`muEdgeGain`** — extra friction per (1 − cos θ): what a deep edge costs in speed
+  - Value: `0.6`
+  - Used: `blade.ts` `muLong`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: `glide_decel_ms2` on a held deep edge against a flat at the same speed, on the same ice
+
+- **`muSkid`** — friction once the edge has let go
+  - Value: `0.35`
+  - Used: `blade.ts` `muLong`; `solver.ts` `step` (skid scrub, brake)
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: stopping distance from a known speed in a hockey stop or snowplough (footage timing)
+  - Source: the bible and `SkateSolver.cpp` (the engineering package said 0.03)
+
+- **`biteC0`** — lateral holding capacity of a flat blade, per unit load
+  - Value: `0.08`
+  - Used: `blade.ts` `biteCapacity`, `skidOnsetSpeed`
+  - Level: **L3**. The bite law's form is described in the code as a caricature of an interlock.
+  - Range: none recorded
+  - Fixed by: `carve_held` at shallow edges
+  - Source: the engineering package
+
+- **`biteC1`** — holding capacity per sin|θ|
+  - Value: `3.5`
+  - Used: `blade.ts` `biteCapacity`, `skidOnsetSpeed`
+  - Level: **L3**. Above about 1 this is not Coulomb friction; the code models it as the edge
+    pushing against the wall of its groove.
+  - Range: none recorded
+  - Fixed by: `carve_held` on deep edges at high speed. With `rocker`, it predicts that no deep edge
+    skids below about 8.4 m/s. A clean held edge faster than that, or a skid slower on good ice,
+    tests it directly.
+  - Source: the engineering package
+
+---
+
+## 2 · Air and body
+
+- **`cdA`** — drag area, upright
+  - Value: `0.495` m² for the reference skater. The profile scales it by √(mass × height)
+    relative to the reference.
+  - Used: `solver.ts` `step` §5; `jump.ts` `jumpAir`; `moves.ts` `pivotStep`; `profile.ts`
+    `applyProfile`
+  - Level: L2. The √(mass × height) scaling is also L2.
+  - Range: none recorded
+  - Fixed by: `glide_decel_ms2` at high speed (above about 6 m/s, where drag dominates), with
+    `muGlide` fixed first from low-speed cases
+  - Source: the bible (the engineering package said 0.45)
+
+- **`mass`** — the reference skater's mass
+  - Value: `55.0` kg (`REFERENCE_MASS` in `profile.ts`)
+  - Used: throughout `solver.ts`, `jump.ts` and `moves.ts`
+  - Level: L2 as a reference. A case supplies the real skater's mass, so this is not moved to fix a case.
+  - Range: 30–120 kg, the profile validator's span
+  - Fixed by: not by a case. It is an input.
+
+- **`comHeight`** — centre-of-mass height standing, for the reference height
+  - Value: `0.95` m at `REFERENCE_HEIGHT` `1.65` m, scaled linearly with height by the profile
+  - Used: `solver.ts` `createState`, `step` (pendulum length); `profile.ts` `applyProfile`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: anthropometric segment tables, plus boot and blade height. It then enters `carve_lean_deg`
+    through r<sub>b</sub> = r<sub>c</sub> + L sin φ.
+
+- **`stanceHalfWidth`** — half the distance between the feet, two-footed
+  - Value: `0.12` m
+  - Used: `solver.ts` `step`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: footage of two-footed glides. It matters for stance authority, not for any §4 observable
+    directly.
+
+- **Jump impulse mass scaling** — `jumpImpulse` × √(55 / mass), constant leg drive per kilogram
+  - Used: `profile.ts` `applyProfile`
+  - Level: L2
+  - Fixed by: `jump_reachable` across skaters of different mass
+
+---
+
+## 3 · Balance and control
+
+**This is a model of the skater's control, not of the ice.** None of these constants has a camera
+observable of its own. They are constrained only indirectly: whether a steady window is reached
+([gate §4.4](fidelity-gate.md#44--steady-windows)), how much of the carve envelope is reachable
+(`carve_held`), and whether an element can be completed at all (`jump_reachable`,
+`propulsion_reachable`). A controller constant should be the **last** thing moved to fix a case,
+because it can hide a physics error behind a skater who compensates.
+
+- **`maxLean`**, **`maxTilt`** — body lean and blade tilt limits
+  - Value: `1.13`, `1.13` rad (about 65°)
+  - Used: `solver.ts` `step`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: the deepest lean in footage of a held edge (`carve_lean_deg` on the most extreme cases)
+  - Source: the bible, "where the blade washes out" (the engineering package said 1.05 or 0.96)
+
+- **`balanceKp`** — lean controller proportional gain
+  - Value: `39.0`
+  - Used: `solver.ts` `step` §2
+  - Level: L2
+  - Range: must exceed g, or the lean loop is unstable (`validate`, L0 control theory). No upper bound
+    recorded.
+  - Fixed by: indirect only
+
+- **`balanceKd`** — lean controller rate gain
+  - Value: `8.0` spec, **`16.0` responsive**
+  - Used: `solver.ts` `step` §2
+  - Level: L2
+  - Range: > 0. None recorded above that.
+  - Fixed by: indirect only. The time to settle onto a commanded edge is visible on footage but mixes
+    skill and physics.
+
+- **`angulationLimit`** — how far blade tilt may differ from body lean
+  - Value: `0.35` rad spec, **`0.70` rad responsive**
+  - Used: `solver.ts` `step` §2
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: `angulation_deg` (L3 measurement). Indirectly, `carve_held` at low speed and tight
+    radius, where the rigid rocker demands more tilt than lean.
+
+- **`controlLatency`** — first-order lag on the tilt command
+  - Value: `0.12` s
+  - Used: `solver.ts` `step` §2
+  - Level: L2
+  - Range: none recorded. Human reaction and neuromuscular delay literature would bound it.
+  - Fixed by: indirect only
+
+- **`internalGain`**, **`internalRateGain`**, **`internalWashout`**, **`internalMax`** — balance
+  authority from the arms and free leg
+  - Value: `6.0`, `0.0` spec / **`2.0` responsive**, `0.0` spec / **`1.5` s responsive**, `1.5` m/s²
+  - Used: `solver.ts` `step`
+  - Level: L2
+  - Range: `internalRateGain` ≥ 0, `internalWashout` ≥ 0. `internalMax` above 2 needs a rate term
+    (`validate`, measured on this rig). No physical range recorded.
+  - Fixed by: indirect only
+
+- **`copGain`**, **`copRateGain`**, **`copCommandShare`** — two-footed stance authority
+  - Value: `12.0`, `0.0` spec / **`2.0` responsive**, `0.0` spec / **`1.0` responsive**
+  - Used: `solver.ts` `step`
+  - Level: L2
+  - Range: `copRateGain` ≥ 0; `copCommandShare` in [0, 1] by definition
+  - Fixed by: indirect only
+
+- **`splitTiltMax`** — tilt difference between the blades at full split deflection
+  - Value: `0.35` rad
+  - Used: `solver.ts` `step`. Inert unless that input axis is driven.
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: not currently exposed to any observable
+
+---
+
+## 4 · Legs and stroke
+
+Structure: the bible's semi-analytic push, not a leg model. Observable class O7.
+
+- **`strokePower`** — peak push acceleration at full knee
+  - Value: `3.2` m/s²
+  - Used: `solver.ts` `step` §5b
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: `propulsion_reachable`, and `stroke_gain_ms` from literature that reports effort
+
+- **`strokeBeta`** — how far the pushing blade is splayed from the line of travel
+  - Value: `0.65` rad (about 37°)
+  - Used: `solver.ts` `step` §5b
+  - Level: L2
+  - Range: (0, π/2) by definition
+  - Fixed by: blade angle to the path during a push, from overhead footage
+
+- **`strokeDuration`** — length of one push
+  - Value: `0.30` s
+  - Used: `solver.ts` `step`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: frame count of blade contact during a push
+
+- **`strokeEdge`** — the inside edge the pushing blade rolls onto
+  - Value: `0.35` rad
+  - Used: `solver.ts` `step`
+  - Level: L2
+  - Range: must exceed `flatThreshold` (`validate`)
+  - Fixed by: close footage of the pushing boot
+
+- **`backPushScale`** — a backward push as a share of the same push forward
+  - Value: `0.91`
+  - Used: `solver.ts` `step`
+  - Level: L2
+  - Range: (0, 1] per `validate`. That bound encodes a design claim and is not evidence.
+  - Fixed by: `crossover_gain_ms` forward against back, on the same skater
+  - Source: 1.05 / 1.15 from `data/motion-primitives.json`
+
+- **`crossoverLean`** — tilt command above which a push counts as a crossover
+  - Value: `0.21` rad (12°, the shallow-edge boundary)
+  - Used: `solver.ts` `step`
+  - Level: L2
+  - Range: must be at least `flatThreshold` (`validate`)
+  - Fixed by: not a physical quantity. It classifies intent.
+
+- **`kneeRate`**, **`kneeSpring`**, **`kneeDamping`**, **`maxKneeCompression`** — the leg
+  - Value: `3.5` /s, `120.0`, `18.0`, `0.25` (share of `comHeight`)
+  - Used: `solver.ts` `step` §1; `jump.ts` `jumpAir` (`kneeRate`)
+  - Level: L2
+  - Range: `kneeRate` > 0. None recorded otherwise.
+  - Fixed by: `maxKneeCompression` from knee bend depth in footage, as a drop in hip height. The
+    others are indirect.
+
+- **Neutral stance knee** — knee input the rig rests at, and the floor during a stroke
+  - Value: `0.35`
+  - Used: `solver.ts` `step`; `jump.ts` (default knee)
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: indirect only
+
+---
+
+## 5 · Falls
+
+- **`fallLean`**, **`fallError`**, **`fallErrorTime`**, **`fallAuthorityCredit`**
+  - Value: `1.13` rad, `0.35` rad, `0.35` s, `0.0` spec / **`1.0` responsive**
+  - Used: `solver.ts` `step` §9; `jump.ts` `land` (`fallError`)
+  - Level: L2
+  - Range: `fallAuthorityCredit` in [0, 1] by definition. None recorded otherwise.
+  - Fixed by: no §4 observable. A fall invalidates a steady window and fails `carve_held`, so these
+    matter only at the edge of the envelope.
+
+---
+
+## 6 · Jumps: flight and inertia
+
+Structure S6. Observable classes O5 and O6.
+
+- **`jumpImpulse`** — vertical takeoff velocity at a perfect takeoff
+  - Value: `2.94` m/s. That gives 0.60 s of air and 0.44 m of rise (L0 ballistics).
+  - Used: `jump.ts` `jumpGround`; `profile.ts` `applyProfile`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: `jump_reachable`. Air time from frame counts gives v<sub>z</sub> = g t / 2 directly.
+  - Source: the bible, "a clean triple"
+
+- **`jumpSpeedShare`** — share of the lift that comes from approach speed, with moves on
+  - Value: `0.2`
+  - Used: `jump.ts` `jumpGround`
+  - Level: **L3**. The code labels it a balance lever.
+  - Range: [0, 1] by definition
+  - Fixed by: `jump_reachable` against entry speed, across footage of the same jump at different speeds
+
+- **`ENTRY_SPEED`** — per jump T, S, Lo, F, Lz, A: the speed at which the approach contributes
+  exactly its share
+  - Value: `6.8, 6.6, 6.4, 7.0, 7.5, 7.8` m/s
+  - Used: `jump.ts` `jumpGround`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: entry speed measured on footage of clean triples
+  - Source: `data/entry-templates.json`, transcribed and tested against it
+
+- **`jumpWhip`**, **`jumpRotBias`** — rotation from a full carriage whip, and the share of entry
+  yaw rate that becomes rotation
+  - Value: `9.5` rad/s, `1.0`
+  - Used: `jump.ts` `jumpGround`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: `jump_reachable`: the revolutions a clean jump turns, given its measured air time
+  - Source: `JumpResolver.cpp` (`jumpWhip`)
+
+- **`inertiaOpen`**, **`inertiaTucked`** — moment of inertia about the vertical, arms open and drawn in
+  - Value: `4.0`, `0.95` kg·m², a pull-in ratio of 4.2
+  - Used: `jump.ts` `newJump`, `jumpGround`, `jumpAir`, `land`; `moves.ts` `spinStart`, `spinTick`
+  - Level: L2. Their ratio is what a camera sees (L0, [gate O6](fidelity-gate.md#o6--moment-of-inertia)).
+  - Range: `inertiaTucked` in (0, `inertiaOpen`] by definition. None recorded otherwise.
+  - Fixed by: `pull_in_ratio` from frame counts. Absolute values need anthropometric segment
+    modelling or literature, because a camera only gives the ratio.
+  - Source: the bible
+
+- **`inertiaPullRate`** — rate the arms change inertia
+  - Value: `11.0` kg·m²/s
+  - Used: `jump.ts` `jumpAir`; `moves.ts` `spinTick`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: frames from takeoff to fully tucked, on footage
+  - Source: `JumpResolver.cpp`
+
+- **`toeWindow`** — time either side of the release in which a toe strike counts as the pick
+  - Value: `0.09` s
+  - Used: `jump.ts` `jumpGround`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: frames between the pick and the release on footage of toe jumps
+  - Source: the bible
+
+- **`jumpLoadKnee`**, **`jumpReleaseKnee`**, **`jumpLoadMax`** — what counts as a load and a release
+  - Value: `0.7`, `0.45`, `1.0` s
+  - Used: `jump.ts` `jumpGround`
+  - Level: L2
+  - Range: release below load (`validate`)
+  - Fixed by: not physical. These classify an input gesture.
+
+- **`landingShock`** — lean rate a zero-quality landing kicks into the body
+  - Value: `1.5` rad/s
+  - Used: `jump.ts` `land`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: no §4 observable
+
+---
+
+## 7 · Jump quality shaping
+
+Hard-coded in `jump.ts`, carried from `JumpResolver.cpp`. They shape quality, which then scales lift
+and rotation, so they reach `air_time_s` and `revolutions_turned`. **All L3.** The code notes they
+shape quality rather than decide a call. None has a range recorded.
+
+- **`IDEAL_LOAD`** — the best load time: `0.30` s
+- **`PRE_ROTATION_RATE`** — pre-rotation penalty accrued past 1.6 × the ideal load: `2.2` /s. The
+  1.6 factor is also a constant.
+- **`PEAK_KNEE_FULL`** — knee depth that scores full: `0.85`
+- **`SETUP_FLAT`** — mean outside-ness below which a setup reads flat: `0.15`
+- **Takeoff quality weights** — timing `0.55`, depth `0.45`; edge-error penalty `0.35`;
+  pre-rotation penalty `0.40`; missed pick `× 0.45`
+- **Lift floor** — v<sub>z</sub> = `jumpImpulse` × (`0.62` + `0.38` q)
+- **Rotation floor** — angular momentum × (`0.80` + `0.20` q)
+- **Landing quality weights** — check error `0.90`, absorption `0.50`, edge `0.35`, balance `0.60`;
+  `TWO_FOOT_PENALTY` `0.15`
+- **Landing thresholds** — fall below quality `0.18` or short by more than `0.70` rev; step-out below `0.34`
+- **`MIN_JUMP_REVS`** — below this it was a hop: `0.375` rev
+
+Fixed by: `jump_reachable` constrains the lift and rotation floors from above. The rest have no
+camera observable, and the gate should not be asked to fit them.
+
+---
+
+## 8 · Moves
+
+All of these are inert with `movesMode` 0. Cases for turns, twizzles, spins and the Ina Bauer set
+`movesMode` 1 ([gate §3](fidelity-gate.md#3--the-configuration-under-test)). **Every "Source" here is
+project design data**, so every level is L2 at best.
+
+### Turns
+
+- **`turnTime`** — duration of a turn's pivot on the middle of the blade
+  - Value: `0.30` s
+  - Used: `moves.ts` `beginPivot`
+  - Level: L2
+  - Range: at least four ticks (`validate`)
+  - Fixed by: frames through the cusp of a three-turn
+
+- **`muTurn`** — scrape friction while a turning blade pivots across its path
+  - Value: `0.20`
+  - Used: `moves.ts` `pivotStep`
+  - Level: **L3** (structure S7)
+  - Range: none recorded
+  - Fixed by: `turn_speed_loss_ms`
+  - Source: calibrated to −0.45 m/s at 6 m/s, `data/motion-primitives.json`
+
+- **`mohawkScrub`** — a mohawk's second half as a share of a three-turn's scrape
+  - Value: `0.78`
+  - Used: `moves.ts` `turnPivot`
+  - Level: L3
+  - Range: none recorded
+  - Fixed by: `turn_speed_loss_ms` for mohawks against three-turns on the same skater
+  - Source: −0.40 m/s, the same file
+
+- **`turnMinSpeed`** — below this there is no edge to turn on
+  - Value: `1.0` m/s
+  - Used: `moves.ts` `turnStart`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: not physical. It is a gate on the move.
+
+- **`turnCarry`**, **`turnCarryTime`** — share of pivot rate kept as rotation a jump can take off
+  with, and how fast it drains
+  - Value: `0.11`, `0.5` s
+  - Used: `moves.ts` `endPivot`, `carryDecay`
+  - Level: L2
+  - Range: `turnCarry` in [0, 1] by definition
+  - Fixed by: `jump_reachable` for jumps entered from a three-turn
+
+### Twizzles
+
+- **`twizzleRate`** — rotation rate with arms in
+  - Value: `16.0` rad/s (2.5 rev/s)
+  - Used: `moves.ts` `twizzleTick`
+  - Level: L2
+  - Range: must turn less than a quarter revolution per tick (`validate`, numerical)
+  - Fixed by: `twizzle_rate_rps`
+  - Source: `data/motion-primitives.json`, two revolutions over 4.5 m at 6 m/s
+
+- **`twizzleArmsOut`**, **`twizzleScrub`**, **`twizzleMinSpeed`**, **`twizzleSteerTime`**
+  - Value: `0.5`, `0.75`, `2.0` m/s, `0.3` s
+  - Used: `moves.ts` `twizzleStart`, `twizzleTick`
+  - Level: L2 (`twizzleScrub` L3, calibrated to −1.0 m/s in the same file)
+  - Range: `twizzleArmsOut` < 1. None recorded otherwise.
+  - Fixed by: `twizzle_rate_rps` arms out against arms in; speed loss over a twizzle by footage timing
+
+- **`TWIZZLE_SPINUP`**, **`TWIZZLE_SETTLE`** — hard-coded in `moves.ts`
+  - Value: `0.15` s, `0.15` s
+  - Level: L2
+  - Fixed by: frame counts at entry. Low priority.
+
+### Spins
+
+- **`spinArm`** — lever arm turning entry travel into angular momentum: L = m v arm (0.7 + 0.3 check)
+  - Value: `0.15` m. The `0.7` and `0.3` check weights are hard-coded in `moves.ts` `spinStart`.
+  - Used: `moves.ts` `spinStart`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: `spin_rate_rps` against measured entry speed
+
+- **`SPIN_INERTIA_SCALE`** — inertia by position: upright, sit, camel
+  - Value: `1.0, 1.25, 2.2`
+  - Used: `moves.ts` `spinStart`, `spinTick`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: `spin_rate_rps` ratios between positions in one spin, with angular momentum conserved
+  - Source: `data/spin-positions.json`, transcribed and tested against it
+
+- **`spinDecay`** — angular momentum a centred spin loses to the blade
+  - Value: `0.12` /s
+  - Used: `moves.ts` `spinTick`
+  - Level: L2
+  - Range: none recorded
+  - Fixed by: `spin_decay_per_s`. Effort does not enter it, so this is one of the cleanest two-sided
+    tests the corpus can hold.
+
+- **`spinTravelDecay`**, **`spinTravelKeep`**, **`spinTravelTime`** — drift, and what it costs
+  - Value: `0.5` /(m/s), `0.12`, `0.6` s
+  - Used: `moves.ts` `spinStart`, `spinTick`
+  - Level: L2
+  - Range: `spinTravelKeep` in [0, 1] by definition
+  - Fixed by: `spin_decay_per_s` on travelling spins against centred ones
+
+- **`spinMinSpeed`**, **`spinMinOmega`**, **`spinExitSpeed`**
+  - Value: `3.0` m/s, `3.0` rad/s, `2.0` m/s
+  - Used: `moves.ts` `spinStart`, `spinTick`
+  - Level: L2
+  - Range: `spinMinSpeed` > 0
+  - Fixed by: the slowest sustained spin rate before a skater exits, and exit speed, from footage
+  - Source: `spinMinSpeed` from `data/spin-positions.json` entries
+
+- **`spinSitKnee`**, **`spinCamelPitch`** — input thresholds selecting sit and camel
+  - Value: `0.6`, `0.5`
+  - Level: L2
+  - Fixed by: not physical. These classify an input.
+
+- **`SPIN_EDGE`**, **`SPIN_BLADE_SPEED`**, **`SPIN_SETTLE`** — hard-coded in `moves.ts`
+  - Value: `0.26` rad, `0.5` m/s, `0.2` s
+  - Level: L2
+  - Fixed by: `SPIN_EDGE` from close footage of the spinning blade. The other two feed the classifier
+    and the settle, and have no observable.
+
+### Ina Bauer
+
+- **`inaBauerScrub`**, **`inaBauerDrag`**, **`inaBauerMinSpeed`**
+  - Value: `0.13`, `2.0` × `cdA`, `2.0` m/s
+  - Used: `solver.ts` `step`; `moves.ts` `inaBauerStart`
+  - Level: L3 (`inaBauerScrub`), L2 (the others)
+  - Range: `inaBauerDrag` ≥ 1 (`validate`)
+  - Fixed by: `ina_bauer_speed_loss_ms`, at two entry speeds to separate scrub from drag
+  - Source: calibrated together to −1.1 m/s over 6 m at 6 m/s, `data/motion-primitives.json`
+
+- **`INA_BAUER_STRIDE`** — hard-coded in `solver.ts`: `0.3` m between the blades along the travel
+  - Level: L2
+  - Fixed by: footage. It affects tracings only.
+
+---
+
+## 9 · Classification thresholds
+
+These are not physics. They define which edge, depth and call a physical state is **named**, so they
+reach `rotation_call` and edge calls, but no two-sided physical observable.
+
+- **`flatThreshold`**, **`flatHysteresis`** — `0.070` rad (4°), `0.026` rad (1.5°).
+  `classify.ts` `classifyEdgeSide`, `classifyDepth`; `moves.ts`; `solver.ts`. L2. Fixed by:
+  protocol `!` and `e` calls paired with footage.
+- **`depthShallow`**, **`depthDeep`** — `0.21` rad (12°), `0.44` rad (25°). `classify.ts`
+  `classifyDepth`; `jump.ts` `outsideness`. L2. Fixed by: no external call uses depth.
+- **`minDwell`** — `0.12` s before an edge counts as established. `solver.ts` `step`. L2.
+- **`dirSpeedEps`** — `0.15` m/s dead band for forward and backward. `classify.ts`, `jump.ts`,
+  `solver.ts`. L2.
+- **`carveDemand`** — `0.5`, the demand-to-capacity ratio above which a held edge is reported as a
+  Carve. `solver.ts` `step`. L2.
+- **`callEdgeUnclear`**, **`callEdgeWrong`** — `0.25`, `0.55` takeoff-edge error for `!` and `e`.
+  `jump.ts` `edgeCall`. L2. Transcribed from `data/calls-and-deductions.csv`, but the scale they sit
+  on is the project's own definition (`edgeMismatch`: 0 on the wanted edge, 0.5 flat, 1 on the other),
+  and the ISU publishes no numeric counterpart. So unlike the rotation thresholds they are not
+  rule-derived. Fixed by: protocol edge calls paired with footage of the takeoff edge.
+
+---
+
+## 10 · Guards and numerical limits
+
+These keep the solver finite. They are not claims about skating and are not moved to fix a case. They
+are listed so none is mistaken for physics. If one ever changes an observable, that is a finding.
+
+- `minSpeedForCurv` `0.5` m/s — guards κ = a / v² near a standstill (`solver.ts` §2)
+- Leg length clamp `0.3` m to `1.05` × `comHeight` (`solver.ts` §1, §7)
+- Minimum yaw radius `0.35` m (`solver.ts` §3)
+- Lean clamp ±`1.55` rad (`solver.ts` §7)
+- Tilt command decay `0.3` s while down (`solver.ts` §2)
+- Brake minimum speed `0.2` m/s (`solver.ts` §3)
+- Two-footed weight band `0.05`–`0.95` (`jump.ts` `land`); lead-foot lean dead band `0.02` rad
+  (`moves.ts`); turn foot threshold `0.25` and `0.75` (`moves.ts`)
+- Twizzle and Ina Bauer end below half their minimum speed (`moves.ts`, `solver.ts`)
+- `SIM_HZ` `120` — the tick rate, a numerical choice fixed by the replay contract
+
+---
+
+## 11 · Not open: physical or rule-derived
+
+These are not tuned, and are not moved to fix a case. A change needs a physical or rules source.
+
+- **`gravity`** — `9.81` m/s². **L0.** Local g varies from about 9.78 to 9.83 m/s² with latitude and
+  altitude, which is below any band in the gate.
+- **`airDensity`** — `1.29` kg/m³. **L0** for dry air at 0 °C and sea level (ideal gas). **L1** as the
+  value for rink air, which is usually warmer than the ice and may be above sea level, both of which
+  lower it. Range: 1.0–1.3 kg/m³, covering 0–20 °C from sea level to about 2000 m (L0). A case at a
+  known venue may record its own value **as an input**. That is the one constant a case may set,
+  because it is a property of the room, not of the model.
+- **`callQuarter`**, **`callUnder`**, **`callDowngrade`** — `0.125`, `0.25`, `0.5` rev.
+  **L1.** Transcribed from `data/calls-and-deductions.csv`, which is pending verification against
+  current ISU publications. They move only when the data file does.
+
+The `airDensity` exception is recorded in
+[gate §3](fidelity-gate.md#3--the-configuration-under-test), and the case schema (Task 1.2) carries it.
+
+---
+
+## 12 · Outside the gate
+
+These are inert under the gate's configuration or reach no §4 observable. They are listed by name so
+their absence above is deliberate.
+
+- **Skater stats**, `profile.ts` `STAT_EFFECTS`. Cases hold every stat at the neutral 50, which bakes
+  to the preset bit for bit. Spans at 0 and 100: `strokePower` 0.70–1.30, `jumpImpulse` 0.82–1.18,
+  `inertiaPullRate` 0.80–1.20, `angulationLimit` 0.75–1.35, `controlLatency` 1.40–0.60, `balanceKd`
+  0.80–1.30, `internalGain` 0.80–1.25. Also the curve shape (t<sup>0.75</sup> above 50).
+- **Blade wear**, `profile.ts`: `SHARPNESS_FRESH` 1.05, `SHARPNESS_DULL` 0.80, `BLADE_LIFE_HOURS` 20.
+  The reference wear bakes to `sharpness` 1.0.
+- **Career**, `profile.ts`: `XP_BASE` 10, `XP_QUAD` 0.04, `XP_PER_LEVEL` 25, level weights, tier floors
+  40, 55, 70 and 85, and the three sample profiles.
+- **Judging**, `score.ts`: GOE quality weights 0.6 and 0.4, judge strictness 0.5 + 0.5u, noise 0.5.
+  GOE is not a gate observable.
+- **Session metrics**, `session.ts`: `MOVING` 0.5 m/s, `MAX_LANDINGS` 100.
+- **The `assisted` preset**, `params.ts`. It is an assist tier and not the preset under test.
+
+If any of these starts affecting a case — for example, if the gate begins testing a non-reference
+skater — it moves up into the sections above.
