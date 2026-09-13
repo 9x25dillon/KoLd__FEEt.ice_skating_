@@ -165,10 +165,12 @@ different things.
 | --- | --- | --- |
 | `docs/` — the design bible and all prose | [**CC BY-NC-ND 4.0**](LICENSE) | Read it, share it, quote it with attribution. You may not use it commercially or publish modified versions. |
 | `src/` and `data/` | [**Apache-2.0**](LICENSE-CODE) | Use it freely, including commercially. Includes an express patent grant, which matters for physics and scoring algorithms. |
+| `tools/` — Ice Lab, the working solver and its tuned constants | [**Apache-2.0**](tools/ice-lab/LICENSE) | Same terms as `src/`. The instrument is meant to be run, checked and corrected by anyone, and a licence cannot fence off the constants anyway — they are numbers, and every build ships them to the browser. |
 
 **Why not MIT or Apache for everything?** Because the design bible is the asset. Licensing it
 permissively would let anyone build and sell this game from the blueprint. The reference code
-is illustrative and costs nothing to give away; the document is not.
+is illustrative and costs nothing to give away; the document is not. Ice Lab is the same bargain
+from the other side: its value is in being checked against real skating, and that needs it open.
 
 **Why not All Rights Reserved?** Because this repository is public, and GitHub's Terms of
 Service already grant every GitHub user the right to view and fork public repositories

@@ -943,3 +943,11 @@ The whole point. `sim/` is written to be transcribed:
 
 Export a tuned parameter set with **params.json** in the panel; it emits only
 what differs from `spec`, which is what a tuning-log entry should contain.
+
+## Licence
+
+Ice Lab is **Apache-2.0** — see [`LICENSE`](LICENSE). That covers everything under
+`tools/`, tuned constants included, on the same terms as `src/` and `data/`. The
+design bible in `docs/` is licensed separately; the reasoning is in
+[the root README](../../README.md#licensing) and
+[D7](../../docs/open-decisions.md#d7--licence-for-tools).
