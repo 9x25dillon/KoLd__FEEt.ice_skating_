@@ -1,0 +1,36 @@
+{
+  "schema": "kold-reference-manifest/1",
+  "sourceCommit": "8d89af29caa14ee413e94fc821c76458d8974836",
+  "sourceSolver": "ice-lab-f64/5",
+  "replaySchema": "edgework-replay/1",
+  "capability": "ground-v1",
+  "replaySha256": "4099850360b51c9a24b4a7f57ffccbe32d26c4d59f79ef36fa0ef3ac23fd5c04",
+  "hz": 120,
+  "frameCount": 240,
+  "sourceHashes": {
+    "tools/ice-lab/sim/blade.ts": "c1e6e030fbf8022e8d2e18c150c1833792791eaa82cc210adb514857dbec0040",
+    "tools/ice-lab/sim/classify.ts": "0fa96fb31b2cb104034562c0352688225c9b22db7c4911c63d4b9fe6c95e5a1d",
+    "tools/ice-lab/sim/jump.ts": "de7b07d96bc29e1f08384fe626ad51b033738916d89adf2f9e512cf113a94d34",
+    "tools/ice-lab/sim/math.ts": "01d67f8dd0ef054f96dd0021a6c7443ba5d1517b0ceeafb169f8dfcbe48e9741",
+    "tools/ice-lab/sim/moves.ts": "56f17f1eb7942de40b59e61f21f600d10077c893a2001b1cc6adc65b20462fcf",
+    "tools/ice-lab/sim/params.ts": "3d328b072966f64b036973dcbdbe68b5df0ee8b52e14d27115098956dab8b8cd",
+    "tools/ice-lab/sim/profile.ts": "3b3d6e73ff6abe7d66f5abdf458e01ae1ac2f197f2968391228e0d2fd92e3f56",
+    "tools/ice-lab/sim/replay.ts": "18039695a0818c1d4dc3c1586e06fd0919ea13f25e39aa1bbc60df19f79febe5",
+    "tools/ice-lab/sim/score.ts": "4a235d7cca66f99d16ae1d41554493be0be91ff3cff3550c842b6ea0e179b34c",
+    "tools/ice-lab/sim/session.ts": "36bd91ac567a03e31493833fa731e4e2ba4bb37000a2a14b194495d585e901f9",
+    "tools/ice-lab/sim/solver.ts": "85490b25602bcf07a61dfcec9e234937dec39ab346d1bc5d62943ed4c4ccc759",
+    "tools/ice-lab/sim/telemetry.ts": "f7c3337f5f4d6597814f2d283ec884d754bce3d3cdd8b9af5b8fd1145a21f48f",
+    "tools/ice-lab/sim/types.ts": "e3eb68b9bbff12270218cb16aa49a386af749c4c28bdd6db388c431294615b11"
+  },
+  "files": {
+    "replay-v1.json": "4099850360b51c9a24b4a7f57ffccbe32d26c4d59f79ef36fa0ef3ac23fd5c04",
+    "oracle.jsonl": "439f6fbf40d2e95a8bee2cb005ea7b9667bb4ab947286db5683014e59684864d",
+    "wire-manifest.json": "ebc4ab47a724280c976be9f6fa8f8a0816dc3cf3b7b488a83ceeb492fe06cb47",
+    "KoLdWireTypes.h": "6734f589569a1d30b1cc693499aefe7dc3c9a3fdba67fa02e393368cc6a7ea0e",
+    "numbers.tsv": "693167ccf3d4540616526d25ff8f25a64b97fd3cdc7a174120eaa5a10ca214cb",
+    "math.tsv": "2fe5a281150a6c6aaaeb63c42e24e9a7c31915066cb365aa6aef4f9391d43d3a",
+    "measured-mutations.json": "9a202158931d109e1f2bd65e1085cc343b83ea5f7cf8b446682d0d2965ff9068",
+    "states.tsv": "ee7add37a696d76c2520bf357b5530266368dde982055886f5eb21f45dbf60dd"
+  },
+  "nativeSolverVerified": false
+}

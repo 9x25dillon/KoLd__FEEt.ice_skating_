@@ -1,0 +1,1481 @@
+{
+  "schema": "kold-wire-manifest/1",
+  "sourceCommit": "8d89af29caa14ee413e94fc821c76458d8974836",
+  "types": [
+    {
+      "name": "Vec2",
+      "fields": [
+        {
+          "name": "x",
+          "type": "number"
+        },
+        {
+          "name": "y",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "Params",
+      "fields": [
+        {
+          "name": "rocker",
+          "type": "number"
+        },
+        {
+          "name": "rockerToeFraction",
+          "type": "number"
+        },
+        {
+          "name": "rockerToeOnset",
+          "type": "number"
+        },
+        {
+          "name": "sharpness",
+          "type": "number"
+        },
+        {
+          "name": "iceHardness",
+          "type": "number"
+        },
+        {
+          "name": "muGlide",
+          "type": "number"
+        },
+        {
+          "name": "muEdgeGain",
+          "type": "number"
+        },
+        {
+          "name": "muSkid",
+          "type": "number"
+        },
+        {
+          "name": "airDensity",
+          "type": "number"
+        },
+        {
+          "name": "cdA",
+          "type": "number"
+        },
+        {
+          "name": "biteC0",
+          "type": "number"
+        },
+        {
+          "name": "biteC1",
+          "type": "number"
+        },
+        {
+          "name": "carveDemand",
+          "type": "number"
+        },
+        {
+          "name": "flatThreshold",
+          "type": "number"
+        },
+        {
+          "name": "flatHysteresis",
+          "type": "number"
+        },
+        {
+          "name": "depthShallow",
+          "type": "number"
+        },
+        {
+          "name": "depthDeep",
+          "type": "number"
+        },
+        {
+          "name": "minDwell",
+          "type": "number"
+        },
+        {
+          "name": "dirSpeedEps",
+          "type": "number"
+        },
+        {
+          "name": "maxLean",
+          "type": "number"
+        },
+        {
+          "name": "maxTilt",
+          "type": "number"
+        },
+        {
+          "name": "balanceKp",
+          "type": "number"
+        },
+        {
+          "name": "balanceKd",
+          "type": "number"
+        },
+        {
+          "name": "angulationLimit",
+          "type": "number"
+        },
+        {
+          "name": "controlLatency",
+          "type": "number"
+        },
+        {
+          "name": "internalGain",
+          "type": "number"
+        },
+        {
+          "name": "internalRateGain",
+          "type": "number"
+        },
+        {
+          "name": "internalWashout",
+          "type": "number"
+        },
+        {
+          "name": "internalMax",
+          "type": "number"
+        },
+        {
+          "name": "copGain",
+          "type": "number"
+        },
+        {
+          "name": "minSpeedForCurv",
+          "type": "number"
+        },
+        {
+          "name": "splitTiltMax",
+          "type": "number"
+        },
+        {
+          "name": "strokePower",
+          "type": "number"
+        },
+        {
+          "name": "strokeBeta",
+          "type": "number"
+        },
+        {
+          "name": "strokeDuration",
+          "type": "number"
+        },
+        {
+          "name": "strokeEdge",
+          "type": "number"
+        },
+        {
+          "name": "kneeRate",
+          "type": "number"
+        },
+        {
+          "name": "kneeSpring",
+          "type": "number"
+        },
+        {
+          "name": "kneeDamping",
+          "type": "number"
+        },
+        {
+          "name": "maxKneeCompression",
+          "type": "number"
+        },
+        {
+          "name": "fallLean",
+          "type": "number"
+        },
+        {
+          "name": "fallError",
+          "type": "number"
+        },
+        {
+          "name": "fallErrorTime",
+          "type": "number"
+        },
+        {
+          "name": "fallAuthorityCredit",
+          "type": "number"
+        },
+        {
+          "name": "jumpMode",
+          "type": "number"
+        },
+        {
+          "name": "jumpLoadKnee",
+          "type": "number"
+        },
+        {
+          "name": "jumpReleaseKnee",
+          "type": "number"
+        },
+        {
+          "name": "jumpLoadMax",
+          "type": "number"
+        },
+        {
+          "name": "jumpImpulse",
+          "type": "number"
+        },
+        {
+          "name": "jumpWhip",
+          "type": "number"
+        },
+        {
+          "name": "jumpRotBias",
+          "type": "number"
+        },
+        {
+          "name": "inertiaOpen",
+          "type": "number"
+        },
+        {
+          "name": "inertiaTucked",
+          "type": "number"
+        },
+        {
+          "name": "inertiaPullRate",
+          "type": "number"
+        },
+        {
+          "name": "toeWindow",
+          "type": "number"
+        },
+        {
+          "name": "landingShock",
+          "type": "number"
+        },
+        {
+          "name": "callQuarter",
+          "type": "number"
+        },
+        {
+          "name": "callUnder",
+          "type": "number"
+        },
+        {
+          "name": "callDowngrade",
+          "type": "number"
+        },
+        {
+          "name": "callEdgeUnclear",
+          "type": "number"
+        },
+        {
+          "name": "callEdgeWrong",
+          "type": "number"
+        },
+        {
+          "name": "movesMode",
+          "type": "number"
+        },
+        {
+          "name": "crossoverLean",
+          "type": "number"
+        },
+        {
+          "name": "backPushScale",
+          "type": "number"
+        },
+        {
+          "name": "turnTime",
+          "type": "number"
+        },
+        {
+          "name": "muTurn",
+          "type": "number"
+        },
+        {
+          "name": "mohawkScrub",
+          "type": "number"
+        },
+        {
+          "name": "turnMinSpeed",
+          "type": "number"
+        },
+        {
+          "name": "turnCarry",
+          "type": "number"
+        },
+        {
+          "name": "turnCarryTime",
+          "type": "number"
+        },
+        {
+          "name": "twizzleRate",
+          "type": "number"
+        },
+        {
+          "name": "twizzleArmsOut",
+          "type": "number"
+        },
+        {
+          "name": "twizzleScrub",
+          "type": "number"
+        },
+        {
+          "name": "twizzleMinSpeed",
+          "type": "number"
+        },
+        {
+          "name": "twizzleSteerTime",
+          "type": "number"
+        },
+        {
+          "name": "spinMinSpeed",
+          "type": "number"
+        },
+        {
+          "name": "spinArm",
+          "type": "number"
+        },
+        {
+          "name": "spinDecay",
+          "type": "number"
+        },
+        {
+          "name": "spinTravelDecay",
+          "type": "number"
+        },
+        {
+          "name": "spinTravelKeep",
+          "type": "number"
+        },
+        {
+          "name": "spinTravelTime",
+          "type": "number"
+        },
+        {
+          "name": "spinMinOmega",
+          "type": "number"
+        },
+        {
+          "name": "spinExitSpeed",
+          "type": "number"
+        },
+        {
+          "name": "spinSitKnee",
+          "type": "number"
+        },
+        {
+          "name": "spinCamelPitch",
+          "type": "number"
+        },
+        {
+          "name": "inaBauerMinSpeed",
+          "type": "number"
+        },
+        {
+          "name": "inaBauerDrag",
+          "type": "number"
+        },
+        {
+          "name": "inaBauerScrub",
+          "type": "number"
+        },
+        {
+          "name": "jumpSpeedShare",
+          "type": "number"
+        },
+        {
+          "name": "mass",
+          "type": "number"
+        },
+        {
+          "name": "comHeight",
+          "type": "number"
+        },
+        {
+          "name": "stanceHalfWidth",
+          "type": "number"
+        },
+        {
+          "name": "gravity",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "JumpState",
+      "fields": [
+        {
+          "name": "phase",
+          "type": "number"
+        },
+        {
+          "name": "t",
+          "type": "number"
+        },
+        {
+          "name": "peakKnee",
+          "type": "number"
+        },
+        {
+          "name": "preRotation",
+          "type": "number"
+        },
+        {
+          "name": "setup",
+          "type": "number"
+        },
+        {
+          "name": "toeTick",
+          "type": "number"
+        },
+        {
+          "name": "toeInLoad",
+          "type": "boolean"
+        },
+        {
+          "name": "takeoffCode",
+          "type": "number"
+        },
+        {
+          "name": "kind",
+          "type": "number"
+        },
+        {
+          "name": "edgeError",
+          "type": "number"
+        },
+        {
+          "name": "quality",
+          "type": "number"
+        },
+        {
+          "name": "z",
+          "type": "number"
+        },
+        {
+          "name": "vz",
+          "type": "number"
+        },
+        {
+          "name": "height",
+          "type": "number"
+        },
+        {
+          "name": "airTime",
+          "type": "number"
+        },
+        {
+          "name": "angMomentum",
+          "type": "number"
+        },
+        {
+          "name": "inertia",
+          "type": "number"
+        },
+        {
+          "name": "rotation",
+          "type": "number"
+        },
+        {
+          "name": "peakOmega",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "JumpResult",
+      "fields": [
+        {
+          "name": "tick",
+          "type": "number"
+        },
+        {
+          "name": "kind",
+          "type": "number"
+        },
+        {
+          "name": "revolutions",
+          "type": "number"
+        },
+        {
+          "name": "turned",
+          "type": "number"
+        },
+        {
+          "name": "shortBy",
+          "type": "number"
+        },
+        {
+          "name": "rotationCall",
+          "type": "number"
+        },
+        {
+          "name": "edgeCall",
+          "type": "number"
+        },
+        {
+          "name": "toe",
+          "type": "boolean"
+        },
+        {
+          "name": "takeoffQuality",
+          "type": "number"
+        },
+        {
+          "name": "landingQuality",
+          "type": "number"
+        },
+        {
+          "name": "height",
+          "type": "number"
+        },
+        {
+          "name": "airTime",
+          "type": "number"
+        },
+        {
+          "name": "peakOmega",
+          "type": "number"
+        },
+        {
+          "name": "twoFoot",
+          "type": "boolean"
+        },
+        {
+          "name": "stepOut",
+          "type": "boolean"
+        },
+        {
+          "name": "fall",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "InaBauerState",
+      "fields": [
+        {
+          "name": "lead",
+          "type": "Foot"
+        },
+        {
+          "name": "t",
+          "type": "number"
+        },
+        {
+          "name": "fromCode",
+          "type": "number"
+        },
+        {
+          "name": "entrySpeed",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "SpinState",
+      "fields": [
+        {
+          "name": "t",
+          "type": "number"
+        },
+        {
+          "name": "dir",
+          "type": "number"
+        },
+        {
+          "name": "angMomentum",
+          "type": "number"
+        },
+        {
+          "name": "inertia",
+          "type": "number"
+        },
+        {
+          "name": "omega",
+          "type": "number"
+        },
+        {
+          "name": "swept",
+          "type": "number"
+        },
+        {
+          "name": "position",
+          "type": "number"
+        },
+        {
+          "name": "positionsHeld",
+          "type": "number"
+        },
+        {
+          "name": "segRevs",
+          "type": "number"
+        },
+        {
+          "name": "bestSegRevs",
+          "type": "number"
+        },
+        {
+          "name": "segOmegaMin",
+          "type": "number"
+        },
+        {
+          "name": "segOmegaMax",
+          "type": "number"
+        },
+        {
+          "name": "foot",
+          "type": "Foot"
+        },
+        {
+          "name": "anchor",
+          "type": "Vec2"
+        },
+        {
+          "name": "travel",
+          "type": "number"
+        },
+        {
+          "name": "fromCode",
+          "type": "number"
+        },
+        {
+          "name": "entrySpeed",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "TurnState",
+      "fields": [
+        {
+          "name": "t",
+          "type": "number"
+        },
+        {
+          "name": "swept",
+          "type": "number"
+        },
+        {
+          "name": "dir",
+          "type": "number"
+        },
+        {
+          "name": "rate",
+          "type": "number"
+        },
+        {
+          "name": "pathRate",
+          "type": "number"
+        },
+        {
+          "name": "entryDir",
+          "type": "number"
+        },
+        {
+          "name": "foot",
+          "type": "Foot"
+        },
+        {
+          "name": "exitFoot",
+          "type": "Foot"
+        },
+        {
+          "name": "cusps",
+          "type": "number"
+        },
+        {
+          "name": "release",
+          "type": "boolean"
+        },
+        {
+          "name": "kind",
+          "type": "number"
+        },
+        {
+          "name": "fromCode",
+          "type": "number"
+        },
+        {
+          "name": "entrySpeed",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "MoveResult",
+      "fields": [
+        {
+          "name": "tick",
+          "type": "number"
+        },
+        {
+          "name": "kind",
+          "type": "number"
+        },
+        {
+          "name": "detail",
+          "type": "number"
+        },
+        {
+          "name": "revolutions",
+          "type": "number"
+        },
+        {
+          "name": "fromCode",
+          "type": "number"
+        },
+        {
+          "name": "toCode",
+          "type": "number"
+        },
+        {
+          "name": "speedLost",
+          "type": "number"
+        },
+        {
+          "name": "seconds",
+          "type": "number"
+        },
+        {
+          "name": "positions",
+          "type": "number"
+        },
+        {
+          "name": "bestSegRevs",
+          "type": "number"
+        },
+        {
+          "name": "travel",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "name": "BladeState",
+      "fields": [
+        {
+          "name": "contact",
+          "type": "Vec2"
+        },
+        {
+          "name": "tangent",
+          "type": "Vec2"
+        },
+        {
+          "name": "tilt",
+          "type": "number"
+        },
+        {
+          "name": "contactS",
+          "type": "number"
+        },
+        {
+          "name": "normalLoad",
+          "type": "number"
+        },
+        {
+          "name": "weight",
+          "type": "number"
+        },
+        {
+          "name": "longSpeed",
+          "type": "number"
+        },
+        {
+          "name": "latSlipAccel",
+          "type": "number"
+        },
+        {
+          "name": "latForce",
+          "type": "number"
+        },
+        {
+          "name": "biteCapacity",
+          "type": "number"
+        },
+        {
+          "name": "demandRatio",
+          "type": "number"
+        },
+        {
+          "name": "turnRadius",
+          "type": "number"
+        },
+        {
+          "name": "dwell",
+          "type": "number"
+        },
+        {
+          "name": "code",
+          "type": "number"
+        },
+        {
+          "name": "depth",
+          "type": "Depth"
+        },
+        {
+          "name": "regime",
+          "type": "Regime"
+        },
+        {
+          "name": "inContact",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "SkaterState",
+      "fields": [
+        {
+          "name": "pos",
+          "type": "Vec2"
+        },
+        {
+          "name": "vel",
+          "type": "Vec2"
+        },
+        {
+          "name": "heading",
+          "type": "Vec2"
+        },
+        {
+          "name": "yawRate",
+          "type": "number"
+        },
+        {
+          "name": "lean",
+          "type": "number"
+        },
+        {
+          "name": "leanRate",
+          "type": "number"
+        },
+        {
+          "name": "leanEq",
+          "type": "number"
+        },
+        {
+          "name": "balanceError",
+          "type": "number"
+        },
+        {
+          "name": "balanceErrorTime",
+          "type": "number"
+        },
+        {
+          "name": "latAccel",
+          "type": "number"
+        },
+        {
+          "name": "intAccel",
+          "type": "number"
+        },
+        {
+          "name": "intHeld",
+          "type": "number"
+        },
+        {
+          "name": "tiltCmd",
+          "type": "number"
+        },
+        {
+          "name": "legLength",
+          "type": "number"
+        },
+        {
+          "name": "legRate",
+          "type": "number"
+        },
+        {
+          "name": "comZ",
+          "type": "number"
+        },
+        {
+          "name": "supportFoot",
+          "type": "Foot"
+        },
+        {
+          "name": "supportMode",
+          "type": "number"
+        },
+        {
+          "name": "knee",
+          "type": "number"
+        },
+        {
+          "name": "strokeTime",
+          "type": "number"
+        },
+        {
+          "name": "strokeFoot",
+          "type": "Foot"
+        },
+        {
+          "name": "crossover",
+          "type": "boolean"
+        },
+        {
+          "name": "crossSide",
+          "type": "number"
+        },
+        {
+          "name": "pushHeld",
+          "type": "boolean"
+        },
+        {
+          "name": "jump",
+          "type": "JumpState"
+        },
+        {
+          "name": "landed",
+          "type": "JumpResult"
+        },
+        {
+          "name": "move",
+          "type": "number"
+        },
+        {
+          "name": "turn",
+          "type": "TurnState"
+        },
+        {
+          "name": "spin",
+          "type": "SpinState"
+        },
+        {
+          "name": "inaBauer",
+          "type": "InaBauerState"
+        },
+        {
+          "name": "moveDone",
+          "type": "MoveResult"
+        },
+        {
+          "name": "movesHeld",
+          "type": "number"
+        },
+        {
+          "name": "flips",
+          "type": "number"
+        },
+        {
+          "name": "spinCarry",
+          "type": "number"
+        },
+        {
+          "name": "fallReason",
+          "type": "Fall"
+        },
+        {
+          "name": "fallen",
+          "type": "boolean"
+        },
+        {
+          "name": "tick",
+          "type": "number"
+        },
+        {
+          "name": "blade",
+          "type": "[BladeState, BladeState]"
+        }
+      ]
+    },
+    {
+      "name": "SkatingInput",
+      "fields": [
+        {
+          "name": "lean",
+          "type": "number"
+        },
+        {
+          "name": "knee",
+          "type": "number"
+        },
+        {
+          "name": "weight",
+          "type": "number"
+        },
+        {
+          "name": "pitch",
+          "type": "number"
+        },
+        {
+          "name": "leanSplit",
+          "type": "number"
+        },
+        {
+          "name": "push",
+          "type": "boolean"
+        },
+        {
+          "name": "brake",
+          "type": "boolean"
+        },
+        {
+          "name": "carriage",
+          "type": "number"
+        },
+        {
+          "name": "toe",
+          "type": "boolean"
+        },
+        {
+          "name": "turn",
+          "type": "boolean"
+        },
+        {
+          "name": "twizzle",
+          "type": "boolean"
+        },
+        {
+          "name": "spin",
+          "type": "boolean"
+        },
+        {
+          "name": "inaBauer",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "name": "EdgeEvent",
+      "fields": [
+        {
+          "name": "tick",
+          "type": "number"
+        },
+        {
+          "name": "type",
+          "type": "EventType"
+        },
+        {
+          "name": "foot",
+          "type": "Foot"
+        },
+        {
+          "name": "prevCode",
+          "type": "number"
+        },
+        {
+          "name": "newCode",
+          "type": "number"
+        },
+        {
+          "name": "prevDwell",
+          "type": "number"
+        },
+        {
+          "name": "value",
+          "type": "number"
+        }
+      ]
+    }
+  ],
+  "replayKeys": [
+    "schema",
+    "solver",
+    "hz",
+    "initial",
+    "frames"
+  ],
+  "initialSpeed": [
+    -100,
+    100
+  ],
+  "initialLean": [
+    -1.55,
+    1.55
+  ],
+  "parameterBounds": {
+    "rocker": [
+      0.000001,
+      1000000
+    ],
+    "rockerToeFraction": [
+      0.000001,
+      1000000
+    ],
+    "rockerToeOnset": [
+      0,
+      1000000
+    ],
+    "sharpness": [
+      0,
+      1000000
+    ],
+    "iceHardness": [
+      0,
+      1000000
+    ],
+    "muGlide": [
+      0,
+      1000000
+    ],
+    "muEdgeGain": [
+      0,
+      1000000
+    ],
+    "muSkid": [
+      0,
+      1000000
+    ],
+    "airDensity": [
+      0,
+      1000000
+    ],
+    "cdA": [
+      0,
+      1000000
+    ],
+    "biteC0": [
+      0,
+      1000000
+    ],
+    "biteC1": [
+      0,
+      1000000
+    ],
+    "carveDemand": [
+      0,
+      1000000
+    ],
+    "flatThreshold": [
+      0,
+      1000000
+    ],
+    "flatHysteresis": [
+      0,
+      1000000
+    ],
+    "depthShallow": [
+      0,
+      1000000
+    ],
+    "depthDeep": [
+      0,
+      1000000
+    ],
+    "minDwell": [
+      0,
+      1000000
+    ],
+    "dirSpeedEps": [
+      0,
+      1000000
+    ],
+    "maxLean": [
+      0,
+      1.55
+    ],
+    "maxTilt": [
+      0,
+      1.55
+    ],
+    "balanceKp": [
+      0,
+      1000000
+    ],
+    "balanceKd": [
+      0,
+      1000000
+    ],
+    "angulationLimit": [
+      0,
+      1000000
+    ],
+    "controlLatency": [
+      0,
+      1000000
+    ],
+    "internalGain": [
+      0,
+      1000000
+    ],
+    "internalRateGain": [
+      0,
+      1000000
+    ],
+    "internalWashout": [
+      0,
+      1000000
+    ],
+    "internalMax": [
+      0,
+      1000000
+    ],
+    "copGain": [
+      0,
+      1000000
+    ],
+    "minSpeedForCurv": [
+      0.000001,
+      1000000
+    ],
+    "splitTiltMax": [
+      0,
+      1000000
+    ],
+    "strokePower": [
+      0,
+      1000000
+    ],
+    "strokeBeta": [
+      0,
+      1000000
+    ],
+    "strokeDuration": [
+      0,
+      1000000
+    ],
+    "strokeEdge": [
+      0,
+      1000000
+    ],
+    "kneeRate": [
+      0,
+      1000000
+    ],
+    "kneeSpring": [
+      0,
+      1000000
+    ],
+    "kneeDamping": [
+      0,
+      1000000
+    ],
+    "maxKneeCompression": [
+      0,
+      1000000
+    ],
+    "fallLean": [
+      0,
+      1.55
+    ],
+    "fallError": [
+      0,
+      1000000
+    ],
+    "fallErrorTime": [
+      0,
+      1000000
+    ],
+    "fallAuthorityCredit": [
+      0,
+      1000000
+    ],
+    "jumpMode": [
+      0,
+      1000000
+    ],
+    "jumpLoadKnee": [
+      0,
+      1000000
+    ],
+    "jumpReleaseKnee": [
+      0,
+      1000000
+    ],
+    "jumpLoadMax": [
+      0,
+      1000000
+    ],
+    "jumpImpulse": [
+      0,
+      1000000
+    ],
+    "jumpWhip": [
+      0,
+      1000000
+    ],
+    "jumpRotBias": [
+      0,
+      1000000
+    ],
+    "inertiaOpen": [
+      0,
+      1000000
+    ],
+    "inertiaTucked": [
+      0,
+      1000000
+    ],
+    "inertiaPullRate": [
+      0,
+      1000000
+    ],
+    "toeWindow": [
+      0,
+      1000000
+    ],
+    "landingShock": [
+      0,
+      1000000
+    ],
+    "callQuarter": [
+      0,
+      1000000
+    ],
+    "callUnder": [
+      0,
+      1000000
+    ],
+    "callDowngrade": [
+      0,
+      1000000
+    ],
+    "callEdgeUnclear": [
+      0,
+      1000000
+    ],
+    "callEdgeWrong": [
+      0,
+      1000000
+    ],
+    "movesMode": [
+      0,
+      1000000
+    ],
+    "crossoverLean": [
+      0,
+      1000000
+    ],
+    "backPushScale": [
+      0,
+      1000000
+    ],
+    "turnTime": [
+      0,
+      1000000
+    ],
+    "muTurn": [
+      0,
+      1000000
+    ],
+    "mohawkScrub": [
+      0,
+      1000000
+    ],
+    "turnMinSpeed": [
+      0,
+      1000000
+    ],
+    "turnCarry": [
+      0,
+      1000000
+    ],
+    "turnCarryTime": [
+      0,
+      1000000
+    ],
+    "twizzleRate": [
+      0,
+      1000000
+    ],
+    "twizzleArmsOut": [
+      0,
+      1000000
+    ],
+    "twizzleScrub": [
+      0,
+      1000000
+    ],
+    "twizzleMinSpeed": [
+      0,
+      1000000
+    ],
+    "twizzleSteerTime": [
+      0,
+      1000000
+    ],
+    "spinMinSpeed": [
+      0,
+      1000000
+    ],
+    "spinArm": [
+      0,
+      1000000
+    ],
+    "spinDecay": [
+      0,
+      1000000
+    ],
+    "spinTravelDecay": [
+      0,
+      1000000
+    ],
+    "spinTravelKeep": [
+      0,
+      1000000
+    ],
+    "spinTravelTime": [
+      0,
+      1000000
+    ],
+    "spinMinOmega": [
+      0,
+      1000000
+    ],
+    "spinExitSpeed": [
+      0,
+      1000000
+    ],
+    "spinSitKnee": [
+      0,
+      1000000
+    ],
+    "spinCamelPitch": [
+      0,
+      1000000
+    ],
+    "inaBauerMinSpeed": [
+      0,
+      1000000
+    ],
+    "inaBauerDrag": [
+      0,
+      1000000
+    ],
+    "inaBauerScrub": [
+      0,
+      1000000
+    ],
+    "jumpSpeedShare": [
+      0,
+      1000000
+    ],
+    "mass": [
+      0.000001,
+      1000000
+    ],
+    "comHeight": [
+      0.000001,
+      1000000
+    ],
+    "stanceHalfWidth": [
+      0,
+      1000000
+    ],
+    "gravity": [
+      0.000001,
+      1000000
+    ]
+  },
+  "inputBounds": {
+    "lean": [
+      -1,
+      1
+    ],
+    "pitch": [
+      -1,
+      1
+    ],
+    "leanSplit": [
+      -1,
+      1
+    ],
+    "knee": [
+      0,
+      1
+    ],
+    "weight": [
+      0,
+      1
+    ],
+    "carriage": [
+      0,
+      1
+    ]
+  }
+}

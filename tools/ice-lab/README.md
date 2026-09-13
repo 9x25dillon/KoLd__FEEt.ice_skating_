@@ -28,6 +28,10 @@ is the entire build step. The cost is that only *erasable* syntax is allowed —
 no `enum`, no `namespace`, no constructor parameter properties — and
 `test/boundary.test.ts` enforces that rather than letting it fail in a browser.
 
+The separate [UE-REPLAY-01 native foundation](native/README.md) builds C++ math
+and serialization checks against the pinned `/5` oracle. It does not yet run
+a native solver or Unreal verifier.
+
 ---
 
 ## What it found

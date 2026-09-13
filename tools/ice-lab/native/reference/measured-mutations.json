@@ -1,0 +1,26 @@
+{
+  "sourceCommit": "8d89af29caa14ee413e94fc821c76458d8974836",
+  "evidence": "TypeScript reference only",
+  "mutations": [
+    {
+      "name": "recorded-digest-frame-4",
+      "tick": 5,
+      "expected": 3358095701,
+      "actual": 3358095700,
+      "ticksAttempted": 5,
+      "firstNumericDifference": null
+    },
+    {
+      "name": "brake-frame-100",
+      "tick": 101,
+      "expected": 1528175992,
+      "actual": 2962664100,
+      "ticksAttempted": 101,
+      "firstNumericDifference": {
+        "path": "/0/blade/0/contact/x",
+        "expectedBits": "400ae0032097d7a9",
+        "actualBits": "400adf91d5812909"
+      }
+    }
+  ]
+}
