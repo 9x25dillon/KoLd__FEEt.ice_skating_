@@ -65,6 +65,11 @@ A case in the corpus has exactly one source type.
 | **footage** | Broadcast or rink video, with a timestamp and the measurement method written out | A value with the uncertainty of that method |
 | **derived** | Computed from an L0 physical relation | That the solver obeys the relation it claims to implement |
 
+**A literature value quoted from another paper is secondary.** It may seed a case, but the case counts
+toward coverage only after the value has been checked against the primary source, and the case cites
+both. [ice-literature.md](ice-literature.md) marks every number it records as measured, modelled or
+secondary.
+
 **Derived cases check the implementation, not the model.** A derived case can find a sign error, an
 integration error at 120 Hz, or a regression. It cannot show that the model matches reality, because
 it only compares the solver with the equations it was written from. Derived cases are part of the
