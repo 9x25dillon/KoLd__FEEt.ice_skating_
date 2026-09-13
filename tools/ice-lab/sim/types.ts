@@ -215,6 +215,18 @@ export interface SkaterState {
   /** Which foot is pushing. Alternates, so a stroke sequence is two-beat. */
   strokeFoot: Foot;
   /**
+   * The push under way is a crossover: movesMode on, and the blade tilted past
+   * `crossoverLean` when it began. Fixed for the length of the push.
+   */
+  crossover: boolean;
+  /**
+   * Where the centre of that crossover's curve is: +1 toward perpLeft(heading),
+   * -1 the other side, 0 for a straight stroke. Both pushes of a crossover
+   * drive the body toward it — the outside foot pushing out on its inside edge,
+   * the inside foot pushing under on its outside edge.
+   */
+  crossSide: number;
+  /**
    * Whether push was down last tick. Strokes are level-triggered (hold it and
    * you keep stroking); standing up after a fall is edge-triggered, because a
    * button already held when the ice arrived is not a decision to get up.

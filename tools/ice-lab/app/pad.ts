@@ -109,6 +109,8 @@ export interface Controls {
   pickJump: number;
   /** Next sample skater (sim/profile.ts): K. Keyboard only. Ignored in playtest. */
   cycleProfile: boolean;
+  /** The moves on or off (movesMode): L. The pad reaches them through D-pad up. Ignored in playtest. */
+  cycleMoves: boolean;
 }
 
 const NOTHING: Controls = {
@@ -117,6 +119,7 @@ const NOTHING: Controls = {
   knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
   cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
+  cycleMoves: false,
 };
 
 /**
@@ -243,6 +246,7 @@ export class Pad {
     if (this.pressed("g")) out.toggleGame = true;
     if (this.pressed("h")) out.cycleGhost = true;
     if (this.pressed("k")) out.cycleProfile = true;
+    if (this.pressed("l")) out.cycleMoves = true;
     for (let n = 1; n <= 6; n++) if (this.pressed(String(n))) out.pickJump = n - 1;
 
     this.prevKeys = new Set(this.keys);

@@ -147,7 +147,7 @@ export function bodyPoints(s: SkaterState, p: Params): Body {
     if (air) f = go(B, n, side(i) * 0.08);
     else if (b.inContact) f = { x: b.contact.x, y: b.contact.y, z: 0 };
     else f = go(go({ x: support.x, y: support.y, z: 0.28 }, t, -0.45), n, side(i) * 0.1);  // free leg, behind
-    if (s.strokeFoot === i && beat > 0) f = go(go(f, n, side(i) * 0.35 * beat), t, -0.2 * beat);
+    if (s.strokeFoot === i && beat > 0) f = go(go(f, n, (s.crossover ? -s.crossSide : side(i)) * 0.35 * beat), t, -0.2 * beat);
     return f;
   };
   const feet: [V3, V3] = [foot(0), foot(1)];
@@ -402,7 +402,9 @@ export class Renderer {
       const side = i === FOOT.Left ? 1 : -1;
       let [fx, fy] = air ? [-0.02, side * 0.06]
         : b.inContact ? local(b.contact) : [support[0] - 0.42, support[1] + side * 0.16];
-      if (s.strokeFoot === i && beat > 0) { fx -= 0.25 * beat; fy += side * 0.35 * beat; }
+      // A crossover's push goes to the outside of the curve whichever foot
+      // makes it: the inside foot's reaches under the body.
+      if (s.strokeFoot === i && beat > 0) { fx -= 0.25 * beat; fy += (s.crossover ? -s.crossSide : side) * 0.35 * beat; }
       const load = b.inContact ? 0.35 + 0.65 * b.weight : 0.25;
       const leg = `rgba(84,124,160,${load.toFixed(2)})`;
       stroke([torsoX - 0.06, side * 0.11, (torsoX + fx) / 2 - 0.05 * s.knee, (side * 0.11 + fy) / 2, fx, fy],
@@ -630,6 +632,17 @@ export class Renderer {
     return out;
   }
 
+  /** The move under way, while the moves are on. */
+  private movesLines(s: SkaterState, p: Params): Array<[string, string]> {
+    if (p.movesMode <= 0) return [];
+    if (s.strokeTime > 0 && s.crossover) {
+      const inside = s.crossSide > 0 ? FOOT.Left : FOOT.Right;
+      return [[`CROSSOVER  ${s.strokeFoot === inside
+        ? "inside foot pushes under, on its outside edge" : "outside foot pushes out"}`, JADE]];
+    }
+    return [["MOVES  push on a curve for a crossover", DIM]];
+  }
+
   private hud(s: SkaterState, p: Params, info: string[]): void {
     const ctx = this.ctx;
     const d = (r: number): string => (r * 180 / Math.PI).toFixed(1);
@@ -642,8 +655,9 @@ export class Renderer {
     const sb = s.blade[s.supportFoot];
     const skidLine = sb.inContact && Math.abs(sb.tilt) > p.flatThreshold;
     const jumpLines = this.jumpLines(s, p);
+    const movesLines = this.movesLines(s, p);
     const height = 4 + 5 * 16 + 6 + 2 * 46 + 4 + (skidLine ? 16 : 0) + (s.fallen ? 16 : 0)
-      + jumpLines.length * 16 + 8 + info.length * 16 + 6;
+      + jumpLines.length * 16 + movesLines.length * 16 + 8 + info.length * 16 + 6;
     ctx.fillStyle = "rgba(7,16,26,0.86)";
     ctx.fillRect(8, 8, Math.min(480, this.canvas.width - 16), height);
     ctx.fillStyle = JADE;
@@ -701,6 +715,7 @@ export class Renderer {
     }
     if (s.fallen) line(`DOWN — ${FALL_NAME[s.fallReason]} · A / Space to stand up`, "#ff4d6d");
     for (const [text, col] of jumpLines) line(text, col);
+    for (const [text, col] of movesLines) line(text, col);
 
     y += 8;
     for (const t of info) line(t, DIM);

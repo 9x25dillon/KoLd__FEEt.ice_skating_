@@ -176,6 +176,9 @@ export class Lab {
     // operator's say-so. They are contained: off in every preset, and off here
     // for certain, so no measured block can have a jump rescue the carve.
     if (this.playtest) this.params.jumpMode = 0;
+    // The moves came the same way, on the operator's say-so, and are contained
+    // the same way: no measured block can have a crossover carry the carve.
+    if (this.playtest) this.params.movesMode = 0;
     // Audio may only start from a gesture; a gamepad press is not one.
     window.addEventListener("keydown", () => { if (this.sound) this.audio.unlock(); });
     window.addEventListener("pointerdown", () => { if (this.sound) this.audio.unlock(); });
@@ -250,7 +253,15 @@ export class Lab {
       this.reset();   // a new target starts the way that jump leaves the ice
     }
     if (c.cycleJump && !this.playtest) {
-      this.params.jumpMode = (this.params.jumpMode + 1) % 3;
+      // Off -> hop -> full jumps -> full jumps with the moves -> off. The pad
+      // has no button left for the moves alone; the keyboard has L.
+      if (this.params.jumpMode < 2) this.params.jumpMode++;
+      else if (this.params.movesMode < 1) this.params.movesMode = 1;
+      else { this.params.jumpMode = 0; this.params.movesMode = 0; }
+      this.panel.refresh();
+    }
+    if (c.cycleMoves && !this.playtest) {
+      this.params.movesMode = this.params.movesMode >= 1 ? 0 : 1;
       this.panel.refresh();
     }
     if (c.cyclePreset && !this.playtest) {

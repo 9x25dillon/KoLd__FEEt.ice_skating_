@@ -89,6 +89,15 @@ const GROUPS: Array<{ title: string; note: string; sliders: Slider[] }> = [
     ],
   },
   {
+    title: "Moves",
+    note: "Off in every preset and forced off under ?playtest=1, like jumps. At 1 a push on a curve is a crossover: the outside foot pushes out, the inside foot pushes under on its outside edge, and both pushes hold the arc instead of weaving off it. L toggles it; J steps to it after full jumps.",
+    sliders: [
+      { key: "movesMode", label: "0 carve only · 1 moves", min: 0, max: 1, step: 1 },
+      { key: "crossoverLean", label: "crossover above lean", min: 0.07, max: 0.6, step: 0.005, deg: true },
+      { key: "backPushScale", label: "backward push ×", min: 0.5, max: 1, step: 0.01 },
+    ],
+  },
+  {
     title: "Edge classification",
     note: "Scoring reads the ESTABLISHED timestamp, not the first tick over a threshold.",
     sliders: [

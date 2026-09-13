@@ -91,7 +91,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     lean, leanRate: 0, leanEq: 0, balanceError: 0, balanceErrorTime: 0,
     latAccel: 0, intAccel: 0, intHeld: 0, tiltCmd: lean, legLength: p.comHeight, legRate: 0,
     comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
-    knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, pushHeld: false,
+    knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, crossover: false, crossSide: 0, pushHeld: false,
     jump: newJump(p), landed: noResult(),
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
@@ -196,6 +196,14 @@ export function step(
   if (alive && input.push && s.strokeTime <= 0) {
     s.strokeTime = p.strokeDuration;
     s.strokeFoot = (1 - s.strokeFoot) as Foot;   // two-beat alternation
+    // "A straight stroke on a flat, a crossover on a curve" (bible §2.1). Read
+    // off the BODY's lean, not the blade's: at speed a wide arc needs little
+    // blade and a lot of lean — 7 m/s round 13 m is 9 degrees of blade and 21
+    // of body — and a tilt threshold turned those crossovers back into
+    // strokes. Fixed for the push, so a lean that changes mid-push cannot turn
+    // half a stroke into a crossover.
+    s.crossover = p.movesMode >= 1 && Math.abs(s.lean) >= p.crossoverLean;
+    s.crossSide = s.crossover ? sign(s.lean) : 0;
   }
   const stroking = s.strokeTime > 0;
 
@@ -226,6 +234,52 @@ export function step(
   let yawNumer = 0, yawDenom = 0, latForceTotal = 0, excessWeighted = 0;
   let flatImpulse = v2(0, 0);
 
+  // A CROSSOVER'S PUSH IS CENTRIPETAL AS WELL AS PROPULSIVE. In a straight
+  // stroke the sideways halves of the two beats point opposite ways and cancel;
+  // on a curve the outside foot pushes out on its inside edge and the inside
+  // foot pushes UNDER on its outside edge, so both reactions point at the
+  // centre. That shared inward force is carried here: the carving blades need
+  // that much less bite for the same arc, the body feels the same total lateral
+  // acceleration, and only the forward half is added to the speed in 5b — a
+  // centripetal force does no work. So a crossover holds a curve a stroke would
+  // weave off, and at the limit it skids later.
+  //
+  // (The bible's §2.2 writes "the outside foot pushes under, the inside foot
+  // pushes out". That is the wrong way round: the underpush is the inside foot's,
+  // on its outside edge — which is also the only assignment in which both
+  // reactions point inward. Corrected here rather than copied.)
+  //
+  // The pushing leg's share of the body is on the same arc as the rest of it,
+  // so its centripetal demand does not vanish for the push: the carving blades
+  // take it up, less what the push itself supplies. Leaving it out — which is
+  // what a straight stroke does, and harmlessly, since a straight line has no
+  // arc — halves the body's lateral support for the length of every push on a
+  // curve, the equilibrium lean halves with it, and the curve collapses the
+  // moment the skater pushes. Measured, responsive at 5 m/s on a 20 degree
+  // edge: the blade command went from 31 degrees to -8 within a second of the
+  // first stroke, and the arc from 4 m to 15.
+  //
+  // With the moves on, every push carries the pushing leg this way; only a
+  // crossover's push also supplies inward force. With them off, pushes stay
+  // exactly as `spec` has them, defect included.
+  let crossLat = 0, crossLoad = 0, crossUsed = 0, pushMass = 0;
+  if (stroking && p.movesMode >= 1) {
+    const pb = s.blade[s.strokeFoot];
+    if (pb.inContact) {
+      for (let i = 0; i < 2; i++) {
+        if (i !== s.strokeFoot && s.blade[i].inContact) crossLoad += s.blade[i].normalLoad;
+      }
+      if (crossLoad > 0) {
+        pushMass = pb.normalLoad / g;
+        if (s.crossover) {
+          const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? p.backPushScale : 1;
+          crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * knee * p.mass * back,
+            biteCapacity(pb.normalLoad, s.crossSide * p.strokeEdge, p));
+        }
+      }
+    }
+  }
+
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     // The pushing blade rolls onto its own INSIDE edge for the length of the
@@ -236,9 +290,13 @@ export function step(
     // A pushing blade is committed to its own inside edge and answers to
     // nothing else; every other blade carries the body's tilt, plus its share
     // of however far the two are being held apart.
+    //
+    // In a crossover both pushing blades lean toward the curve's centre: the
+    // outside foot is then on its inside edge as in a stroke, and the inside
+    // foot on its OUTSIDE edge — the underpush.
     const apart = (i === FOOT.Left ? -1 : 1) * split * p.splitTiltMax;
     b.tilt = pushing
-      ? (i === FOOT.Left ? -p.strokeEdge : p.strokeEdge)
+      ? (s.crossover ? s.crossSide * p.strokeEdge : (i === FOOT.Left ? -p.strokeEdge : p.strokeEdge))
       : clamp(s.tiltCmd + apart, -p.maxTilt, p.maxTilt);
 
     if (!b.inContact) {
@@ -285,7 +343,17 @@ export function step(
 
     const rGeo = carveRadius(b.tilt, rhoEff);
     const massShare = b.normalLoad / g;      // kg this blade answers for
-    const fNeed = massShare * vLong * vLong / rGeo;
+    // In a crossover, a blade carving toward the push's centre also answers
+    // for its share of the pushing leg, and is spared its share of the push.
+    // Outside one, both are zero and the carve is exactly as it was,
+    // expression for expression.
+    const inCross = pushMass > 0 && !pushing;
+    const share = inCross ? b.normalLoad / crossLoad : 0;
+    const helped = crossLat > 0 && sign(b.tilt) === s.crossSide ? share * crossLat : 0;
+    crossUsed += helped;
+    const arcMass = inCross ? massShare + share * pushMass : massShare;
+    const fArc = arcMass * vLong * vLong / rGeo;
+    const fNeed = inCross ? Math.abs(fArc - helped) : fArc;
     const fBite = biteCapacity(b.normalLoad, b.tilt, p);
 
     // `excess` is an ACCELERATION (m/s^2): the part of the demand the edge
@@ -293,6 +361,13 @@ export function step(
     let radius: number, excess: number, fLat: number;
     if (fNeed <= fBite) {
       radius = rGeo; excess = 0; fLat = fNeed;
+    } else if (inCross) {
+      // Letting go mid-crossover: the arc opens to what the push and the bite
+      // hold between them.
+      const held = helped + (fArc >= helped ? fBite : -fBite);
+      radius = held > 1e-6 ? arcMass * vLong * vLong / held : 1e6;
+      excess = (fNeed - fBite) / Math.max(arcMass, 1e-6);
+      fLat = fBite;
     } else {
       // The edge lets go: the arc opens out to whatever the bite can hold and
       // the difference is scrubbed off as speed.
@@ -305,7 +380,9 @@ export function step(
     b.biteCapacity = fBite;
     b.demandRatio = fBite > 1e-6 ? fNeed / fBite : 0;
     b.latSlipAccel = excess;
-    b.latForce = fLat * sign(b.tilt);
+    // Toward the arc's centre — unless a crossover is pushing in harder than
+    // the arc needs, when the edge holds the body out instead.
+    b.latForce = fLat * sign(b.tilt) * (fArc >= helped ? 1 : -1);
 
     // A PUSHING blade is not carrying the skater — it is the push. Its lateral
     // force is applied explicitly in 5b, so counting the carve force here as
@@ -336,6 +413,10 @@ export function step(
       prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: 0,
     });
   }
+
+  // The inward half of a crossover push acts on the body however the blades
+  // shared it, so the pendulum feels the same total the arc demands.
+  if (crossUsed > 0) latForceTotal += s.crossSide * crossUsed;
 
   // ── 4. turn the blades and the body ───────────────────────────────────────
   // An ideal edge does no work: it changes where the velocity points, not how
@@ -402,17 +483,23 @@ export function step(
     const push = s.blade[s.strokeFoot];
     if (push.inContact) {
       const outward = s.strokeFoot === FOOT.Left ? 1 : -1;
-      const wanted = p.strokePower * knee * p.mass;
-      const force = Math.min(wanted, push.biteCapacity);
       // Reaction to a push along the splayed blade's normal: forward by
       // sin(beta), sideways by cos(beta). The sideways halves cancel across
       // the two beats, which is what makes alternation the natural gait.
       // Skating backward, the splay mirrors across the blade's normal and the
-      // push drives backward: a C-cut rather than a stroke. Unreachable before
-      // jumps, since nothing else can turn a skater around.
+      // push drives backward: a C-cut rather than a stroke, and with the moves
+      // on a slightly weaker one (backPushScale).
       const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? -1 : 1;
-      const dirv = mul(rotate(perpLeft(s.heading), outward * back * p.strokeBeta), -outward);
-      s.vel = add(s.vel, mul(dirv, (force / p.mass) * dt));
+      const wanted = p.strokePower * knee * p.mass * (back < 0 && p.movesMode >= 1 ? p.backPushScale : 1);
+      const force = Math.min(wanted, push.biteCapacity);
+      if (s.crossover && crossLat > 0) {
+        // Forward only: the inward half was centripetal, shared with the
+        // carving blades in section 3, and a centripetal force does no work.
+        s.vel = add(s.vel, mul(s.heading, back * (force / p.mass) * sin(p.strokeBeta) * dt));
+      } else {
+        const dirv = mul(rotate(perpLeft(s.heading), outward * back * p.strokeBeta), -outward);
+        s.vel = add(s.vel, mul(dirv, (force / p.mass) * dt));
+      }
     }
   }
 

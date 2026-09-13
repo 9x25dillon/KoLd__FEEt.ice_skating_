@@ -200,6 +200,32 @@ export interface Params {
   callEdgeUnclear: number;
   callEdgeWrong: number;
 
+  // ── moves ─────────────────────────────────────────────────────────────────
+  // The skating vocabulary beyond the carve: crossovers first. Added on the
+  // operator's direction (2026-09-13), over pre-production-plan.md §1 the way
+  // jumps were, and contained the way jumps are: 0 in every preset, forced to
+  // 0 under ?playtest=1, and every lever below is inert at 0 — so no measured
+  // block contains a move, and every number recorded so far still measures
+  // the same thing.
+  /** 0 the carve-only rig, 1 the moves: crossovers on a curve. */
+  movesMode: number;
+  /**
+   * |blade tilt command| at or above which a push is a crossover rather than a
+   * stroke, rad. The bible's A is "a straight stroke on a flat, a crossover on
+   * a curve", and data/motion-primitives.json says the solver rejects a
+   * crossover "below a minimum heading change, which is physically why you
+   * cannot crossover in a straight line". This is that minimum, as a lean.
+   */
+  crossoverLean: number;
+  /**
+   * A push made skating backward, as a fraction of the same push forward.
+   * data/motion-primitives.json has a back crossover gaining 1.05 m/s where a
+   * forward one gains 1.15, and a back stroke 0.60 where a forward one gains
+   * 0.75: pushing backward is slightly WEAKER, not stronger. The crossover
+   * ratio is taken, since back crossovers are how skaters approach jumps.
+   */
+  backPushScale: number;
+
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
   comHeight: number;
@@ -278,6 +304,10 @@ export const DEFAULT_PARAMS: Params = {
   callEdgeUnclear: 0.25,
   callEdgeWrong: 0.55,
 
+  movesMode: 0,
+  crossoverLean: 0.21,       // 12 deg: the shallow-edge boundary
+  backPushScale: 0.91,       // 1.05 / 1.15, data/motion-primitives.json
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -334,6 +364,11 @@ export function validate(p: Params): string[] {
     errs.push("rotation call thresholds must rise q < under < downgrade");
   if (p.callEdgeUnclear >= p.callEdgeWrong)
     errs.push("callEdgeUnclear must be below callEdgeWrong");
+  if (![0, 1].includes(p.movesMode)) errs.push("movesMode is 0 (the carve only) or 1 (the moves)");
+  if (p.backPushScale <= 0 || p.backPushScale > 1)
+    errs.push("backPushScale is a fraction of the forward push, in (0, 1]");
+  if (p.crossoverLean < p.flatThreshold)
+    errs.push("crossoverLean is below flatThreshold, so a push on a flat blade would count as a crossover");
   if (p.internalMax > 2.0 && p.internalRateGain <= 0)
     errs.push("internalMax above 2 with no internalRateGain: a proportional gain with no damping "
       + "makes balance worse, not easier — raise internalRateGain first");

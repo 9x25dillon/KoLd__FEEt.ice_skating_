@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 194 tests
+node --test test/*.test.ts     # 201 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -251,12 +251,12 @@ the next one**, and the entry tables above moved by 1–3° when it landed.
 
 Keyboard: **A/D** lean, **W/S** rocker fore-aft, **Shift** knee, **Q/E** weight,
 **Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **K** sample
-skater, **M** pad scheme. Jumps, when on: **J** cycles off / hop / full, **C** arms out, **F** toe
-pick.
+skater, **M** pad scheme. Jumps, when on: **J** cycles off / hop / full / full with the
+moves, **C** arms out, **F** toe pick. **L** turns the moves on and off by themselves.
 
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
 weight, **Y** reset, **X** preset, **Back** scheme; for jumps, **right stick**
-carriage, **B** toe pick, **D-pad ↑** jump mode, **D-pad ↓** camera view, **D-pad ← →**
+carriage, **B** toe pick, **D-pad ↑** jump mode (and past full jumps, the moves), **D-pad ↓** camera view, **D-pad ← →**
 zoom — or, in the jump challenge, the previous / next jump. The courses are on
 the stick clicks: **left stick click** next course, **right stick click** next
 ghost. The chase camera's tilt stays on **[ / ]**. A browser hides a gamepad
@@ -462,6 +462,52 @@ hiss, and a toe click, takeoff swell and landing "chk" that is dirtier the worse
 the landing. Both are in the plan's build list and both stay on in playtest.
 Audio starts on the first key or click; a gamepad press is not a gesture.
 
+## The moves — crossovers
+
+Added 2026-09-13, on the operator's direction — *"i am seeing skaters doing back
+crossovers right into the jump and we need to put that in the games engine for
+simulation realism"* — over [pre-production-plan.md §1](../../docs/pre-production-plan.md)
+the way jumps were, and contained the way jumps are: `movesMode` is 0 in every
+preset, `?playtest=1` forces it to 0, and every lever it gates is inert at 0.
+Replayed through `/4` and `/5` with the moves off, the fixture and three of the
+operator's play clips — 22,184 ticks — match on every state field and event.
+
+**A push while leaning into a curve is a crossover** (bible §2.1: *"a straight
+stroke on a flat, a crossover on a curve"*). The outside foot pushes out on its
+inside edge, as a stroke does; the inside foot pushes **under** the body on its
+**outside** edge. Both reactions then point at the centre, so the push carries
+part of the arc's centripetal force instead of weaving the skater off it — and
+since a centripetal force does no work, only the push's forward half is speed.
+Whether a push is a crossover is read off the body's lean (`crossoverLean`, 12°),
+not the blade's: at 7 m/s a 13 m circle is 9° of blade and 21° of body, and a
+blade threshold turned those crossovers back into strokes.
+
+The bible's §2.2 has the feet the wrong way round (*"the outside foot pushes
+under, the inside foot pushes out"*); the underpush is the inside foot's, which
+is also the only assignment in which both reactions point inward. Corrected in
+`sim/solver.ts`, recorded here.
+
+**What it found.** A stroke on a curve had always been broken, and nothing
+stroked on a curve until now. During a push the pushing leg carries half the
+body but supplies no centripetal force, so the body's lateral support halves,
+the equilibrium lean halves with it, and the curve collapses the moment the
+skater pushes: measured at 5 m/s on a 20° command, 51% short of what the arc
+needs and the lean swinging 19–53°. With the moves on, every push has the
+carving blade carry the pushing leg, and a crossover supplies its own share:
+within 0.3% of the arc and 20–27° of lean through twenty pushes.
+`test/crossover.test.ts` holds both numbers. `spec` keeps the defect, as it
+keeps the others.
+
+**Against the data.** `data/motion-primitives.json` has a forward crossover
+gaining 1.15 m/s at 6 m/s and a back crossover 1.05. Measured from 5.7 m/s at a
+full knee: **+1.01 forward, +0.92 backward** — the bible's push is 12% short of
+the data, and backward is `backPushScale` (0.91, the data's own ratio) of forward.
+Pushing backward is slightly *weaker*, not stronger; skaters use back crossovers
+before jumps because they build speed while already facing the way the takeoff
+needs, so no turn has to bleed it off at the last moment. Stroking and
+crossovers both top out near 8.7 m/s, where the pushing blade's own edge starts
+to skid.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in
@@ -616,7 +662,7 @@ require the exact schema, solver version, 120 Hz rate, complete finite tuning,
 bounded input axes, boolean buttons, at most 36,000 ticks and at most 64 MiB.
 Warnings about balance tuning are preserved so a bad tuning can be reproduced.
 
-`ice-lab-f64/4` is a JavaScript regression contract. CRC32 covers every state
+`ice-lab-f64/5` is a JavaScript regression contract. CRC32 covers every state
 field and event using canonical JSON, with straight-blade Infinity encoded
 explicitly; it is a diagnostic, not an authenticity signature. **A clip
 verifies in any JavaScript engine**, not only the one that recorded it: every
@@ -639,6 +685,9 @@ fixture's 240 ticks matched the `/2` solver on every shared field and event.
 positions within 2.2e-16 m of `/3`, a 4,742-tick play clip within 6.5e-12 m,
 same falls on the same ticks), so the fixture was re-run from its own inputs.
 `/3` clips no longer load; verify one against a checkout of `34fecd8`.
+`/4` to `/5` added the moves: `movesMode` and its levers on the tuning, what they
+carry on the state. With the moves off the fixture and three play clips, 22,184
+ticks, matched `/4` on every field and event; `/4` clips verify against `9400137`.
 
 `test/fixtures/replay-v1.json` pins a 240-tick skating run with a tuning change
 at tick 121. PR checks run the tests, browser build and fixture verifier under

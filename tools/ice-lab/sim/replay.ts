@@ -26,7 +26,14 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       fixture's positions agree to 2.2e-16 m and a 4,742-tick play clip's to
 //       6.5e-12 m, with the same falls on the same ticks.
 //       /3 clips no longer load; verify one against a checkout of 34fecd8.
-export const REPLAY_SOLVER = "ice-lab-f64/4";
+//   /5  The moves (movesMode): Params gained movesMode and the moves' levers,
+//       and SkaterState gained what they carry, starting with crossovers
+//       (`crossover`, `crossSide`). With movesMode 0 — every preset — nothing
+//       moved at all: the fixture and three operator play clips, 22,184 ticks,
+//       replayed through /4 and /5 with every /4 state field and event
+//       identical on every tick. /4 clips no longer load; verify one against a
+//       checkout of 9400137.
+export const REPLAY_SOLVER = "ice-lab-f64/5";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
