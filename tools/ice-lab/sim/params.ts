@@ -255,6 +255,23 @@ export interface Params {
   turnCarry: number;
   /** Seconds that carried rotation takes to drain away. */
   turnCarryTime: number;
+  /**
+   * rad/s a twizzle spins at with the arms in. data/motion-primitives.json's
+   * twizzle is two revolutions over 4.5 m at 6 m/s: 16.8 rad/s.
+   */
+  twizzleRate: number;
+  /** The share of that rate lost with the arms held all the way out (carriage 1). */
+  twizzleArmsOut: number;
+  /**
+   * A twizzle's scrape as a share of a turn's (muTurn): it is made on the ball
+   * of the foot, a smaller contact than a turn's rocker. Calibrated to the
+   * data's -1.0 m/s for two revolutions at 6 m/s.
+   */
+  twizzleScrub: number;
+  /** m/s below which a twizzle cannot start, and half of which ends one. */
+  twizzleMinSpeed: number;
+  /** Seconds for the stick's steer to bend a twizzle's path. */
+  twizzleSteerTime: number;
 
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
@@ -343,6 +360,11 @@ export const DEFAULT_PARAMS: Params = {
   turnMinSpeed: 1.0,
   turnCarry: 0.11,           // a three-turn entry worth about a third of a revolution at a full whip
   turnCarryTime: 0.5,
+  twizzleRate: 16.0,
+  twizzleArmsOut: 0.5,
+  twizzleScrub: 0.75,
+  twizzleMinSpeed: 2.0,
+  twizzleSteerTime: 0.3,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -404,6 +426,10 @@ export function validate(p: Params): string[] {
   if (p.turnTime < 4 * SIM_DT) errs.push("turnTime is under four ticks: a pivot needs a cusp to flip at");
   if (p.turnCarry > 1) errs.push("turnCarry is a share of the pivot rate, 0..1");
   if (p.turnCarryTime <= 0) errs.push("turnCarryTime must be positive");
+  if (p.twizzleRate * SIM_DT >= Math.PI / 2)
+    errs.push("twizzleRate turns a quarter revolution in a tick, so a cusp could be skipped");
+  if (p.twizzleArmsOut >= 1) errs.push("twizzleArmsOut is a share of the rate, below 1");
+  if (p.twizzleSteerTime <= 0) errs.push("twizzleSteerTime must be positive");
   if (p.backPushScale <= 0 || p.backPushScale > 1)
     errs.push("backPushScale is a fraction of the forward push, in (0, 1]");
   if (p.crossoverLean < p.flatThreshold)

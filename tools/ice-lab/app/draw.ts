@@ -639,17 +639,22 @@ export class Renderer {
     if (s.move === MOVE.Turn) {
       const T = s.turn;
       out.push([`TURN  ${codeToString(T.fromCode)} ${T.dir > 0 ? "↺" : "↻"} ${(T.swept * 180 / Math.PI).toFixed(0)}°`
-        + `${T.cusped ? `  ${TURN_NAME[T.kind]}` : "  — weight to the other foot for a mohawk"}`, GOLD]);
+        + `${T.cusps > 0 ? `  ${TURN_NAME[T.kind]}` : "  — weight to the other foot for a mohawk"}`, GOLD]);
+    } else if (s.move === MOVE.Twizzle) {
+      const T = s.turn;
+      out.push([`TWIZZLE  ${(T.swept / (2 * Math.PI)).toFixed(2)} rev ${T.dir > 0 ? "↺" : "↻"}  ${(T.rate / (2 * Math.PI)).toFixed(1)} rev/s`
+        + `${T.release ? "  finishing" : "  — let go to come out"}`, GOLD]);
     } else if (s.strokeTime > 0 && s.crossover) {
       const inside = s.crossSide > 0 ? FOOT.Left : FOOT.Right;
       out.push([`CROSSOVER  ${s.strokeFoot === inside
         ? "inside foot pushes under, on its outside edge" : "outside foot pushes out"}`, JADE]);
     } else {
-      out.push(["MOVES  push on a curve: crossover · B on an edge: turn", DIM]);
+      out.push(["MOVES  push on a curve: crossover · B turn · Z twizzle", DIM]);
     }
     const m = s.moveDone;
-    if (m.tick >= 0 && m.kind === MOVE.Turn) {
-      out.push([`LAST  ${codeToString(m.fromCode)} ${TURN_NAME[m.detail]} → ${codeToString(m.toCode)}`
+    if (m.tick >= 0 && m.kind !== MOVE.None) {
+      const what = m.kind === MOVE.Turn ? TURN_NAME[m.detail] : `twizzle ${m.revolutions.toFixed(2)} rev`;
+      out.push([`LAST  ${codeToString(m.fromCode)} ${what} → ${codeToString(m.toCode)}`
         + `  −${m.speedLost.toFixed(2)} m/s${Math.abs(s.spinCarry) > 0.05 ? `  carry ${s.spinCarry.toFixed(1)} rad/s` : ""}`, INK]);
     }
     return out;

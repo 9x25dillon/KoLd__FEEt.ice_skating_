@@ -50,7 +50,7 @@
 // bible's version is the project's own and reads more directly on screen.
 
 import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos } from "./math.ts";
-import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT, MOVE } from "./types.ts";
+import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT, MOVE, HELD } from "./types.ts";
 import type {
   SkaterState, BladeState, SkatingInput, EdgeEvent, Foot, Fall,
 } from "./types.ts";
@@ -59,7 +59,11 @@ import { SIM_DT } from "./params.ts";
 import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean } from "./blade.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
 import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
-import { newTurn, noMove, turnStart, turnPivot, turnFrame, turnLoadFoot, turnEvent, carryDecay } from "./moves.ts";
+import {
+  newTurn, noMove, turnStart, twizzleStart, turnPivot, twizzleTick, turnFrame, turnLoadFoot,
+  turnEvent, twizzleEvent, carryDecay, pivoting,
+} from "./moves.ts";
+import type { PivotTick } from "./moves.ts";
 
 /**
  * A non-finite axis is a bug in the caller, and it must not be a quiet one.
@@ -94,7 +98,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
     knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, crossover: false, crossSide: 0, pushHeld: false,
     jump: newJump(p), landed: noResult(),
-    move: MOVE.None, turn: newTurn(), moveDone: noMove(), turnHeld: false, flips: 0, spinCarry: 0,
+    move: MOVE.None, turn: newTurn(), moveDone: noMove(), movesHeld: 0, flips: 0, spinCarry: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -125,14 +129,15 @@ export function step(
   // allocation here is a reset, and a reset is allowed to allocate.
   const freshPush = input.push && !s.pushHeld;
   s.pushHeld = input.push;
-  // A turn also starts on a fresh press, and for the same reason.
-  const freshTurn = input.turn === true && !s.turnHeld;
-  s.turnHeld = input.turn === true;
+  // A move also starts on a fresh press, and for the same reason.
+  const heldNow = (input.turn === true ? HELD.Turn : 0) | (input.twizzle === true ? HELD.Twizzle : 0);
+  const freshMoves = heldNow & ~s.movesHeld;
+  s.movesHeld = heldNow;
   if (s.fallen && freshPush) {
     // The last landing is kept: it is the record of why they are down. So is
     // the frame count, since the heading is kept and a scheme reads it.
-    const { pos, heading, tick, landed, moveDone, flips, turnHeld } = s;
-    Object.assign(s, createState(p), { pos, heading, tick, landed, moveDone, flips, turnHeld, pushHeld: true });
+    const { pos, heading, tick, landed, moveDone, flips, movesHeld } = s;
+    Object.assign(s, createState(p), { pos, heading, tick, landed, moveDone, flips, movesHeld, pushHeld: true });
     for (const b of s.blade) {
       b.tangent = v2(heading.x, heading.y);
       b.contact = v2(pos.x, pos.y);
@@ -174,11 +179,13 @@ export function step(
   const split = clamp(axis(input.leanSplit, 0), -1, 1);
   const contactS = clamp(0.5 + 0.5 * clamp(axis(input.pitch, 0), -1, 1), 0, 1);
 
-  // ── 0c. a turn begins ─────────────────────────────────────────────────────
+  // ── 0c. a turn or a twizzle begins ────────────────────────────────────────
   // sim/moves.ts: on a fresh press, if the edge permits one. From here until
   // it ends the body is on one foot and the pivot stands in for sections 2-5.
-  if (freshTurn) turnStart(s, p);
-  const turning = s.move === MOVE.Turn;
+  if (freshMoves & HELD.Turn) turnStart(s, p);
+  else if (freshMoves & HELD.Twizzle) twizzleStart(s, p);
+  const turning = pivoting(s);
+  const moveThisTick = s.move;
 
   // ── 1. legs -> normal load ────────────────────────────────────────────────
   // A deep knee is more push, more bite and more jump impulse; here it only
@@ -224,11 +231,12 @@ export function step(
   // ── 1c. or a turn's pivot, in place of sections 2-5 ───────────────────────
   let yawNumer = 0, yawDenom = 0, latForceTotal = 0, excessWeighted = 0;
   let flatImpulse = v2(0, 0);
-  let cusp = false;
+  let pivot: PivotTick | null = null;
   if (turning) {
-    const pivot = turnPivot(s, p, dt, weightR);
+    pivot = s.move === MOVE.Turn
+      ? turnPivot(s, p, dt, weightR)
+      : twizzleTick(s, p, dt, leanCmd, axis(input.carriage, 0), input.twizzle === true);
     latForceTotal = pivot.lat * p.mass;
-    cusp = pivot.cusp;
   }
 
   // ── 2. balance controller: where the lean should put the blade ────────────
@@ -618,7 +626,8 @@ export function step(
     }
     b.depth = classifyDepth(b.tilt, p);
   }
-  if (cusp) turnEvent(s, events);
+  if (pivot?.cusp && moveThisTick === MOVE.Turn) turnEvent(s, events);
+  if (pivot?.ended && moveThisTick === MOVE.Twizzle) twizzleEvent(s, events);
 
   // ── 9. fall, latched ──────────────────────────────────────────────────────
   // Latched, because a fall condition that stays true would otherwise emit an

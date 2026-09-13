@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 212 tests
+node --test test/*.test.ts     # 218 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -253,7 +253,7 @@ Keyboard: **A/D** lean, **W/S** rocker fore-aft, **Shift** knee, **Q/E** weight,
 **Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **K** sample
 skater, **M** pad scheme. Jumps, when on: **J** cycles off / hop / full / full with the
 moves, **C** arms out, **F** toe pick. **L** turns the moves on and off by themselves; with
-them on, **B** on an edge is a turn.
+them on, **B** on an edge is a turn and **Z** held a twizzle.
 
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
 weight, **Y** reset, **X** preset, **Back** scheme; for jumps, **right stick**
@@ -261,7 +261,8 @@ carriage, **B** toe pick, **D-pad ↑** jump mode (and past full jumps, the move
 zoom — or, in the jump challenge, the previous / next jump. The courses are on
 the stick clicks: **left stick click** next course, **right stick click** next
 ghost. With the moves on the face buttons take the bible's §2.1 layout: **B** is the
-turn, and the toe pick moves to a tap of **LT**, which held is still the brake.
+turn, **X** held a twizzle, and the toe pick moves to a tap of **LT**, which held
+is still the brake (the preset stays on keyboard **T**).
 The chase camera's tilt stays on **[ / ]**. A browser hides a gamepad
 until a button is pressed, which reads exactly like a broken pad.
 
@@ -465,7 +466,7 @@ hiss, and a toe click, takeoff swell and landing "chk" that is dirtier the worse
 the landing. Both are in the plan's build list and both stay on in playtest.
 Audio starts on the first key or click; a gamepad press is not a gesture.
 
-## The moves — crossovers and turns
+## The moves — crossovers, turns and twizzles
 
 Added 2026-09-13, on the operator's direction — *"i am seeing skaters doing back
 crossovers right into the jump and we need to put that in the games engine for
@@ -552,6 +553,18 @@ revolutions and a fall; out of a LFO three-turn, **1.93** and a clean double. At
 full whip, 3.02 against 3.34. `turnCarry` is a balance lever and is labelled as
 one: a third of a revolution at a full whip is a choice, taken so the whip stays
 the main source of rotation and the entry still clearly matters.
+
+**Twizzles.** **Z** (pad **X**) held: *"travelling rotation on one foot; hold to
+sustain, stick to steer"* (bible §2.1). The same pivot kept going — spun up to
+`twizzleRate`, slower with the arms out, a cusp every half revolution — while
+the body travels on and the stick bends its path. Let go and it finishes to the
+next alignment with the path, so when you let go chooses whether you come out
+forward or backward. A twizzle is skated upright over the foot: the body is held
+at the lean its path needs rather than balanced through a loop nobody steers at
+two and a half revolutions a second. Measured from 5.8 m/s: **two revolutions in
+0.84 s for 0.96 m/s** (data: 720° over 4.5 m at 6 m/s for 1.0 m/s); on the right
+foot the edge alternates RFO / RBI; a held ±0.4 of stick bends a one-second
+twizzle's path ±39° and none leaves it straight.
 
 ## What a session measures
 
@@ -759,7 +772,7 @@ sim/replay.ts      bounded capture, strict import, full-state checks and playbac
 sim/jump.ts        load, air, land: JumpResolver.cpp, and the panel's calls
 sim/score.ts       one jump's score, from the data files: ScoreCalculator.cs
 sim/profile.ts     who is skating: body, blade wear, five stats, baked over a preset
-sim/moves.ts       the moves: turns (a pivot, a cusp, a frame flip), and the carry into a jump
+sim/moves.ts       the moves: turns and twizzles (a pivot, cusps, frame flips), and the carry into a jump
 replay/verify.ts   command-line replay verification
 app/pad.ts         controller and keyboard: hardware, and nothing else
 app/schemes.ts     A, B and C — what an axis MEANS, as pure functions
@@ -803,7 +816,7 @@ It is the edge cutting a groove and pushing sideways against the wall of it.
 
 ## What is deliberately not here
 
-Spins, and turns beyond the three-turn and mohawk (brackets, rockers, counters,
+Spins, and turns beyond the three-turn, mohawk and twizzle (brackets, rockers, counters,
 choctaws), falls beyond their trigger, animation, networking, stamina,
 flow, combinations and sequences, and the ice grid (tracings are
 drawn, but they do not yet feed friction or bite back into the solver as the

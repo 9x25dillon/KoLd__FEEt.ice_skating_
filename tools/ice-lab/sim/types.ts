@@ -142,28 +142,32 @@ export interface JumpResult {
 // ── moves ───────────────────────────────────────────────────────────────────
 
 /** The move under way. One at a time; sim/moves.ts owns every field. */
-export const MOVE = { None: 0, Turn: 1 } as const;
-export const MOVE_NAME = ["", "TURN"] as const;
+export const MOVE = { None: 0, Turn: 1, Twizzle: 2 } as const;
+export const MOVE_NAME = ["", "TURN", "TWIZZLE"] as const;
+
+/** Bits of SkaterState.movesHeld: which move buttons were down last tick. */
+export const HELD = { Turn: 1, Twizzle: 2 } as const;
 
 /** Which turn a pivot became, decided at the cusp by the foot the weight is on. */
 export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1 } as const;
 export const TURN_NAME = ["three-turn", "mohawk"] as const;
 
 /**
- * A turn in progress: the blade pivots half a revolution about its contact,
- * on the rocker, while the body keeps the arc it was on. Bible §2.3: a three
- * turn keeps the foot and changes the edge, a mohawk changes the foot and keeps
- * the edge's character; both rotate INTO the curve and leave the skater going
- * the other way.
+ * A pivot in progress — a turn or a twizzle. The blade rotates about its
+ * contact while the body travels. Bible §2.3: a three turn keeps the foot and
+ * changes the edge, a mohawk changes the foot and keeps the edge's character;
+ * both rotate INTO the curve and leave the skater going the other way. A
+ * twizzle keeps going: a travelling rotation on one foot, a cusp every half
+ * revolution.
  */
 export interface TurnState {
   /** Seconds into the pivot. */
   t: number;
-  /** Radians the blade has pivoted against the path, 0..pi. */
+  /** Radians the blade has pivoted against the path: 0..pi for a turn, on and on for a twizzle. */
   swept: number;
   /** +1 anticlockwise, -1 clockwise: the way the body turns. */
   dir: number;
-  /** rad/s of blade pivot, set at entry from the rocker the contact is on. */
+  /** rad/s of blade pivot now: fixed for a turn, spun up and held for a twizzle. */
   rate: number;
   /** rad/s the path was turning at entry, which the body keeps through the pivot. */
   pathRate: number;
@@ -173,9 +177,11 @@ export interface TurnState {
   foot: Foot;
   /** The foot that carries the exit: the same one, or the other for a mohawk. */
   exitFoot: Foot;
-  /** Past the cusp: the frame has flipped and the exit edge is live. */
-  cusped: boolean;
-  /** TURN_KIND, final once cusped. */
+  /** Cusps passed — blade square to the path, the frame flipped. A turn has one. */
+  cusps: number;
+  /** A twizzle whose button has been let go, finishing to the next alignment. */
+  release: boolean;
+  /** TURN_KIND, final once past the cusp. */
   kind: number;
   /** Edge code at entry. */
   fromCode: number;
@@ -191,6 +197,8 @@ export interface MoveResult {
   kind: number;
   /** For a turn, TURN_KIND. */
   detail: number;
+  /** Revolutions the blade turned against the path: a turn's half, a twizzle's count. */
+  revolutions: number;
   fromCode: number;
   toCode: number;
   /** Speed lost across the move, m/s. */
@@ -299,8 +307,8 @@ export interface SkaterState {
   turn: TurnState;
   /** The last move that finished. */
   moveDone: MoveResult;
-  /** Whether the turn request was down last tick: a turn starts on a fresh press. */
-  turnHeld: boolean;
+  /** HELD bits: which move buttons were down last tick. A move starts on a fresh press. */
+  movesHeld: number;
   /**
    * How many times the body's frame has been reversed — a turn's cusp. Lean,
    * tilt and every lateral quantity are measured toward perpLeft(heading), so
@@ -364,11 +372,13 @@ export interface SkatingInput {
    * a mohawk — is the foot the weight is on at the cusp.
    */
   turn: boolean;
+  /** The twizzle button, held: a travelling rotation for as long as it is (movesMode on). */
+  twizzle: boolean;
 }
 
 export const NEUTRAL_INPUT: SkatingInput = {
   lean: 0, knee: 0.35, weight: 0.5, pitch: 0, leanSplit: 0, push: false, brake: false,
-  carriage: 0, toe: false, turn: false,
+  carriage: 0, toe: false, turn: false, twizzle: false,
 };
 
 // ── events ──────────────────────────────────────────────────────────────────
@@ -376,14 +386,14 @@ export const NEUTRAL_INPUT: SkatingInput = {
 export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
   SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
-  Takeoff: 8, Landing: 9, Turn: 10,
+  Takeoff: 8, Landing: 9, Turn: 10, Twizzle: 11,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
   "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
-  "TAKEOFF", "LANDING", "TURN",
+  "TAKEOFF", "LANDING", "TURN", "TWIZZLE",
 ] as const;
 
 export interface EdgeEvent {
@@ -393,6 +403,6 @@ export interface EdgeEvent {
   prevCode: number;
   newCode: number;
   prevDwell: number;
-  /** Context: tilt at a change, slip speed at a skid, lean at a fall, TURN_KIND at a turn's cusp. */
+  /** Context: tilt at a change, slip speed at a skid, lean at a fall, TURN_KIND at a turn's cusp, revolutions at a twizzle's end. */
   value: number;
 }

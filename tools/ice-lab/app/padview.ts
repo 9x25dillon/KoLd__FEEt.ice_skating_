@@ -177,7 +177,7 @@ export class PadView {
       ["B", this.moves ? "turn" : "toe", this.moves ? this.turnLit : this.flash.toe > 0],
       ...(this.moves ? [["LT tap", "toe", this.flash.toe > 0] as [string, string, boolean]] : []),
       ["Y", "reset", this.flash.reset > 0],
-      ["X", "preset", this.flash.cyclePreset > 0],
+      ["X", this.moves ? "twizzle" : "preset", this.moves ? (this.input?.twizzle ?? false) : this.flash.cyclePreset > 0],
       ["⧉", "scheme", this.flash.cycleScheme > 0],
       ["☰", "pause", this.flash.pause > 0],
       ["▲", "jumps", this.flash.cycleJump > 0],
@@ -200,7 +200,7 @@ export class PadView {
       text(`→ lean ${sg(it.lean)}  pitch ${sg(it.pitch)}  split ${sg(it.leanSplit)}`,
         x + 10, y + 204, INK);
       text(`  knee ${it.knee.toFixed(2)}  wt ${it.weight.toFixed(2)}  arms ${it.carriage.toFixed(2)}`
-        + `${it.push ? " PUSH" : ""}${it.brake ? " BRK" : ""}${it.toe ? " TOE" : ""}${it.turn ? " TURN" : ""}`, x + 10, y + 220, INK);
+        + `${it.push ? " PUSH" : ""}${it.brake ? " BRK" : ""}${it.toe ? " TOE" : ""}${it.turn ? " TURN" : ""}${it.twizzle ? " TWZ" : ""}`, x + 10, y + 220, INK);
     } else {
       text("→ waiting for the first tick", x + 10, y + 204);
     }

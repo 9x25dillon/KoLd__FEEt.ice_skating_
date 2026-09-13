@@ -200,9 +200,9 @@ export function jumpGround(
   if (J.t > IDEAL_LOAD * 1.6) J.preRotation += PRE_ROTATION_RATE * dt;
   if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; return; }
   if (kneeIn >= p.jumpReleaseKnee) return;
-  // Mid-turn the blade is scraping across its path: the release waits for the
-  // exit edge, and takes off from it (sim/moves.ts).
-  if (s.move === MOVE.Turn) return;
+  // Mid-move the blade is not on an edge to leave from: the release waits for
+  // the exit edge, and takes off from it (sim/moves.ts).
+  if (s.move !== MOVE.None) return;
 
   // ── TAKEOFF ───────────────────────────────────────────────────────────────
   const foot = s.supportFoot;

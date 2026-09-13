@@ -95,6 +95,8 @@ export interface Controls {
    * bible puts it). The solver starts a turn on the press.
    */
   turn: boolean;
+  /** The twizzle button, held (keyboard Z; with the moves on, pad X, where the bible puts it). */
+  twizzle: boolean;
   /** One-shot: true only on the frame the button went down. */
   reset: boolean;
   pause: boolean;
@@ -128,7 +130,7 @@ export interface Controls {
 const NOTHING: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
-  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false, turn: false,
+  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false, turn: false, twizzle: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
   cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
   cycleMoves: false,
@@ -223,7 +225,9 @@ export class Pad {
       out.brake = moves ? ltDown && this.ltTicks > LT_TAP_TICKS : ltDown;
       out.reset = (gp.buttons[Y]?.pressed ?? false) && !this.prevButtons.has(Y);
       out.pause = (gp.buttons[START]?.pressed ?? false) && !this.prevButtons.has(START);
-      out.cyclePreset = (gp.buttons[X]?.pressed ?? false) && !this.prevButtons.has(X);
+      // With the moves on, X is the bible's twizzle; the preset stays on T.
+      if (moves) out.twizzle = gp.buttons[X]?.pressed ?? false;
+      else out.cyclePreset = (gp.buttons[X]?.pressed ?? false) && !this.prevButtons.has(X);
       out.cycleScheme = (gp.buttons[BACK]?.pressed ?? false) && !this.prevButtons.has(BACK);
       if (moves) {
         out.toe = ltDown && !this.ltWasDown;
@@ -265,6 +269,7 @@ export class Pad {
     if (this.held("c")) out.carriage = 1;
     if (this.pressed("f")) out.toe = true;
     if (this.held("b")) out.turn = true;
+    if (this.held("z")) out.twizzle = true;
     if (this.pressed("j")) out.cycleJump = true;
     if (this.pressed("v")) out.cycleView = true;
     if (this.pressed("=") || this.pressed("+")) out.zoom += 1;
