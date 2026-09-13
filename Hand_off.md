@@ -1,82 +1,106 @@
 # Hand-off
 
-**Last session: 2026-09-11 (eighth). Repo state: complete specification, plus a running Ice Lab with
+**Last session: 2026-09-13 (ninth). Repo state: complete specification, plus a running Ice Lab with
 replay that verifies in any engine, three control schemes, a debug camera, three courses with ghost
-races, and — new today — a skater profile layer: body, blade wear and five trainable stats baked over
-a preset. The first piece of the career game.**
+races, a skater profile layer, and — new today — the moves: crossovers, the three-turn and the
+mohawk, twizzles, spins, the Ina Bauer, and edge and toe jumps reached from those entries with the
+approach speed part of the lift.**
 
 Read this before touching anything. It covers what exists, what is decided, the conventions that
 hold the document set together, and the things most likely to trip you up.
 
 > **This line changed.** Until 2026-09-08 this file said *"zero implementation."* That is no longer
-> true: `tools/ice-lab/` is real, runs, and has 194 passing tests, including replay
-> capture/pla## 0 · Start here (written at the close of 2026-09-11, eighth session)
+> true: `tools/ice-lab/` is real, runs, and has 244 passing tests, including replay capture and a
+> verifier that replays a clip recorded in one JavaScript engine in another.
 
-**Repo:** `main` at `00ec259`, pushed. This hand-off edit is the only uncommitted change of ours.
-The operator's play data has moved: it now lives in **`E_W_replays_sessions_eng_bld/`** at the repo
-root (cards, clips, params exports, event logs), untracked on purpose. Use only what is there; do not
-commit or delete it without asking. The stray `Ice Lab — KoLd__FEEt edgework.html` at the root is a
-browser "save page" of the lab, also untracked — not a source file.
+## 0 · Start here (written 2026-09-13, ninth session)
 
-**Two sessions happened on 2026-09-11.** The seventh (before this one) closed all three items the
-sixth left open and then built the game layers; the eighth built the profile layer. Read the §8 log
-rows for both. In one breath, the seventh landed: edge changes counting the skater's choices rather
-than strokes (`f1cb2b4`), deterministic transcendentals so a Firefox clip verifies in Node
-(`0b4636b`, ADR-EDGE-007 done, `test/boundary.test.ts` bans raw `Math.sin`/`pow`/`**` in `sim/`),
-session card `/2` with jumps and a clip link (`87607af`), a debug camera with a chase view, the
-Figure Eight, ghost races, the edge course, the jump challenge, and the courses on a pad.
+**Repo:** branch **`ice-lab-moves`**, seven commits on top of `main` at `9400137` (six layers and
+this hand-off). **Local only: not pushed, not merged** — the operator has not said to do either;
+ask. `main` is untouched. The operator's play data lives in **`E_W_replays_sessions_eng_bld/`** at the
+repo root (cards, clips, params exports, event logs), untracked on purpose; use only what is there,
+and do not commit or delete it without asking. The stray `Ice Lab — KoLd__FEEt edgework.html` at the
+root is a browser "save page" of the lab, also untracked — not a source file.
 
-**What the eighth session built — `sim/profile.ts`.** The operator's direction, in their words:
-*"skaters weight increasing or decreasing speed angle and blade edge sharpness and ice carve depth,
-skater strength parameters and stamina pool that can be leveled up through training and practice
-mini games, and professional career progression."* The profile layer is the first piece:
+**How the session turned.** It opened on the eighth session's list, and the carve item (below) was
+assessed and put to the operator as one question. They redirected instead, in their words: *"i noticed
+that alot of ice skating is done mostly while skating with the skaters body and blades facing
+backwards, so we need to add to the sim engine that carving in reverse right before a jump is how most
+figure skaters are able to perform ... it looks like skating in reverse adds alot more speed and
+angular momentum as well."* That was measured and answered before anything was built: jumps do take
+off backward (five of six); a back edge adds spin only through the way it curves — the same inputs
+turn 3.04 revolutions backward and 2.58 forward, and the lutz's back edge curves against its spin;
+backward is **not** faster (the rig's stroke is mirrored exactly, and `data/motion-primitives.json` has
+back pushes slightly weaker); the real gap was that nothing in the engine could turn a skater around.
+Then: *"yes build the three-turn, swizzles, Crossovers, edge and toe jumps, spins, the Ina Bauer and
+the mohawk. and your right, i am seeing skaters doing back crossovers right into the jump and we need
+to put that in the games engine for simulation realism"*.
 
-- A `SkaterProfile` (mass, height, blade wear, five stats 0..100, XP) is **baked** by
-  `applyProfile(preset, profile)` into an ordinary `Params`. The solver never sees a profile. Fifty
-  on every stat is the reference skater and bakes to the preset **bit for bit** — tested over every
-  preset — so no recording, fixture or measurement has moved.
-- The balance is one table, `STAT_EFFECTS`, and one curve: linear below 50, diminishing returns
-  above (`t^0.75`, written as square roots because `sim/` may not call `Math.pow`), XP price
-  quadratic in the stat. `train`, `overall`, `tierOf` (club → regionals → nationals → grand prix →
-  worlds, bible §1) and `level` are the hooks the career module will call. All pure.
-- **Stamina moves nothing yet** and a test says so. The rig has no Wind/Legs pool (bible §2.8); the
-  solver's stroke has no stamina term. Filling that row is a solver change and the next physics step.
-- Mass does less than a player expects — stroke, bite and lean all scale with normal load, so it
-  cancels. It moves drag per kilogram and jump impulse (scaled by `sqrt(55 / mass)`).
-- **K** cycles four sample skaters in the lab over the loaded preset; the HUD names them.
-  Measured, `responsive` at 4 m/s: edge entry 21° / 27° / 27° at stat 0 / 50 / 100 (the top half
-  buys settling, not depth — the lean loop binds first); stroking from 1 m/s reaches
-  3.0 / 3.9 / 4.9 m/s in six seconds.
+**What was built** — one layer per commit, every one behind **`movesMode`**: 0 in every preset, forced
+to 0 under `?playtest=1`, and every lever inert at 0, the way jumps are contained. Each number is a
+test in `tools/ice-lab/test/`, measured before it was asserted, against the project's own data:
 
-**The operator's next asks, stated 2026-09-11 and not started, in their order:**
+| commit | layer | measured | data |
+| --- | --- | --- | --- |
+| `8da3a2a` | **crossovers** — a push while leaning into a curve; the inside foot pushes under on its outside edge; both pushes carry the arc | +1.01 m/s forward, +0.92 back, per crossover at full knee | +1.15 / +1.05 |
+| `aee316c` | **three-turn and mohawk** — a pivot on the rocker, a frame flip at the cusp, the weight at the cusp decides which; a jump out of one inherits its rotation | 0.46 / 0.42 m/s from 6.2; a half-whip salchow 1.60 rev and a fall from a steady LBI, 1.88 and a clean double out of a three-turn | 0.45 / 0.40 |
+| `a282cf7` | **twizzles** — the pivot kept going; hold to sustain, stick to steer, let go to come out forward or back | two revolutions in 0.84 s for 0.96 m/s | 720° for 1.0 m/s |
+| `e10e6a7` | **spins** — L from the entry (m v spinArm, the check), I from the position, ω = L / I; knee deep sit, stick forward camel | upright off 4.5 m/s: 4.0 rev/s draining to 2.3 over 4 s, 11 revolutions, 0.29 m drift | inertia scales from `spin-positions.json` |
+| `33986ce` | **the Ina Bauer** — two feet, the trailing blade reversed; lean toward the lead foot and both are outside edges | 1.03 m/s in a second from 5.85 | 1.1 over 6 m at 6 |
+| `1e38ad0` | **edge and toe jumps from their entries** — the approach is 20% of the lift, per jump at its triple's entry speed; a toe jump vaults over its pick | a loop off at 4.6 m/s turns 2.61 and falls; after back crossovers, off at 7.4, 2.83 and lands | entry speeds from `entry-templates.json` |
 
-1. **The carve as a feature.** Two ideas in their words: *"adding a ghost line to follow"* and
-   *"being able to use the carved lines as a performance tool."* The tracing is drawn but feeds
-   nothing back (bible §05 wants friction and bite to read it). A ghost line already half-exists:
-   `app/race.ts` re-simulates any replay beside the live run. The new part is the tracing as
-   data — a buffer the solver reads (carve depth → ice damage → glide friction, as
-   `SkateSolver.cpp` does with `Ice.GlideFriction`) and the game reads (did you hold the line).
-   Decide first whether the ground-truth line is a replay's tracing or a designed curve; both are
-   cheap once the tracing is a buffer rather than pixels.
-2. **A career module** holding training and the practice mini-games. The courses (Figure Eight,
-   edge course, jump challenge) are the mini-games already; what is missing is a `CareerState` that
-   earns XP from them and calls `train`. Keep it in `sim/` or a new `career/` that imports only
-   `sim/`, so a career is replayable like a run.
-3. **Stat balance tied to the competitive scoring.** `overall` and the tier floors are the
-   attachment points. `sim/score.ts` scores one jump from `data/`; a field of rivals needs
-   profiles → expected scores, which is a calibration to do against the tier ladder once (1) and (2)
-   exist. Not before.
-4. **Stamina pools in the solver** (bible §2.8, `SkateSolver.cpp` `UpdateStamina`/`StaminaGain`).
-   Required before the stamina stat means anything. It changes solver output only when a pool is
-   below full, but bump `REPLAY_SOLVER` anyway and re-prove the fixture.
+**With the moves off, nothing moved.** Every commit replayed the fixture and three operator clips —
+22,184 ticks, the hop clip included — through the committed `/4` solver and the new one, with every
+`/4` state field and event identical on every tick (scratch script, recipe in §5 item 14). The replay
+contract is **`ice-lab-f64/5`**, one version for the whole unpushed set, extended commit by commit with
+the fixture re-recorded from its own inputs each time. Once pushed, any further change is `/6`.
 
-**Toolchain reminders:** `npm run typecheck` still fails (no tsc on the box). Scratch-install
-`typescript @types/node` and run `tsc --noEmit -p . --typeRoots <scratch>/node_modules/@types`
-from `tools/ice-lab/`; TypeScript 7.0.2 was clean today. The README's test count line is 194.
+**Controls with the moves on** (**L** toggles them; **J** / D-pad ↑ steps off → hop → full jumps →
+full jumps with the moves). Keyboard: **B** turn, **Z** twizzle, **Y** spin, **I** Ina Bauer, with Q / E
+choosing the foot. **The pad's face buttons switch to the bible's §2.1 layout** — B turn, X twizzle, Y
+spin, LB + RB Ina Bauer, the toe pick a tap of LT (held, still the brake), **reset on Back**, preset and
+scheme on keyboard T and M only. **Tell the operator before they play: they reset with Y.** A held stick
+keeps its circle through a turn (`latchTurns`, `app/schemes.ts`).
 
----
+**Found along the way** (each in the README):
 
-ing costs a fall; export the replay with its button, never by pasting.
+1. **The bible's §2.2 has the crossover feet backwards** (*"the outside foot pushes under"*). The
+   underpush is the inside foot's, on its outside edge. Corrected in `sim/solver.ts` and recorded —
+   a candidate for the §3.5 corrections table and the bible itself, which was not edited.
+2. **A stroke on a curve always halved the body's lateral support** — the pushing leg carries weight
+   and no centripetal force — so a curve collapsed the moment anyone pushed on it: 51% short of the
+   arc, lean swinging 19–53°. Nothing stroked on a curve before. Kept in `spec` and with the moves off;
+   with them on, every push has the carving blade carry the pushing leg.
+3. **A two-footed lean command locks at maxTilt more easily than a one-footed one.** `responsive`, 4
+   m/s, weight 0.5: a 20° command overshoots, pins the blade at 64.7° and falls in 3.3 s; one-footed it
+   tracks to 20.4°; at 5 m/s two-footed it holds. Symmetric, and identical in the `/4` solver — not
+   new, not fixed. It is what a pad player with both bumpers released meets, and crossovers at speed in
+   that state wind the lean deeper. Worth a trace (§5 item 8) before any tuning.
+
+**The operator's asks from 2026-09-11 are still open**, in their order: (1) **the carve as a
+feature** — *"a ghost line to follow"*, *"use the carved lines as a performance tool"*; this session
+recommended one layer, `sim/ice.ts`: a ~12 cm damage/snow grid written by every blade pass (bible
+§3.2), read by glide friction and bite (0.006 → 0.015, off in `spec`), with the ghost carving its own
+ice so its whole line lies ahead of you and an "off the line" read against it. The one question —
+is the ground-truth line a replay's tracing or a designed curve — went unanswered when the operator
+redirected; the recommendation was a replay's tracing, the Figure Eight keeping its circles for §6.
+Also: `SkateSolver.cpp` reads friction where it just wrote the tracing, so a blade would slow on its
+own wake — cells need the tick they were cut. (2) **A career module** calling `train`. (3) **Stat
+balance tied to scoring**, not before (1) and (2). (4) **Stamina pools** in the solver.
+
+**Loose ends of the moves**, none started: scheme B cannot steer backward (it chases the heading,
+which a turn reverses); spin levels (`SpinResolver.cpp` — the state already records positions held two
+revolutions); turns and twizzles in step-sequence levels (`step-features.json`); brackets, rockers,
+counters, choctaws; the jump challenge still starts attempts at 5 m/s (with the moves on its panel
+shows the target's entry speed beside yours).
+
+**Toolchain reminders:** `npm run typecheck` still fails (no tsc on the box); scratch-install
+`typescript @types/node` and run `tsc --noEmit -p . --typeRoots <scratch>/node_modules/@types` from
+`tools/ice-lab/` — TypeScript 7.0.2 was clean at every commit. **Headless Chromium** (`/usr/bin/chromium`)
+drives the real page over the DevTools protocol with nothing installed: `node app/serve.mjs`, launch
+`--headless=new --remote-debugging-port=…`, connect with Node's global `WebSocket`, and inject a fake
+analog pad with `Page.addScriptToEvaluateOnNewDocument` overriding `navigator.getGamepads` — the
+keyboard's A / D is a full 65° lean and puts the skater down at once. The README's test count is 244.
 
 ---
 
@@ -101,7 +125,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Data files | 12 in `data/` — 5 CSV, 6 JSON, 1 README |
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
-| Implementation | `tools/ice-lab/` — 194 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps (off by default), scoring from `data/`, skater profiles |
+| Implementation | `tools/ice-lab/` — 244 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps (off by default), scoring from `data/`, skater profiles, the moves (off by default) |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 
@@ -137,7 +161,7 @@ transcription rather than as discovery. **It is not the game and it is not an en
 
 ```sh
 cd tools/ice-lab
-node --test test/*.test.ts     # 194 pass, ~6 s
+node --test test/*.test.ts     # 244 pass, ~7 s
 node app/serve.mjs             # http://localhost:8123/
 ```
 
@@ -178,6 +202,17 @@ kinematics were proven identical to `/2` (§5 item 14's procedure).
 learn what each button does. The skater figure is drawn from state (feet on the solver's contacts,
 arms from the save, tuck in the air), and the input panel shows hardware beside the mapped
 `SkatingInput`. The panel is developer-only (off in playtest); the figure is not.
+
+**The moves, over the same refusal (added 2026-09-13, ninth session).** Crossovers, the three-turn and
+mohawk, twizzles, spins, the Ina Bauer, and jumps reached from those entries — the operator's list, in
+`sim/moves.ts` and the solver, behind `movesMode` with the same containment as jumps (0 in every
+preset, forced 0 in playtest, inert at 0). Two ideas hold it together. **A cusp is a change of frame,
+not of physics**: lean and tilt are measured toward the heading's left, so when a turn reverses the
+heading they all change sign with the body unchanged, and the edge code flips on the same tick
+(`flipFrame`, counted in `s.flips`, which a control scheme reads to keep a held stick on its side of
+the ice). **The moves are measured against the project's own data** — `motion-primitives.json` for
+costs, `spin-positions.json` for inertia, `entry-templates.json` for entry speeds — with every
+calibrated constant labelled a balance lever. The README's "The moves" section has all of it.
 
 Read [`tools/ice-lab/README.md`](tools/ice-lab/README.md) before changing any of it.
 
@@ -519,6 +554,28 @@ If you add a sixth page, copy the head from `docs/web/production.html`.
    hand-edited to `edgework-session/2`. The collector rebuilds cards and treats the field as the
    format; number sessions in the filename.
 
+24. **The Bash tool's shell is zsh here, not fish or bash.** An unquoted `$var` does not word-split:
+   `for cfg in "0 5 0.25"; do node x.ts $cfg` passes one argument and every number reads as NaN — a
+   run of all-zero traces that looks like a physics result. Use `${=cfg}`.
+
+25. **After a turn, lean and tilt have the opposite sign for the same body.** Anything reading
+   `s.lean` across a turn must follow `s.flips`. A test driver that does not mirror its stick at a
+   flip leans the skater out of the circle it was on; every moves test does the mirror by hand, the
+   way `latchTurns` does for a player.
+
+26. **Stroking and crossovers top out near 8.7 m/s**, where the pushing blade — at its 20° push edge,
+   carving nothing — reports its own skid and friction. Pre-existing, in `spec` too, and a plausible
+   ceiling; do not mistake it for drag.
+
+27. **Enter an Ina Bauer with the lean already in.** Pressed while the balance loop is still rolling a
+   lean in (the blade first tilts the other way), it starts on inside edges, correctly for the tilt it
+   found. Measured runs lean first.
+
+28. **Jump outcomes with the moves on depend on approach speed**, so a jump test copied from
+   `test/jump.test.ts` into moves mode comes out lower unless it approaches at the jump's entry speed
+   (`ENTRY_SPEED`, from `data/entry-templates.json`). The turns test's salchow had to move from 6.3
+   to 7.0 m/s for exactly this reason.
+
 ---
 
 ## 6 · Where to go next
@@ -572,10 +629,11 @@ In descending order of value:
 
 ### Not in the rig, deliberately
 
-Turns and three-turns, spins, jump combinations and sequences, stamina pools, flow, animation,
-networking, a career state, and ice-grid feedback — tracings are drawn but do not yet feed friction or
-bite back into the solver as the bible's §05 requires. The stroke is the bible's semi-analytic push,
-not a leg model. The profile layer (2026-09-11) exists but nothing moves its stats yet; see §0.
+Brackets, rockers, counters and choctaws; spin and step-sequence levels; jump combinations and
+sequences; stamina pools, flow, animation, networking, a career state, and ice-grid feedback — tracings
+are drawn but do not yet feed friction or bite back into the solver as the bible's §05 requires. The
+stroke is the bible's semi-analytic push, not a leg model. The profile layer (2026-09-11) exists but
+nothing moves its stats yet. The moves (2026-09-13) exist, contained; see §0.
 
 ### Known gaps, all deliberate
 
@@ -605,6 +663,7 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-13 (ninth) | The moves, on the operator's redirect toward backward skating and "back crossovers right into the jump": crossovers (`8da3a2a`), three-turn and mohawk (`aee316c`), twizzles (`a282cf7`), spins (`e10e6a7`), the Ina Bauer (`33986ce`), edge and toe jumps from their entries with the approach in the lift (`1e38ad0`). All behind `movesMode`, contained as jumps are; calibrated to `motion-primitives.json`, `spin-positions.json` and `entry-templates.json`. Found: the bible's crossover feet are backwards; a stroke on a curve always halved lateral support; two-footed lean commands lock at maxTilt at 4 m/s. Moves-off proven identical to `/4` over 22,184 ticks at every commit; replay `/5`. Driven in headless Chromium with a fake pad. 244 tests, tsc 7.0.2 clean. Branch `ice-lab-moves`, local, unpushed. |
 | 2026-09-11 (eighth) | The skater profile layer, on the operator's direction toward a career game: `sim/profile.ts` — body, blade wear, five stats baked over a preset by `applyProfile`, one balance table and curve, XP pricing, `train`/`overall`/`tierOf`/`level`. Reference skater bakes bit-for-bit to every preset. Stamina listed and inert, recorded by a test. K cycles four samples in the lab. 194 tests, tsc 7.0.2 clean. `00ec259`. |
 | 2026-09-11 (seventh) | Closed the sixth's three items: edge changes count choices not strokes (`f1cb2b4`), deterministic sin/cos/tan/atan2/asin/log in `sim/math.ts` with a boundary test banning raw `Math.*` transcendentals and `**` in `sim/` (`0b4636b`), session card `/2` with jumps and a clip digest (`87607af`). Then the game layers: debug camera and chase view, the Figure Eight with best-run ghosts, ghost races on any course, the edge course, the jump challenge from `data/`, and all of it on a pad. Every layer reads state and never writes it, tested; all unreachable in `?playtest=1`. |
 | 2026-09-10 (sixth, after push) | Served the lab for the operator's first play sessions. Found the stroke-inflated edge-change metric (measured), the Firefox-vs-Node replay divergence (confirmed by verifying in headless Firefox), and a paste-wrapped clip (repaired losslessly in scratch). No code changed after `34fecd8`. |
@@ -619,6 +678,8 @@ worth having.
 | 2026-09-09 (second) | The controls. Findings 4 and 5 fixed and a seventh found: the fall test scores a save as a fall. Two new parameters, both defaulting to the spec's behaviour; `validate()` now rejects the assist tier written the wrong way. 64 tests. |
 
 ### How the 2026-09-09 session ran, for whoever runs the next one
+
+(The ninth session's shape, 2026-09-13, is at the end of this section.)
 
 The shape that worked: **assess first, recommend once, then build.** The session opened as a
 review of `big_reffg.txt`, pivoted to "can this other repo become a game engine", and the useful
@@ -665,3 +726,15 @@ Two habits worth keeping:
   there and answered most of it in about five minutes.
 - **When a spec and the project's own reference code disagree, say which wins and why, in the
   code.** `sim/params.ts` carries that table as a comment. Nobody has to re-derive it.
+
+The ninth session's shape: **answer the claim before building the ask.** The operator's redirect came
+with a physics claim — backward skating adds speed and angular momentum — and the useful first move
+was four measurements (the takeoff's spin split, forward against backward, the stroke both ways, the
+data's back pushes) that kept what was right, corrected what was not, and located the real gap (no way
+to turn around). The operator then asked for seven things at once; they became six layers, each
+measured against the project's own data before its test was written, each proven not to move the
+moves-off solver, each committed before the next began. What cost time: a first crossover model that
+shared the push's force correctly and still let the curve collapse, because the pushing leg's own arc
+demand had never been carried — found by tracing the blade command through the first push rather than
+by sweeping; and a browser check driven from the keyboard, whose full-deflection lean put the skater
+down before any move could start, until a fake analog pad replaced it.
