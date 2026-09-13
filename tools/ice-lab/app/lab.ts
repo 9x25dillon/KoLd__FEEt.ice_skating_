@@ -431,7 +431,7 @@ export class Lab {
         let lines: PanelLine[];
         if (kind === "jumps") {
           lines = jumpLines(leap, this.state, this.jumpTarget, (k) => this.best(`jumps:${k}`), this.newBest,
-            this.params.jumpMode === 2, this.tables !== null);
+            this.params.jumpMode === 2, this.tables !== null, this.params.movesMode >= 1);
           // A jump is not a race against the clock: the ghost is there to watch.
           lines.push([ahead ? `ghost: ${this.ghostLabel} at this jump · ${ahead.result.score.toFixed(2)}`
             : this.ghostSource === "off" ? "no ghost · H for one" : "no ghost yet: land one", DIM]);

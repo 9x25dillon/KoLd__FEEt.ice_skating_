@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 237 tests
+node --test test/*.test.ts     # 244 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -468,7 +468,7 @@ hiss, and a toe click, takeoff swell and landing "chk" that is dirtier the worse
 the landing. Both are in the plan's build list and both stay on in playtest.
 Audio starts on the first key or click; a gamepad press is not a gesture.
 
-## The moves — crossovers, turns, twizzles, spins and the Ina Bauer
+## The moves — crossovers, turns, twizzles, spins, the Ina Bauer, and jumps from their entries
 
 Added 2026-09-13, on the operator's direction — *"i am seeing skaters doing back
 crossovers right into the jump and we need to put that in the games engine for
@@ -604,6 +604,29 @@ a second from 5.85 m/s** (data: 1.1 over 6 m at 6 m/s). Held the data's 1.8 s, t
 body keeps its lean to within 2° and the curve its direction. (Leaning in only at
 the press, while the balance loop is still rolling the lean in, can start one on
 inside edges — lean first.)
+
+**Edge and toe jumps, from their entries.** All six jumps were already in the rig;
+what the moves add is the way skaters reach them, and a reason for the crossovers
+before them. With the moves on, part of a jump's lift is its approach turned
+upward — blocked by the takeoff edge, or vaulted over the pick — so a jump's vertical
+velocity is `jumpSpeedShare` (0.2) of the reference scaled by takeoff speed over
+that jump's `data/entry-templates.json` entry speed for a triple (T 6.8, S 6.6, Lo
+6.4, F 7.0, Lz 7.5, A 7.8 m/s), and the rest the legs'. At its own entry speed a
+jump rises exactly as `jumpImpulse` says; faster higher, slower lower; what goes up
+comes out of the travel. **A toe jump vaults over its pick**: miss the pick's
+window and it has nothing to vault over. Edge jumps get their rotation from the
+edge's curve and the turn before them (`spinCarry`). A balance lever, labelled.
+
+Measured from 5 m/s backward with the same whip: a loop with no crossovers takes
+off at 4.6 m/s, turns 2.61 revolutions and falls; after three seconds of **back
+crossovers** it takes off at 7.4 m/s, rises higher, turns 2.83 and lands. A toe
+loop off the same crossovers lands (3Tq) with the pick in its window and goes down
+a revolution short with the pick too early. And every takeoff is reachable the way
+a skater reaches it — a flip (or without the pick, a salchow) off a LFO three-turn
+onto LBI, a lutz off clockwise back crossovers and a long LBO, an axel from back
+crossovers through an outside mohawk onto LFO — each identified by the resolver
+from how it left the ice (`test/entries.test.ts`). In the jump challenge, with the
+moves on, the panel shows the entry speed the target wants beside your own.
 
 ## What a session measures
 

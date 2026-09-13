@@ -310,6 +310,17 @@ export interface Params {
    * Ina Bauer: -1.1 m/s over 6 m at 6 m/s.
    */
   inaBauerScrub: number;
+  /**
+   * The share of a jump's lift that comes from its approach speed, with the
+   * moves on. A takeoff is not a leg pushing up from rest: the skater's travel
+   * is blocked by the edge — or, for a toe jump, vaulted over the pick — and
+   * part of it turns upward. Anchored per jump to data/entry-templates.json's
+   * min_entry_speed_ms for a triple: at that speed a jump rises exactly as
+   * `jumpImpulse` says, faster rises higher, slower lower. A toe jump without a
+   * clean pick has nothing to vault over and gets none of it. A balance lever,
+   * labelled as one.
+   */
+  jumpSpeedShare: number;
 
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
@@ -416,6 +427,7 @@ export const DEFAULT_PARAMS: Params = {
   inaBauerMinSpeed: 2.0,
   inaBauerDrag: 2.0,
   inaBauerScrub: 0.13,
+  jumpSpeedShare: 0.2,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -485,6 +497,7 @@ export function validate(p: Params): string[] {
   if (p.spinTravelTime <= 0) errs.push("spinTravelTime must be positive");
   if (p.spinMinSpeed <= 0) errs.push("spinMinSpeed must be positive: a spin from a standstill has no angular momentum");
   if (p.inaBauerDrag < 1) errs.push("inaBauerDrag multiplies the upright drag area: a side-on body has more, not less");
+  if (p.jumpSpeedShare > 1) errs.push("jumpSpeedShare is a share of the lift, 0..1");
   if (p.backPushScale <= 0 || p.backPushScale > 1)
     errs.push("backPushScale is a fraction of the forward push, in (0, 1]");
   if (p.crossoverLean < p.flatThreshold)

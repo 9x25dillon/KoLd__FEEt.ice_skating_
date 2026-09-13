@@ -62,6 +62,14 @@ export const JUMP_DEFS: readonly JumpDef[] = [
   { foot: FOOT.Left, side: EDGE.Outside, dir: DIR.Forward, toe: false, edgeCallable: false },   // A
 ];
 
+/**
+ * m/s: data/entry-templates.json's min_entry_speed_ms for each jump's triple,
+ * in JUMP order — T, S, Lo, F, Lz, A. With the moves on, a jump taken off at
+ * its own speed rises as jumpImpulse says (`jumpSpeedShare`). Transcribed, as
+ * JUMP_DEFS is; test/entries.test.ts holds them to the file.
+ */
+export const ENTRY_SPEED = [6.8, 6.6, 6.4, 7.0, 7.5, 7.8] as const;
+
 // JumpResolver.cpp's own constants, carried verbatim. They shape quality
 // rather than deciding a call, which is why they are not on the panel.
 const IDEAL_LOAD = 0.30;           // s
@@ -227,6 +235,17 @@ export function jumpGround(
 
   // Ballistics are fixed HERE and cannot be changed in the air.
   J.vz = p.jumpImpulse * (0.62 + 0.38 * q);
+  // With the moves on, part of the lift is the approach turned upward: blocked
+  // by the takeoff edge, or vaulted over the pick — so a toe jump that missed
+  // its pick has nothing to vault over. What goes up comes out of the travel.
+  if (p.movesMode >= 1 && J.kind !== JUMP_NONE) {
+    const vh = len(s.vel);
+    const vault = !JUMP_DEFS[J.kind].toe || struck ? vh / ENTRY_SPEED[J.kind] : 0;
+    const legs = J.vz * (1 - p.jumpSpeedShare);
+    J.vz = legs + J.vz * p.jumpSpeedShare * vault;
+    const left = vh * vh - (J.vz * J.vz - legs * legs);
+    if (vh > 1e-6) s.vel = mul(s.vel, Math.sqrt(Math.max(0, left)) / vh);
+  }
   J.airTime = 2 * J.vz / p.gravity;
   J.height = J.vz * J.vz / (2 * p.gravity);
 

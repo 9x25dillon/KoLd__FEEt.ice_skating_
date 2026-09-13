@@ -20,7 +20,8 @@
 
 import type { SkaterState, JumpResult } from "../sim/types.ts";
 import { codeToString, EDGE, DIR, FOOT } from "../sim/types.ts";
-import { JUMP_CODE, JUMP_DEFS, JUMP_NONE, JUMP_PHASE } from "../sim/jump.ts";
+import { JUMP_CODE, JUMP_DEFS, JUMP_NONE, JUMP_PHASE, ENTRY_SPEED } from "../sim/jump.ts";
+import { len } from "../sim/math.ts";
 import { scoreJump, fallDeduction, round2 } from "../sim/score.ts";
 import type { ScoreTables, JumpScore } from "../sim/score.ts";
 import type { Course, CourseResult, RunState, Best, PanelLine } from "./course.ts";
@@ -113,12 +114,18 @@ export class JumpAttempt implements Course {
 
 /** The panel: the jump asked for and how it leaves the ice, the attempt, the board. */
 export function jumpLines(attempt: JumpAttempt | null, s: SkaterState, target: number,
-  bestOf: (kind: number) => Best | null, newBest: boolean, jumpsOn: boolean, hasTables: boolean): PanelLine[] {
+  bestOf: (kind: number) => Best | null, newBest: boolean, jumpsOn: boolean, hasTables: boolean,
+  movesOn = false): PanelLine[] {
   const lines: PanelLine[] = [["JUMP CHALLENGE (G) · 1-6 picks the jump", JADE]];
   if (!jumpsOn) lines.push(["jumps are off: press J until it says full", RED]);
   if (!hasTables) lines.push(["no scoring tables beside the page: nothing scores", RED]);
   lines.push([`${target + 1}. ${JUMP_WORDS[target]} (${JUMP_CODE[target]})`, GOLD]);
   lines.push([`take off ${recipe(target)}`, INK]);
+  // With the moves on the approach is part of the lift: say what it wants.
+  if (movesOn) {
+    const v = len(s.vel), want = ENTRY_SPEED[target];
+    lines.push([`approach ${want.toFixed(1)} m/s for a triple · now ${v.toFixed(1)} · crossovers build it`, v >= want ? JADE : DIM]);
+  }
   const r = attempt?.result();
   if (r?.state === "running") {
     const J = s.jump;

@@ -122,12 +122,13 @@ test("a turn needs an edge under it and some speed", () => {
 });
 
 test("the release of a jump waits for the exit edge, and a salchow off a three-turn takes the turn with it", () => {
-  // Half a whip, a 0.30 s load, the knee let go as the turn ends. From a
-  // steady LBI that is a fall a revolution short; out of a three-turn it is a
-  // clean double. Measured: 1.62 revolutions against 1.93.
+  // Half a whip, a 0.30 s load, the knee let go as the turn ends, taken off
+  // near the salchow's entry speed (data/entry-templates.json, 6.6 m/s). From
+  // a steady LBI that is a fall a revolution short; out of a three-turn it is
+  // a clean double. Measured: 1.60 revolutions against 1.88.
   const jump = (viaTurn: boolean): Run => {
     const p = moves({ jumpMode: 2 });
-    return drive(p, viaTurn ? 6.3 : -6.3, 0, viaTurn ? 0.3 : -0.3, {
+    return drive(p, viaTurn ? 7.0 : -7.0, 0, viaTurn ? 0.3 : -0.3, {
       ticks: 900,
       each: (i, s) => {
         const loading = i >= 240 && i < 276;
