@@ -1,0 +1,63 @@
+{
+  "id": "flight-residual-hop",
+  "kind": "jump",
+  "role": "validation",
+  "source": {
+    "type": "derived",
+    "citation": "h = g t² / 8: rise against air time for ballistic flight with equal takeoff and landing height",
+    "primary_checked": null,
+    "notes": "Checks the implementation, not reality. h is the peak centre-of-mass height above its takeoff value, t runs from the takeoff tick to the landing tick; both are camera-visible quantities, not JumpResult fields. The band allows the tick quantization of t. A hop: jumpMode 1, no rotation."
+  },
+  "requires": [
+    "jumps"
+  ],
+  "skater": null,
+  "venue": null,
+  "inputs": {
+    "initial": {
+      "speed_ms": 5.0,
+      "lean_rad": 0.0
+    },
+    "modes": {
+      "jumpMode": 1,
+      "movesMode": 0
+    },
+    "script": [
+      {
+        "seconds": 1.0,
+        "input": {
+          "weight": 1.0
+        }
+      },
+      {
+        "seconds": 0.3,
+        "input": {
+          "weight": 1.0,
+          "knee": 0.9
+        }
+      },
+      {
+        "seconds": 2.5,
+        "input": {
+          "weight": 1.0,
+          "knee": 0.2
+        }
+      }
+    ],
+    "clip": null
+  },
+  "observable": {
+    "name": "air_time_height_residual_m",
+    "window": "flight",
+    "radius": null
+  },
+  "expected": {
+    "comparison": "within",
+    "value": 0.0,
+    "unit": "m",
+    "measurement_uncertainty": 0.0,
+    "band": 0.05,
+    "tolerance": 0.05,
+    "confidence": "L0"
+  }
+}

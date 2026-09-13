@@ -1,0 +1,48 @@
+{
+  "id": "ina-bauer-speed-loss-footage",
+  "kind": "glide",
+  "role": "validation",
+  "source": {
+    "type": "footage",
+    "citation": "",
+    "primary_checked": null,
+    "notes": "Speed at entry and 1.0 s later, no push. Needs two entry speeds to separate scrub from drag."
+  },
+  "requires": [
+    "moves",
+    "ina-bauer"
+  ],
+  "skater": null,
+  "venue": {
+    "venue_type": null,
+    "indoor": null,
+    "elevation_m": null,
+    "slab": null,
+    "ice_surface_temp_c": null,
+    "air_temp_c": null,
+    "air_rh_pct": null,
+    "air_density_kg_m3": null,
+    "water_tds_ppm": null,
+    "ice_hardness_shore_d": null,
+    "minutes_since_resurface": null,
+    "surface": {
+      "profile": "unknown",
+      "relief_mm": null,
+      "measured": false,
+      "method": ""
+    },
+    "rink_location": null,
+    "travel_direction": null,
+    "paired_case": null
+  },
+  "inputs": null,
+  "observable": {
+    "name": "ina_bauer_speed_loss_ms",
+    "window": {
+      "from_s": 0.0,
+      "to_s": 1.0
+    },
+    "radius": null
+  },
+  "expected": null
+}

@@ -1,0 +1,42 @@
+{
+  "id": "stroke-gain-footage",
+  "kind": "propulsion",
+  "role": "validation",
+  "source": {
+    "type": "footage",
+    "citation": "",
+    "primary_checked": null,
+    "notes": "Speed before and after one stroke from footage timing. Two-sided only with a source that reports effort; otherwise use propulsion-reachable."
+  },
+  "requires": [],
+  "skater": null,
+  "venue": {
+    "venue_type": null,
+    "indoor": null,
+    "elevation_m": null,
+    "slab": null,
+    "ice_surface_temp_c": null,
+    "air_temp_c": null,
+    "air_rh_pct": null,
+    "air_density_kg_m3": null,
+    "water_tds_ppm": null,
+    "ice_hardness_shore_d": null,
+    "minutes_since_resurface": null,
+    "surface": {
+      "profile": "unknown",
+      "relief_mm": null,
+      "measured": false,
+      "method": ""
+    },
+    "rink_location": null,
+    "travel_direction": null,
+    "paired_case": null
+  },
+  "inputs": null,
+  "observable": {
+    "name": "stroke_gain_ms",
+    "window": "element",
+    "radius": null
+  },
+  "expected": null
+}

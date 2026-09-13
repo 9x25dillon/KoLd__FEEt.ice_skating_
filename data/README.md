@@ -22,6 +22,7 @@
 | `motion-primitives.json` | The move vocabulary the Composer's transition solver searches over: 21 primitives with preconditions, arc geometry, speed deltas and stamina costs. |
 | `entry-templates.json` | Per-element required approaches — the run-in each element needs, which the solver plans *to* rather than planning an exact terminal pose. |
 | `assist-tiers.json` | The five assist tiers and the adaptive router that recommends one from The Patch's tracing score ([D4](../docs/open-decisions.md#d4--where-the-difficulty-default-sits)). |
+| `validation/` | The fidelity gate's reference cases: one JSON file per case, with its source, rink record, inputs, observable and expected value or null. Format in [`validation/README.md`](validation/README.md). |
 
 ## Column notes
 
