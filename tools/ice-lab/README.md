@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 244 tests
+node --test test/*.test.ts     # 249 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -244,6 +244,39 @@ the next one**, and the entry tables above moved by 1–3° when it landed.
   1% per second at 4 m/s and 20°, scaling with the timestep. Rotating the
   velocity instead conserves speed *exactly*, which `test/carve.test.ts` asserts
   to 1e-9. Left in, that artifact gets tuned around as though it were drag.
+
+### 9. Two feet down, the stance pulls against the lean
+
+Found 2026-09-13, fixed the same day. With both feet on the ice the
+centre-of-pressure term — the stance shifting pressure between the feet —
+is proportional on the balance error and nothing else, and it aims for the lean
+the edge alone balances. So it pulls against the lean controller: the
+controller eases the edge to let the body lean in, the stance holds the body up
+off the edge it has eased, and entering a lean from upright its undamped push
+first resists the lean and then drives it past anything the edge can hold. The
+blade pins at maxTilt and the skater goes down. One-footed there is no stance
+term and none of it happens.
+
+Measured on the old `responsive`, 4 m/s, both feet down, 20° asked for: the
+blade pinned for 229 ticks and the skater fell at 3.4 s, where one-footed the
+same command settles at 20.1°. At 5 and 6 m/s it stayed up but settled anywhere
+from 15° to 22°, and a two-footed slalom fell at 7.1 s.
+
+Two corrections, both 0 in `spec`, both on in the presets:
+
+- **`copRateGain`** — the rate half of the stance's PD, as finding 5 gave the
+  arms theirs. Pressure is shifted against a lean that is moving, not only one
+  that is off.
+- **`copCommandShare`** — the stance aims for the lean the skater commands, as
+  far as the edge could carry the stance's load at this speed. At a standstill
+  the edge can carry nothing, so the stance aims where it always did and
+  standing still is bit-for-bit what it was.
+
+Now every two-footed lean the edge can hold is held: 13, 20 and 25° at 4 to
+6 m/s settle within 0.5° with under 0.5° of overshoot, 20° at 4 m/s in 1.30 s
+(one-footed 1.63), and the slaloms that fell or overshot 9° track to 0.1°. One
+foot is untouched. `test/stance.test.ts` holds all of it against the package's
+stance, built by adding to `spec`.
 
 ---
 
@@ -782,7 +815,7 @@ require the exact schema, solver version, 120 Hz rate, complete finite tuning,
 bounded input axes, boolean buttons, at most 36,000 ticks and at most 64 MiB.
 Warnings about balance tuning are preserved so a bad tuning can be reproduced.
 
-`ice-lab-f64/5` is a JavaScript regression contract. CRC32 covers every state
+`ice-lab-f64/6` is a JavaScript regression contract. CRC32 covers every state
 field and event using canonical JSON, with straight-blade Infinity encoded
 explicitly; it is a diagnostic, not an authenticity signature. **A clip
 verifies in any JavaScript engine**, not only the one that recorded it: every
@@ -808,6 +841,9 @@ same falls on the same ticks), so the fixture was re-run from its own inputs.
 `/4` to `/5` added the moves: `movesMode` and its levers on the tuning, what they
 carry on the state. With the moves off the fixture and three play clips, 22,184
 ticks, matched `/4` on every field and event; `/4` clips verify against `9400137`.
+`/5` to `/6` gave the stance its rate term and aim (finding 9); with both at 0
+the fixture and the play clips matched `/5` on every field and event, and `/5`
+clips verify against `8d89af2`.
 
 `test/fixtures/replay-v1.json` pins a 240-tick skating run with a tuning change
 at tick 121. PR checks run the tests, browser build and fixture verifier under

@@ -15,9 +15,8 @@ hold the document set together, and the things most likely to trip you up.
 
 ## 0 · Start here (written 2026-09-13, ninth session)
 
-**Repo:** branch **`ice-lab-moves`**, seven commits on top of `main` at `9400137` (six layers and
-this hand-off). **Local only: not pushed, not merged** — the operator has not said to do either;
-ask. `main` is untouched. The operator's play data lives in **`E_W_replays_sessions_eng_bld/`** at the
+**Repo:** `main`, pushed. The moves branch was fast-forwarded into `main` on the operator's word, and
+the two-footed stance fix (finding 9) followed on `main`. The operator's play data lives in **`E_W_replays_sessions_eng_bld/`** at the
 repo root (cards, clips, params exports, event logs), untracked on purpose; use only what is there,
 and do not commit or delete it without asking. The stray `Ice Lab — KoLd__FEEt edgework.html` at the
 root is a browser "save page" of the lab, also untracked — not a source file.
@@ -52,8 +51,8 @@ test in `tools/ice-lab/test/`, measured before it was asserted, against the proj
 **With the moves off, nothing moved.** Every commit replayed the fixture and three operator clips —
 22,184 ticks, the hop clip included — through the committed `/4` solver and the new one, with every
 `/4` state field and event identical on every tick (scratch script, recipe in §5 item 14). The replay
-contract is **`ice-lab-f64/5`**, one version for the whole unpushed set, extended commit by commit with
-the fixture re-recorded from its own inputs each time. Once pushed, any further change is `/6`.
+contract was **`ice-lab-f64/5`** for the whole set, and is **`/6`** since the stance fix. Any further
+change is `/7`.
 
 **Controls with the moves on** (**L** toggles them; **J** / D-pad ↑ steps off → hop → full jumps →
 full jumps with the moves). Keyboard: **B** turn, **Z** twizzle, **Y** spin, **I** Ina Bauer, with Q / E
@@ -71,11 +70,12 @@ keeps its circle through a turn (`latchTurns`, `app/schemes.ts`).
    and no centripetal force — so a curve collapsed the moment anyone pushed on it: 51% short of the
    arc, lean swinging 19–53°. Nothing stroked on a curve before. Kept in `spec` and with the moves off;
    with them on, every push has the carving blade carry the pushing leg.
-3. **A two-footed lean command locks at maxTilt more easily than a one-footed one.** `responsive`, 4
-   m/s, weight 0.5: a 20° command overshoots, pins the blade at 64.7° and falls in 3.3 s; one-footed it
-   tracks to 20.4°; at 5 m/s two-footed it holds. Symmetric, and identical in the `/4` solver — not
-   new, not fixed. It is what a pad player with both bumpers released meets, and crossovers at speed in
-   that state wind the lean deeper. Worth a trace (§5 item 8) before any tuning.
+3. **Two feet down, the stance pulled against the lean** — finding 9, fixed on the operator's word the
+   same day. The centre-of-pressure term was proportional-only and aimed at the lean the edge
+   balances, so a two-footed 20° command at 4 m/s pinned the blade and fell at 3.4 s. It now has a
+   rate term (`copRateGain`) and aims at the commanded lean as far as the edge can carry its load
+   (`copCommandShare`), both 0 in `spec`: every two-footed lean the edge can hold is held within 0.5°,
+   standing still is bit-for-bit unchanged, one foot is untouched. Replay `/6`.
 
 **The operator's asks from 2026-09-11 are still open**, in their order: (1) **the carve as a
 feature** — *"a ghost line to follow"*, *"use the carved lines as a performance tool"*; this session
@@ -100,7 +100,7 @@ shows the target's entry speed beside yours).
 drives the real page over the DevTools protocol with nothing installed: `node app/serve.mjs`, launch
 `--headless=new --remote-debugging-port=…`, connect with Node's global `WebSocket`, and inject a fake
 analog pad with `Page.addScriptToEvaluateOnNewDocument` overriding `navigator.getGamepads` — the
-keyboard's A / D is a full 65° lean and puts the skater down at once. The README's test count is 244.
+keyboard's A / D is a full 65° lean and puts the skater down at once. The README's test count is 249.
 
 ---
 
@@ -125,7 +125,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Data files | 12 in `data/` — 5 CSV, 6 JSON, 1 README |
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
-| Implementation | `tools/ice-lab/` — 244 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps (off by default), scoring from `data/`, skater profiles, the moves (off by default) |
+| Implementation | `tools/ice-lab/` — 249 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps (off by default), scoring from `data/`, skater profiles, the moves (off by default) |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 
@@ -161,7 +161,7 @@ transcription rather than as discovery. **It is not the game and it is not an en
 
 ```sh
 cd tools/ice-lab
-node --test test/*.test.ts     # 244 pass, ~7 s
+node --test test/*.test.ts     # 249 pass, ~7 s
 node app/serve.mjs             # http://localhost:8123/
 ```
 
@@ -663,6 +663,7 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-13 (ninth, after the merge) | Merged the moves into `main` and pushed. Then finding 9 on the operator's word: the two-footed stance was proportional-only and aimed at the edge's balance, so it pulled against the lean controller and a 20° two-footed entry at 4 m/s fell. `copRateGain` and `copCommandShare`, 0 in `spec`, on in the presets; standing still bit-for-bit unchanged; replay `/6`; `test/stance.test.ts`. 249 tests. |
 | 2026-09-13 (ninth) | The moves, on the operator's redirect toward backward skating and "back crossovers right into the jump": crossovers (`8da3a2a`), three-turn and mohawk (`aee316c`), twizzles (`a282cf7`), spins (`e10e6a7`), the Ina Bauer (`33986ce`), edge and toe jumps from their entries with the approach in the lift (`1e38ad0`). All behind `movesMode`, contained as jumps are; calibrated to `motion-primitives.json`, `spin-positions.json` and `entry-templates.json`. Found: the bible's crossover feet are backwards; a stroke on a curve always halved lateral support; two-footed lean commands lock at maxTilt at 4 m/s. Moves-off proven identical to `/4` over 22,184 ticks at every commit; replay `/5`. Driven in headless Chromium with a fake pad. 244 tests, tsc 7.0.2 clean. Branch `ice-lab-moves`, local, unpushed. |
 | 2026-09-11 (eighth) | The skater profile layer, on the operator's direction toward a career game: `sim/profile.ts` — body, blade wear, five stats baked over a preset by `applyProfile`, one balance table and curve, XP pricing, `train`/`overall`/`tierOf`/`level`. Reference skater bakes bit-for-bit to every preset. Stamina listed and inert, recorded by a test. K cycles four samples in the lab. 194 tests, tsc 7.0.2 clean. `00ec259`. |
 | 2026-09-11 (seventh) | Closed the sixth's three items: edge changes count choices not strokes (`f1cb2b4`), deterministic sin/cos/tan/atan2/asin/log in `sim/math.ts` with a boundary test banning raw `Math.*` transcendentals and `**` in `sim/` (`0b4636b`), session card `/2` with jumps and a clip digest (`87607af`). Then the game layers: debug camera and chase view, the Figure Eight with best-run ghosts, ghost races on any course, the edge course, the jump challenge from `data/`, and all of it on a pad. Every layer reads state and never writes it, tested; all unreachable in `?playtest=1`. |

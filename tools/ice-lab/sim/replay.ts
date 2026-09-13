@@ -35,7 +35,12 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       replayed through /4 and /5 with every /4 state field and event
 //       identical on every tick. /4 clips no longer load; verify one against a
 //       checkout of 9400137.
-export const REPLAY_SOLVER = "ice-lab-f64/5";
+//   /6  The stance's rate term and aim (copRateGain, copCommandShare), both 0
+//       in `spec` and on in the presets. Replayed through /5 and /6 with the
+//       new levers at 0, the fixture and three operator clips matched on every
+//       state field and event; the fixture was re-recorded from its own inputs.
+//       /5 clips no longer load; verify one against a checkout of 8d89af2.
+export const REPLAY_SOLVER = "ice-lab-f64/6";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

@@ -118,13 +118,16 @@ test("edge changes count the skater's choices, not the strokes", () => {
 });
 
 test("a blade that pushes off one edge and comes back on the other made one change", () => {
-  // A push roll is skipped, not erased. Lean right, stroke on the right foot,
-  // flip the lean mid-push: that blade leaves its outside edge, pushes on its
-  // inside, and stays there because the new lean wants it there — no roll-back
+  // A push roll is skipped, not erased. Lean one way, flip the lean, and stroke
+  // on the right foot while the flip is carrying the edges across: that blade
+  // leaves its outside edge for the push, the flip arrives mid-push, and it
+  // stays on its inside because the new lean wants it there — no roll-back
   // event ever fires. Measured: the only events in the window are the roll-in
   // (skipped) and two on the left blade, which was not pushing. The right
   // blade's net change is the third, and a meter that only filtered would
-  // report two.
+  // report two. (The flip leads the push by 0.27 s since the two-footed stance
+  // stopped wobbling: the edges take that long to come across. Any flip from
+  // 0.33 to 0.20 s before the push gives this same pattern.)
   const m = new SessionMeter();
   const s = createState(p, 4.0, 0);
   const ev: EdgeEvent[] = [];
@@ -132,7 +135,7 @@ test("a blade that pushes off one edge and comes back on the other made one chan
   let before = 0;
   for (let i = 0; i < 300; i++) {
     if (i === 240) before = counted();
-    const inp = { ...NEUTRAL_INPUT, lean: i < 250 ? 0.2 : -0.2, push: i === 240 };
+    const inp = { ...NEUTRAL_INPUT, lean: i < 208 ? -0.2 : 0.2, push: i === 240 };
     ev.length = 0;
     step(s, inp, p, SIM_DT, ev);
     m.sample(s, inp, ev, SIM_DT);

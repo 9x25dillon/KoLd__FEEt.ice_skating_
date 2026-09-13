@@ -600,9 +600,32 @@ export function step(
 
     // The centre of pressure is NOT washed out: a stance 24 cm wide really can
     // hold a small lean indefinitely, which is what standing still is.
+    //
+    // Two corrections to it, both 0 in `spec`. As the package has it the
+    // stance is a proportional term on the balance error and nothing else,
+    // and two-footed it pulls against the lean controller: the controller
+    // eases the edge to let the body lean in, the stance holds the body up off
+    // the edge it has eased, and from upright its undamped push runs the lean
+    // past anything the edge can hold. Measured, `responsive` at 4 m/s with
+    // both feet down and 20 degrees asked for: the blade pinned at maxTilt for
+    // 229 ticks and the skater fell at 3.4 s, where one-footed the same command
+    // settles at 20.1. So the stance gets the rate half of its PD
+    // (`copRateGain`, as the arms got theirs), and it aims for the lean the
+    // skater commands (`copCommandShare`) as far as the edge could carry the
+    // stance's load at this speed — which at a standstill is not at all, so
+    // standing still is what it was.
     if (s.supportMode === 2) {
       const copMax = g * p.stanceHalfWidth / L;
-      aInt += clamp(p.copGain * s.balanceError, -copMax, copMax);
+      let copError = s.balanceError;
+      if (p.copCommandShare > 0) {
+        const edgeCan = dot(s.vel, s.vel) * sin(p.maxTilt) / effectiveRocker(s.blade[s.supportFoot].contactS, p);
+        const aim = clamp(edgeCan / copMax, 0, 1) * p.copCommandShare;
+        copError = s.lean - (s.leanEq + (leanCmd - s.leanEq) * aim);
+      }
+      const copDemand = p.copRateGain > 0
+        ? p.copGain * copError + p.copRateGain * s.leanRate
+        : p.copGain * copError;
+      aInt += clamp(copDemand, -copMax, copMax);
     }
   }
   s.intAccel = aInt;

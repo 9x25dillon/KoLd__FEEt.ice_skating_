@@ -51,6 +51,8 @@ const GROUPS: Array<{ title: string; note: string; sliders: Slider[] }> = [
         note: "Arms and free leg, m/s². Past ~2 this needs a rate term under it, and 2.5 is already a quarter of g." },
       { key: "internalRateGain", label: "authority damping", min: 0, max: 8.0, step: 0.1,
         note: "Per rad/s of lean rate. Zero is what the package specifies, and is why raising the ceiling used to make balance worse." },
+      { key: "copRateGain", label: "stance damping", min: 0, max: 8.0, step: 0.1 },
+      { key: "copCommandShare", label: "stance aims at command", min: 0, max: 1, step: 0.05 },
       { key: "fallAuthorityCredit", label: "fall credits authority", min: 0, max: 1, step: 0.05,
         note: "0 scores a skater using their arms as already falling — at 3° of lean, measured." },
       { key: "maxLean", label: "max body lean", min: 0.3, max: 1.4, step: 0.01, deg: true },

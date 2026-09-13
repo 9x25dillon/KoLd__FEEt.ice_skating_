@@ -75,9 +75,9 @@ test("leaning into a curve, the inside foot pushes under on its outside edge", (
 test("a crossover keeps the body's lateral support whole; a stroke on a curve halves it", () => {
   // The defect a straight stroke carries onto a curve: the pushing leg's share
   // of the body gets no centripetal force for the push, so the equilibrium
-  // lean halves and the lean swings. Measured, 5 m/s, 20 degrees commanded:
-  // strokes 51% short of the arc and the lean 19..53 degrees; crossovers
-  // within 0.3% and 20..27 degrees.
+  // lean halves and every push rocks the body. Measured, 5 m/s, 20 degrees
+  // commanded: strokes 51% short of the arc and the lean rocking over 22.5..28.7
+  // degrees; crossovers within 0.3% and holding 22.4..22.7.
   const run = (on: number): { worst: number; lo: number; hi: number; fell: boolean } => {
     let worst = 0, lo = 99, hi = -99;
     const s = curve(moves(on), 5, (st) => {
@@ -90,9 +90,9 @@ test("a crossover keeps the body's lateral support whole; a stroke on a curve ha
   };
   const stroke = run(0), cross = run(1);
   assert.ok(stroke.worst > 0.4, `strokes short of the arc by ${stroke.worst.toFixed(3)}`);
-  assert.ok(stroke.hi - stroke.lo > 25, `stroke lean ${stroke.lo.toFixed(1)}..${stroke.hi.toFixed(1)}`);
+  assert.ok(stroke.hi - stroke.lo > 4, `stroke lean ${stroke.lo.toFixed(1)}..${stroke.hi.toFixed(1)}`);
   assert.ok(cross.worst < 0.01, `crossovers short of the arc by ${cross.worst.toFixed(3)}`);
-  assert.ok(cross.hi - cross.lo < 10, `crossover lean ${cross.lo.toFixed(1)}..${cross.hi.toFixed(1)}`);
+  assert.ok(cross.hi - cross.lo < 1, `crossover lean ${cross.lo.toFixed(1)}..${cross.hi.toFixed(1)}`);
   assert.equal(cross.fell, false);
 });
 

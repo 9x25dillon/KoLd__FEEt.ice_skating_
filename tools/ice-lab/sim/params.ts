@@ -105,6 +105,31 @@ export interface Params {
   internalMax: number;
   /** Shifting the centre of pressure within the stance, two-footed only. */
   copGain: number;
+  /**
+   * Rate term on that same stance authority, per rad/s of lean rate: the half
+   * of the stance's PD the package never had, as `internalRateGain` is the
+   * arms'. Pressure is shifted between the feet against a lean that is moving,
+   * not only one that is off.
+   *
+   * 0 in `spec`, so the defect stays measurable.
+   */
+  copRateGain: number;
+  /**
+   * Where the stance corrects the body toward, 0..1: at 0 the lean the edge
+   * alone balances, which is the package's; at 1 the lean the skater
+   * commands, as far as the edge could carry the stance's load at this speed.
+   *
+   * At 0 the stance and the lean controller pull against each other: the
+   * controller eases the edge to let the body lean in, the stance holds the
+   * body up off the edge it has eased, and two-footed they settle short of the
+   * command with the stance at its cap — or, entering from upright, the
+   * stance's push runs the lean past what the edge can hold and the blade
+   * pins at maxTilt. At a standstill the edge can carry nothing, so the stance
+   * aims where it always did, and standing still is unchanged.
+   *
+   * 0 in `spec`, so the defect stays measurable.
+   */
+  copCommandShare: number;
   /** Guards kappa = a / v^2 at a standstill. */
   minSpeedForCurv: number;
   /**
@@ -364,6 +389,8 @@ export const DEFAULT_PARAMS: Params = {
   internalWashout: 0.0,     // nor any limit on holding it out; see the field comment
   internalMax: 1.5,
   copGain: 12.0,
+  copRateGain: 0.0,         // the package has no rate term here either; see the field comment
+  copCommandShare: 0.0,     // nor any aim but the edge's balance; see the field comment
   minSpeedForCurv: 0.5,
   splitTiltMax: 0.35,       // 20 deg apart at full deflection
 
@@ -470,6 +497,10 @@ export function validate(p: Params): string[] {
     errs.push("internalWashout is a time constant in seconds, or 0 to disable it");
   if (p.internalRateGain < 0)
     errs.push("internalRateGain must not be negative: a negative rate term is anti-damping");
+  if (p.copRateGain < 0)
+    errs.push("copRateGain must not be negative: a negative rate term is anti-damping");
+  if (p.copCommandShare < 0 || p.copCommandShare > 1)
+    errs.push("copCommandShare is a share, 0..1");
   if (p.fallAuthorityCredit < 0 || p.fallAuthorityCredit > 1)
     errs.push("fallAuthorityCredit is a fraction, 0..1");
   // Measured on this rig, not asserted from theory: with no rate term, raising
@@ -532,15 +563,17 @@ export function leanLoopResponse(p: Params): { wn: number; zeta: number } {
  *
  * `responsive` is the first tuning pass. It widens the angulation limit,
  * roughly doubles lean damping, gives the internal authority the rate term the
- * package never had, and credits that authority in the fall test. See
- * test/balance.test.ts for the envelope each of those buys, measured
- * separately — the gains and the rate term fix different halves of it.
+ * package never had, credits that authority in the fall test, and gives the
+ * two-footed stance its rate term and its aim at the commanded lean. See
+ * test/balance.test.ts and test/stance.test.ts for what each of those buys,
+ * measured separately — the gains and the rate terms fix different halves of it.
  */
 export const PRESETS: Readonly<Record<string, Params>> = {
   spec: DEFAULT_PARAMS,
   responsive: {
     ...DEFAULT_PARAMS, balanceKd: 16.0, angulationLimit: 0.70,
     internalRateGain: 2.0, internalWashout: 1.5, fallAuthorityCredit: 1.0,
+    copRateGain: 2.0, copCommandShare: 1.0,
   },
   /**
    * An assist tier, as a parameter overlay and nothing else.
@@ -568,6 +601,6 @@ export const PRESETS: Readonly<Record<string, Params>> = {
     ...DEFAULT_PARAMS, balanceKd: 20.0, angulationLimit: 0.70,
     controlLatency: 0.04,
     internalRateGain: 4.0, internalWashout: 1.5, internalMax: 2.5,
-    fallAuthorityCredit: 1.0,
+    fallAuthorityCredit: 1.0, copRateGain: 2.0, copCommandShare: 1.0,
   },
 };
