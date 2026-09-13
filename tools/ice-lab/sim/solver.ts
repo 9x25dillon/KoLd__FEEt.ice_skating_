@@ -60,8 +60,8 @@ import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean } f
 import { classifyCode, classifyDepth } from "./classify.ts";
 import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
 import {
-  newTurn, noMove, turnStart, twizzleStart, turnPivot, twizzleTick, turnFrame, turnLoadFoot,
-  turnEvent, twizzleEvent, carryDecay, pivoting,
+  newTurn, newSpin, noMove, turnStart, twizzleStart, spinStart, turnPivot, twizzleTick, spinTick,
+  turnFrame, turnLoadFoot, turnEvent, twizzleEvent, spinEvent, carryDecay, replacesCarve,
 } from "./moves.ts";
 import type { PivotTick } from "./moves.ts";
 
@@ -98,7 +98,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
     knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, crossover: false, crossSide: 0, pushHeld: false,
     jump: newJump(p), landed: noResult(),
-    move: MOVE.None, turn: newTurn(), moveDone: noMove(), movesHeld: 0, flips: 0, spinCarry: 0,
+    move: MOVE.None, turn: newTurn(), spin: newSpin(), moveDone: noMove(), movesHeld: 0, flips: 0, spinCarry: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -130,7 +130,8 @@ export function step(
   const freshPush = input.push && !s.pushHeld;
   s.pushHeld = input.push;
   // A move also starts on a fresh press, and for the same reason.
-  const heldNow = (input.turn === true ? HELD.Turn : 0) | (input.twizzle === true ? HELD.Twizzle : 0);
+  const heldNow = (input.turn === true ? HELD.Turn : 0) | (input.twizzle === true ? HELD.Twizzle : 0)
+    | (input.spin === true ? HELD.Spin : 0);
   const freshMoves = heldNow & ~s.movesHeld;
   s.movesHeld = heldNow;
   if (s.fallen && freshPush) {
@@ -179,12 +180,13 @@ export function step(
   const split = clamp(axis(input.leanSplit, 0), -1, 1);
   const contactS = clamp(0.5 + 0.5 * clamp(axis(input.pitch, 0), -1, 1), 0, 1);
 
-  // ── 0c. a turn or a twizzle begins ────────────────────────────────────────
-  // sim/moves.ts: on a fresh press, if the edge permits one. From here until
-  // it ends the body is on one foot and the pivot stands in for sections 2-5.
+  // ── 0c. a turn, a twizzle or a spin begins ────────────────────────────────
+  // sim/moves.ts: on a fresh press, if the ice permits one. From here until it
+  // ends the body is on one foot and the move stands in for sections 2-5.
   if (freshMoves & HELD.Turn) turnStart(s, p);
   else if (freshMoves & HELD.Twizzle) twizzleStart(s, p);
-  const turning = pivoting(s);
+  else if (freshMoves & HELD.Spin) spinStart(s, p, axis(input.carriage, 0), knee, axis(input.pitch, 0));
+  const turning = replacesCarve(s);
   const moveThisTick = s.move;
 
   // ── 1. legs -> normal load ────────────────────────────────────────────────
@@ -198,8 +200,8 @@ export function step(
   s.legLength = clamp(s.legLength, 0.3, p.comHeight * 1.05);
 
   const nTotal = Math.max(0, p.mass * (g + legAccel));
-  // A turn is made on one foot: the pivot foot, and after a mohawk's cusp the other.
-  const loadFoot = turning ? turnLoadFoot(s) : -1;
+  // A move is made on one foot: the pivot or spinning foot, and after a mohawk's cusp the other.
+  const loadFoot = !turning ? -1 : s.move === MOVE.Spin ? s.spin.foot : turnLoadFoot(s);
   const weights = loadFoot === FOOT.Right ? [0, 1] : loadFoot === FOOT.Left ? [1, 0] : [1 - weightR, weightR];
   let loaded = 0;
   for (let i = 0; i < 2; i++) {
@@ -233,9 +235,9 @@ export function step(
   let flatImpulse = v2(0, 0);
   let pivot: PivotTick | null = null;
   if (turning) {
-    pivot = s.move === MOVE.Turn
-      ? turnPivot(s, p, dt, weightR)
-      : twizzleTick(s, p, dt, leanCmd, axis(input.carriage, 0), input.twizzle === true);
+    pivot = s.move === MOVE.Turn ? turnPivot(s, p, dt, weightR)
+      : s.move === MOVE.Twizzle ? twizzleTick(s, p, dt, leanCmd, axis(input.carriage, 0), input.twizzle === true)
+        : spinTick(s, p, dt, knee, axis(input.pitch, 0), axis(input.carriage, 0), input.spin === true);
     latForceTotal = pivot.lat * p.mass;
   }
 
@@ -584,7 +586,7 @@ export function step(
 
   // Blade contacts hang off the base of the pendulum, not off the COM. In a
   // turn the pendulum is in the travel frame, and so are they.
-  const frameH = turning ? turnFrame(s) : s.heading;
+  const frameH = moveThisTick === MOVE.Turn || moveThisTick === MOVE.Twizzle ? turnFrame(s) : s.heading;
   const right = mul(perpLeft(frameH), -1);
   const base = add(s.pos, mul(right, L * sin(s.lean)));
   for (let i = 0; i < 2; i++) {
@@ -628,6 +630,7 @@ export function step(
   }
   if (pivot?.cusp && moveThisTick === MOVE.Turn) turnEvent(s, events);
   if (pivot?.ended && moveThisTick === MOVE.Twizzle) twizzleEvent(s, events);
+  if (pivot?.ended && moveThisTick === MOVE.Spin) spinEvent(s, events);
 
   // ── 9. fall, latched ──────────────────────────────────────────────────────
   // Latched, because a fall condition that stays true would otherwise emit an

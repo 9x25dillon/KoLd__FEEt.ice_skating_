@@ -7,7 +7,7 @@
 
 import type { SkaterState, BladeState } from "../sim/types.ts";
 import {
-  EDGE, REGIME, REGIME_NAME, FALL_NAME, FOOT, MOVE, TURN_NAME,
+  EDGE, REGIME, REGIME_NAME, FALL_NAME, FOOT, MOVE, TURN_NAME, SPIN_POSITION_NAME,
   codeToString, codeSide, EDGE_CODE_NONE,
 } from "../sim/types.ts";
 import type { Params } from "../sim/params.ts";
@@ -18,6 +18,23 @@ import { PadView } from "./padview.ts";
 import { drawRibbon } from "./ribbon.ts";
 import { Camera, PX } from "./camera.ts";
 import { JUMP_PHASE, JUMP_CODE, JUMP_NONE, ROTATION_MARK, EDGE_MARK } from "../sim/jump.ts";
+import { SPIN_INERTIA_SCALE } from "../sim/moves.ts";
+import { SPIN_POSITION } from "../sim/types.ts";
+
+/**
+ * How far out the arms and free leg are, 0 tucked .. 1 open, read back off the
+ * moment of inertia the solver is using — in the air a jump's, in a spin the
+ * spin's divided by its position's scale. -1 when neither applies.
+ */
+export function armsOpen(s: SkaterState, p: Params): number {
+  const span = Math.max(p.inertiaOpen - p.inertiaTucked, 1e-3);
+  if (s.jump.phase === JUMP_PHASE.Air) return clampUnit((s.jump.inertia - p.inertiaTucked) / span);
+  if (s.move === MOVE.Spin) return clampUnit((s.spin.inertia / SPIN_INERTIA_SCALE[s.spin.position] - p.inertiaTucked) / span);
+  return -1;
+}
+
+/** A camel: torso horizontal, free leg out behind at hip height. */
+const camel = (s: SkaterState): boolean => s.move === MOVE.Spin && s.spin.position === SPIN_POSITION.Camel;
 
 
 const INK = "#dce9f2";
@@ -132,7 +149,7 @@ export function bodyPoints(s: SkaterState, p: Params): Body {
   // The COM sits just above the hips; the torso pitches forward as the knee
   // bends, which is how a skater keeps the COM over a bent leg.
   const hip = go(C, u, -0.08);
-  const pitch = 0.15 + 0.35 * s.knee;
+  const pitch = camel(s) ? 2.5 : 0.15 + 0.35 * s.knee;
   const dl = Math.hypot(u.x + t.x * pitch, u.y + t.y * pitch, u.z);
   const d: V3 = { x: (u.x + t.x * pitch) / dl, y: (u.y + t.y * pitch) / dl, z: u.z / dl };
   const shoulder = go(hip, d, 0.5);
@@ -146,6 +163,7 @@ export function bodyPoints(s: SkaterState, p: Params): Body {
     let f: V3;
     if (air) f = go(B, n, side(i) * 0.08);
     else if (b.inContact) f = { x: b.contact.x, y: b.contact.y, z: 0 };
+    else if (camel(s)) f = go({ x: support.x, y: support.y, z: 0.85 }, t, -0.95);  // a camel's free leg, out behind
     else f = go(go({ x: support.x, y: support.y, z: 0.28 }, t, -0.45), n, side(i) * 0.1);  // free leg, behind
     if (s.strokeFoot === i && beat > 0) f = go(go(f, n, (s.crossover ? -s.crossSide : side(i)) * 0.35 * beat), t, -0.2 * beat);
     return f;
@@ -166,9 +184,8 @@ export function bodyPoints(s: SkaterState, p: Params): Body {
   const knees: [V3, V3] = [knee(0), knee(1)];
 
   const save = air ? 0 : clampUnit(s.intAccel / Math.max(p.internalMax, 1e-3));
-  const tuck = air
-    ? clampUnit((p.inertiaOpen - s.jump.inertia) / Math.max(p.inertiaOpen - p.inertiaTucked, 1e-3)) : 0;
-  const reach = 1 - 0.8 * Math.max(0, tuck);
+  const open = armsOpen(s, p);
+  const reach = open < 0 ? 1 : 0.2 + 0.8 * open;
   const shoulders: [V3, V3] = [go(shoulder, n, 0.19), go(shoulder, n, -0.19)];
   const hand = (i: number): V3 =>
     go(go(go(shoulders[i], n, side(i) * (0.1 + 0.45 * reach)), t, side(i) * 0.35 * save), d, -(0.3 - 0.15 * reach));
@@ -392,7 +409,7 @@ export class Renderer {
       return;
     }
 
-    const torsoX = 0.04 + 0.14 * s.knee;
+    const torsoX = camel(s) ? 0.34 : 0.04 + 0.14 * s.knee;
     const beat = s.strokeTime > 0 ? Math.sin(Math.min(1, s.strokeTime / 0.3) * Math.PI) : 0;
     const braking = s.blade[0].regime === REGIME.Brake || s.blade[1].regime === REGIME.Brake;
     const support = local(s.blade[s.supportFoot].contact);
@@ -401,7 +418,7 @@ export class Renderer {
       const b = s.blade[i];
       const side = i === FOOT.Left ? 1 : -1;
       let [fx, fy] = air ? [-0.02, side * 0.06]
-        : b.inContact ? local(b.contact) : [support[0] - 0.42, support[1] + side * 0.16];
+        : b.inContact ? local(b.contact) : camel(s) ? [support[0] - 0.95, support[1]] : [support[0] - 0.42, support[1] + side * 0.16];
       // A crossover's push goes to the outside of the curve whichever foot
       // makes it: the inside foot's reaches under the body.
       if (s.strokeFoot === i && beat > 0) { fx -= 0.25 * beat; fy += (s.crossover ? -s.crossSide : side) * 0.35 * beat; }
@@ -427,8 +444,8 @@ export class Renderer {
     // In the air the arms are the moment of inertia: drawn in as it falls
     // toward the tucked value, which is the pull-in the whole jump rides on.
     const save = air ? 0 : clampUnit(s.intAccel / Math.max(p.internalMax, 1e-3));
-    const tuck = air ? clampUnit((p.inertiaOpen - s.jump.inertia) / Math.max(p.inertiaOpen - p.inertiaTucked, 1e-3)) : 0;
-    const reach = 1 - 0.8 * Math.max(0, tuck);
+    const open = armsOpen(s, p);
+    const reach = open < 0 ? 1 : 0.2 + 0.8 * open;
     const armCol = Math.abs(save) > 0.95 ? GOLD : "#60d9ce";
     stroke([torsoX, 0.18, torsoX - 0.05 + 0.3 * save, 0.18 + 0.30 * reach,
       torsoX + 0.1 + 0.45 * save, 0.18 + 0.48 * reach], armCol, 0.11);
@@ -640,6 +657,11 @@ export class Renderer {
       const T = s.turn;
       out.push([`TURN  ${codeToString(T.fromCode)} ${T.dir > 0 ? "↺" : "↻"} ${(T.swept * 180 / Math.PI).toFixed(0)}°`
         + `${T.cusps > 0 ? `  ${TURN_NAME[T.kind]}` : "  — weight to the other foot for a mohawk"}`, GOLD]);
+    } else if (s.move === MOVE.Spin) {
+      const S = s.spin;
+      out.push([`SPIN  ${SPIN_POSITION_NAME[S.position]} ${S.dir > 0 ? "↺" : "↻"}  ${(S.omega / (2 * Math.PI)).toFixed(1)} rev/s`
+        + `  ${(S.swept / (2 * Math.PI)).toFixed(1)} rev  drift ${S.travel.toFixed(2)} m`, GOLD]);
+      out.push(["  knee deep: sit · stick forward: camel · arms in: faster · let go: check out", DIM]);
     } else if (s.move === MOVE.Twizzle) {
       const T = s.turn;
       out.push([`TWIZZLE  ${(T.swept / (2 * Math.PI)).toFixed(2)} rev ${T.dir > 0 ? "↺" : "↻"}  ${(T.rate / (2 * Math.PI)).toFixed(1)} rev/s`
@@ -649,11 +671,13 @@ export class Renderer {
       out.push([`CROSSOVER  ${s.strokeFoot === inside
         ? "inside foot pushes under, on its outside edge" : "outside foot pushes out"}`, JADE]);
     } else {
-      out.push(["MOVES  push on a curve: crossover · B turn · Z twizzle", DIM]);
+      out.push(["MOVES  push on a curve: crossover · B turn · Z twizzle · Y spin", DIM]);
     }
     const m = s.moveDone;
     if (m.tick >= 0 && m.kind !== MOVE.None) {
-      const what = m.kind === MOVE.Turn ? TURN_NAME[m.detail] : `twizzle ${m.revolutions.toFixed(2)} rev`;
+      const what = m.kind === MOVE.Turn ? TURN_NAME[m.detail]
+        : m.kind === MOVE.Twizzle ? `twizzle ${m.revolutions.toFixed(2)} rev`
+          : `spin ${m.revolutions.toFixed(1)} rev, best ${m.bestSegRevs.toFixed(1)} in one position, drift ${m.travel.toFixed(2)} m`;
       out.push([`LAST  ${codeToString(m.fromCode)} ${what} → ${codeToString(m.toCode)}`
         + `  −${m.speedLost.toFixed(2)} m/s${Math.abs(s.spinCarry) > 0.05 ? `  carry ${s.spinCarry.toFixed(1)} rad/s` : ""}`, INK]);
     }

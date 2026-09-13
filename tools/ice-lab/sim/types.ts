@@ -142,11 +142,53 @@ export interface JumpResult {
 // ── moves ───────────────────────────────────────────────────────────────────
 
 /** The move under way. One at a time; sim/moves.ts owns every field. */
-export const MOVE = { None: 0, Turn: 1, Twizzle: 2 } as const;
-export const MOVE_NAME = ["", "TURN", "TWIZZLE"] as const;
+export const MOVE = { None: 0, Turn: 1, Twizzle: 2, Spin: 3 } as const;
+export const MOVE_NAME = ["", "TURN", "TWIZZLE", "SPIN"] as const;
 
 /** Bits of SkaterState.movesHeld: which move buttons were down last tick. */
-export const HELD = { Turn: 1, Twizzle: 2 } as const;
+export const HELD = { Turn: 1, Twizzle: 2, Spin: 4 } as const;
+
+/** A spin's basic position (data/spin-positions.json's basic_position). */
+export const SPIN_POSITION = { Upright: 0, Sit: 1, Camel: 2 } as const;
+export const SPIN_POSITION_NAME = ["upright", "sit", "camel"] as const;
+
+/**
+ * A spin in progress. Bible §2.5: "a continuous negotiation between speed,
+ * position and centering, under a slowly draining angular momentum". The
+ * angular momentum is set by the entry and never grows; the position and the
+ * arms set the moment of inertia, and omega = L / I.
+ */
+export interface SpinState {
+  /** Seconds spinning. */
+  t: number;
+  /** +1 anticlockwise, -1 clockwise. */
+  dir: number;
+  /** kg m^2 / s, a magnitude; only friction and travel take it away. */
+  angMomentum: number;
+  /** kg m^2 about the vertical now: the position's scale on the arms' reach. */
+  inertia: number;
+  /** rad/s now. */
+  omega: number;
+  /** Radians turned since the entry. */
+  swept: number;
+  /** SPIN_POSITION now. */
+  position: number;
+  /** Bits of SPIN_POSITION held for two revolutions or more: the data's min_revolutions. */
+  positionsHeld: number;
+  /** Revolutions in the current position, and the most in any one. */
+  segRevs: number;
+  bestSegRevs: number;
+  /** rad/s, the slowest and fastest in the current position: "clear increase of speed". */
+  segOmegaMin: number;
+  segOmegaMax: number;
+  /** The spinning foot. */
+  foot: Foot;
+  /** Where the spin began, and the furthest it has travelled from there, m. */
+  anchor: Vec2;
+  travel: number;
+  fromCode: number;
+  entrySpeed: number;
+}
 
 /** Which turn a pivot became, decided at the cusp by the foot the weight is on. */
 export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1 } as const;
@@ -203,6 +245,10 @@ export interface MoveResult {
   toCode: number;
   /** Speed lost across the move, m/s. */
   speedLost: number;
+  /** A spin's: bits of SPIN_POSITION held two revolutions, the most revolutions in one, and its drift, m. */
+  positions: number;
+  bestSegRevs: number;
+  travel: number;
 }
 
 // ── state ───────────────────────────────────────────────────────────────────
@@ -305,6 +351,7 @@ export interface SkaterState {
   /** MOVE under way. sim/moves.ts owns this and everything below it. */
   move: number;
   turn: TurnState;
+  spin: SpinState;
   /** The last move that finished. */
   moveDone: MoveResult;
   /** HELD bits: which move buttons were down last tick. A move starts on a fresh press. */
@@ -374,11 +421,17 @@ export interface SkatingInput {
   turn: boolean;
   /** The twizzle button, held: a travelling rotation for as long as it is (movesMode on). */
   twizzle: boolean;
+  /**
+   * The spin button, held: a spin for as long as it is (movesMode on). The
+   * position is the knee and the stick — deep knee sit, stick forward camel —
+   * and the arms are carriage.
+   */
+  spin: boolean;
 }
 
 export const NEUTRAL_INPUT: SkatingInput = {
   lean: 0, knee: 0.35, weight: 0.5, pitch: 0, leanSplit: 0, push: false, brake: false,
-  carriage: 0, toe: false, turn: false, twizzle: false,
+  carriage: 0, toe: false, turn: false, twizzle: false, spin: false,
 };
 
 // ── events ──────────────────────────────────────────────────────────────────
@@ -386,14 +439,14 @@ export const NEUTRAL_INPUT: SkatingInput = {
 export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
   SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
-  Takeoff: 8, Landing: 9, Turn: 10, Twizzle: 11,
+  Takeoff: 8, Landing: 9, Turn: 10, Twizzle: 11, Spin: 12,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
   "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
-  "TAKEOFF", "LANDING", "TURN", "TWIZZLE",
+  "TAKEOFF", "LANDING", "TURN", "TWIZZLE", "SPIN",
 ] as const;
 
 export interface EdgeEvent {
@@ -403,6 +456,6 @@ export interface EdgeEvent {
   prevCode: number;
   newCode: number;
   prevDwell: number;
-  /** Context: tilt at a change, slip speed at a skid, lean at a fall, TURN_KIND at a turn's cusp, revolutions at a twizzle's end. */
+  /** Context: tilt at a change, slip speed at a skid, lean at a fall, TURN_KIND at a turn's cusp, revolutions at a twizzle's or a spin's end. */
   value: number;
 }

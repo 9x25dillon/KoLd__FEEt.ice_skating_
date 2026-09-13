@@ -51,10 +51,29 @@
 // A twizzle is skated upright over the foot: the body is held at the lean its
 // path needs rather than balanced through a loop no one can steer at 2.5
 // revolutions a second.
+//
+// ── A SPIN ──────────────────────────────────────────────────────────────────
+//
+// Bible §2.5: "a continuous negotiation between speed, position and
+// centering, under a slowly draining angular momentum". The entry hooks the
+// skater's travel into rotation — m v spinArm of it, cleaner with the upper
+// body checked (carriage at the press) — and after that L only ever falls:
+// blade friction, and more of it the further the spin drifts ("a wobbling spin
+// dies fast"). The position sets the moment of inertia from
+// data/spin-positions.json's inertia_scale on the open baseline, the arms move
+// it between tucked and open at the rate a jump's pull-in does, and omega is
+// L / I: a camel is slow and an upright fast, emergently, as that file says.
+// Knee deep is a sit, stick forward a camel; change position mid-spin and the
+// speed changes with it, which is what a combination spin is.
+//
+// The spinning blade is on the back edge that curves the way the spin turns —
+// LBI anticlockwise on the left foot, RBO on the right — and letting go checks
+// out: pushed away backward at `spinExitSpeed` onto the back outside edge of
+// the foot that lands the rotation.
 
-import { rotate, normalizeOr, len, mul, sin, tan, atan2, sign, clamp } from "./math.ts";
-import { MOVE, TURN_KIND, FOOT, EVENT, EDGE_CODE_NONE, REGIME } from "./types.ts";
-import type { SkaterState, TurnState, MoveResult, EdgeEvent, Foot } from "./types.ts";
+import { rotate, normalizeOr, len, mul, sin, tan, atan2, sign, clamp, lerp, moveToward } from "./math.ts";
+import { MOVE, TURN_KIND, FOOT, EVENT, EDGE_CODE_NONE, REGIME, SPIN_POSITION, DIR, EDGE, makeCode } from "./types.ts";
+import type { SkaterState, TurnState, SpinState, MoveResult, EdgeEvent, Foot } from "./types.ts";
 import type { Params } from "./params.ts";
 import { effectiveRocker } from "./blade.ts";
 import { JUMP_PHASE } from "./jump.ts";
@@ -76,6 +95,30 @@ export function noMove(): MoveResult {
   return {
     tick: -1, kind: MOVE.None, detail: 0, revolutions: 0,
     fromCode: EDGE_CODE_NONE, toCode: EDGE_CODE_NONE, speedLost: 0,
+    positions: 0, bestSegRevs: 0, travel: 0,
+  };
+}
+
+/**
+ * data/spin-positions.json's inertia_scale for the three basic positions, on
+ * its 4.0 kg m^2 open baseline — transcribed, because sim/ cannot read a file;
+ * test/spin.test.ts holds them to the file.
+ */
+export const SPIN_INERTIA_SCALE = [1.0, 1.25, 2.2] as const;
+
+/** Radians of blade tilt on the spinning edge: a shallow back edge, well clear of flat. */
+const SPIN_EDGE = 0.26;
+/** m/s the classifier is told the spinning contact moves backward at: it is on a back edge. */
+const SPIN_BLADE_SPEED = 0.5;
+/** Seconds a spinning body settles upright over the foot. */
+const SPIN_SETTLE = 0.2;
+
+export function newSpin(): SpinState {
+  return {
+    t: 0, dir: 0, angMomentum: 0, inertia: 0, omega: 0, swept: 0,
+    position: SPIN_POSITION.Upright, positionsHeld: 0, segRevs: 0, bestSegRevs: 0,
+    segOmegaMin: 0, segOmegaMax: 0, foot: FOOT.Right, anchor: { x: 0, y: 0 }, travel: 0,
+    fromCode: EDGE_CODE_NONE, entrySpeed: 0,
   };
 }
 
@@ -98,8 +141,11 @@ export function flipFrame(s: SkaterState): void {
   s.flips++;
 }
 
-/** Whether a pivot is under way — a turn or a twizzle — standing in for the carve. */
+/** Whether a pivot is under way — a turn or a twizzle. */
 export const pivoting = (s: SkaterState): boolean => s.move === MOVE.Turn || s.move === MOVE.Twizzle;
+
+/** Whether a move is standing in for the carve this tick: a pivot, or a spin. */
+export const replacesCarve = (s: SkaterState): boolean => pivoting(s) || s.move === MOVE.Spin;
 
 /** +1 while the travel frame points the way the pivot began, -1 after an odd number of cusps. */
 const travelSense = (T: TurnState): number => (T.cusps % 2 === 0 ? T.entryDir : -T.entryDir);
@@ -306,6 +352,132 @@ export function twizzleTick(
   let ended = false;
   if (T.release && T.swept >= align - 1e-9) { endPivot(s, p, speed); ended = true; }
   return { lat, cusp, ended };
+}
+
+/** Knee deep is a sit, stick forward a camel, anything else upright. */
+export function spinPosition(knee: number, pitch: number, p: Params): number {
+  return knee >= p.spinSitKnee ? SPIN_POSITION.Sit : pitch >= p.spinCamelPitch ? SPIN_POSITION.Camel : SPIN_POSITION.Upright;
+}
+
+/**
+ * Start a spin: moves on, on the ice, fast enough to have something to hook.
+ * The spin turns the way the path does; the travel becomes the rotation.
+ */
+export function spinStart(s: SkaterState, p: Params, carriage: number, knee: number, pitch: number): boolean {
+  if (p.movesMode < 1 || s.fallen || s.move !== MOVE.None || s.jump.phase === JUMP_PHASE.Air) return false;
+  const b = s.blade[s.supportFoot];
+  const speed = len(s.vel);
+  if (!b.inContact || speed < p.spinMinSpeed) return false;
+  const Sp = s.spin;
+  const pathSense = sign(b.tilt) * sign(b.longSpeed);
+  const check = clamp(carriage, 0, 1);
+  Sp.t = 0;
+  Sp.dir = pathSense !== 0 ? pathSense : 1;
+  Sp.angMomentum = p.mass * speed * p.spinArm * (0.7 + 0.3 * check);
+  Sp.position = spinPosition(knee, pitch, p);
+  Sp.inertia = SPIN_INERTIA_SCALE[Sp.position] * lerp(p.inertiaTucked, p.inertiaOpen, check);
+  Sp.omega = Sp.angMomentum / Sp.inertia;
+  Sp.swept = 0;
+  Sp.positionsHeld = 0;
+  Sp.segRevs = 0;
+  Sp.bestSegRevs = 0;
+  Sp.segOmegaMin = Sp.omega;
+  Sp.segOmegaMax = Sp.omega;
+  Sp.foot = s.supportFoot;
+  Sp.anchor = { x: s.pos.x, y: s.pos.y };
+  Sp.travel = 0;
+  Sp.fromCode = b.code;
+  Sp.entrySpeed = speed;
+  // The hook takes the travel: what is left drifts, and dies away.
+  s.vel = mul(s.vel, p.spinTravelKeep);
+  s.move = MOVE.Spin;
+  s.strokeTime = 0;
+  s.crossover = false;
+  return true;
+}
+
+/**
+ * One tick of a spin, in place of the carve: the position and arms set I, L
+ * drains, omega = L / I turns the body, the drift dies, and letting go — or
+ * running out of rotation — checks out.
+ */
+export function spinTick(
+  s: SkaterState, p: Params, dt: number, knee: number, pitch: number, carriage: number, held: boolean,
+): PivotTick {
+  const Sp = s.spin;
+  Sp.t += dt;
+
+  const pos = spinPosition(knee, pitch, p);
+  if (pos !== Sp.position) {
+    if (Sp.segRevs >= 2) Sp.positionsHeld |= 1 << Sp.position;
+    Sp.position = pos;
+    Sp.segRevs = 0;
+    Sp.segOmegaMin = Sp.omega;
+    Sp.segOmegaMax = Sp.omega;
+  }
+  // Arms and a free leg move at the rate a jump's pull-in does.
+  const target = SPIN_INERTIA_SCALE[pos] * lerp(p.inertiaTucked, p.inertiaOpen, clamp(carriage, 0, 1));
+  Sp.inertia = moveToward(Sp.inertia, target, p.inertiaPullRate * dt);
+
+  const drift = len(s.vel);
+  s.vel = mul(s.vel, Math.max(0, 1 - dt / p.spinTravelTime));
+  Sp.angMomentum *= Math.max(0, 1 - (p.spinDecay + p.spinTravelDecay * drift) * dt);
+  Sp.omega = Sp.angMomentum / Sp.inertia;
+
+  const dAngle = Sp.omega * dt;
+  Sp.swept += dAngle;
+  Sp.segRevs += dAngle / (2 * Math.PI);
+  Sp.bestSegRevs = Math.max(Sp.bestSegRevs, Sp.segRevs);
+  Sp.segOmegaMin = Math.min(Sp.segOmegaMin, Sp.omega);
+  Sp.segOmegaMax = Math.max(Sp.segOmegaMax, Sp.omega);
+  const ax = s.pos.x - Sp.anchor.x, ay = s.pos.y - Sp.anchor.y;
+  Sp.travel = Math.max(Sp.travel, Math.sqrt(ax * ax + ay * ay));
+
+  s.heading = normalizeOr(rotate(s.heading, Sp.dir * dAngle), s.heading);
+  s.yawRate = Sp.dir * Sp.omega;
+  s.lean += (0 - s.lean) * Math.min(1, dt / SPIN_SETTLE);
+  s.leanRate = 0;
+  s.tiltCmd = -Sp.dir * SPIN_EDGE;
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    b.tangent = { x: s.heading.x, y: s.heading.y };
+    b.latForce = 0; b.latSlipAccel = 0; b.demandRatio = 0; b.biteCapacity = 0; b.turnRadius = Infinity;
+    if (b.inContact) {
+      // On the back edge that curves the way the spin turns.
+      b.tilt = -Sp.dir * SPIN_EDGE;
+      b.longSpeed = -SPIN_BLADE_SPEED;
+      b.regime = REGIME.Edge;
+    } else {
+      b.longSpeed = 0;
+      b.regime = REGIME.Unloaded;
+    }
+  }
+
+  const ended = !held || Sp.omega < p.spinMinOmega;
+  if (ended) {
+    if (Sp.segRevs >= 2) Sp.positionsHeld |= 1 << Sp.position;
+    const exitFoot = (Sp.dir > 0 ? FOOT.Right : FOOT.Left) as Foot;
+    // The check-out: pushed away backward onto that foot's back outside edge.
+    s.vel = mul(s.heading, -p.spinExitSpeed);
+    s.yawRate = 0;
+    s.tiltCmd = -Sp.dir * SPIN_EDGE;
+    const r = s.moveDone;
+    r.tick = s.tick; r.kind = MOVE.Spin; r.detail = Sp.position; r.revolutions = Sp.swept / (2 * Math.PI);
+    r.fromCode = Sp.fromCode; r.toCode = makeCode(exitFoot, DIR.Backward, EDGE.Outside);
+    r.speedLost = Sp.entrySpeed - p.spinExitSpeed;
+    r.positions = Sp.positionsHeld; r.bestSegRevs = Sp.bestSegRevs; r.travel = Sp.travel;
+    s.move = MOVE.None;
+  }
+  return { lat: 0, cusp: false, ended };
+}
+
+/** After classification on a spin's last tick: revolutions, and the edge it checks out onto. */
+export function spinEvent(s: SkaterState, events: EdgeEvent[]): void {
+  const r = s.moveDone;
+  events.push({
+    tick: s.tick, type: EVENT.Spin, foot: (r.toCode & 1) as Foot,
+    prevCode: r.fromCode, newCode: r.toCode, prevDwell: s.spin.t, value: r.revolutions,
+  });
 }
 
 /** After classification on a turn's cusp tick: say which turn it was, and onto what. */

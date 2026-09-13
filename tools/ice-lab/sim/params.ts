@@ -272,6 +272,31 @@ export interface Params {
   twizzleMinSpeed: number;
   /** Seconds for the stick's steer to bend a twizzle's path. */
   twizzleSteerTime: number;
+  /** m/s a spin needs at entry. data/spin-positions.json's basic entries: 3.0. */
+  spinMinSpeed: number;
+  /**
+   * Metres: the lever arm of the entry. A skater hooking into a spin at speed v
+   * turns m v arm of travel into rotation about their own axis; the check of
+   * the upper body (carriage at the press) is what makes the transfer clean.
+   * 0.15 puts a 4 m/s upright entry, arms drawn in, at about 5 revolutions a
+   * second and a camel at 2.5.
+   */
+  spinArm: number;
+  /** 1/s: the angular momentum a centred spin loses to blade friction. */
+  spinDecay: number;
+  /** Extra 1/s of that loss per m/s of drift: "a wobbling spin dies fast". */
+  spinTravelDecay: number;
+  /** Share of the entry velocity left as drift once the hook has taken the rest. */
+  spinTravelKeep: number;
+  /** Seconds that drift takes to die away. */
+  spinTravelTime: number;
+  /** rad/s below which a spin cannot be held and checks out by itself. */
+  spinMinOmega: number;
+  /** m/s the check-out pushes the skater away onto the back edge. */
+  spinExitSpeed: number;
+  /** Knee at or above which a spin is a sit, and stick forward at or above which a camel. */
+  spinSitKnee: number;
+  spinCamelPitch: number;
 
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
@@ -365,6 +390,16 @@ export const DEFAULT_PARAMS: Params = {
   twizzleScrub: 0.75,
   twizzleMinSpeed: 2.0,
   twizzleSteerTime: 0.3,
+  spinMinSpeed: 3.0,         // data/spin-positions.json entries
+  spinArm: 0.15,
+  spinDecay: 0.12,
+  spinTravelDecay: 0.5,
+  spinTravelKeep: 0.12,
+  spinTravelTime: 0.6,
+  spinMinOmega: 3.0,
+  spinExitSpeed: 2.0,
+  spinSitKnee: 0.6,
+  spinCamelPitch: 0.5,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -430,6 +465,9 @@ export function validate(p: Params): string[] {
     errs.push("twizzleRate turns a quarter revolution in a tick, so a cusp could be skipped");
   if (p.twizzleArmsOut >= 1) errs.push("twizzleArmsOut is a share of the rate, below 1");
   if (p.twizzleSteerTime <= 0) errs.push("twizzleSteerTime must be positive");
+  if (p.spinTravelKeep > 1) errs.push("spinTravelKeep is a share of the entry velocity, 0..1");
+  if (p.spinTravelTime <= 0) errs.push("spinTravelTime must be positive");
+  if (p.spinMinSpeed <= 0) errs.push("spinMinSpeed must be positive: a spin from a standstill has no angular momentum");
   if (p.backPushScale <= 0 || p.backPushScale > 1)
     errs.push("backPushScale is a fraction of the forward push, in (0, 1]");
   if (p.crossoverLean < p.flatThreshold)

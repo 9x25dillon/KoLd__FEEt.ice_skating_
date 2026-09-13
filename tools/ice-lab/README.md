@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 218 tests
+node --test test/*.test.ts     # 228 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -253,7 +253,7 @@ Keyboard: **A/D** lean, **W/S** rocker fore-aft, **Shift** knee, **Q/E** weight,
 **Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **K** sample
 skater, **M** pad scheme. Jumps, when on: **J** cycles off / hop / full / full with the
 moves, **C** arms out, **F** toe pick. **L** turns the moves on and off by themselves; with
-them on, **B** on an edge is a turn and **Z** held a twizzle.
+them on, **B** on an edge is a turn, **Z** held a twizzle and **Y** held a spin.
 
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
 weight, **Y** reset, **X** preset, **Back** scheme; for jumps, **right stick**
@@ -261,8 +261,9 @@ carriage, **B** toe pick, **D-pad ↑** jump mode (and past full jumps, the move
 zoom — or, in the jump challenge, the previous / next jump. The courses are on
 the stick clicks: **left stick click** next course, **right stick click** next
 ghost. With the moves on the face buttons take the bible's §2.1 layout: **B** is the
-turn, **X** held a twizzle, and the toe pick moves to a tap of **LT**, which held
-is still the brake (the preset stays on keyboard **T**).
+turn, **X** held a twizzle, **Y** held a spin, reset moves to **Back**, and the toe
+pick moves to a tap of **LT**, which held is still the brake (the preset and the
+scheme stay on keyboard **T** and **M**).
 The chase camera's tilt stays on **[ / ]**. A browser hides a gamepad
 until a button is pressed, which reads exactly like a broken pad.
 
@@ -466,7 +467,7 @@ hiss, and a toe click, takeoff swell and landing "chk" that is dirtier the worse
 the landing. Both are in the plan's build list and both stay on in playtest.
 Audio starts on the first key or click; a gamepad press is not a gesture.
 
-## The moves — crossovers, turns and twizzles
+## The moves — crossovers, turns, twizzles and spins
 
 Added 2026-09-13, on the operator's direction — *"i am seeing skaters doing back
 crossovers right into the jump and we need to put that in the games engine for
@@ -565,6 +566,28 @@ two and a half revolutions a second. Measured from 5.8 m/s: **two revolutions in
 0.84 s for 0.96 m/s** (data: 720° over 4.5 m at 6 m/s for 1.0 m/s); on the right
 foot the edge alternates RFO / RBI; a held ±0.4 of stick bends a one-second
 twizzle's path ±39° and none leaves it straight.
+
+**Spins.** **Y** (pad **Y**) held at 3 m/s or more (`data/spin-positions.json`'s
+entries): *"a continuous negotiation between speed, position and centering, under
+a slowly draining angular momentum"* (bible §2.5). The entry hooks the skater's
+travel into rotation — `m v spinArm`, cleaner with the upper body checked, which is
+the arms held out at the press — and after that L only ever falls: blade friction,
+and more of it the further the spin drifts. The position sets the moment of
+inertia from the data file's `inertia_scale` (upright 1.0, sit 1.25, camel 2.2, on
+its 4.0 kg·m² open baseline; `test/spin.test.ts` holds them to the file), the arms
+move it between tucked and open at a jump's pull-in rate, and ω = L / I — so a
+camel is slow and an upright fast *"emergently, without any scripting"*, as the
+file says. **Knee deep is a sit, stick forward a camel**; change position mid-spin
+and the speed changes with it, which is a combination spin. The spinning blade is
+on the back edge that curves the way it turns — LBI anticlockwise on the left foot —
+and letting go (or running out of rotation) checks out backward onto RBO.
+
+Measured, entered off LFO at 4.5 m/s with the arms in: an upright starts at **4.0
+revolutions a second** and drains to 2.3 over four seconds, **11 revolutions**,
+drifting **0.29 m** (inside `data/spin-features.json`'s 0.45 m centering); arms out
+it is 0.8; a checked entry is 5.0. Each position held two revolutions goes on the
+record (`positions`), the data's `min_revolutions`, which is what a level-feature
+detector will read.
 
 ## What a session measures
 
@@ -772,7 +795,7 @@ sim/replay.ts      bounded capture, strict import, full-state checks and playbac
 sim/jump.ts        load, air, land: JumpResolver.cpp, and the panel's calls
 sim/score.ts       one jump's score, from the data files: ScoreCalculator.cs
 sim/profile.ts     who is skating: body, blade wear, five stats, baked over a preset
-sim/moves.ts       the moves: turns and twizzles (a pivot, cusps, frame flips), and the carry into a jump
+sim/moves.ts       the moves: turns and twizzles (a pivot, cusps, frame flips), spins (L, I and drift), and the carry into a jump
 replay/verify.ts   command-line replay verification
 app/pad.ts         controller and keyboard: hardware, and nothing else
 app/schemes.ts     A, B and C — what an axis MEANS, as pure functions
@@ -816,8 +839,9 @@ It is the edge cutting a groove and pushing sideways against the wall of it.
 
 ## What is deliberately not here
 
-Spins, and turns beyond the three-turn, mohawk and twizzle (brackets, rockers, counters,
-choctaws), falls beyond their trigger, animation, networking, stamina,
+Spin scoring and levels, spin variations beyond the three basic positions, flying
+entries, turns beyond the three-turn, mohawk and twizzle (brackets, rockers,
+counters, choctaws), falls beyond their trigger, animation, networking, stamina,
 flow, combinations and sequences, and the ice grid (tracings are
 drawn, but they do not yet feed friction or bite back into the solver as the
 bible's §05 requires). The stroke is the design bible's semi-analytic push, not

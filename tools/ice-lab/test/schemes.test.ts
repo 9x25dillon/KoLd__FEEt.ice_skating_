@@ -23,7 +23,7 @@ const sticks: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.45, weight: 1, push: false, brake: false,
-  carriage: 0, toe: false, turn: false, twizzle: false,
+  carriage: 0, toe: false, turn: false, twizzle: false, spin: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
   cycleMoves: false,
 };
