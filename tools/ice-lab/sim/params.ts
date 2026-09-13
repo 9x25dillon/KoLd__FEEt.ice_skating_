@@ -297,6 +297,19 @@ export interface Params {
   /** Knee at or above which a spin is a sit, and stick forward at or above which a camel. */
   spinSitKnee: number;
   spinCamelPitch: number;
+  /** m/s an Ina Bauer needs: it is a glide, and a slow one falls over. */
+  inaBauerMinSpeed: number;
+  /**
+   * The body side-on to the travel, arms spread and arched back: its drag area
+   * as a multiple of `cdA`.
+   */
+  inaBauerDrag: number;
+  /**
+   * Friction on the trailing blade, whose foot no one turns out a perfect
+   * 180 degrees. With the drag, calibrated to data/motion-primitives.json's
+   * Ina Bauer: -1.1 m/s over 6 m at 6 m/s.
+   */
+  inaBauerScrub: number;
 
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
@@ -400,6 +413,9 @@ export const DEFAULT_PARAMS: Params = {
   spinExitSpeed: 2.0,
   spinSitKnee: 0.6,
   spinCamelPitch: 0.5,
+  inaBauerMinSpeed: 2.0,
+  inaBauerDrag: 2.0,
+  inaBauerScrub: 0.13,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -468,6 +484,7 @@ export function validate(p: Params): string[] {
   if (p.spinTravelKeep > 1) errs.push("spinTravelKeep is a share of the entry velocity, 0..1");
   if (p.spinTravelTime <= 0) errs.push("spinTravelTime must be positive");
   if (p.spinMinSpeed <= 0) errs.push("spinMinSpeed must be positive: a spin from a standstill has no angular momentum");
+  if (p.inaBauerDrag < 1) errs.push("inaBauerDrag multiplies the upright drag area: a side-on body has more, not less");
   if (p.backPushScale <= 0 || p.backPushScale > 1)
     errs.push("backPushScale is a fraction of the forward push, in (0, 1]");
   if (p.crossoverLean < p.flatThreshold)

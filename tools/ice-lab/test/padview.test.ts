@@ -13,7 +13,7 @@ const idle: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.35, weight: 0.5, push: false, brake: false,
-  carriage: 0, toe: false, turn: false, twizzle: false, spin: false,
+  carriage: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
   cycleMoves: false,
 };

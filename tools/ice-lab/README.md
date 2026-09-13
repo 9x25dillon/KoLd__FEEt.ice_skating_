@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 228 tests
+node --test test/*.test.ts     # 237 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -253,7 +253,8 @@ Keyboard: **A/D** lean, **W/S** rocker fore-aft, **Shift** knee, **Q/E** weight,
 **Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **K** sample
 skater, **M** pad scheme. Jumps, when on: **J** cycles off / hop / full / full with the
 moves, **C** arms out, **F** toe pick. **L** turns the moves on and off by themselves; with
-them on, **B** on an edge is a turn, **Z** held a twizzle and **Y** held a spin.
+them on, **B** on an edge is a turn, **Z** held a twizzle, **Y** held a spin and **I** held
+an Ina Bauer.
 
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
 weight, **Y** reset, **X** preset, **Back** scheme; for jumps, **right stick**
@@ -261,7 +262,7 @@ carriage, **B** toe pick, **D-pad ↑** jump mode (and past full jumps, the move
 zoom — or, in the jump challenge, the previous / next jump. The courses are on
 the stick clicks: **left stick click** next course, **right stick click** next
 ghost. With the moves on the face buttons take the bible's §2.1 layout: **B** is the
-turn, **X** held a twizzle, **Y** held a spin, reset moves to **Back**, and the toe
+turn, **X** held a twizzle, **Y** held a spin, **LB + RB** together an Ina Bauer, reset moves to **Back**, and the toe
 pick moves to a tap of **LT**, which held is still the brake (the preset and the
 scheme stay on keyboard **T** and **M**).
 The chase camera's tilt stays on **[ / ]**. A browser hides a gamepad
@@ -467,7 +468,7 @@ hiss, and a toe click, takeoff swell and landing "chk" that is dirtier the worse
 the landing. Both are in the plan's build list and both stay on in playtest.
 Audio starts on the first key or click; a gamepad press is not a gesture.
 
-## The moves — crossovers, turns, twizzles and spins
+## The moves — crossovers, turns, twizzles, spins and the Ina Bauer
 
 Added 2026-09-13, on the operator's direction — *"i am seeing skaters doing back
 crossovers right into the jump and we need to put that in the games engine for
@@ -588,6 +589,21 @@ drifting **0.29 m** (inside `data/spin-features.json`'s 0.45 m centering); arms 
 it is 0.8; a checked entry is 5.0. Each position held two revolutions goes on the
 record (`positions`), the data's `min_revolutions`, which is what a level-feature
 detector will read.
+
+**The Ina Bauer.** **I** (pad **LB + RB**) held, skating forward: both feet down on
+parallel tracks, the lead foot forward and the trailing foot backward, toes turned
+out, the body side-on. It is the one move the carve skates itself — the trailing
+blade's tangent is reversed, so its tilt is the body's lean read in a reversed
+frame, its long speed is negative, and the classifier calls it a back edge. Lean
+toward the lead foot's side and both blades are on outside edges, **LFO and RBO**,
+which is `data/motion-primitives.json`'s Ina Bauer; the lead foot is whichever side
+the body leans at the press, so a lean first gives the outside edges. The side-on
+body has more drag (`inaBauerDrag`) and nobody turns a foot out a full 180°, so the
+trailing blade scrapes a little (`inaBauerScrub`); together they cost **1.03 m/s in
+a second from 5.85 m/s** (data: 1.1 over 6 m at 6 m/s). Held the data's 1.8 s, the
+body keeps its lean to within 2° and the curve its direction. (Leaning in only at
+the press, while the balance loop is still rolling the lean in, can start one on
+inside edges — lean first.)
 
 ## What a session measures
 
@@ -795,7 +811,7 @@ sim/replay.ts      bounded capture, strict import, full-state checks and playbac
 sim/jump.ts        load, air, land: JumpResolver.cpp, and the panel's calls
 sim/score.ts       one jump's score, from the data files: ScoreCalculator.cs
 sim/profile.ts     who is skating: body, blade wear, five stats, baked over a preset
-sim/moves.ts       the moves: turns and twizzles (a pivot, cusps, frame flips), spins (L, I and drift), and the carry into a jump
+sim/moves.ts       the moves: turns and twizzles (a pivot, cusps, frame flips), spins (L, I and drift), the Ina Bauer, and the carry into a jump
 replay/verify.ts   command-line replay verification
 app/pad.ts         controller and keyboard: hardware, and nothing else
 app/schemes.ts     A, B and C — what an axis MEANS, as pure functions

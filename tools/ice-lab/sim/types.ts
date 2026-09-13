@@ -142,11 +142,25 @@ export interface JumpResult {
 // ── moves ───────────────────────────────────────────────────────────────────
 
 /** The move under way. One at a time; sim/moves.ts owns every field. */
-export const MOVE = { None: 0, Turn: 1, Twizzle: 2, Spin: 3 } as const;
-export const MOVE_NAME = ["", "TURN", "TWIZZLE", "SPIN"] as const;
+export const MOVE = { None: 0, Turn: 1, Twizzle: 2, Spin: 3, InaBauer: 4 } as const;
+export const MOVE_NAME = ["", "TURN", "TWIZZLE", "SPIN", "INA BAUER"] as const;
 
 /** Bits of SkaterState.movesHeld: which move buttons were down last tick. */
-export const HELD = { Turn: 1, Twizzle: 2, Spin: 4 } as const;
+export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8 } as const;
+
+/**
+ * An Ina Bauer in progress: both feet down on parallel tracks, the lead foot
+ * skating forward and the trailing foot backward, toes turned out, the body
+ * side-on to the travel. No other move is a two-foot glide with the blades
+ * pointing opposite ways, so it is the one move the carve itself skates.
+ */
+export interface InaBauerState {
+  /** The foot skating forward; the other trails, backward. */
+  lead: Foot;
+  t: number;
+  fromCode: number;
+  entrySpeed: number;
+}
 
 /** A spin's basic position (data/spin-positions.json's basic_position). */
 export const SPIN_POSITION = { Upright: 0, Sit: 1, Camel: 2 } as const;
@@ -245,6 +259,8 @@ export interface MoveResult {
   toCode: number;
   /** Speed lost across the move, m/s. */
   speedLost: number;
+  /** How long it lasted, s. The data holds an Ina Bauer to 1.8 s at the least. */
+  seconds: number;
   /** A spin's: bits of SPIN_POSITION held two revolutions, the most revolutions in one, and its drift, m. */
   positions: number;
   bestSegRevs: number;
@@ -352,6 +368,7 @@ export interface SkaterState {
   move: number;
   turn: TurnState;
   spin: SpinState;
+  inaBauer: InaBauerState;
   /** The last move that finished. */
   moveDone: MoveResult;
   /** HELD bits: which move buttons were down last tick. A move starts on a fresh press. */
@@ -427,11 +444,13 @@ export interface SkatingInput {
    * and the arms are carriage.
    */
   spin: boolean;
+  /** The Ina Bauer, held: the trailing foot turned out backward beside the lead (movesMode on). */
+  inaBauer: boolean;
 }
 
 export const NEUTRAL_INPUT: SkatingInput = {
   lean: 0, knee: 0.35, weight: 0.5, pitch: 0, leanSplit: 0, push: false, brake: false,
-  carriage: 0, toe: false, turn: false, twizzle: false, spin: false,
+  carriage: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
 };
 
 // ── events ──────────────────────────────────────────────────────────────────
@@ -439,14 +458,14 @@ export const NEUTRAL_INPUT: SkatingInput = {
 export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
   SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
-  Takeoff: 8, Landing: 9, Turn: 10, Twizzle: 11, Spin: 12,
+  Takeoff: 8, Landing: 9, Turn: 10, Twizzle: 11, Spin: 12, InaBauer: 13,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
   "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
-  "TAKEOFF", "LANDING", "TURN", "TWIZZLE", "SPIN",
+  "TAKEOFF", "LANDING", "TURN", "TWIZZLE", "SPIN", "INA BAUER",
 ] as const;
 
 export interface EdgeEvent {
@@ -456,6 +475,6 @@ export interface EdgeEvent {
   prevCode: number;
   newCode: number;
   prevDwell: number;
-  /** Context: tilt at a change, slip speed at a skid, lean at a fall, TURN_KIND at a turn's cusp, revolutions at a twizzle's or a spin's end. */
+  /** Context: tilt at a change, slip speed at a skid, lean at a fall, TURN_KIND at a turn's cusp, revolutions at a twizzle's or a spin's end, seconds held at an Ina Bauer's end. */
   value: number;
 }

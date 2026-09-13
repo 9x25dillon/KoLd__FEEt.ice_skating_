@@ -60,8 +60,9 @@ import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean } f
 import { classifyCode, classifyDepth } from "./classify.ts";
 import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
 import {
-  newTurn, newSpin, noMove, turnStart, twizzleStart, spinStart, turnPivot, twizzleTick, spinTick,
-  turnFrame, turnLoadFoot, turnEvent, twizzleEvent, spinEvent, carryDecay, replacesCarve,
+  newTurn, newSpin, newInaBauer, noMove, turnStart, twizzleStart, spinStart, inaBauerStart, inaBauerEnd,
+  turnPivot, twizzleTick, spinTick, turnFrame, turnLoadFoot, turnEvent, twizzleEvent, spinEvent,
+  carryDecay, replacesCarve,
 } from "./moves.ts";
 import type { PivotTick } from "./moves.ts";
 
@@ -78,6 +79,9 @@ import type { PivotTick } from "./moves.ts";
  * the compiler deletes the check.
  */
 const axis = (v: number, fallback: number): number => (Number.isFinite(v) ? v : fallback);
+
+/** Metres each foot of an Ina Bauer sits from the body along the track, lead ahead. */
+const INA_BAUER_STRIDE = 0.3;
 
 // ── construction ────────────────────────────────────────────────────────────
 
@@ -98,7 +102,8 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
     knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, crossover: false, crossSide: 0, pushHeld: false,
     jump: newJump(p), landed: noResult(),
-    move: MOVE.None, turn: newTurn(), spin: newSpin(), moveDone: noMove(), movesHeld: 0, flips: 0, spinCarry: 0,
+    move: MOVE.None, turn: newTurn(), spin: newSpin(), inaBauer: newInaBauer(), moveDone: noMove(),
+    movesHeld: 0, flips: 0, spinCarry: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -131,7 +136,7 @@ export function step(
   s.pushHeld = input.push;
   // A move also starts on a fresh press, and for the same reason.
   const heldNow = (input.turn === true ? HELD.Turn : 0) | (input.twizzle === true ? HELD.Twizzle : 0)
-    | (input.spin === true ? HELD.Spin : 0);
+    | (input.spin === true ? HELD.Spin : 0) | (input.inaBauer === true ? HELD.InaBauer : 0);
   const freshMoves = heldNow & ~s.movesHeld;
   s.movesHeld = heldNow;
   if (s.fallen && freshPush) {
@@ -183,10 +188,19 @@ export function step(
   // ── 0c. a turn, a twizzle or a spin begins ────────────────────────────────
   // sim/moves.ts: on a fresh press, if the ice permits one. From here until it
   // ends the body is on one foot and the move stands in for sections 2-5.
+  //
+  // An Ina Bauer is held, not a pivot: it ends when the button is let go, or
+  // the glide runs out, and the carve skates it in between.
+  if (s.move === MOVE.InaBauer) {
+    s.inaBauer.t += dt;
+    if (!input.inaBauer || s.fallen || len(s.vel) < 0.5 * p.inaBauerMinSpeed) inaBauerEnd(s, events);
+  }
   if (freshMoves & HELD.Turn) turnStart(s, p);
   else if (freshMoves & HELD.Twizzle) twizzleStart(s, p);
   else if (freshMoves & HELD.Spin) spinStart(s, p, axis(input.carriage, 0), knee, axis(input.pitch, 0));
+  else if (freshMoves & HELD.InaBauer) inaBauerStart(s, p, axis(input.lean, 0));
   const turning = replacesCarve(s);
+  const ina = s.move === MOVE.InaBauer;
   const moveThisTick = s.move;
 
   // ── 1. legs -> normal load ────────────────────────────────────────────────
@@ -202,7 +216,9 @@ export function step(
   const nTotal = Math.max(0, p.mass * (g + legAccel));
   // A move is made on one foot: the pivot or spinning foot, and after a mohawk's cusp the other.
   const loadFoot = !turning ? -1 : s.move === MOVE.Spin ? s.spin.foot : turnLoadFoot(s);
-  const weights = loadFoot === FOOT.Right ? [0, 1] : loadFoot === FOOT.Left ? [1, 0] : [1 - weightR, weightR];
+  // An Ina Bauer is on both feet, whatever the weight input says.
+  const weights = loadFoot === FOOT.Right ? [0, 1] : loadFoot === FOOT.Left ? [1, 0]
+    : ina ? [0.5, 0.5] : [1 - weightR, weightR];
   let loaded = 0;
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
@@ -214,9 +230,11 @@ export function step(
   }
   s.supportMode = loaded;
   s.supportFoot = (weights[1] >= weights[0] ? FOOT.Right : FOOT.Left) as Foot;
+  // The heading is the lead blade's, which points forward; the trail's points back.
+  if (ina) s.supportFoot = s.inaBauer.lead;
 
   // ── 1b. begin a stroke, before any blade tilt is assigned ─────────────────
-  if (alive && input.push && s.strokeTime <= 0 && !turning) {
+  if (alive && input.push && s.strokeTime <= 0 && !turning && !ina) {
     s.strokeTime = p.strokeDuration;
     s.strokeFoot = (1 - s.strokeFoot) as Foot;   // two-beat alternation
     // "A straight stroke on a flat, a crossover on a curve" (bible §2.1). Read
@@ -326,10 +344,14 @@ export function step(
     // In a crossover both pushing blades lean toward the curve's centre: the
     // outside foot is then on its inside edge as in a stroke, and the inside
     // foot on its OUTSIDE edge — the underpush.
+    //
+    // In an Ina Bauer the trailing blade points backward, so the body's tilt,
+    // read in its reversed frame, has the opposite sign.
     const apart = (i === FOOT.Left ? -1 : 1) * split * p.splitTiltMax;
+    const reversed = ina && i !== s.inaBauer.lead;
     b.tilt = pushing
       ? (s.crossover ? s.crossSide * p.strokeEdge : (i === FOOT.Left ? -p.strokeEdge : p.strokeEdge))
-      : clamp(s.tiltCmd + apart, -p.maxTilt, p.maxTilt);
+      : reversed ? -clamp(s.tiltCmd, -p.maxTilt, p.maxTilt) : clamp(s.tiltCmd + apart, -p.maxTilt, p.maxTilt);
 
     if (!b.inContact) {
       b.regime = REGIME.Unloaded;
@@ -423,7 +445,8 @@ export function step(
     // standstill wound the lean up to 40 degrees and put the skater down; the
     // stroke reads as a weave that never comes back.
     if (!(stroking && i === s.strokeFoot)) {
-      latForceTotal += b.latForce;
+      // The body's lateral frame is the heading's; a reversed blade's is not.
+      latForceTotal += reversed ? -b.latForce : b.latForce;
       excessWeighted += excess * b.weight;
       const yawRate = sign(b.tilt) * vLong / Math.max(radius, 0.35);
       yawNumer += yawRate * b.normalLoad;
@@ -493,10 +516,14 @@ export function step(
       dv += muLong(b.tilt, b.latSlipAccel > 0, p) * b.normalLoad / p.mass * dt;
     }
     if (input.brake) dv += p.muSkid * nTotal / p.mass * dt;
+    // An Ina Bauer's trailing foot is never turned out quite square to the lead.
+    if (ina) dv += p.inaBauerScrub * s.blade[1 - s.inaBauer.lead].normalLoad / p.mass * dt;
 
     // Air drag. At 8 m/s this is several times blade friction, which is why
-    // speed is expensive to build and cheap to keep.
-    dv += 0.5 * p.airDensity * p.cdA * speed * speed / p.mass * dt;
+    // speed is expensive to build and cheap to keep. Side-on, arms spread, in
+    // an Ina Bauer, rather more.
+    const dragArea = ina ? p.cdA * p.inaBauerDrag : p.cdA;
+    dv += 0.5 * p.airDensity * dragArea * speed * speed / p.mass * dt;
 
     // Friction never reverses motion.
     speed = Math.max(0, speed - dv);
@@ -593,6 +620,12 @@ export function step(
     const off = s.supportMode === 2 ? p.stanceHalfWidth : 0;
     s.blade[i].contact = add(base,
       mul(perpLeft(frameH), i === FOOT.Left ? off : -off));
+  }
+  // An Ina Bauer's feet are a stride apart along the track: the lead ahead.
+  if (ina) {
+    const lead = s.inaBauer.lead;
+    s.blade[lead].contact = add(s.blade[lead].contact, mul(frameH, INA_BAUER_STRIDE));
+    s.blade[1 - lead].contact = add(s.blade[1 - lead].contact, mul(frameH, -INA_BAUER_STRIDE));
   }
 
   // ── 8. classify, and say so ───────────────────────────────────────────────

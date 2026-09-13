@@ -99,6 +99,11 @@ export interface Controls {
   twizzle: boolean;
   /** The spin button, held (keyboard Y; with the moves on, pad Y, where the bible puts it). */
   spin: boolean;
+  /**
+   * The Ina Bauer, held: keyboard I; with the moves on, both bumpers at once —
+   * both feet down and turned out, which is what the move is.
+   */
+  inaBauer: boolean;
   /** One-shot: true only on the frame the button went down. */
   reset: boolean;
   pause: boolean;
@@ -132,7 +137,7 @@ export interface Controls {
 const NOTHING: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
-  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false, turn: false, twizzle: false, spin: false,
+  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
   cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
   cycleMoves: false,
@@ -221,6 +226,7 @@ export class Pad {
       const wl = gp.buttons[LB]?.pressed ? 1 : 0;
       const wr = gp.buttons[RB]?.pressed ? 1 : 0;
       out.weight = wl && !wr ? 0 : wr && !wl ? 1 : 0.5;
+      if (moves && wl && wr) out.inaBauer = true;
       out.push = (gp.buttons[A]?.pressed ?? false) && !this.prevButtons.has(A);
       const ltDown = (gp.buttons[LT]?.value ?? 0) > TRIGGER;
       this.ltTicks = ltDown ? this.ltTicks + 1 : 0;
@@ -280,6 +286,7 @@ export class Pad {
     if (this.held("b")) out.turn = true;
     if (this.held("z")) out.twizzle = true;
     if (this.held("y")) out.spin = true;
+    if (this.held("i")) out.inaBauer = true;
     if (this.pressed("j")) out.cycleJump = true;
     if (this.pressed("v")) out.cycleView = true;
     if (this.pressed("=") || this.pressed("+")) out.zoom += 1;

@@ -83,3 +83,27 @@ test("with the moves on, B is the turn and a tap of LT the toe pick; LT held sti
   assert.equal(c.turn, false);
   assert.equal(read(false, LT_).brake, true, "and LT brakes at once");
 });
+
+test("with the moves on, X twizzles, Y spins, Back resets, and both bumpers are the Ina Bauer", () => {
+  const X_ = 2, Y_ = 3, LB_ = 4, RB_ = 5, BACK_ = 8;
+  const read = (moves: boolean, ...buttons: number[]) => { held = buttons; return pad.read(moves); };
+  read(true);
+  let c = read(true, X_);
+  assert.equal(c.twizzle, true);
+  assert.equal(c.cyclePreset, false, "X is no longer the preset");
+  c = read(true, Y_);
+  assert.equal(c.spin, true);
+  assert.equal(c.reset, false, "Y is no longer reset");
+  read(true);
+  c = read(true, BACK_);
+  assert.equal(c.reset, true, "Back is reset");
+  assert.equal(c.cycleScheme, false, "and not the scheme");
+  c = read(true, LB_, RB_);
+  assert.equal(c.inaBauer, true);
+  assert.equal(c.weight, 0.5, "both feet down");
+  assert.equal(read(true, LB_).inaBauer, false, "one bumper is only weight");
+  read(false);
+  assert.equal(read(false, LB_, RB_).inaBauer, false, "with the moves off, both bumpers are just two-footed");
+  read(false);
+  assert.equal(read(false, Y_).reset, true, "and Y is reset again");
+});

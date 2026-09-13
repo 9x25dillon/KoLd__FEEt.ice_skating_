@@ -137,7 +137,12 @@ export interface Body {
  * deep knee (RT, Shift) reads as a deep bend rather than a shorter stick.
  */
 export function bodyPoints(s: SkaterState, p: Params): Body {
-  const t = s.heading, n = perpLeft(t);
+  // The body's own frame. Side-on in an Ina Bauer, chest away from the curve
+  // it leans back into: the heading turned a quarter toward the trailing foot.
+  const ina = s.move === MOVE.InaBauer;
+  const leadLeft = s.inaBauer.lead === FOOT.Left;
+  const t = !ina ? s.heading : leadLeft ? { x: s.heading.y, y: -s.heading.x } : perpLeft(s.heading);
+  const n = perpLeft(t);
   const air = s.jump.phase === JUMP_PHASE.Air;
   const lift = air ? Math.max(0, s.jump.z) : 0;
   const { base } = pendulum(s);
@@ -438,6 +443,10 @@ export class Renderer {
       }
     }
 
+    // Side-on in an Ina Bauer: the torso, arms and head turn a quarter toward
+    // the trailing foot; the legs already reach to the blades ahead and behind.
+    if (s.move === MOVE.InaBauer) ctx.rotate(s.inaBauer.lead === FOOT.Left ? -Math.PI / 2 : Math.PI / 2);
+
     // Arms: swung fore and aft against each other by the save, like a skater
     // windmilling to stay up. Normalized by the ceiling, so full swing means
     // the arms have nothing left to give.
@@ -662,6 +671,10 @@ export class Renderer {
       out.push([`SPIN  ${SPIN_POSITION_NAME[S.position]} ${S.dir > 0 ? "↺" : "↻"}  ${(S.omega / (2 * Math.PI)).toFixed(1)} rev/s`
         + `  ${(S.swept / (2 * Math.PI)).toFixed(1)} rev  drift ${S.travel.toFixed(2)} m`, GOLD]);
       out.push(["  knee deep: sit · stick forward: camel · arms in: faster · let go: check out", DIM]);
+    } else if (s.move === MOVE.InaBauer) {
+      const B = s.inaBauer;
+      out.push([`INA BAUER  ${codeToString(s.blade[B.lead].code)} leads, ${codeToString(s.blade[1 - B.lead].code)} trails`
+        + `  ${B.t.toFixed(1)} s${B.t < 1.8 ? " — the data holds one 1.8 s" : ""}`, GOLD]);
     } else if (s.move === MOVE.Twizzle) {
       const T = s.turn;
       out.push([`TWIZZLE  ${(T.swept / (2 * Math.PI)).toFixed(2)} rev ${T.dir > 0 ? "↺" : "↻"}  ${(T.rate / (2 * Math.PI)).toFixed(1)} rev/s`
@@ -671,13 +684,14 @@ export class Renderer {
       out.push([`CROSSOVER  ${s.strokeFoot === inside
         ? "inside foot pushes under, on its outside edge" : "outside foot pushes out"}`, JADE]);
     } else {
-      out.push(["MOVES  push on a curve: crossover · B turn · Z twizzle · Y spin", DIM]);
+      out.push(["MOVES  push on a curve: crossover · B turn · Z twizzle · Y spin · I Ina Bauer", DIM]);
     }
     const m = s.moveDone;
     if (m.tick >= 0 && m.kind !== MOVE.None) {
       const what = m.kind === MOVE.Turn ? TURN_NAME[m.detail]
         : m.kind === MOVE.Twizzle ? `twizzle ${m.revolutions.toFixed(2)} rev`
-          : `spin ${m.revolutions.toFixed(1)} rev, best ${m.bestSegRevs.toFixed(1)} in one position, drift ${m.travel.toFixed(2)} m`;
+          : m.kind === MOVE.Spin ? `spin ${m.revolutions.toFixed(1)} rev, best ${m.bestSegRevs.toFixed(1)} in one position, drift ${m.travel.toFixed(2)} m`
+            : `Ina Bauer ${m.seconds.toFixed(1)} s`;
       out.push([`LAST  ${codeToString(m.fromCode)} ${what} → ${codeToString(m.toCode)}`
         + `  −${m.speedLost.toFixed(2)} m/s${Math.abs(s.spinCarry) > 0.05 ? `  carry ${s.spinCarry.toFixed(1)} rad/s` : ""}`, INK]);
     }

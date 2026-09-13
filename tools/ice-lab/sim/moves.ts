@@ -70,10 +70,24 @@
 // LBI anticlockwise on the left foot, RBO on the right — and letting go checks
 // out: pushed away backward at `spinExitSpeed` onto the back outside edge of
 // the foot that lands the rotation.
+//
+// ── AN INA BAUER ────────────────────────────────────────────────────────────
+//
+// Both feet down on parallel tracks, the lead foot skating forward and the
+// trailing foot backward, toes turned out, the body side-on. It is the one move
+// the carve skates itself: the trailing blade's tangent is reversed, so its
+// tilt is the body's lean read in a reversed frame, its long speed is negative,
+// and the classifier calls it a back edge. Lean toward the lead foot's side and
+// both blades are on outside edges — LFO and RBO, the data's Ina Bauer — lean
+// the other way and both are inside. The lead foot is the one on the side the
+// body leans at the press, so the outside edges are what a press gives. The
+// body side-on to the travel has more drag, and nobody turns a foot out a full
+// 180 degrees, so the trailing blade scrapes a little: together, calibrated to
+// data/motion-primitives.json's -1.1 m/s over 6 m at 6 m/s.
 
-import { rotate, normalizeOr, len, mul, sin, tan, atan2, sign, clamp, lerp, moveToward } from "./math.ts";
+import { rotate, normalizeOr, len, mul, dot, sin, tan, atan2, sign, clamp, lerp, moveToward } from "./math.ts";
 import { MOVE, TURN_KIND, FOOT, EVENT, EDGE_CODE_NONE, REGIME, SPIN_POSITION, DIR, EDGE, makeCode } from "./types.ts";
-import type { SkaterState, TurnState, SpinState, MoveResult, EdgeEvent, Foot } from "./types.ts";
+import type { SkaterState, TurnState, SpinState, InaBauerState, MoveResult, EdgeEvent, Foot } from "./types.ts";
 import type { Params } from "./params.ts";
 import { effectiveRocker } from "./blade.ts";
 import { JUMP_PHASE } from "./jump.ts";
@@ -94,9 +108,51 @@ export function newTurn(): TurnState {
 export function noMove(): MoveResult {
   return {
     tick: -1, kind: MOVE.None, detail: 0, revolutions: 0,
-    fromCode: EDGE_CODE_NONE, toCode: EDGE_CODE_NONE, speedLost: 0,
+    fromCode: EDGE_CODE_NONE, toCode: EDGE_CODE_NONE, speedLost: 0, seconds: 0,
     positions: 0, bestSegRevs: 0, travel: 0,
   };
+}
+
+export function newInaBauer(): InaBauerState {
+  return { lead: FOOT.Right, t: 0, fromCode: EDGE_CODE_NONE, entrySpeed: 0 };
+}
+
+/**
+ * Start an Ina Bauer: moves on, skating forward (the data's `pre`), fast
+ * enough to glide. The trailing foot is turned out to point backward beside
+ * the lead. `lean` is the body's lean command: the lead foot is on its side.
+ */
+export function inaBauerStart(s: SkaterState, p: Params, lean: number): boolean {
+  if (p.movesMode < 1 || s.fallen || s.move !== MOVE.None || s.jump.phase === JUMP_PHASE.Air) return false;
+  const speed = len(s.vel);
+  if (speed < p.inaBauerMinSpeed || dot(s.vel, s.heading) <= 0) return false;
+  const B = s.inaBauer;
+  B.lead = (lean > 0.02 ? FOOT.Left : lean < -0.02 ? FOOT.Right : s.supportFoot) as Foot;
+  B.t = 0;
+  B.fromCode = s.blade[s.supportFoot].code;
+  B.entrySpeed = speed;
+  const trail = s.blade[1 - B.lead];
+  trail.tangent = { x: -s.heading.x, y: -s.heading.y };
+  s.move = MOVE.InaBauer;
+  s.strokeTime = 0;
+  s.crossover = false;
+  return true;
+}
+
+/** Bring the trailing foot back beside the lead, forward: an ordinary two-foot glide. */
+export function inaBauerEnd(s: SkaterState, events: EdgeEvent[]): void {
+  const B = s.inaBauer;
+  const lead = s.blade[B.lead], trail = s.blade[1 - B.lead];
+  trail.tangent = { x: lead.tangent.x, y: lead.tangent.y };
+  const r = s.moveDone;
+  r.tick = s.tick; r.kind = MOVE.InaBauer; r.detail = B.lead; r.revolutions = 0;
+  r.fromCode = B.fromCode; r.toCode = lead.code; r.speedLost = B.entrySpeed - len(s.vel); r.seconds = B.t;
+  r.positions = 0; r.bestSegRevs = 0; r.travel = 0;
+  s.move = MOVE.None;
+  events.push({
+    tick: s.tick, type: EVENT.InaBauer, foot: B.lead,
+    prevCode: B.fromCode, newCode: lead.code, prevDwell: B.t, value: B.t,
+  });
 }
 
 /**
@@ -254,6 +310,7 @@ function endPivot(s: SkaterState, p: Params, speed: number): void {
   const r = s.moveDone;
   r.tick = s.tick; r.kind = s.move; r.detail = T.kind; r.revolutions = T.swept / (2 * Math.PI);
   r.fromCode = T.fromCode; r.toCode = s.blade[T.exitFoot].code; r.speedLost = T.entrySpeed - speed;
+  r.seconds = T.t; r.positions = 0; r.bestSegRevs = 0; r.travel = 0;
   s.move = MOVE.None;
 }
 
@@ -465,6 +522,7 @@ export function spinTick(
     r.tick = s.tick; r.kind = MOVE.Spin; r.detail = Sp.position; r.revolutions = Sp.swept / (2 * Math.PI);
     r.fromCode = Sp.fromCode; r.toCode = makeCode(exitFoot, DIR.Backward, EDGE.Outside);
     r.speedLost = Sp.entrySpeed - p.spinExitSpeed;
+    r.seconds = Sp.t;
     r.positions = Sp.positionsHeld; r.bestSegRevs = Sp.bestSegRevs; r.travel = Sp.travel;
     s.move = MOVE.None;
   }
