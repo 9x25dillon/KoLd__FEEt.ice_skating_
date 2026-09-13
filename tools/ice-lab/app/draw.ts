@@ -7,7 +7,7 @@
 
 import type { SkaterState, BladeState } from "../sim/types.ts";
 import {
-  EDGE, REGIME, REGIME_NAME, FALL_NAME, FOOT,
+  EDGE, REGIME, REGIME_NAME, FALL_NAME, FOOT, MOVE, TURN_NAME,
   codeToString, codeSide, EDGE_CODE_NONE,
 } from "../sim/types.ts";
 import type { Params } from "../sim/params.ts";
@@ -632,15 +632,27 @@ export class Renderer {
     return out;
   }
 
-  /** The move under way, while the moves are on. */
+  /** The move under way and the last one finished, while the moves are on. */
   private movesLines(s: SkaterState, p: Params): Array<[string, string]> {
     if (p.movesMode <= 0) return [];
-    if (s.strokeTime > 0 && s.crossover) {
+    const out: Array<[string, string]> = [];
+    if (s.move === MOVE.Turn) {
+      const T = s.turn;
+      out.push([`TURN  ${codeToString(T.fromCode)} ${T.dir > 0 ? "↺" : "↻"} ${(T.swept * 180 / Math.PI).toFixed(0)}°`
+        + `${T.cusped ? `  ${TURN_NAME[T.kind]}` : "  — weight to the other foot for a mohawk"}`, GOLD]);
+    } else if (s.strokeTime > 0 && s.crossover) {
       const inside = s.crossSide > 0 ? FOOT.Left : FOOT.Right;
-      return [[`CROSSOVER  ${s.strokeFoot === inside
-        ? "inside foot pushes under, on its outside edge" : "outside foot pushes out"}`, JADE]];
+      out.push([`CROSSOVER  ${s.strokeFoot === inside
+        ? "inside foot pushes under, on its outside edge" : "outside foot pushes out"}`, JADE]);
+    } else {
+      out.push(["MOVES  push on a curve: crossover · B on an edge: turn", DIM]);
     }
-    return [["MOVES  push on a curve for a crossover", DIM]];
+    const m = s.moveDone;
+    if (m.tick >= 0 && m.kind === MOVE.Turn) {
+      out.push([`LAST  ${codeToString(m.fromCode)} ${TURN_NAME[m.detail]} → ${codeToString(m.toCode)}`
+        + `  −${m.speedLost.toFixed(2)} m/s${Math.abs(s.spinCarry) > 0.05 ? `  carry ${s.spinCarry.toFixed(1)} rad/s` : ""}`, INK]);
+    }
+    return out;
   }
 
   private hud(s: SkaterState, p: Params, info: string[]): void {

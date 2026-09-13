@@ -28,7 +28,7 @@
 // written for (about 85% of skaters). A clockwise skater mirrors the table and
 // the sign; that mirror is not modelled.
 
-import { EDGE, DIR, FOOT, EDGE_CODE_NONE, REGIME, EVENT, FALL, makeCode, codeDir } from "./types.ts";
+import { EDGE, DIR, FOOT, EDGE_CODE_NONE, REGIME, EVENT, FALL, MOVE, makeCode, codeDir } from "./types.ts";
 import type { SkaterState, SkatingInput, EdgeEvent, JumpState, JumpResult, Foot, Edge, Dir } from "./types.ts";
 import type { Params } from "./params.ts";
 import { clamp, saturate, lerp, moveToward, rotate, normalizeOr, wrapPi, dot, mul, len, add } from "./math.ts";
@@ -200,6 +200,9 @@ export function jumpGround(
   if (J.t > IDEAL_LOAD * 1.6) J.preRotation += PRE_ROTATION_RATE * dt;
   if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; return; }
   if (kneeIn >= p.jumpReleaseKnee) return;
+  // Mid-turn the blade is scraping across its path: the release waits for the
+  // exit edge, and takes off from it (sim/moves.ts).
+  if (s.move === MOVE.Turn) return;
 
   // ── TAKEOFF ───────────────────────────────────────────────────────────────
   const foot = s.supportFoot;
@@ -227,12 +230,13 @@ export function jumpGround(
   J.airTime = 2 * J.vz / p.gravity;
   J.height = J.vz * J.vz / (2 * p.gravity);
 
-  // Angular momentum: the entry curve plus the whip of the free side, and
-  // after this instant L never changes. A counter-clockwise skater cannot
+  // Angular momentum: the entry curve, whatever a turn just before it left in
+  // the body (spinCarry, zero without the moves), plus the whip of the free
+  // side — and after this instant L never changes. A counter-clockwise skater cannot
   // spin clockwise off a bad entry, so a net negative is no rotation at all.
   const whip = saturate(finite(input.carriage, 0));
   J.angMomentum = p.jumpMode >= JUMP_MODE.Full
-    ? p.inertiaOpen * Math.max(0, p.jumpRotBias * s.yawRate + p.jumpWhip * whip) * (0.80 + 0.20 * q)
+    ? p.inertiaOpen * Math.max(0, p.jumpRotBias * s.yawRate + s.spinCarry + p.jumpWhip * whip) * (0.80 + 0.20 * q)
     : 0;
   J.inertia = p.inertiaOpen;
   J.rotation = 0; J.peakOmega = 0; J.z = 0;

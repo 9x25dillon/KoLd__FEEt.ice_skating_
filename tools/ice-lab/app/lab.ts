@@ -212,7 +212,7 @@ export class Lab {
   }
 
   private tick(): void {
-    const c = this.pad.read();
+    const c = this.pad.read(this.params.movesMode >= 1 && !this.playtest);
     if (c.reset) this.reset();
     this.viewControls(c);
     if (c.pause) { this.clock.paused = true; return; }
@@ -277,9 +277,9 @@ export class Lab {
     // Hardware in, intent out. Which of the three schemes is doing that
     // translation is the question the whole exercise is asking.
     const it = applyScheme(this.scheme, c, this.state.heading, this.state.vel, this.state.yawRate,
-      this.params, this.schemeState);
+      this.params, this.schemeState, this.state.flips);
 
-    this.renderer.pad.note(c, it);
+    this.renderer.pad.note(c, it, this.params.movesMode >= 1);
     this.events.length = 0;
     step(this.state, it, this.params, SIM_DT, this.events);
     this.audio.onTick(it, this.events, this.state);

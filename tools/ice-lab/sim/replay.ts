@@ -27,8 +27,9 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       6.5e-12 m, with the same falls on the same ticks.
 //       /3 clips no longer load; verify one against a checkout of 34fecd8.
 //   /5  The moves (movesMode): Params gained movesMode and the moves' levers,
-//       and SkaterState gained what they carry, starting with crossovers
-//       (`crossover`, `crossSide`). With movesMode 0 — every preset — nothing
+//       and SkaterState gained what they carry: crossovers (`crossover`,
+//       `crossSide`), turns (`move`, `turn`, `moveDone`, `turnHeld`, `flips`,
+//       `spinCarry`; SkatingInput `turn`). With movesMode 0 — every preset — nothing
 //       moved at all: the fixture and three operator play clips, 22,184 ticks,
 //       replayed through /4 and /5 with every /4 state field and event
 //       identical on every tick. /4 clips no longer load; verify one against a
@@ -160,10 +161,10 @@ export function parseReplay(json: string): Replay {
     const path = `frames[${i}]`;
     const frame = object(root.frames[i], path, ["input", "scheme", "digest"], ["params"]);
     const input = object(frame.input, `${path}.input`,
-      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "toe"]);
+      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "toe", "turn"]);
     for (const key of ["lean", "pitch", "leanSplit"]) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["knee", "weight", "carriage"]) number(input[key], `${path}.input.${key}`, 0, 1);
-    for (const key of ["push", "brake", "toe"]) {
+    for (const key of ["push", "brake", "toe", "turn"]) {
       if (typeof input[key] !== "boolean") throw new Error(`${path}.input.${key}: expected a boolean`);
     }
     if (!["A", "B", "C"].includes(frame.scheme as string)) throw new Error(`${path}.scheme: expected A, B, or C`);

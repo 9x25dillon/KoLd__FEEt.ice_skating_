@@ -29,6 +29,13 @@ const CURVE = 1.35;
 const TRIGGER = 0.35;
 
 /**
+ * With the moves on, LT is the bible's toe pick as a tap and still the brake
+ * held: the pick strikes on the press, and the brake only bites once LT has
+ * been held this long. Ticks at 120 Hz: 0.15 s.
+ */
+const LT_TAP_TICKS = 18;
+
+/**
  * How far off horizontal the stick must be pushed before it reads as rocker,
  * in scheme A. Radians.
  *
@@ -83,6 +90,11 @@ export interface Controls {
    * a second experiment nobody asked for.
    */
   toe: boolean;
+  /**
+   * The turn button, held (keyboard B; with the moves on, pad B, where the
+   * bible puts it). The solver starts a turn on the press.
+   */
+  turn: boolean;
   /** One-shot: true only on the frame the button went down. */
   reset: boolean;
   pause: boolean;
@@ -116,7 +128,7 @@ export interface Controls {
 const NOTHING: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
-  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
+  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false, turn: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
   cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
   cycleMoves: false,
@@ -164,6 +176,8 @@ export class Pad {
   private keys = new Set<string>();
   private prevButtons = new Set<number>();
   private prevKeys = new Set<string>();
+  private ltWasDown = false;
+  private ltTicks = 0;
 
   constructor(target: HTMLElement | Window = window) {
     target.addEventListener("keydown", (e) => {
@@ -182,7 +196,12 @@ export class Pad {
     return this.keys.has(k) && !this.prevKeys.has(k);
   }
 
-  read(): Controls {
+  /**
+   * `moves`: the moves are on (never in playtest), so the face buttons take
+   * the bible's §2.1 layout — B is the turn, and the toe pick moves to a tap
+   * of LT, which held is still the brake.
+   */
+  read(moves = false): Controls {
     const out: Controls = { ...NOTHING };
     const gp = navigator.getGamepads?.().find((g) => g && g.connected) ?? null;
 
@@ -199,12 +218,20 @@ export class Pad {
       const wr = gp.buttons[RB]?.pressed ? 1 : 0;
       out.weight = wl && !wr ? 0 : wr && !wl ? 1 : 0.5;
       out.push = (gp.buttons[A]?.pressed ?? false) && !this.prevButtons.has(A);
-      out.brake = (gp.buttons[LT]?.value ?? 0) > TRIGGER;
+      const ltDown = (gp.buttons[LT]?.value ?? 0) > TRIGGER;
+      this.ltTicks = ltDown ? this.ltTicks + 1 : 0;
+      out.brake = moves ? ltDown && this.ltTicks > LT_TAP_TICKS : ltDown;
       out.reset = (gp.buttons[Y]?.pressed ?? false) && !this.prevButtons.has(Y);
       out.pause = (gp.buttons[START]?.pressed ?? false) && !this.prevButtons.has(START);
       out.cyclePreset = (gp.buttons[X]?.pressed ?? false) && !this.prevButtons.has(X);
       out.cycleScheme = (gp.buttons[BACK]?.pressed ?? false) && !this.prevButtons.has(BACK);
-      out.toe = (gp.buttons[B]?.pressed ?? false) && !this.prevButtons.has(B);
+      if (moves) {
+        out.toe = ltDown && !this.ltWasDown;
+        out.turn = gp.buttons[B]?.pressed ?? false;
+      } else {
+        out.toe = (gp.buttons[B]?.pressed ?? false) && !this.prevButtons.has(B);
+      }
+      this.ltWasDown = ltDown;
       out.cycleJump = (gp.buttons[DPAD_UP]?.pressed ?? false) && !this.prevButtons.has(DPAD_UP);
       out.cycleView = (gp.buttons[DPAD_DOWN]?.pressed ?? false) && !this.prevButtons.has(DPAD_DOWN);
       if ((gp.buttons[DPAD_RIGHT]?.pressed ?? false) && !this.prevButtons.has(DPAD_RIGHT)) out.dpadStep += 1;
@@ -237,6 +264,7 @@ export class Pad {
     if (this.pressed("m")) out.cycleScheme = true;
     if (this.held("c")) out.carriage = 1;
     if (this.pressed("f")) out.toe = true;
+    if (this.held("b")) out.turn = true;
     if (this.pressed("j")) out.cycleJump = true;
     if (this.pressed("v")) out.cycleView = true;
     if (this.pressed("=") || this.pressed("+")) out.zoom += 1;

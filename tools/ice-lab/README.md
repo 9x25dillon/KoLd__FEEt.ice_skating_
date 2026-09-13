@@ -13,7 +13,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 201 tests
+node --test test/*.test.ts     # 212 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```
@@ -252,14 +252,17 @@ the next one**, and the entry tables above moved by 1–3° when it landed.
 Keyboard: **A/D** lean, **W/S** rocker fore-aft, **Shift** knee, **Q/E** weight,
 **Space** stroke, **X** brake, **R** reset, **P** pause, **T** preset, **K** sample
 skater, **M** pad scheme. Jumps, when on: **J** cycles off / hop / full / full with the
-moves, **C** arms out, **F** toe pick. **L** turns the moves on and off by themselves.
+moves, **C** arms out, **F** toe pick. **L** turns the moves on and off by themselves; with
+them on, **B** on an edge is a turn.
 
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
 weight, **Y** reset, **X** preset, **Back** scheme; for jumps, **right stick**
 carriage, **B** toe pick, **D-pad ↑** jump mode (and past full jumps, the moves), **D-pad ↓** camera view, **D-pad ← →**
 zoom — or, in the jump challenge, the previous / next jump. The courses are on
 the stick clicks: **left stick click** next course, **right stick click** next
-ghost. The chase camera's tilt stays on **[ / ]**. A browser hides a gamepad
+ghost. With the moves on the face buttons take the bible's §2.1 layout: **B** is the
+turn, and the toe pick moves to a tap of **LT**, which held is still the brake.
+The chase camera's tilt stays on **[ / ]**. A browser hides a gamepad
 until a button is pressed, which reads exactly like a broken pad.
 
 **The input panel** (top right, toggle "input") shows the hardware as read —
@@ -462,7 +465,7 @@ hiss, and a toe click, takeoff swell and landing "chk" that is dirtier the worse
 the landing. Both are in the plan's build list and both stay on in playtest.
 Audio starts on the first key or click; a gamepad press is not a gesture.
 
-## The moves — crossovers
+## The moves — crossovers and turns
 
 Added 2026-09-13, on the operator's direction — *"i am seeing skaters doing back
 crossovers right into the jump and we need to put that in the games engine for
@@ -507,6 +510,48 @@ before jumps because they build speed while already facing the way the takeoff
 needs, so no turn has to bleed it off at the last moment. Stroking and
 crossovers both top out near 8.7 m/s, where the pushing blade's own edge starts
 to skid.
+
+**Turns** (`sim/moves.ts`). **B** on an edge turns the skater round: a
+**three-turn** keeps the foot and changes the edge, a **mohawk** changes the foot
+and keeps the edge's character, and both rotate into the curve (bible §2.3).
+Which it is, is where the weight is at the cusp — still on the pivot foot, a
+three-turn; moved to the other (**Q / E**, LB / RB), a mohawk. This is how a
+skater gets backward, so it is how most jumps are reached: five of the six take
+off backward, and the salchow's entry is *"a forward outside three turn onto the
+back inside edge"* (`data/entry-templates.json`).
+
+The model is a pivot. The body keeps the arc it was on; the blade, lifted onto its
+rocker, turns half a revolution about its contact, scraping across its own path
+(`muTurn g |sin a|`); at the cusp, blade square to the path, the frame the lean is
+measured in reverses; at the end the blade is aligned with the path again, the
+other way round, and carving resumes on the exit edge. **The cusp is a change of
+frame, not of physics**: lean and tilt are measured toward the heading's left, so
+reversing the heading negates them with the body unchanged — the same lean
+toward the same centre, the same blade depth, the same circle, now on RBI. The
+classifier reads the side from the sign of the tilt, so the edge code flips from
+outside to inside on the cusp tick, which is exactly what a three-turn does.
+
+Measured on `responsive` from 6.2 m/s: RFO three-turn → RBI costs **0.46 m/s**,
+LFI mohawk → RBI **0.42** (data: 0.45 and 0.40 at 6 m/s, which `muTurn` and
+`mohawkScrub` are calibrated to). On the front of the rocker (stick forward) the
+pivot is quicker and costs **0.26** — turns really are made on the rocker.
+
+**A held stick keeps its circle.** A and C read the stick in the body's frame, so
+a turn moves the circle's centre from one side of the skater to the other; read
+literally, a thumb still holding right would lean them out of it. The cusp
+mirrors a held stick until it comes back toward centre, then the next lean is the
+new frame's (`latchTurns` in `app/schemes.ts`). B steers on the ice, which a turn
+does not move, and is never mirrored — but B was built for forward skating and
+has not been taught to steer backward.
+
+**A turn's rotation carries into a jump.** A jump's release waits for the exit
+edge, and takes off with `spinCarry`: `turnCarry` (0.11) of the pivot's rotation
+rate, draining over `turnCarryTime` (0.5 s) — so the jump has to come straight
+out of the turn. Measured, a salchow at half a whip: from a steady LBI **1.62**
+revolutions and a fall; out of a LFO three-turn, **1.93** and a clean double. At a
+full whip, 3.02 against 3.34. `turnCarry` is a balance lever and is labelled as
+one: a third of a revolution at a full whip is a choice, taken so the whip stays
+the main source of rotation and the entry still clearly matters.
 
 ## What a session measures
 
@@ -714,6 +759,7 @@ sim/replay.ts      bounded capture, strict import, full-state checks and playbac
 sim/jump.ts        load, air, land: JumpResolver.cpp, and the panel's calls
 sim/score.ts       one jump's score, from the data files: ScoreCalculator.cs
 sim/profile.ts     who is skating: body, blade wear, five stats, baked over a preset
+sim/moves.ts       the moves: turns (a pivot, a cusp, a frame flip), and the carry into a jump
 replay/verify.ts   command-line replay verification
 app/pad.ts         controller and keyboard: hardware, and nothing else
 app/schemes.ts     A, B and C — what an axis MEANS, as pure functions
@@ -757,8 +803,8 @@ It is the edge cutting a groove and pushing sideways against the wall of it.
 
 ## What is deliberately not here
 
-Spins, turns and three-turns (a skater gets backward by a waltz jump or by
-starting backward), falls beyond their trigger, animation, networking, stamina,
+Spins, and turns beyond the three-turn and mohawk (brackets, rockers, counters,
+choctaws), falls beyond their trigger, animation, networking, stamina,
 flow, combinations and sequences, and the ice grid (tracings are
 drawn, but they do not yet feed friction or bite back into the solver as the
 bible's §05 requires). The stroke is the design bible's semi-analytic push, not

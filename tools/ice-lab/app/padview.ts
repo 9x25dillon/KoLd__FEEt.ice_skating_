@@ -69,6 +69,9 @@ export function displaySticks(c: Controls, scheme: number): {
 export class PadView {
   private controls: Controls | null = null;
   private input: SkatingInput | null = null;
+  /** The moves are on, so the chips show the bible's layout: B turn, LT tap toe. */
+  private moves = false;
+  private turnLit = false;
   private flash: Record<Flash, number> = {
     push: 0, toe: 0, reset: 0, pause: 0, cyclePreset: 0, cycleScheme: 0, cycleJump: 0,
   };
@@ -77,9 +80,11 @@ export class PadView {
    * Once per simulation tick. `controls` is null during replay playback: a
    * replay records what the solver was told, not what the hands did.
    */
-  note(controls: Controls | null, input: SkatingInput | null): void {
+  note(controls: Controls | null, input: SkatingInput | null, moves = false): void {
     this.controls = controls;
     this.input = input;
+    this.moves = moves;
+    this.turnLit = input?.turn ?? false;
     for (const k of FLASHES) {
       if (controls?.[k]) this.flash[k] = FLASH_TICKS;
       else if (this.flash[k] > 0) this.flash[k]--;
@@ -169,7 +174,8 @@ export class PadView {
     // ── buttons ─────────────────────────────────────────────────────────────
     const chips: Array<[string, string, boolean]> = [
       ["A", s.fallen ? "stand" : "stroke", this.flash.push > 0],
-      ["B", "toe", this.flash.toe > 0],
+      ["B", this.moves ? "turn" : "toe", this.moves ? this.turnLit : this.flash.toe > 0],
+      ...(this.moves ? [["LT tap", "toe", this.flash.toe > 0] as [string, string, boolean]] : []),
       ["Y", "reset", this.flash.reset > 0],
       ["X", "preset", this.flash.cyclePreset > 0],
       ["⧉", "scheme", this.flash.cycleScheme > 0],
@@ -194,7 +200,7 @@ export class PadView {
       text(`→ lean ${sg(it.lean)}  pitch ${sg(it.pitch)}  split ${sg(it.leanSplit)}`,
         x + 10, y + 204, INK);
       text(`  knee ${it.knee.toFixed(2)}  wt ${it.weight.toFixed(2)}  arms ${it.carriage.toFixed(2)}`
-        + `${it.push ? " PUSH" : ""}${it.brake ? " BRK" : ""}${it.toe ? " TOE" : ""}`, x + 10, y + 220, INK);
+        + `${it.push ? " PUSH" : ""}${it.brake ? " BRK" : ""}${it.toe ? " TOE" : ""}${it.turn ? " TURN" : ""}`, x + 10, y + 220, INK);
     } else {
       text("→ waiting for the first tick", x + 10, y + 204);
     }

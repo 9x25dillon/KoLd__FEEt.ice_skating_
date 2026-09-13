@@ -50,7 +50,7 @@
 // bible's version is the project's own and reads more directly on screen.
 
 import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos } from "./math.ts";
-import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT } from "./types.ts";
+import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT, MOVE } from "./types.ts";
 import type {
   SkaterState, BladeState, SkatingInput, EdgeEvent, Foot, Fall,
 } from "./types.ts";
@@ -59,6 +59,7 @@ import { SIM_DT } from "./params.ts";
 import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean } from "./blade.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
 import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
+import { newTurn, noMove, turnStart, turnPivot, turnFrame, turnLoadFoot, turnEvent, carryDecay } from "./moves.ts";
 
 /**
  * A non-finite axis is a bug in the caller, and it must not be a quiet one.
@@ -93,6 +94,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
     knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, crossover: false, crossSide: 0, pushHeld: false,
     jump: newJump(p), landed: noResult(),
+    move: MOVE.None, turn: newTurn(), moveDone: noMove(), turnHeld: false, flips: 0, spinCarry: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -123,10 +125,14 @@ export function step(
   // allocation here is a reset, and a reset is allowed to allocate.
   const freshPush = input.push && !s.pushHeld;
   s.pushHeld = input.push;
+  // A turn also starts on a fresh press, and for the same reason.
+  const freshTurn = input.turn === true && !s.turnHeld;
+  s.turnHeld = input.turn === true;
   if (s.fallen && freshPush) {
-    // The last landing is kept: it is the record of why they are down.
-    const { pos, heading, tick, landed } = s;
-    Object.assign(s, createState(p), { pos, heading, tick, landed, pushHeld: true });
+    // The last landing is kept: it is the record of why they are down. So is
+    // the frame count, since the heading is kept and a scheme reads it.
+    const { pos, heading, tick, landed, moveDone, flips, turnHeld } = s;
+    Object.assign(s, createState(p), { pos, heading, tick, landed, moveDone, flips, turnHeld, pushHeld: true });
     for (const b of s.blade) {
       b.tangent = v2(heading.x, heading.y);
       b.contact = v2(pos.x, pos.y);
@@ -168,6 +174,12 @@ export function step(
   const split = clamp(axis(input.leanSplit, 0), -1, 1);
   const contactS = clamp(0.5 + 0.5 * clamp(axis(input.pitch, 0), -1, 1), 0, 1);
 
+  // ── 0c. a turn begins ─────────────────────────────────────────────────────
+  // sim/moves.ts: on a fresh press, if the edge permits one. From here until
+  // it ends the body is on one foot and the pivot stands in for sections 2-5.
+  if (freshTurn) turnStart(s, p);
+  const turning = s.move === MOVE.Turn;
+
   // ── 1. legs -> normal load ────────────────────────────────────────────────
   // A deep knee is more push, more bite and more jump impulse; here it only
   // has to produce the load, since the vertical axis belongs to the jump
@@ -179,7 +191,9 @@ export function step(
   s.legLength = clamp(s.legLength, 0.3, p.comHeight * 1.05);
 
   const nTotal = Math.max(0, p.mass * (g + legAccel));
-  const weights = [1 - weightR, weightR];
+  // A turn is made on one foot: the pivot foot, and after a mohawk's cusp the other.
+  const loadFoot = turning ? turnLoadFoot(s) : -1;
+  const weights = loadFoot === FOOT.Right ? [0, 1] : loadFoot === FOOT.Left ? [1, 0] : [1 - weightR, weightR];
   let loaded = 0;
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
@@ -193,7 +207,7 @@ export function step(
   s.supportFoot = (weights[1] >= weights[0] ? FOOT.Right : FOOT.Left) as Foot;
 
   // ── 1b. begin a stroke, before any blade tilt is assigned ─────────────────
-  if (alive && input.push && s.strokeTime <= 0) {
+  if (alive && input.push && s.strokeTime <= 0 && !turning) {
     s.strokeTime = p.strokeDuration;
     s.strokeFoot = (1 - s.strokeFoot) as Foot;   // two-beat alternation
     // "A straight stroke on a flat, a crossover on a curve" (bible §2.1). Read
@@ -207,12 +221,22 @@ export function step(
   }
   const stroking = s.strokeTime > 0;
 
+  // ── 1c. or a turn's pivot, in place of sections 2-5 ───────────────────────
+  let yawNumer = 0, yawDenom = 0, latForceTotal = 0, excessWeighted = 0;
+  let flatImpulse = v2(0, 0);
+  let cusp = false;
+  if (turning) {
+    const pivot = turnPivot(s, p, dt, weightR);
+    latForceTotal = pivot.lat * p.mass;
+    cusp = pivot.cusp;
+  }
+
   // ── 2. balance controller: where the lean should put the blade ────────────
   // The skater does not steer, they lean; the blade angle that produces the
   // curvature the lean needs is solved for here, then rate-limited by the
   // neuromuscular lag. Assist tiers shrink that lag and nothing else.
   const rhoSupport = effectiveRocker(s.blade[s.supportFoot].contactS, p);
-  if (alive) {
+  if (alive && !turning) {
     const v2sq = Math.max(dot(s.vel, s.vel), p.minSpeedForCurv * p.minSpeedForCurv);
     const aCmd = g * tan(leanCmd)
       + p.balanceKp * (s.lean - leanCmd)
@@ -226,13 +250,11 @@ export function step(
     tiltTarget = clamp(tiltTarget, -p.maxTilt, p.maxTilt);
     const alpha = p.controlLatency > 1e-4 ? Math.min(1, dt / p.controlLatency) : 1;
     s.tiltCmd += (tiltTarget - s.tiltCmd) * alpha;
-  } else {
+  } else if (!turning) {
     s.tiltCmd += (0 - s.tiltCmd) * Math.min(1, dt / 0.3);
   }
 
   // ── 3. carve and bite, per loaded blade ───────────────────────────────────
-  let yawNumer = 0, yawDenom = 0, latForceTotal = 0, excessWeighted = 0;
-  let flatImpulse = v2(0, 0);
 
   // A CROSSOVER'S PUSH IS CENTRIPETAL AS WELL AS PROPULSIVE. In a straight
   // stroke the sideways halves of the two beats point opposite ways and cancel;
@@ -280,7 +302,7 @@ export function step(
     }
   }
 
-  for (let i = 0; i < 2; i++) {
+  if (!turning) for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     // The pushing blade rolls onto its own INSIDE edge for the length of the
     // push; every other blade carries the body's commanded tilt. For the left
@@ -428,23 +450,25 @@ export function step(
     s.vel = add(s.vel, mul(flatImpulse, 1 / p.mass));
   }
 
-  const yawRate = yawDenom > 1e-6 ? yawNumer / yawDenom : 0;
-  s.yawRate = yawRate;
-  const dPsi = yawRate * dt;
-  if (dPsi !== 0) {
-    for (let i = 0; i < 2; i++) {
-      const b = s.blade[i];
-      if (b.inContact) b.tangent = normalizeOr(rotate(b.tangent, dPsi), b.tangent);
+  if (!turning) {
+    const yawRate = yawDenom > 1e-6 ? yawNumer / yawDenom : 0;
+    s.yawRate = yawRate;
+    const dPsi = yawRate * dt;
+    if (dPsi !== 0) {
+      for (let i = 0; i < 2; i++) {
+        const b = s.blade[i];
+        if (b.inContact) b.tangent = normalizeOr(rotate(b.tangent, dPsi), b.tangent);
+      }
+      s.vel = rotate(s.vel, dPsi);
     }
-    s.vel = rotate(s.vel, dPsi);
+    s.heading = s.blade[s.supportFoot].inContact
+      ? s.blade[s.supportFoot].tangent
+      : s.heading;
   }
-  s.heading = s.blade[s.supportFoot].inContact
-    ? s.blade[s.supportFoot].tangent
-    : s.heading;
 
   // ── 5. losses ─────────────────────────────────────────────────────────────
   let speed = len(s.vel);
-  if (speed > 1e-6) {
+  if (!turning && speed > 1e-6) {
     const dir = mul(s.vel, 1 / speed);
 
     // Skid scrub, following SkateSolver.cpp: mu_skid * (excess acceleration)
@@ -550,13 +574,15 @@ export function step(
   s.lean = clamp(s.lean + s.leanRate * dt, -1.55, 1.55);
   s.comZ = L * cos(s.lean);
 
-  // Blade contacts hang off the base of the pendulum, not off the COM.
-  const right = mul(perpLeft(s.heading), -1);
+  // Blade contacts hang off the base of the pendulum, not off the COM. In a
+  // turn the pendulum is in the travel frame, and so are they.
+  const frameH = turning ? turnFrame(s) : s.heading;
+  const right = mul(perpLeft(frameH), -1);
   const base = add(s.pos, mul(right, L * sin(s.lean)));
   for (let i = 0; i < 2; i++) {
     const off = s.supportMode === 2 ? p.stanceHalfWidth : 0;
     s.blade[i].contact = add(base,
-      mul(perpLeft(s.heading), i === FOOT.Left ? off : -off));
+      mul(perpLeft(frameH), i === FOOT.Left ? off : -off));
   }
 
   // ── 8. classify, and say so ───────────────────────────────────────────────
@@ -592,6 +618,8 @@ export function step(
     }
     b.depth = classifyDepth(b.tilt, p);
   }
+  if (cusp) turnEvent(s, events);
+
   // ── 9. fall, latched ──────────────────────────────────────────────────────
   // Latched, because a fall condition that stays true would otherwise emit an
   // event every tick and drown the stream it is trying to explain.
@@ -628,6 +656,7 @@ export function step(
   }
 
   // ── 10. is the knee loading a jump, or releasing one? ─────────────────────
+  if (!turning) carryDecay(s, p, dt);
   jumpGround(s, input, p, dt, events);
 }
 

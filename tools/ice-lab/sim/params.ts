@@ -225,6 +225,36 @@ export interface Params {
    * ratio is taken, since back crossovers are how skaters approach jumps.
    */
   backPushScale: number;
+  /**
+   * Seconds a turn's pivot takes on the middle of the blade. The blade turns
+   * half a revolution about its contact; on the front of the rocker, where it
+   * is tighter, it turns faster in proportion — "turns are executed on the
+   * rocker" (bible §3.2) — and scrapes for less time.
+   */
+  turnTime: number;
+  /**
+   * Friction of a blade scraping across its own path while it pivots: the
+   * speed a turn costs is muTurn g |sin a| integrated over the pivot, a the
+   * angle between blade and path. Calibrated to data/motion-primitives.json's
+   * three-turn, -0.45 m/s at 6 m/s.
+   */
+  muTurn: number;
+  /**
+   * A mohawk's second half, on the new foot, as a fraction of a three-turn's.
+   * The data has a mohawk at -0.40 m/s against the three-turn's -0.45: the
+   * placed foot scrapes less than the pivoting one.
+   */
+  mohawkScrub: number;
+  /** m/s below which there is no edge to turn on. */
+  turnMinSpeed: number;
+  /**
+   * The share of a turn's pivot rate left in the body as rotation a jump can
+   * take off with (`spinCarry`). A skater who checks the turn keeps none of
+   * it; one who takes off out of it, as a salchow does, keeps some.
+   */
+  turnCarry: number;
+  /** Seconds that carried rotation takes to drain away. */
+  turnCarryTime: number;
 
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
@@ -307,6 +337,12 @@ export const DEFAULT_PARAMS: Params = {
   movesMode: 0,
   crossoverLean: 0.21,       // 12 deg: the shallow-edge boundary
   backPushScale: 0.91,       // 1.05 / 1.15, data/motion-primitives.json
+  turnTime: 0.30,
+  muTurn: 0.20,              // three-turn -0.45 m/s at 6 m/s with glide and drag, data/motion-primitives.json
+  mohawkScrub: 0.78,         // mohawk -0.40 m/s, the same file
+  turnMinSpeed: 1.0,
+  turnCarry: 0.11,           // a three-turn entry worth about a third of a revolution at a full whip
+  turnCarryTime: 0.5,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -365,6 +401,9 @@ export function validate(p: Params): string[] {
   if (p.callEdgeUnclear >= p.callEdgeWrong)
     errs.push("callEdgeUnclear must be below callEdgeWrong");
   if (![0, 1].includes(p.movesMode)) errs.push("movesMode is 0 (the carve only) or 1 (the moves)");
+  if (p.turnTime < 4 * SIM_DT) errs.push("turnTime is under four ticks: a pivot needs a cusp to flip at");
+  if (p.turnCarry > 1) errs.push("turnCarry is a share of the pivot rate, 0..1");
+  if (p.turnCarryTime <= 0) errs.push("turnCarryTime must be positive");
   if (p.backPushScale <= 0 || p.backPushScale > 1)
     errs.push("backPushScale is a fraction of the forward push, in (0, 1]");
   if (p.crossoverLean < p.flatThreshold)

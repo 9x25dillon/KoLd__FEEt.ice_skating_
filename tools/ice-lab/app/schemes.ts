@@ -111,9 +111,19 @@ const KEY_STEER_ANGLE = 1.05;
  */
 export interface SchemeState {
   commit: number;
+  /** The skater's frame count when last seen (SkaterState.flips). */
+  flips: number;
+  /** A held stick is being read mirrored, because a turn reversed the body under it. */
+  mirror: boolean;
 }
 
-export const newSchemeState = (): SchemeState => ({ commit: 0 });
+export const newSchemeState = (): SchemeState => ({ commit: 0, flips: 0, mirror: false });
+
+/**
+ * How far back toward centre a stick must come before a turn's mirror lets go.
+ * Past it the stick is read in the body's frame again, as A always reads it.
+ */
+const LATCH_RELEASE = 0.15;
 
 /** Signed angle from `a` to `b`, both unit-ish. Positive is toward perpLeft. */
 function signedAngle(a: Vec2, b: Vec2): number {
@@ -137,7 +147,7 @@ export function schemeA(c: Controls): SkatingInput {
     pitch: c.ky !== 0 ? c.ky : c.pitch,
     leanSplit: 0,
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
-    carriage: carriage(c), toe: c.toe,
+    carriage: carriage(c), toe: c.toe, turn: c.turn,
   };
 }
 
@@ -216,7 +226,7 @@ export function schemeB(
     pitch: c.ky,
     leanSplit: 0,
     knee: c.knee, weight, push: c.push, brake: c.brake,
-    carriage: carriage(c), toe: c.toe,
+    carriage: carriage(c), toe: c.toe, turn: c.turn,
   };
 }
 
@@ -253,16 +263,42 @@ export function schemeC(c: Controls): SkatingInput {
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
     // The right stick is the right blade here, so C's carriage is the
     // keyboard's alone. A pad skating C can hop but not whip a rotation.
-    carriage: clamp(c.carriage, 0, 1), toe: c.toe,
+    carriage: clamp(c.carriage, 0, 1), toe: c.toe, turn: c.turn,
   };
 }
 
-/** Whichever of the three is live. */
+/**
+ * Whichever of the three is live. `flips` is the skater's frame count
+ * (SkaterState.flips), which a turn's cusp moves; see `latchTurns`.
+ */
 export function applyScheme(
   scheme: Scheme, c: Controls, heading: Vec2, vel: Vec2, yawRate: number,
-  p: Params, st: SchemeState,
+  p: Params, st: SchemeState, flips = 0,
 ): SkatingInput {
-  if (scheme === SCHEME.B) return schemeB(c, heading, vel, yawRate, p, st);
-  if (scheme === SCHEME.C) return schemeC(c);
-  return schemeA(c);
+  if (scheme === SCHEME.B) return latchTurns(scheme, schemeB(c, heading, vel, yawRate, p, st), st, flips);
+  if (scheme === SCHEME.C) return latchTurns(scheme, schemeC(c), st, flips);
+  return latchTurns(scheme, schemeA(c), st, flips);
+}
+
+/**
+ * A HELD STICK KEEPS ITS SIDE OF THE ICE THROUGH A TURN.
+ *
+ * A and C read the stick in the body's frame (bible §2.1: "lean direction in
+ * the skater's frame"). A three-turn reverses the body, so the centre of the
+ * circle the skater is on moves from their right to their left without the
+ * ice changing — and a thumb still holding right would, read literally, ask
+ * them to lean out of the circle they are skating. So a turn's cusp mirrors
+ * the stick for as long as it is held, and letting it come back toward centre
+ * ends the mirror: the next push is read in the new frame. Hold the stick
+ * through a three-turn and you keep the circle; let go and lean again and you
+ * choose a new one.
+ *
+ * B steers toward a direction on the ice, which a turn does not move, so B is
+ * never mirrored.
+ */
+export function latchTurns(scheme: Scheme, it: SkatingInput, st: SchemeState, flips: number): SkatingInput {
+  if (flips !== st.flips) { st.flips = flips; st.mirror = !st.mirror; }
+  if (scheme === SCHEME.B) { st.mirror = false; return it; }
+  if (st.mirror && Math.abs(it.lean) < LATCH_RELEASE && Math.abs(it.leanSplit) < LATCH_RELEASE) st.mirror = false;
+  return st.mirror ? { ...it, lean: -it.lean, leanSplit: -it.leanSplit } : it;
 }

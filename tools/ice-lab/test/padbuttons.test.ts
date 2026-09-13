@@ -60,3 +60,26 @@ test("nothing else moved: D-pad up is jump mode, down is the view, A is a stroke
   assert.equal(c.push, true);
   assert.equal(c.toggleGame || c.cycleGhost || c.dpadStep !== 0, false);
 });
+
+test("with the moves on, B is the turn and a tap of LT the toe pick; LT held still brakes", () => {
+  const B_ = 1, LT_ = 6;
+  const read = (moves: boolean, ...buttons: number[]) => { held = buttons; return pad.read(moves); };
+  read(true);
+  let c = read(true, B_);
+  assert.equal(c.turn, true, "B is the turn button");
+  assert.equal(c.toe, false, "and no longer the pick");
+  c = read(true, B_);
+  assert.equal(c.turn, true, "held, so the solver can take the press");
+  read(true);
+  c = read(true, LT_);
+  assert.equal(c.toe, true, "the pick strikes on the press of LT");
+  assert.equal(c.brake, false, "a tap does not brake");
+  for (let i = 0; i < 18; i++) c = read(true, LT_);
+  assert.equal(c.toe, false, "once per press");
+  assert.equal(c.brake, true, "held past 0.15 s it brakes");
+  read(false);
+  c = read(false, B_);
+  assert.equal(c.toe, true, "with the moves off, B is the pick as it always was");
+  assert.equal(c.turn, false);
+  assert.equal(read(false, LT_).brake, true, "and LT brakes at once");
+});

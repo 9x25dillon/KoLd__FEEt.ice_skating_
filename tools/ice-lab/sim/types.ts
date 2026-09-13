@@ -139,6 +139,64 @@ export interface JumpResult {
   fall: boolean;
 }
 
+// ── moves ───────────────────────────────────────────────────────────────────
+
+/** The move under way. One at a time; sim/moves.ts owns every field. */
+export const MOVE = { None: 0, Turn: 1 } as const;
+export const MOVE_NAME = ["", "TURN"] as const;
+
+/** Which turn a pivot became, decided at the cusp by the foot the weight is on. */
+export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1 } as const;
+export const TURN_NAME = ["three-turn", "mohawk"] as const;
+
+/**
+ * A turn in progress: the blade pivots half a revolution about its contact,
+ * on the rocker, while the body keeps the arc it was on. Bible §2.3: a three
+ * turn keeps the foot and changes the edge, a mohawk changes the foot and keeps
+ * the edge's character; both rotate INTO the curve and leave the skater going
+ * the other way.
+ */
+export interface TurnState {
+  /** Seconds into the pivot. */
+  t: number;
+  /** Radians the blade has pivoted against the path, 0..pi. */
+  swept: number;
+  /** +1 anticlockwise, -1 clockwise: the way the body turns. */
+  dir: number;
+  /** rad/s of blade pivot, set at entry from the rocker the contact is on. */
+  rate: number;
+  /** rad/s the path was turning at entry, which the body keeps through the pivot. */
+  pathRate: number;
+  /** +1 the turn began skating forward, -1 backward. */
+  entryDir: number;
+  /** The foot the pivot is made on. */
+  foot: Foot;
+  /** The foot that carries the exit: the same one, or the other for a mohawk. */
+  exitFoot: Foot;
+  /** Past the cusp: the frame has flipped and the exit edge is live. */
+  cusped: boolean;
+  /** TURN_KIND, final once cusped. */
+  kind: number;
+  /** Edge code at entry. */
+  fromCode: number;
+  /** Speed when the pivot began, m/s. */
+  entrySpeed: number;
+}
+
+/** The last move that finished, for the panel and the tests. */
+export interface MoveResult {
+  /** Tick it finished; -1 before the first. */
+  tick: number;
+  /** MOVE. */
+  kind: number;
+  /** For a turn, TURN_KIND. */
+  detail: number;
+  fromCode: number;
+  toCode: number;
+  /** Speed lost across the move, m/s. */
+  speedLost: number;
+}
+
 // ── state ───────────────────────────────────────────────────────────────────
 
 export interface BladeState {
@@ -236,6 +294,27 @@ export interface SkaterState {
   jump: JumpState;
   /** The last jump that came down, as the technical panel would read it. */
   landed: JumpResult;
+  /** MOVE under way. sim/moves.ts owns this and everything below it. */
+  move: number;
+  turn: TurnState;
+  /** The last move that finished. */
+  moveDone: MoveResult;
+  /** Whether the turn request was down last tick: a turn starts on a fresh press. */
+  turnHeld: boolean;
+  /**
+   * How many times the body's frame has been reversed — a turn's cusp. Lean,
+   * tilt and every lateral quantity are measured toward perpLeft(heading), so
+   * when the heading reverses they all change sign with the physics unchanged.
+   * A control scheme reads this to keep a held stick meaning the same side of
+   * the ice (app/schemes.ts).
+   */
+  flips: number;
+  /**
+   * rad/s of rotation a turn leaves in the body, anticlockwise positive,
+   * draining over `turnCarryTime`. A jump taken off the turn's exit edge
+   * inherits it: why a salchow is entered off a three-turn.
+   */
+  spinCarry: number;
   fallReason: Fall;
   fallen: boolean;
   tick: number;
@@ -279,11 +358,17 @@ export interface SkatingInput {
   carriage: number;
   /** A toe-pick strike, this tick. Toe jumps need one within `toeWindow` of the release. */
   toe: boolean;
+  /**
+   * The turn button, held. A turn starts on the press, if the edge the skater
+   * is on permits one (movesMode on). Which turn it becomes — a three-turn, or
+   * a mohawk — is the foot the weight is on at the cusp.
+   */
+  turn: boolean;
 }
 
 export const NEUTRAL_INPUT: SkatingInput = {
   lean: 0, knee: 0.35, weight: 0.5, pitch: 0, leanSplit: 0, push: false, brake: false,
-  carriage: 0, toe: false,
+  carriage: 0, toe: false, turn: false,
 };
 
 // ── events ──────────────────────────────────────────────────────────────────
@@ -291,14 +376,14 @@ export const NEUTRAL_INPUT: SkatingInput = {
 export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
   SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
-  Takeoff: 8, Landing: 9,
+  Takeoff: 8, Landing: 9, Turn: 10,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
   "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
-  "TAKEOFF", "LANDING",
+  "TAKEOFF", "LANDING", "TURN",
 ] as const;
 
 export interface EdgeEvent {
@@ -308,6 +393,6 @@ export interface EdgeEvent {
   prevCode: number;
   newCode: number;
   prevDwell: number;
-  /** Context: tilt at a change, slip speed at a skid, lean at a fall. */
+  /** Context: tilt at a change, slip speed at a skid, lean at a fall, TURN_KIND at a turn's cusp. */
   value: number;
 }
