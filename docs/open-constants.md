@@ -77,10 +77,14 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
   - Value: `0.006`
   - Used: `blade.ts` `muLong`; `moves.ts` `pivotStep`; `solver.ts` `step` §5
   - Level: L2
-  - Range: none recorded. A published measurement of skate-on-ice friction should be found and cited
-    first. Speed-skating work exists, but on a different blade, which would make the transfer L1.
+  - Range: **0.0046–0.0071**. That is measured kinetic friction on long-track speed and hockey blades, at
+    1.8–8 m/s on −1.8 to −11 °C ice, as quoted by Lever et al. 2022 from de Koning 1992 and Federolf
+    2008 ([ice-literature §2](ice-literature.md#2--kinetic-friction-of-skates-on-rink-ice-the-numbers)).
+    **L1** for a figure skate. Both are secondary quotes until the primaries are checked.
   - Fixed by: `glide_decel_ms2` at low speed (below about 3 m/s, where drag is the smaller term), on
-    ice with a recorded temperature and time since resurfacing
+    ice with a recorded temperature and time since resurfacing. It is a whole-glide average. Friction
+    peaks at touch-down and push-off, and its dependence on ice temperature is contested
+    ([ice-literature §3](ice-literature.md#3--what-kinetic-friction-depends-on)).
   - Note: this gives 0.059 m/s² of deceleration on a flat blade. Air drag gives the same at about
     3.2 m/s ([gate O4](fidelity-gate.md#o4--speed-decay)).
 
@@ -599,7 +603,10 @@ These are not tuned, and are not moved to fix a case. A change needs a physical 
   altitude, which is below any band in the gate.
 - **`airDensity`** — `1.29` kg/m³. **L0** for dry air at 0 °C and sea level (ideal gas). **L1** as the
   value for rink air, which is usually warmer than the ice and may be above sea level, both of which
-  lower it. Range: 1.0–1.3 kg/m³, covering 0–20 °C from sea level to about 2000 m (L0). A case at a
+  lower it. The IIHF guideline air temperature of 9–11 °C, as quoted by Hutchins et al. 2026, gives about
+  1.24–1.25 kg/m³ at sea level, so the current value probably overstates indoor drag by about 3%
+  ([ice-literature §7](ice-literature.md#7--what-this-means-for-ice-labs-constants)). Not changed: it
+  moves solver arithmetic and the replay contract, and it gets its own commit. Range: 1.0–1.3 kg/m³, covering 0–20 °C from sea level to about 2000 m (L0). A case at a
   known venue may record its own value **as an input**. That is the one constant a case may set,
   because it is a property of the room, not of the model.
 - **`callQuarter`**, **`callUnder`**, **`callDowngrade`** — `0.125`, `0.25`, `0.5` rev.
