@@ -23,8 +23,8 @@ is fun but whether the model is *right*: does the solver reproduce measurable pr
 skating — lean against speed and radius, the radius an edge leaves on the ice, the speed a held
 edge loses, air time and rotation — within stated tolerances, well enough that a skater, a coach
 or a technical specialist recognises it. That question can be answered by one person, offline,
-for nothing, so it comes first. Its observables, tolerances and pass condition are being specified
-in `docs/fidelity-gate.md`.
+for nothing, so it comes first. Its observables, tolerances, pass condition and what a failure
+obligates are specified in [`docs/fidelity-gate.md`](docs/fidelity-gate.md).
 
 **Nothing in the model is validated against real skating yet.** Every number in Ice Lab is
 measured and tested against this project's own documents and data. That is internal consistency,
@@ -143,6 +143,7 @@ docs/
   level-features.md        Spin and step level detection: declared vs observed
   composer-solver.md       Transition planning: lattice search, time fit, chaining
   open-decisions.md        Decisions D1–D7 + known specification gaps
+  fidelity-gate.md         The near-term gate: observables, tolerances, pass condition
   web/                     The five rendered documents (open in any browser)
 data/
   scale-of-values.csv      Jump base values and GOE steps
