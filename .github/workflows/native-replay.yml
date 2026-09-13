@@ -1,0 +1,54 @@
+name: Native replay foundation
+
+on:
+  pull_request:
+    paths:
+      - "tools/ice-lab/**"
+      - ".github/workflows/native-replay.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/ice-lab/**"
+      - ".github/workflows/native-replay.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    # Protocol/math checks only. No Unreal or native solver acceptance claim.
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [g++, clang++]
+    defaults:
+      run:
+        working-directory: tools/ice-lab
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # exporter reads the pinned /5 Git objects
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+      - name: Reproduce pinned oracle, wire tables and corpora
+        run: npm run native:reference
+      - name: Check artifact integrity and measured mutations
+        run: npm run native:test
+      - name: Configure
+        run: cmake -S native -B native-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+      - name: Build
+        run: cmake --build native-build --parallel 2
+      - name: Audit actual compiler flags
+        run: node native/check-fp-flags.mjs native-build/compile_commands.json
+      - name: Check native math, canonical bytes and CRCs
+        run: ctest --test-dir native-build --output-on-failure
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-foundation-${{ matrix.compiler }}
+          path: |
+            tools/ice-lab/native-build/compile_commands.json
+            tools/ice-lab/native-build/Testing/Temporary/LastTest.log
+            tools/ice-lab/native/reference/manifest.json
