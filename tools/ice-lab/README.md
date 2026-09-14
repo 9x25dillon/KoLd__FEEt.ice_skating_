@@ -59,6 +59,16 @@ blade, skid and jump audio. Separate ice tracings follow the two blade contacts
 and break while airborne. The athlete uses the engine's body pose, including
 knee compression, height, lean, arm carriage and spin positions.
 
+**Music**, in the Controls window, picks one of five tracks (`game/audio/`);
+**Sound** starts and stops its playback alongside the procedural audio. Each
+track's estimated tempo drives the rhythm layer (`sim/music.ts`, `musicMode`):
+a crossover push lands in a beat window — full strength on tempo, weaker with
+an audible chop off it, never a failed push — and a three-turn or a jump
+landing near a downbeat earns musical credit, shown as "Musical credit" and
+not yet spent by anything. Playback is presentation-only and never reaches a
+replay; `game/audio/README.md` covers where the tracks came from and why
+their tempo is an estimate pending hand correction.
+
 This does not implement every feature in the design bible. Stamina depletion,
 ice wear feeding back into grip, a full career/competition system and the future
 native runtime are not present in this game. Game rules live in `game/run.ts`,
@@ -107,7 +117,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 249 tests
+node --test test/*.test.ts     # 271 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```

@@ -347,6 +347,36 @@ export interface Params {
    */
   jumpSpeedShare: number;
 
+  // ── music ─────────────────────────────────────────────────────────────────
+  // sim/music.ts, design-bible.md §2.1, §2.6, §5.2. Off in every preset the
+  // way jumps and moves were: 0 here leaves every lever below inert, so
+  // nothing measured so far changes.
+  /** 0 off, 1 the rhythm layer: beat-timed crossover pushes and accent credit. */
+  musicMode: number;
+  /** Beats per minute of the assumed track — a game-layer track manifest can override this. */
+  musicBpm: number;
+  /**
+   * s from the tick clock's zero to the track's first beat — the lead-in a
+   * real recording almost always has. 0 for the rig's placeholder grid; a
+   * track manifest supplies its own, itself an aubiotrack estimate pending
+   * hand correction (bible §5.2: "let the player correct the grid by hand").
+   */
+  musicOffset: number;
+  /** Beats to a bar — also this rig's placeholder accent spacing; see sim/music.ts. */
+  musicBeatsPerBar: number;
+  /** Bars to a phrase; the last downbeat of one is its climax, worth 3x credit. */
+  musicBarsPerPhrase: number;
+  /**
+   * s either side of a beat a crossover's push still counts as on tempo.
+   * Authored here, not measured: the bible specifies the mechanic ("each push
+   * has a beat window") but not this tolerance. Playtest it (bible §2.6).
+   */
+  musicBeatWindow: number;
+  /** s either side of an accent a turn or landing still earns credit. Bible: 80 ms. */
+  musicAccentWindow: number;
+  /** A crossover push that misses its beat window, as a fraction of a hit. Bible: 45%. */
+  musicMissedPushScale: number;
+
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
   comHeight: number;
@@ -456,6 +486,15 @@ export const DEFAULT_PARAMS: Params = {
   inaBauerScrub: 0.13,
   jumpSpeedShare: 0.2,
 
+  musicMode: 0,
+  musicBpm: 128,
+  musicOffset: 0,
+  musicBeatsPerBar: 4,
+  musicBarsPerPhrase: 8,
+  musicBeatWindow: 0.10,
+  musicAccentWindow: 0.08,      // bible §2.1, §2.6
+  musicMissedPushScale: 0.45,   // bible §2.6
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -536,6 +575,17 @@ export function validate(p: Params): string[] {
   if (p.internalMax > 2.0 && p.internalRateGain <= 0)
     errs.push("internalMax above 2 with no internalRateGain: a proportional gain with no damping "
       + "makes balance worse, not easier — raise internalRateGain first");
+  if (![0, 1].includes(p.musicMode)) errs.push("musicMode is 0 (off) or 1 (the rhythm layer)");
+  if (p.musicBpm <= 0) errs.push("musicBpm must be positive");
+  if (p.musicOffset < 0) errs.push("musicOffset is a lead-in, seconds from tick zero, and cannot be negative");
+  if (p.musicBeatsPerBar < 1) errs.push("musicBeatsPerBar must be at least 1");
+  if (p.musicBarsPerPhrase < 1) errs.push("musicBarsPerPhrase must be at least 1");
+  if (p.musicBeatWindow <= 0 || p.musicBeatWindow >= 30 / p.musicBpm)
+    errs.push("musicBeatWindow must be positive and below half a beat, or every push is on tempo");
+  if (p.musicAccentWindow <= 0 || p.musicAccentWindow >= 30 * p.musicBeatsPerBar / p.musicBpm)
+    errs.push("musicAccentWindow must be positive and below half a bar, or every landing is an accent");
+  if (p.musicMissedPushScale <= 0 || p.musicMissedPushScale >= 1)
+    errs.push("musicMissedPushScale is a fraction of a hit, in (0, 1)");
   return errs;
 }
 

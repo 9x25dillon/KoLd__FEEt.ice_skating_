@@ -27,6 +27,40 @@ const pad = new Pad();
 let profileIndex = 0;
 let beginner = true;
 let params = { ...BEGINNER_PARAMS };
+
+// ── the rhythm layer's music (game/audio/README.md): presentation only. The
+// selected track's bpm/offset/beatsPerBar/barsPerPhrase feed Params before a
+// run starts; the decoded audio itself never reaches sim/ or a replay. ──────
+interface Track { id: string; title: string; file: string; bpm: number; offset: number; beatsPerBar: number; barsPerPhrase: number }
+let tracks: Track[] = [];
+let trackIndex = 0;
+const musicEl = el("music") as HTMLAudioElement;
+void fetch("audio/tracks.json").then(r => r.json()).then((list: Track[]) => {
+  tracks = list;
+  const select = el("track-select") as HTMLSelectElement;
+  tracks.forEach((track, index) => {
+    const option = document.createElement("option");
+    option.value = String(index); option.textContent = track.title;
+    select.append(option);
+  });
+  // The fetch can resolve after the first run already started (start() found
+  // `tracks` empty and left the beat grid on its placeholder). Catch up now,
+  // rather than skate the whole first run in silence.
+  if (mode !== "ready") {
+    applyTrack(params);
+    // Starting from 0 here is a known approximation for this one race: a run
+    // already a few seconds in restarts the track's phase rather than the
+    // skater's. Every later run is exact, from start()'s own reset.
+    if (sound && mode === "playing") { musicEl.currentTime = 0; void musicEl.play().catch(() => { /* still locked */ }); }
+  }
+}).catch(() => { /* No manifest: the rhythm layer keeps its placeholder grid. */ });
+function applyTrack(p: typeof params): void {
+  const track = tracks[trackIndex];
+  if (!track) return;
+  p.musicBpm = track.bpm; p.musicOffset = track.offset;
+  p.musicBeatsPerBar = track.beatsPerBar; p.musicBarsPerPhrase = track.barsPerPhrase;
+  if (musicEl.src !== new URL(`audio/${track.file}`, location.href).href) musicEl.src = `audio/${track.file}`;
+}
 let coach = new BeginnerCoach(), playground = new Playground(), pendingTrick = false;
 let recorder = new ReplayRecorder(params, 4.5), playback: ReplayPlayer | null = null;
 let replayJson = "", technical = 0, scoredTick = -1, tables: ScoreTables | null = null;
@@ -61,6 +95,7 @@ el("record").textContent = `Personal best · ${best.toLocaleString()} pts`;
 
 function start() {
   params = applyProfile(beginner ? BEGINNER_PARAMS : GAME_PARAMS, SAMPLE_PROFILES[profileIndex]);
+  applyTrack(params);
   coach = new BeginnerCoach(); playground = new Playground(); pendingTrick = false; rookie = courseMode ? new RookieCourse() : null;
   recorder = new ReplayRecorder(params, 4.5); playback = null; replayJson = "";
   technical = 0; scoredTick = -1; replayNotice = "Recording your skating · first five minutes";
@@ -69,10 +104,16 @@ function start() {
   pendingToe = false; cantilever = false; elapsedSkate = 0;
   practice = new Practice(); scene.reset(skater);
   el("overlay").hidden = true; el("pause").hidden = false;
+  // A run's tick zero is the beat grid's phase origin (sim/music.ts): the
+  // track restarts from its own zero at the same moment, so the two stay in
+  // phase for the run's length. Only once unlocked (the Sound button).
+  musicEl.currentTime = 0;
+  if (sound && musicEl.src) void musicEl.play().catch(() => { /* still locked; the Sound button retries */ });
 }
 function pause() {
   if (mode !== "playing") return;
   mode = "paused"; accumulator = 0;
+  musicEl.pause();
   el("title").textContent = "Take a breath.";
   el("description").textContent = "Your run is paused. The clock will wait for you.";
   el("help").hidden = true; el("start").textContent = "Back to the ice →";
@@ -81,10 +122,12 @@ function pause() {
 }
 function resume() {
   mode = "playing"; accumulator = 0;
+  if (sound && musicEl.src) void musicEl.play().catch(() => { /* still locked */ });
   el("overlay").hidden = true; el("pause").hidden = false;
 }
 function finish() {
   mode = "done";
+  musicEl.pause();
   const record = run.score > best;
   best = Math.max(best, run.score);
   try { localStorage.setItem("edgework-ice-run-best", String(best)); } catch { /* Play without persistence. */ }
@@ -135,7 +178,18 @@ el("close-guide").addEventListener("click", () => guide.close());
 guide.addEventListener("close", () => { if (resumeAfterGuide) resume(); });
 el("camera").addEventListener("click", () => { scene.overview = !scene.overview; });
 el("cruise").addEventListener("click", () => { cruise = !cruise; });
-el("sound").addEventListener("click", () => { sound = !sound; if (sound) audio.unlock(); });
+el("sound").addEventListener("click", () => {
+  sound = !sound;
+  if (sound) { audio.unlock(); if (mode === "playing" && musicEl.src) void musicEl.play().catch(() => { /* needs another gesture */ }); }
+  else musicEl.pause();
+});
+const trackSelect = el("track-select") as HTMLSelectElement;
+trackSelect.addEventListener("change", () => {
+  trackIndex = Number(trackSelect.value);
+  const wasPlaying = !musicEl.paused;
+  applyTrack(params);
+  if (wasPlaying) void musicEl.play().catch(() => { /* still locked */ });
+});
 canvas.addEventListener("wheel", e => { e.preventDefault(); scene.zoom = Math.max(0.65, Math.min(1.8, scene.zoom * (e.deltaY > 0 ? 0.9 : 1.1))); }, { passive: false });
 window.addEventListener("keydown", e => { if (e.key.toLowerCase() === "u") lowHeld = true; if(e.key === " ") pushHeld = true; });
 window.addEventListener("keyup", e => { if (e.key.toLowerCase() === "u") lowHeld = false; if(e.key === " ") pushHeld = false; });
@@ -154,6 +208,7 @@ function draw(_now: number) {
   schemeSelect.value = String(scheme);
   el("replay-status").textContent = recorder.full && !playback ? "Five-minute recording full · export and reset for a new clip" : replayNotice;
   if(tables) el("technical").textContent = `Jump technical total · ${technical.toFixed(2)} (separate from practice points)`;
+  el("music-credit").textContent = `Musical credit · ${skater.musicCredit.toFixed(0)}`;
   el("time").textContent = freeSkate ? `${Math.floor(elapsedSkate / 60)}:${String(Math.floor(elapsedSkate % 60)).padStart(2, "0")}` : run.seconds.toFixed(1);
   el("time-label").textContent = playback ? "Replay" : freeSkate ? "Free skate" : "Time";
   el("score").textContent = (freeSkate ? practice.count * 250 + playground.score + (rookie?.score ?? 0) : run.score).toLocaleString();

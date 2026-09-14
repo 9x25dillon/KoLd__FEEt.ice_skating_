@@ -360,6 +360,13 @@ export interface SkaterState {
    * button already held when the ice arrived is not a decision to get up.
    */
   pushHeld: boolean;
+  /**
+   * A crossover push's beat-window outcome (sim/music.ts), as a multiple of a
+   * hit's impulse: 1 off `musicMode` or on a straight stroke, `musicMissedPushScale`
+   * on a crossover push that missed tempo. Fixed for the length of the push,
+   * the way `crossover` and `crossSide` are.
+   */
+  strokeMusicScale: number;
   /** The jump in progress, if any. sim/jump.ts owns every field. */
   jump: JumpState;
   /** The last jump that came down, as the technical panel would read it. */
@@ -387,6 +394,12 @@ export interface SkaterState {
    * inherits it: why a salchow is entered off a three-turn.
    */
   spinCarry: number;
+  /**
+   * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
+   * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
+   * Tracked and replay-safe; not yet spent by sim/score.ts.
+   */
+  musicCredit: number;
   fallReason: Fall;
   fallen: boolean;
   tick: number;
@@ -459,13 +472,15 @@ export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
   SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
   Takeoff: 8, Landing: 9, Turn: 10, Twizzle: 11, Spin: 12, InaBauer: 13,
+  MusicHit: 14, MusicMiss: 15, MusicAccent: 16,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
   "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
   "TAKEOFF", "LANDING", "TURN", "TWIZZLE", "SPIN", "INA BAUER",
+  "MUSIC HIT", "MUSIC MISS", "MUSIC ACCENT",
 ] as const;
 
 export interface EdgeEvent {

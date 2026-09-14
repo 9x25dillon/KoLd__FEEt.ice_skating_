@@ -40,7 +40,16 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       new levers at 0, the fixture and three operator clips matched on every
 //       state field and event; the fixture was re-recorded from its own inputs.
 //       /5 clips no longer load; verify one against a checkout of 8d89af2.
-export const REPLAY_SOLVER = "ice-lab-f64/6";
+//   /7  The rhythm layer (sim/music.ts, musicMode): Params gained musicMode
+//       and its levers, and SkaterState gained `strokeMusicScale` and
+//       `musicCredit`. With musicMode 0 — every preset — `strokeMusicScale`
+//       never leaves 1 and the accent scan never runs, so nothing kinematic
+//       changed: the full existing suite, including the fixture and the
+//       tick-for-tick move regressions, passed unchanged with the new fields
+//       present but inert; the fixture was re-recorded from its own inputs
+//       to carry them. /6 clips no longer load; verify one against a
+//       checkout of 23e675b.
+export const REPLAY_SOLVER = "ice-lab-f64/7";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

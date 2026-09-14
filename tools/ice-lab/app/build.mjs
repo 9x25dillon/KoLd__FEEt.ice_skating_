@@ -102,6 +102,14 @@ emit("game");
 copyFileSync(join(root, "game/index.html"), join(out, "game/index.html"));
 copyFileSync(join(root, "app/index.html"), join(out, "app/index.html"));
 
+// The rhythm layer's tracks (game/audio/README.md): media plus the manifest,
+// not the README — served beside the page, never bundled into code.
+mkdirSync(join(out, "game/audio"), { recursive: true });
+for (const f of readdirSync(join(root, "game/audio"))) {
+  if (f.endsWith(".md")) continue;
+  copyFileSync(join(root, "game/audio", f), join(out, "game/audio", f));
+}
+
 // The scoring tables, as data beside the page rather than code inside it
 // (convention 3.2). The lab fetches them to score a landed jump; a host that
 // cannot serve them — the single-file bundle — simply shows no score.
