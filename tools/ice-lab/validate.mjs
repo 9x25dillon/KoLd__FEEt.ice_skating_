@@ -156,7 +156,7 @@ function runCase(c, preset, casesDir) {
     }
     // The second run: the recorded clip through the replay player.
     const check = verifyReplay(parseReplay(rec.toJson()));
-    return { trace, changes, g: p.gravity, nondeterministic: check.divergence, divergence: null };
+    return { trace, changes, g: p.gravity, settle: settleTicks(p), nondeterministic: check.divergence, divergence: null };
   }
   const clip = parseReplay(readFileSync(resolve(casesDir, "..", c.inputs.clip), "utf8"));
   const player = new ReplayPlayer(clip);
@@ -170,24 +170,30 @@ function runCase(c, preset, casesDir) {
     trace.push(snapshot(player.state, input, player.events));
     if (player.divergence) player.divergence = { ...player.divergence }; // reported, not fatal
   }
-  return { trace, changes, g: p.gravity, nondeterministic: null, divergence: player.divergence };
+  return { trace, changes, g: p.gravity, settle: settleTicks(p), nondeterministic: null, divergence: player.divergence };
 }
 
 // ── windows and observables ─────────────────────────────────────────────────
 
 const DEG = 180 / Math.PI;
 const STEADY_TICKS = SIM_HZ;          // at least 1.0 s
-const SETTLE_TICKS = 2 * SIM_HZ;      // beginning no earlier than 2.0 s after the last input change
+/**
+ * Seconds after the last input change before a steady window may begin
+ * (fidelity-gate §4.4): long enough for the arms' authority to wash out where
+ * the preset washes it out — three 1.5 s time constants, rounded up — and the
+ * original 2.0 s where it never does.
+ */
+function settleTicks(p) { return (p.internalWashout > 0 ? 5 : 2) * SIM_HZ; }
 const STEADY_LEAN_PP = 1 / DEG;       // phi varying by less than 1 degree peak to peak
 
 /**
  * fidelity-gate §4.4: the earliest span of exactly 1.0 s that begins at least
- * 2.0 s after the last input change, with no skid, push, fall or flight, and
+ * the preset's settle time after the last input change, with no skid, push, fall or flight, and
  * lean within 1 degree peak to peak. Indices into the trace, [from, to).
  * Leaves one tick either side so central differences exist.
  */
-function steadyWindow(trace, changes) {
-  const start = Math.max(1, (changes.length ? changes[changes.length - 1] : 0) + SETTLE_TICKS);
+function steadyWindow(trace, changes, settle) {
+  const start = Math.max(1, (changes.length ? changes[changes.length - 1] : 0) + settle);
   outer: for (let i = start; i + STEADY_TICKS < trace.length; i++) {
     let lo = Infinity, hi = -Infinity;
     for (let k = i; k < i + STEADY_TICKS; k++) {
@@ -227,7 +233,7 @@ function flight(trace) {
 /** Each returns { value } or { reason } when the run could not produce the observable. */
 const EXTRACT = {
   carve_lean_residual_deg(run, c) {
-    const w = c.observable.window === "steady" ? steadyWindow(run.trace, run.changes) : null;
+    const w = c.observable.window === "steady" ? steadyWindow(run.trace, run.changes, run.settle) : null;
     if (!w) return { reason: "no steady window (fidelity-gate §4.4)" };
     let sum = 0;
     for (let k = w.from; k < w.to; k++) {
@@ -237,14 +243,14 @@ const EXTRACT = {
     return { value: sum / (w.to - w.from), window: w };
   },
   carve_lean_deg(run, c) {
-    const w = c.observable.window === "steady" ? steadyWindow(run.trace, run.changes) : null;
+    const w = c.observable.window === "steady" ? steadyWindow(run.trace, run.changes, run.settle) : null;
     if (!w) return { reason: "no steady window (fidelity-gate §4.4)" };
     let sum = 0;
     for (let k = w.from; k < w.to; k++) sum += Math.abs(run.trace[k].lean) * DEG;
     return { value: sum / (w.to - w.from), window: w };
   },
   glide_decel_ms2(run, c) {
-    const w = c.observable.window === "steady" ? steadyWindow(run.trace, run.changes)
+    const w = c.observable.window === "steady" ? steadyWindow(run.trace, run.changes, run.settle)
       : typeof c.observable.window === "object" ? explicitWindow(run.trace, c.observable.window) : null;
     if (!w) return { reason: "no usable window" };
     const v0 = kinematics(run.trace, w.from).speed, v1 = kinematics(run.trace, w.to - 1).speed;

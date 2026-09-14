@@ -277,11 +277,25 @@ cases that report the effort alongside the result.
 
 ### 4.4 · Steady windows
 
-Carve, tracing and glide observables are taken over a **steady window**: at least 1.0 s, beginning
-no earlier than 2.0 s after the last input change, with no skid, no push, no fall, and φ varying by
-less than 1° peak to peak across the window. These thresholds are **L2**. They are chosen so the balance
-controller has settled in both presets, and the validator reports a case whose run never reaches
-such a window as a failure, not as a skip.
+Carve, tracing and glide observables are taken over a **steady window**: at least 1.0 s, with no skid,
+no push, no fall, and φ varying by less than 1° peak to peak across the window. It begins no earlier than
+a **settle time** after the last input change:
+
+- **5.0 s** for a preset whose arm and free-leg authority washes out (`internalWashout` > 0: `responsive`,
+  `assisted`). That is three washout time constants of 1.5 s, rounded up.
+- **2.0 s** for a preset with no washout (`spec`).
+
+These thresholds are **L2**. The validator reports a case whose run never reaches such a window as a
+failure, not as a skip.
+
+**Why the settle time depends on the preset** (decided by the owner, 2026-09-13). The first validator run
+found that a flat lean does not mean a balanced body. In a fast deep carve on `responsive`, lean was flat
+within 1° two seconds in, but the arms were still holding the body 0.98° shallower than the edge
+balances. That authority decays with the washout time constant: −0.36° at 3 s, 0.00° by 6 s. A 2 s settle
+measured the controller's transient, not the steady turn. The assisted presets' transients are an
+intended, emergent part of how they skate, so the window waits them out instead of the model hiding them.
+The change was made after the result was seen. It is recorded here with its reason, in a commit that
+changes nothing else, as [§5](#5--tolerance-bands) requires of any such change.
 
 ---
 
