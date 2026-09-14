@@ -172,7 +172,9 @@ a failure can be traced to a specific structure ([§7.3](#73--structural-failure
 - **S6 — flight.** Vertical velocity, air time and angular momentum are fixed at takeoff. In the air
   ω = L<sub>ang</sub> / I, and I moves between `inertiaOpen` and `inertiaTucked` (`jump.ts`). Ballistic
   flight and conservation of angular momentum are **L0**. Treating the arms as the only lever in the air
-  is **L0** in the sense that no external torque acts. The two-value inertia model is **L2**.
+  is **L0** in the sense that no external torque acts. The two-value inertia model is **L2**. A wound-up
+  jump's assist (`jumpAssist`) drives that same lever for the skater, at the same rate, and nothing else,
+  so it cannot break conservation. No case winds up, so it cannot move a gate observable.
 - **S8 — the rink's shape.** The ice is a paraboloid, h = relief (1 − (x/a)² − (y/b)²), flat
   beyond the boards. Gravity along it, −g∇h, is applied along the travel only (`rinkSlopeAccel`, `solver.ts`
   §5). The pull of a slope is **L0**. The paraboloid form is **L3**. Neglecting the across-travel

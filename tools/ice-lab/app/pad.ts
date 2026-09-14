@@ -85,6 +85,12 @@ export interface Controls {
    */
   carriage: number;
   /**
+   * The wind-up against the rotation, from the keyboard (U), -1..1. The pad's
+   * wind-up is the right stick flicked right, read by the schemes that give
+   * the right stick to the arms (A and B).
+   */
+  windup: number;
+  /**
    * One-shot toe-pick strike: pad B, keyboard F. The bible puts the pick on an
    * LT tap, but LT is this rig's brake, and a tap/hold split on one trigger is
    * a second experiment nobody asked for.
@@ -139,7 +145,7 @@ export interface Controls {
 const NOTHING: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
-  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
+  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, windup: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
   cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
   cycleMoves: false, cycleRink: false,
@@ -284,6 +290,7 @@ export class Pad {
     if (this.pressed("t")) out.cyclePreset = true;
     if (this.pressed("m")) out.cycleScheme = true;
     if (this.held("c")) out.carriage = 1;
+    if (this.held("u")) out.windup = 1;
     if (this.pressed("f")) out.toe = true;
     if (this.held("b")) out.turn = true;
     if (this.held("z")) out.twizzle = true;

@@ -640,10 +640,11 @@ export class Renderer {
     const out: Array<[string, string]> = [];
     if (J.phase === JUMP_PHASE.Load) {
       out.push([`JUMP ${mode}  LOAD ${J.t.toFixed(2)}s  knee ${s.knee.toFixed(2)}`
-        + `${J.toeInLoad ? "  pick" : ""}${J.preRotation > 0 ? "  PRE-ROTATING" : ""}`, GOLD]);
+        + `${J.toeInLoad ? "  pick" : ""}${J.windupTick >= 0 ? "  WOUND" : ""}${J.preRotation > 0 ? "  PRE-ROTATING" : ""}`, GOLD]);
     } else if (J.phase === JUMP_PHASE.Air) {
       out.push([`JUMP ${mode}  AIR ${(J.rotation / (2 * Math.PI)).toFixed(2)} rev  `
-        + `ω ${(J.angMomentum / J.inertia).toFixed(1)}  I ${J.inertia.toFixed(2)}  ${J.z.toFixed(2)} m`, JADE]);
+        + `ω ${(J.angMomentum / J.inertia).toFixed(1)}  I ${J.inertia.toFixed(2)}  ${J.z.toFixed(2)} m`
+        + (J.armed && J.target > 0 ? `  assist → ${(J.target / (2 * Math.PI)).toFixed(1)} rev` : ""), JADE]);
     } else {
       out.push([`JUMP ${mode}  deep knee, then release`, DIM]);
     }
@@ -653,7 +654,7 @@ export class Renderer {
         : `${L.revolutions}${JUMP_CODE[L.kind]}${ROTATION_MARK[L.rotationCall]}${EDGE_MARK[L.edgeCall]}`;
       out.push([`LAST  ${name}  ${L.turned.toFixed(2)} rev  TQ ${L.takeoffQuality.toFixed(2)}  `
         + `LQ ${L.landingQuality.toFixed(2)}${L.fall ? "  FALL" : L.stepOut ? "  step-out" : ""}`
-        + `${L.twoFoot && L.kind !== JUMP_NONE ? "  two-foot" : ""}`, L.fall ? "#ff4d6d" : INK]);
+        + `${L.twoFoot && L.kind !== JUMP_NONE ? "  two-foot" : ""}${L.armed ? "  wound" : ""}`, L.fall ? "#ff4d6d" : INK]);
     }
     return out;
   }

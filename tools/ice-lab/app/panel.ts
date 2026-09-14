@@ -88,6 +88,9 @@ const GROUPS: Array<{ title: string; note: string; sliders: Slider[] }> = [
       { key: "jumpLoadMax", label: "longest load (s)", min: 0.3, max: 2, step: 0.05 },
       { key: "toeWindow", label: "toe-pick window (s)", min: 0.02, max: 0.3, step: 0.005 },
       { key: "landingShock", label: "landing shock (rad/s)", min: 0, max: 4, step: 0.05 },
+      { key: "jumpAssist", label: "wound-up assist", min: 0, max: 1, step: 0.05,
+        note: "How much of the arms a jump flies for you once it is wound up — U, or the right stick flicked right, before the release. Moves only I: a short takeoff still lands short. spec 0.25 · responsive 0.5 · assisted 0.8." },
+      { key: "windupWindow", label: "wind-up window (s)", min: 0.05, max: 1.5, step: 0.05 },
     ],
   },
   {

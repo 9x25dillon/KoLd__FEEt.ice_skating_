@@ -224,6 +224,31 @@ export interface Params {
   /** Takeoff-edge error that draws ! and e; the same file. */
   callEdgeUnclear: number;
   callEdgeWrong: number;
+  /**
+   * 0..1: how much of the arms a WOUND-UP jump flies for the skater.
+   *
+   * The operator's direction (2026-09-13): the arms and body positioning are
+   * partly automated from the jump's own geometry, more the more assisted the
+   * preset, and only after an initiating action — a flick of the wind-up
+   * (SkatingInput.windup) against the rotation before the release. Without the
+   * flick nothing here runs and the jump is the manual one, bit for bit.
+   *
+   * With it: the whip at takeoff is at least jumpAssist x the flick, and in the
+   * air the carriage is blended jumpAssist of the way toward what the geometry
+   * asks — the arms that land the nearest whole revolution (half, for an axel)
+   * the takeoff can really reach, opening early to check out when there is
+   * rotation to spare (sim/jump.ts `assistedCarriage`).
+   * It moves only the moment of inertia, at the arms' own rate: angular
+   * momentum is still set at takeoff and conserved, so a takeoff that cannot
+   * reach the revolution still comes down short. L3, chosen.
+   *
+   * spec 0.25, responsive 0.5, assisted 0.8.
+   */
+  jumpAssist: number;
+  /** Wind-up past which a flick counts, 0..1 of the stick. */
+  windupThreshold: number;
+  /** s before the release inside which the flick still arms the jump. */
+  windupWindow: number;
 
   // ── moves ─────────────────────────────────────────────────────────────────
   // The skating vocabulary beyond the carve: crossovers first. Added on the
@@ -446,6 +471,9 @@ export const DEFAULT_PARAMS: Params = {
   callDowngrade: 0.5,
   callEdgeUnclear: 0.25,
   callEdgeWrong: 0.55,
+  jumpAssist: 0.25,          // the operator's override of spec, like jumps themselves; 0 is the package
+  windupThreshold: 0.6,
+  windupWindow: 0.6,
 
   movesMode: 0,
   crossoverLean: 0.21,       // 12 deg: the shallow-edge boundary
@@ -540,6 +568,10 @@ export function validate(p: Params): string[] {
     errs.push("rotation call thresholds must rise q < under < downgrade");
   if (p.callEdgeUnclear >= p.callEdgeWrong)
     errs.push("callEdgeUnclear must be below callEdgeWrong");
+  if (p.jumpAssist > 1) errs.push("jumpAssist is a share of the arms, 0..1");
+  if (p.windupThreshold <= 0 || p.windupThreshold > 1)
+    errs.push("windupThreshold must be in (0, 1]: at 0 a resting stick would arm every jump");
+  if (p.windupWindow < 2 * SIM_DT) errs.push("windupWindow is under two ticks");
   if (![0, 1].includes(p.movesMode)) errs.push("movesMode is 0 (the carve only) or 1 (the moves)");
   if (p.turnTime < 4 * SIM_DT) errs.push("turnTime is under four ticks: a pivot needs a cusp to flip at");
   if (p.turnCarry > 1) errs.push("turnCarry is a share of the pivot rate, 0..1");
@@ -640,7 +672,7 @@ export const PRESETS: Readonly<Record<string, Params>> = {
   responsive: {
     ...DEFAULT_PARAMS, balanceKd: 16.0, angulationLimit: 0.70,
     internalRateGain: 2.0, internalWashout: 1.5, fallAuthorityCredit: 1.0,
-    copRateGain: 2.0, copCommandShare: 1.0,
+    copRateGain: 2.0, copCommandShare: 1.0, jumpAssist: 0.5,
   },
   /**
    * An assist tier, as a parameter overlay and nothing else.
@@ -668,6 +700,6 @@ export const PRESETS: Readonly<Record<string, Params>> = {
     ...DEFAULT_PARAMS, balanceKd: 20.0, angulationLimit: 0.70,
     controlLatency: 0.04,
     internalRateGain: 4.0, internalWashout: 1.5, internalMax: 2.5,
-    fallAuthorityCredit: 1.0, copRateGain: 2.0, copCommandShare: 1.0,
+    fallAuthorityCredit: 1.0, copRateGain: 2.0, copCommandShare: 1.0, jumpAssist: 0.8,
   },
 };

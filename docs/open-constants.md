@@ -389,6 +389,28 @@ Structure S6. Observable classes O5 and O6.
   - Fixed by: frames from takeoff to fully tucked, on footage
   - Source: `JumpResolver.cpp`
 
+- **`jumpAssist`** — how much of the arms a wound-up jump flies for the skater
+  - Value: `0.25` spec, **`0.5` responsive**, `0.8` assisted. Spec's value is the operator's override
+    (2026-09-13). The engineering package has no assist, which is 0.
+  - Used: `jump.ts` `jumpGround` (the whip floor), `jumpAir` (the blend), `assistedCarriage`
+  - Level: **L3**. It is a control assist, not a property of skating. What it may move is bounded by L0:
+    only I, at the arms' rate, with angular momentum conserved.
+  - Range: [0, 1] by definition
+  - Fixed by: no physical observable. It must not change any gate observable, because cases never wind up.
+    A playtest question, not a fidelity one.
+
+- **`windupThreshold`**, **`windupWindow`** — how far the flick must go, and how long before the release it
+  still counts
+  - Value: `0.6` of the stick, `0.6` s
+  - Used: `jump.ts` `jumpGround`
+  - Level: L3
+  - Range: threshold in (0, 1]; window at least two ticks (`validate`)
+  - Fixed by: not physical. It is an input gesture. The window could be informed by how long before
+    takeoff skaters counter-rotate the shoulders on footage.
+
+- **Assist geometry** — hard-coded in `jump.ts`: the target is the nearest whole revolution (half for an
+  axel) to the fully tucked reach, and the arms are found by 12 bisection steps. L3, and a design choice.
+
 - **`toeWindow`** — time either side of the release in which a toe strike counts as the pick
   - Value: `0.09` s
   - Used: `jump.ts` `jumpGround`
