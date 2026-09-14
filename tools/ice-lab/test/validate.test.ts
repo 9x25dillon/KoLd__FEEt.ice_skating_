@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { validateCorpus } from "../validate.mjs";
+import { markdown, validateCorpus } from "../validate.mjs";
 
 const HOP = [
   { seconds: 1.0, input: { weight: 1.0 } },
@@ -85,4 +85,16 @@ test("exit 0 only when every sourced case passes; unsourced and unmodelled never
     rmSync(clean, { recursive: true, force: true });
     rmSync(dirty, { recursive: true, force: true });
   }
+});
+
+test("the Markdown report is marked generated, carries every case, and is the same every run", () => {
+  const dir = corpus([derivedHop("hop-ballistic", 0), stub("a-stub"), stub("a-bracket", ["bracket"])]);
+  try {
+    const a = markdown(validateCorpus(dir)), b = markdown(validateCorpus(dir));
+    assert.equal(a, b);
+    assert.match(a, /GENERATED — do not edit/);
+    assert.match(a, /\*\*Gate not met\.\*\*/);
+    for (const id of ["hop-ballistic", "a-stub", "a-bracket"]) assert.ok(a.includes(`\`${id}\``), id);
+    assert.ok(a.endsWith("\n"));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

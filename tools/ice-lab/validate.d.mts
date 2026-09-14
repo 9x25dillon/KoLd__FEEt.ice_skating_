@@ -30,3 +30,6 @@ export interface FidelityReport {
 }
 
 export function validateCorpus(casesDir?: string, clipsDir?: string | null): FidelityReport;
+
+/** docs/fidelity-report.md for a report: deterministic, no clock or commit in it. */
+export function markdown(report: FidelityReport): string;

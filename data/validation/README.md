@@ -172,4 +172,6 @@ assumed from its type.
 - **Footage and protocol stubs**, at least one for every observable that needs an outside measurement,
   and one each for the unmodelled turns.
 
-The validator (Task 1.3) reads everything here. Nothing in `cases/` is read by the instrument.
+The validator (`tools/ice-lab/validate.mjs`) reads everything here. Nothing in `cases/` is read by the
+instrument. After changing a case, regenerate [`docs/fidelity-report.md`](../../docs/fidelity-report.md)
+with `node tools/ice-lab/validate.mjs --report docs/fidelity-report.md`; CI fails on a stale report.

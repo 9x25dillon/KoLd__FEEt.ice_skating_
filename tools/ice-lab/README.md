@@ -13,11 +13,12 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 271 tests
+node --test test/*.test.ts     # 272 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 node demo.mjs                  # scripted runs to watch -> build/demos/ (import replay)
 node validate.mjs              # the fidelity gate, headless (--json for CI)
+node validate.mjs --report ../../docs/fidelity-report.md   # regenerate the committed report
 node validate.mjs --clips build/clips   # and every run as a replay clip: open one with import replay to watch its inputs
 ```
 

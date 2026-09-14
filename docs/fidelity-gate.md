@@ -7,7 +7,7 @@ is compared ([§4](#4--observables)), how close is close enough and why
 ([§5](#5--tolerance-bands)), when the gate as a whole is met ([§6](#6--pass-condition)), and what a
 failure obligates ([§7](#7--what-a-failure-obligates)). The implementation is
 `tools/ice-lab/validate.mjs`, run against the case corpus in `data/validation/cases/`, and it
-writes `docs/fidelity-report.md`. None of those exist yet. This document comes first because the
+writes [`docs/fidelity-report.md`](fidelity-report.md). This document came first because the
 validator implements it, not the other way round.
 
 > **Nothing in the model has passed this gate.** Every number in Ice Lab has been measured and
@@ -458,10 +458,10 @@ Structures most exposed today, in order:
 | Artefact | Does | Status |
 | --- | --- | --- |
 | [`docs/open-constants.md`](open-constants.md) | Every tuned constant: value, use, level, plausible range, the measurement that fixes it | written |
-| `data/validation/README.md` | Case schema, including `role` (validation or calibration), one-sided and categorical comparisons, u<sub>m</sub>, radius convention and ice state | not written |
-| `data/validation/cases/` | Derived cases for S1 and S6, and stubs for everything needing measurement | not written |
-| `tools/ice-lab/validate.mjs` | Implements §3–§6, zero dependencies, `--json` | not written |
-| `docs/fidelity-report.md` | Generated. Per-observable pass state, deviations, unsourced list, gate state against §6.3 | not written |
+| [`data/validation/README.md`](../data/validation/README.md) | Case schema, including `role` (validation or calibration), one-sided and categorical comparisons, u<sub>m</sub>, radius convention and ice state | written |
+| [`data/validation/cases/`](../data/validation/cases/) | Derived cases for S1 and S6, and stubs for everything needing measurement | written |
+| `tools/ice-lab/validate.mjs` | Implements §3–§6, zero dependencies, `--json`, `--report`, `--clips` | written; run in CI on every push |
+| [`docs/fidelity-report.md`](fidelity-report.md) | Generated. Per-observable pass state, deviations, unsourced list, gate state against §6.3 | generated; CI fails if stale |
 
 When an implementation disagrees with this document, one of them is wrong, and the disagreement is
 fixed in the open. Neither is quietly edited to match the other.

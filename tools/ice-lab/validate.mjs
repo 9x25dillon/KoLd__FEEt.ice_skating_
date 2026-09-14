@@ -3,6 +3,8 @@
 //   node tools/ice-lab/validate.mjs            human-readable report
 //   node tools/ice-lab/validate.mjs --json     machine-readable, for CI
 //   node tools/ice-lab/validate.mjs --cases <dir>
+//   node tools/ice-lab/validate.mjs --report <file> also write the Markdown report
+//                                                  (docs/fidelity-report.md; generated, never hand-edited)
 //   node tools/ice-lab/validate.mjs --clips <dir>   also write each run's replay clip,
 //                                                  to open in the lab (import replay) and watch
 //
@@ -394,6 +396,92 @@ function human(report) {
   return out.join("\n") + "\n";
 }
 
+const CLASS = {
+  carve: "O1 carve relation", tracing: "O2 tracing curvature", transition: "O3 edge transitions",
+  glide: "O4 speed decay", jump: "O5 jump rotation", inertia: "O6 moment of inertia", propulsion: "O7 propulsion",
+};
+
+/** A number for the report: fixed to four places, so the file is stable across engines and runs. */
+function num(x) {
+  if (typeof x !== "number") return "—";
+  const t = x.toFixed(4);
+  return t === "-0.0000" ? "0.0000" : t;
+}
+
+/**
+ * docs/fidelity-report.md. Everything in it comes from the report object and
+ * the corpus; nothing depends on the clock, the machine or the commit, so CI
+ * can regenerate it and require it byte-identical (fidelity-gate §6.3 item 4).
+ */
+export function markdown(report) {
+  const out = [];
+  const s = report.summary;
+  const r = report.results;
+  out.push("# Fidelity report", "");
+  out.push("> **GENERATED — do not edit.** Written by `node tools/ice-lab/validate.mjs --report docs/fidelity-report.md`");
+  out.push("> from the cases in [`data/validation/cases/`](../data/validation/cases/), against the specification in");
+  out.push("> [`fidelity-gate.md`](fidelity-gate.md). CI regenerates it on every push and fails if it differs.", "");
+  out.push(`Preset under test **\`${report.preset}\`** (the public build's boot preset); reference **\`${report.reference}\`**,`
+    + ` reported, not gated. Solver \`${report.solver}\`.`, "");
+
+  const sourcedFail = s.fail > 0;
+  const covered = report.gate.coverage_count_met;
+  out.push("## Gate", "");
+  out.push(`**Gate not met.** ${s.pass} pass, ${s.fail} fail, ${s.unsourced} unsourced, ${s.unmodelled} unmodelled, of ${s.cases} cases.`, "");
+  out.push("| §6.3 | Condition | State |", "| --- | --- | --- |");
+  out.push(`| 1 | No failing sourced case | ${sourcedFail ? "**not met** — " + s.fail + " failing" : "met"} |`);
+  out.push(`| 2 | Three passing external cases per class, from two independent sources | ${covered ? "count met; source independence not yet evaluated" : "**not met** — see coverage below"} |`);
+  out.push("| 3 | No calibration case counted | met by construction: the count excludes them |");
+  out.push("| 4 | Reproduced by CI, byte-identical | checked by `.github/workflows/ice-lab-checks.yml`, not by this file |", "");
+
+  out.push("## Coverage by observable class", "");
+  out.push("External passing counts literature cases only once `primary_checked` is true (§2.2). Three per class are needed.", "");
+  out.push("| Class | Cases | Pass | Fail | Unsourced | Unmodelled | External passing |", "| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
+  for (const kind of Object.keys(CLASS)) {
+    const rows = r.filter((x) => x.kind === kind);
+    const n = (v) => rows.filter((x) => x.verdict === v).length;
+    out.push(`| ${CLASS[kind]} | ${rows.length} | ${n("pass")} | ${n("fail")} | ${n("unsourced")} | ${n("unmodelled")} | ${report.coverage[kind]} / 3 |`);
+  }
+  out.push("");
+
+  out.push("## Pass state by observable", "");
+  out.push("| Observable | Cases | Pass | Fail | Unsourced | Unmodelled |", "| --- | ---: | ---: | ---: | ---: | ---: |");
+  const observables = [...new Set(r.map((x) => x.observable))].filter(Boolean).sort();
+  for (const o of observables) {
+    const rows = r.filter((x) => x.observable === o);
+    const n = (v) => rows.filter((x) => x.verdict === v).length;
+    out.push(`| \`${o}\` | ${rows.length} | ${n("pass")} | ${n("fail")} | ${n("unsourced")} | ${n("unmodelled")} |`);
+  }
+  out.push("");
+
+  out.push("## Sourced cases", "");
+  const sourced = r.filter((x) => x.verdict === "pass" || x.verdict === "fail");
+  if (sourced.length === 0) out.push("None.", "");
+  else {
+    out.push(`| Case | Source | Observable | Expected | Tolerance | Actual | Deviation | Verdict | \`${report.reference}\` |`);
+    out.push("| --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |");
+    for (const x of sourced) {
+      const ref = x[report.reference];
+      const refCell = ref ? `${ref.verdict}${ref.actual !== null ? " " + num(ref.actual) : ""}${ref.reason ? " (" + ref.reason + ")" : ""}` : "—";
+      out.push(`| \`${x.id}\` | ${x.source} | \`${x.observable}\` | ${num(x.expected)} ${x.unit ?? ""} | ${num(x.tolerance)} | ${num(x.actual)} | ${num(x.deviation)} | `
+        + `${x.verdict === "pass" ? "pass" : "**FAIL**"}${x.reason ? " — " + x.reason : ""} | ${refCell} |`);
+    }
+    out.push("");
+  }
+
+  const unsourced = r.filter((x) => x.verdict === "unsourced");
+  out.push(`## Unsourced (${unsourced.length})`, "");
+  out.push("Stubs waiting for a measurement. A null expectation is correct; an invented number would be a defect.", "");
+  for (const x of unsourced) out.push(`- \`${x.id}\` — ${x.source}, \`${x.observable}\``);
+  out.push("");
+
+  const unmodelled = r.filter((x) => x.verdict === "unmodelled");
+  out.push(`## Unmodelled (${unmodelled.length})`, "");
+  for (const x of unmodelled) out.push(`- \`${x.id}\` — ${x.reason}`);
+  out.push("");
+  return out.join("\n");
+}
+
 function main(argv) {
   const json = argv.includes("--json");
   const at = argv.indexOf("--cases");
@@ -401,6 +489,8 @@ function main(argv) {
   const ca = argv.indexOf("--clips");
   const clips = ca >= 0 && argv[ca + 1] ? resolve(argv[ca + 1]) : null;
   const report = validateCorpus(dir, clips);
+  const ra = argv.indexOf("--report");
+  if (ra >= 0 && argv[ra + 1]) writeFileSync(resolve(argv[ra + 1]), markdown(report));
   process.stdout.write(json ? JSON.stringify(report, null, 2) + "\n" : human(report));
   return report.summary.fail === 0 ? 0 : 1;
 }
