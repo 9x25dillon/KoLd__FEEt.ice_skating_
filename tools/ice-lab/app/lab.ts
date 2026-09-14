@@ -5,7 +5,7 @@
 // with your hands instead of a rebuild. Everything here is presentation and
 // glue; no physics is decided in this file.
 
-import { PRESETS, RINKS, SIM_DT, SIM_HZ } from "../sim/params.ts";
+import { BOOT_PRESET, PRESETS, RINKS, SIM_DT, SIM_HZ } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import { SAMPLE_PROFILES, applyProfile, overall, tierOf, level } from "../sim/profile.ts";
 import type { SkaterProfile } from "../sim/profile.ts";
@@ -62,16 +62,6 @@ import type { ScoreTables, JumpScore } from "../sim/score.ts";
 const PRESET_NAMES = Object.keys(PRESETS);
 const RINK_NAMES = Object.keys(RINKS);
 
-/**
- * What the lab boots on — `responsive`, not `spec`.
- *
- * `spec` is the baseline every measurement is taken against and it stays that,
- * but it cannot enter an edge deeper than 11 degrees at stroking pace, so
- * handing it to someone as their first thirty seconds of the model is not a
- * fair test of anything: it reads as a broken skater rather than as a recorded
- * defect. Press the preset button (T, or X on a pad) to cycle to it.
- */
-const BOOT_PRESET = "responsive";
 
 export class Lab {
   private params: Params = { ...PRESETS[BOOT_PRESET] };

@@ -39,7 +39,7 @@ not fidelity, and the difference is the whole of the next phase.
   Bauer, jumps from their entries) are in, and **off by default**, each behind its own switch.
 - **Replay.** Capture a run, verify it headlessly in another JavaScript engine, and get the first
   tick where two runs diverge. The replay contract is `ice-lab-f64/7`.
-- **258 tests** (as of 2026-09-13), all passing.
+- **261 tests** (as of 2026-09-13), all passing.
 - **A public build** at **<https://9x25dillon.github.io/KoLd__FEEt.ice_skating_/>**, deployed by
   [`pages.yml`](.github/workflows/pages.yml) on every push to `main` that touches the instrument.
   The tests gate the deploy.
@@ -56,8 +56,9 @@ not fidelity, and the difference is the whole of the next phase.
 
 ### What does not exist yet
 
-- **A fidelity harness.** No validator, no reference case corpus, no fidelity report. No
-  observable is yet compared with published measurement or broadcast footage.
+- **External evidence.** The validator (`node tools/ice-lab/validate.mjs`) and a case corpus
+  (`data/validation/`) exist. Every case that needs published measurement or footage is still a stub,
+  and there is no generated fidelity report yet.
 - **Parts of the model.** Brackets, rockers, counters and choctaws; spin levels; combinations and
   sequences; stamina. Tracings are drawn but do not yet feed friction or bite back into the solver
   as the bible's §05 requires. The stroke is the bible's semi-analytic push, not a leg model.
@@ -133,7 +134,7 @@ tools/ice-lab/             The current work — see its README
   sim/                     The solver: pure, deterministic, written to be transcribed to C++
   app/                     The browser rig, build, local server and session collector
   replay/                  Headless replay verification
-  test/                    258 tests
+  test/                    261 tests
   native/                  C++17 wire, math and serialization foundation — not a solver
   deploy/                  systemd unit, Caddyfile and runbook for the collector
 docs/

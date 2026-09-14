@@ -13,9 +13,10 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 258 tests
+node --test test/*.test.ts     # 261 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
+node validate.mjs              # the fidelity gate, headless (--json for CI)
 ```
 
 `tsconfig.json` is there for editors and for an optional `tsc --noEmit`; it is
