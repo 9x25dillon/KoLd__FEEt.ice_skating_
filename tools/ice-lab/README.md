@@ -1,5 +1,99 @@
 # Ice Lab — a browser tuning rig for edgework
 
+## Play Ice Run
+
+`game/` is a standalone browser game on the same 120 Hz solver as the lab, with
+a close, angled momentum camera: it follows **velocity**, not body heading, so
+turning backward, twizzling and rotating in the air do not spin the view around
+the athlete. Camera-relative controller aiming is transformed back into world
+space before scheme B maps it to a physical lean. **V** switches between the
+momentum view and the rink overview; the mouse wheel or **+/−** changes zoom.
+
+```sh
+cd tools/ice-lab
+node app/build.mjs
+node app/serve.mjs
+```
+
+Open **http://localhost:8123/game/**. Use **A/D or left/right arrows** to steer,
+tap/hold **Space** to push (fresh tap to get up), **X** to brake, **P** to pause, and **R** to
+restart. On a controller, the left stick aims in a direction across the ice,
+**A** pushes, **LT** held brakes, **Start** pauses, and **Back** restarts. **Y is spin.** Keyboard or
+controller required; touch controls are not implemented.
+
+The opening card picks one of three modes. **Free Skate** is open practice: seven
+objectives worth 250 points each, once per run (`game/practice.ts`), plus a FLOW
+meter that rewards staying upright at speed and unlocks a scattered field of
+snowflakes and pucks to knock into gold targets (`game/playground.ts`). The
+**Rookie course** is a guided, curved 8-gate lane with two jump bars; clipping a
+cone costs 25 points, and the HUD tracks gates cleared against a clean run
+(`game/rookie.ts`). The **90-second light run** chases gold lights in order;
+pickups within 8 seconds build a chain up to ×5 — silver is 1,500 points, gold
+3,000 (`game/run.ts`) — and your personal best stays in this browser when
+storage is available. Jumps and moves are enabled in every mode.
+
+**Difficulty**, in the Controls window, is Beginner or Simulation and starts a
+new run. Beginner softens keyboard lean and hands the on-screen **trick** button
+(or J / D-pad up) a full spin jump: it loads the knee, then bisects the arm
+carriage against a landing rotation predicted with the same fixed-step inertia
+and ballistic equations as the solver (`game/beginner.ts`), so the assist only
+ever chooses an input sequence — it never writes skater state. Simulation turns
+that off; jumps are the manual load-and-release, same as the lab.
+
+Free Skate starts with **Cruise** enabled. It supplies ordinary solver pushes
+below 5.5 m/s while gliding, and stops supplying them during braking, falls,
+jump loading and moves. Turn it off for manual strokes. Holding **Space / pad A**
+also repeats pushes.
+
+The **Controls** window exposes all three mappings with assisted tuning, the four
+sample skater profiles and the difficulty toggle (changing either starts a new
+run), and replay export and playback. Recording captures actual solver inputs,
+parameters, events and state digests for the first five minutes. Imports enforce
+the engine's schema and size limits, lock out live skating input, and stop on
+completion or first divergence. Replay preserves physics; the simplified
+cantilever pose overlay is not recorded.
+
+Landed jumps receive the engine's data-backed technical score, shown separately
+from practice, playground or light-run points. **Sound** enables the existing
+blade, skid and jump audio. Separate ice tracings follow the two blade contacts
+and break while airborne. The athlete uses the engine's body pose, including
+knee compression, height, lean, arm carriage and spin positions.
+
+This does not implement every feature in the design bible. Stamina depletion,
+ice wear feeding back into grip, a full career/competition system and the future
+native runtime are not present in this game. Game rules live in `game/run.ts`,
+`game/rookie.ts`, `game/playground.ts` and `game/beginner.ts`, separate from the
+physics. The original lab retains its course, ghost-race, telemetry and tuning
+tools at `/app/`; build output includes the game as a separate module page, and
+the lab's single-file bundle still contains only the lab.
+
+**Controls** opens a complete keyboard/controller guide and pauses skating:
+
+| Move | Keyboard | Controller |
+| --- | --- | --- |
+| Jump | Hold Shift ~0.3 s, release; bend again in the air for landing | Squeeze/release RT |
+| Toe pick | Tap F near the end of the jump load | Tap LT |
+| Arms open / tuck | Hold/release C | Right stick out / centred |
+| Weight left / right | Q / E | LB / RB |
+| Three-turn into backward skating | Carve, tap B, keep the same foot | Carve, tap B, keep the same bumper |
+| Mohawk | B, transfer Q ↔ E during turn | B, transfer LB ↔ RB |
+| Forward / back crossovers | Push on a curve; turn backward first for back crossovers | Same with A and stick |
+| Spin | Hold Y; Shift for sit, W with knee released for camel | Hold Y; RT for sit, right stick forward with RT released for camel |
+| Twizzle | Hold Z | Hold X |
+| Ina Bauer | Hold I while gliding forward | Hold LB + RB |
+| Cantilever pose | Hold U while gliding | Hold D-pad down |
+| Change control scheme | M | Keyboard M |
+
+The cantilever is a simplified animated low-back pose over the existing two-foot
+glide, with knee compression below the jump-load threshold. It does not implement
+dedicated cantilever balance physics. Releasing it does not charge a jump.
+The skater rendering shows separate feet, pose changes, airborne height and spin;
+the HUD reports current moves, forward/backward glide, edges and the last landing.
+
+Assisted steering is the default. Game-only backward steering aims relative to
+the travel frame rather than demanding a reversal, and keyboard direct lean is
+scaled to a manageable shallow edge rather than the lab's full deflection.
+
 A 120 Hz, deterministic, inertial implementation of the KoLd__FEEt blade–ice
 model, with every constant on a slider and the whole thing running in a
 browser. It exists so the questions in

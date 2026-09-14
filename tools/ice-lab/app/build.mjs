@@ -98,6 +98,8 @@ function bundle(modules) {
 
 emit("sim");
 emit("app");
+emit("game");
+copyFileSync(join(root, "game/index.html"), join(out, "game/index.html"));
 copyFileSync(join(root, "app/index.html"), join(out, "app/index.html"));
 
 // The scoring tables, as data beside the page rather than code inside it
