@@ -3,6 +3,8 @@
 //   node tools/ice-lab/validate.mjs            human-readable report
 //   node tools/ice-lab/validate.mjs --json     machine-readable, for CI
 //   node tools/ice-lab/validate.mjs --cases <dir>
+//   node tools/ice-lab/validate.mjs --clips <dir>   also write each run's replay clip,
+//                                                  to open in the lab (import replay) and watch
 //
 // docs/fidelity-gate.md is the specification and this file implements it; where
 // they disagree, one of them is wrong and the disagreement is fixed in the open.
@@ -17,7 +19,7 @@
 // Exit 0 only when every sourced case passes. Unsourced (expected null) and
 // unmodelled cases never move the exit code.
 
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -155,8 +157,9 @@ function runCase(c, preset, casesDir) {
       trace.push(snapshot(s, input, events));
     }
     // The second run: the recorded clip through the replay player.
-    const check = verifyReplay(parseReplay(rec.toJson()));
-    return { trace, changes, g: p.gravity, settle: settleTicks(p), nondeterministic: check.divergence, divergence: null };
+    const clip = rec.toJson();
+    const check = verifyReplay(parseReplay(clip));
+    return { clip, trace, changes, g: p.gravity, settle: settleTicks(p), nondeterministic: check.divergence, divergence: null };
   }
   const clip = parseReplay(readFileSync(resolve(casesDir, "..", c.inputs.clip), "utf8"));
   const player = new ReplayPlayer(clip);
@@ -170,7 +173,7 @@ function runCase(c, preset, casesDir) {
     trace.push(snapshot(player.state, input, player.events));
     if (player.divergence) player.divergence = { ...player.divergence }; // reported, not fatal
   }
-  return { trace, changes, g: p.gravity, settle: settleTicks(p), nondeterministic: null, divergence: player.divergence };
+  return { clip: null, trace, changes, g: p.gravity, settle: settleTicks(p), nondeterministic: null, divergence: player.divergence };
 }
 
 // ── windows and observables ─────────────────────────────────────────────────
@@ -281,10 +284,11 @@ function compare(e, value) {
 }
 
 /** One preset's verdict on one case. */
-function judge(c, preset, casesDir) {
+function judge(c, preset, casesDir, clipsDir = null) {
   let run;
   try { run = runCase(c, preset, casesDir); }
   catch (err) { return { verdict: "fail", reason: `run failed: ${err.message}` }; }
+  if (clipsDir && run.clip) writeFileSync(join(clipsDir, `${c.id}.json`), run.clip);
   if (run.nondeterministic) {
     return { verdict: "fail", reason: `nondeterministic: replay diverged at tick ${run.nondeterministic.tick}` };
   }
@@ -302,7 +306,8 @@ function judge(c, preset, casesDir) {
 
 // ── the corpus ──────────────────────────────────────────────────────────────
 
-export function validateCorpus(casesDir = DEFAULT_CASES) {
+export function validateCorpus(casesDir = DEFAULT_CASES, clipsDir = null) {
+  if (clipsDir) mkdirSync(clipsDir, { recursive: true });
   const files = readdirSync(casesDir).filter((f) => f.endsWith(".json")).sort();
   const results = [];
   for (const file of files) {
@@ -318,7 +323,7 @@ export function validateCorpus(casesDir = DEFAULT_CASES) {
     const missing = c.requires.filter((f) => !FEATURES.has(f));
     if (missing.length) { results.push({ ...base, verdict: "unmodelled", reason: `needs ${missing.join(", ")}` }); continue; }
     if (c.expected === null) { results.push({ ...base, verdict: "unsourced" }); continue; }
-    const gated = judge(c, BOOT_PRESET, casesDir);
+    const gated = judge(c, BOOT_PRESET, casesDir, clipsDir);
     const reference = judge(c, REFERENCE_PRESET, casesDir);
     results.push({
       ...base, expected: c.expected.value, comparison: c.expected.comparison,
@@ -393,7 +398,9 @@ function main(argv) {
   const json = argv.includes("--json");
   const at = argv.indexOf("--cases");
   const dir = at >= 0 && argv[at + 1] ? resolve(argv[at + 1]) : DEFAULT_CASES;
-  const report = validateCorpus(dir);
+  const ca = argv.indexOf("--clips");
+  const clips = ca >= 0 && argv[ca + 1] ? resolve(argv[ca + 1]) : null;
+  const report = validateCorpus(dir, clips);
   process.stdout.write(json ? JSON.stringify(report, null, 2) + "\n" : human(report));
   return report.summary.fail === 0 ? 0 : 1;
 }

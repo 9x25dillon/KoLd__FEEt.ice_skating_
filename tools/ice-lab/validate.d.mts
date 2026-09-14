@@ -29,4 +29,4 @@ export interface FidelityReport {
   results: CaseResult[];
 }
 
-export function validateCorpus(casesDir?: string): FidelityReport;
+export function validateCorpus(casesDir?: string, clipsDir?: string | null): FidelityReport;
