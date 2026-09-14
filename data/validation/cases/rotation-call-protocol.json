@@ -1,0 +1,44 @@
+{
+  "id": "rotation-call-protocol",
+  "kind": "jump",
+  "role": "validation",
+  "source": {
+    "type": "protocol",
+    "citation": "",
+    "primary_checked": null,
+    "notes": "An ISU judges' protocol call on a named element, paired with footage giving the measured shortfall; a shortfall straddling a boundary lets either neighbouring call pass (fidelity-gate §5.2)."
+  },
+  "requires": [
+    "jumps"
+  ],
+  "skater": null,
+  "venue": {
+    "venue_type": null,
+    "indoor": null,
+    "elevation_m": null,
+    "slab": null,
+    "ice_surface_temp_c": null,
+    "air_temp_c": null,
+    "air_rh_pct": null,
+    "air_density_kg_m3": null,
+    "water_tds_ppm": null,
+    "ice_hardness_shore_d": null,
+    "minutes_since_resurface": null,
+    "surface": {
+      "profile": "unknown",
+      "relief_mm": null,
+      "measured": false,
+      "method": ""
+    },
+    "rink_location": null,
+    "travel_direction": null,
+    "paired_case": null
+  },
+  "inputs": null,
+  "observable": {
+    "name": "rotation_call",
+    "window": "flight",
+    "radius": null
+  },
+  "expected": null
+}

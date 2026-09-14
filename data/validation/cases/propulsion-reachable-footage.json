@@ -1,0 +1,42 @@
+{
+  "id": "propulsion-reachable-footage",
+  "kind": "propulsion",
+  "role": "validation",
+  "source": {
+    "type": "footage",
+    "citation": "",
+    "primary_checked": null,
+    "notes": "A measured speed gain from one push. One-sided: some input within the model's limits must reach it."
+  },
+  "requires": [],
+  "skater": null,
+  "venue": {
+    "venue_type": null,
+    "indoor": null,
+    "elevation_m": null,
+    "slab": null,
+    "ice_surface_temp_c": null,
+    "air_temp_c": null,
+    "air_rh_pct": null,
+    "air_density_kg_m3": null,
+    "water_tds_ppm": null,
+    "ice_hardness_shore_d": null,
+    "minutes_since_resurface": null,
+    "surface": {
+      "profile": "unknown",
+      "relief_mm": null,
+      "measured": false,
+      "method": ""
+    },
+    "rink_location": null,
+    "travel_direction": null,
+    "paired_case": null
+  },
+  "inputs": null,
+  "observable": {
+    "name": "propulsion_reachable",
+    "window": "element",
+    "radius": null
+  },
+  "expected": null
+}

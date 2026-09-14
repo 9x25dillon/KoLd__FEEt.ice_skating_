@@ -23,9 +23,9 @@ const sticks: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.45, weight: 1, push: false, brake: false,
-  carriage: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
+  carriage: 0, windup: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
-  cycleMoves: false,
+  cycleMoves: false, cycleRink: false,
 };
 
 /** Hold a target heading with B for `secs`, reporting the error it settles to. */
@@ -65,19 +65,22 @@ test("A and B · the right stick does nothing on the ice, because the bible rese
   // the contrast the down-select needs.
   //
   // Carriage is now modelled, for jumps only: the stick reaches the solver as
-  // `carriage` and nothing else, and nothing on the ice reads it. So the rule
+  // `carriage` and, thrown sideways, as the wind-up against the rotation —
+  // both the arms, both read only by a jump — and nothing on the ice reads either. So the rule
   // is checked where it matters — the skater — with jumps off, as every preset
   // has them.
   const idle = { ...sticks, lean: 0.4, pitch: 0.1, weight: 0.5 };
   const pushed = { ...idle, rx: 0.9, ry: -0.8 };
-  const { carriage: ca, ...a1 } = schemeA(pushed);
-  const { carriage: ca0, ...a0 } = schemeA(idle);
-  assert.deepEqual(a1, a0, "A maps the right stick to carriage and nothing else");
+  const { carriage: ca, windup: wa, ...a1 } = schemeA(pushed);
+  const { carriage: ca0, windup: wa0, ...a0 } = schemeA(idle);
+  assert.deepEqual(a1, a0, "A maps the right stick to carriage and wind-up, and nothing else");
   assert.ok(ca > 0.99 && ca0 === 0);
+  assert.equal(wa, 0.9, "the sideways throw is the wind-up");
+  assert.equal(wa0, 0);
   const st = newSchemeState();
-  const { carriage: _b0, ...b0 } = schemeB({ ...idle, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
-  const { carriage: _b1, ...b1 } = schemeB({ ...pushed, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
-  assert.deepEqual(b1, b0, "B ignores it too, apart from carriage");
+  const { carriage: _b0, windup: _w0, ...b0 } = schemeB({ ...idle, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
+  const { carriage: _b1, windup: _w1, ...b1 } = schemeB({ ...pushed, lx: 0, ly: 1 }, v2(1, 0), v2(5, 0), 0, p, st);
+  assert.deepEqual(b1, b0, "B ignores it too, apart from carriage and wind-up");
   assert.equal(b0.pitch, 0, "and B has no rocker on the pad at all");
 
   assert.equal(p.jumpMode, 0, "every preset skates with jumps off");

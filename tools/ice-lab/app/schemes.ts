@@ -147,13 +147,24 @@ export function schemeA(c: Controls): SkatingInput {
     pitch: c.ky !== 0 ? c.ky : c.pitch,
     leanSplit: 0,
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
-    carriage: carriage(c), toe: c.toe, turn: c.turn, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
+    carriage: carriage(c), windup: windup(c), toe: c.toe, turn: c.turn, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
   };
 }
 
 /** The right stick's reach, or the keyboard's held C. Jumps only; see schemeA. */
 function carriage(c: Controls): number {
   return clamp(Math.max(c.carriage, Math.hypot(c.rx, c.ry)), 0, 1);
+}
+
+/**
+ * The wind-up: the keyboard's held U, or the right stick's sideways throw.
+ * Right is clockwise, against the counter-clockwise rotation every jump turns,
+ * so a flick right before the release arms the jump's assist and a flick left
+ * takes it back (sim/jump.ts). The same throw also reads as carriage — the
+ * arms go out to wind — which is what a wind-up is. Jumps only.
+ */
+function windup(c: Controls): number {
+  return clamp(c.windup !== 0 ? c.windup : c.rx, -1, 1);
 }
 
 /**
@@ -226,7 +237,7 @@ export function schemeB(
     pitch: c.ky,
     leanSplit: 0,
     knee: c.knee, weight, push: c.push, brake: c.brake,
-    carriage: carriage(c), toe: c.toe, turn: c.turn, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
+    carriage: carriage(c), windup: windup(c), toe: c.toe, turn: c.turn, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
   };
 }
 
@@ -261,9 +272,9 @@ export function schemeC(c: Controls): SkatingInput {
     pitch: c.ky !== 0 ? c.ky
       : clamp((relievedPitch(c.lx, c.ly) + relievedPitch(c.rx, c.ry)) / 2, -1, 1),
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
-    // The right stick is the right blade here, so C's carriage is the
-    // keyboard's alone. A pad skating C can hop but not whip a rotation.
-    carriage: clamp(c.carriage, 0, 1), toe: c.toe, turn: c.turn, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
+    // The right stick is the right blade here, so C's carriage and wind-up are
+    // the keyboard's alone. A pad skating C can hop but not whip or wind a rotation.
+    carriage: clamp(c.carriage, 0, 1), windup: clamp(c.windup, -1, 1), toe: c.toe, turn: c.turn, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
   };
 }
 

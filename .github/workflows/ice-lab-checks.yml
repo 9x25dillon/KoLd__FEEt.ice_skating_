@@ -1,14 +1,20 @@
 name: Ice Lab checks
 
+# Every push, on every branch: a model that drifts away from reality should fail
+# the build the moment it drifts, the same way a unit test does. The validation
+# cases and the gate that defines them trigger it too.
 on:
   pull_request:
     paths:
       - "tools/ice-lab/**"
+      - "data/validation/**"
+      - "docs/fidelity-gate.md"
       - ".github/workflows/ice-lab-checks.yml"
   push:
-    branches: [main]
     paths:
       - "tools/ice-lab/**"
+      - "data/validation/**"
+      - "docs/fidelity-gate.md"
       - ".github/workflows/ice-lab-checks.yml"
   workflow_dispatch:
 
@@ -32,3 +38,20 @@ jobs:
       - run: node --test test/*.test.ts
       - run: node app/build.mjs
       - run: node replay/verify.ts test/fixtures/replay-v1.json
+      # The fidelity gate (docs/fidelity-gate.md): exit 1 on any failing sourced
+      # case. The human report goes to the log; the JSON is kept as an artifact;
+      # the Markdown report is regenerated over the committed one.
+      - name: Fidelity validator
+        run: |
+          node validate.mjs --report ../../docs/fidelity-report.md
+          node validate.mjs --json > fidelity.json
+      # fidelity-gate §6.3 item 4: the committed report is what this checkout
+      # produces, byte for byte. A stale report fails the build.
+      - name: Fidelity report is current
+        run: git diff --exit-code -- ../../docs/fidelity-report.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fidelity-node${{ matrix.node }}
+          path: tools/ice-lab/fidelity.json
+          if-no-files-found: ignore
