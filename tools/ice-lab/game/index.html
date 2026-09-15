@@ -12,6 +12,25 @@ body{background:#c3dce2;color:#f1f5fb}header{top:24px}.brand{color:#26354e;font-
 @media(max-width:850px){.stats{top:74px;left:24px;transform:none}.actions{top:78px}.actions button{padding:8px;font-size:10px}#coach{top:148px;width:230px}#movement{bottom:167px;left:16px;padding:12px;min-width:190px}#knee{display:none}.dock{gap:12px;padding:12px}.dock span{font-size:9px}}@media(max-width:600px){header a{font-size:10px}.stats{left:16px;gap:16px;padding:10px 14px}.stats strong{font-size:19px}.actions{top:148px;left:16px;right:16px;max-width:none;justify-content:flex-start}#coach{top:194px;right:16px;width:185px;padding:14px}#coach h2{font-size:18px}#coach p{font-size:11px}#movement{bottom:170px}#stance{font-size:9px}.dock{gap:8px;flex-wrap:wrap;max-width:370px}.dock span{font-size:9px}.subkeys{font-size:8px}#hint{bottom:137px;font-size:10px}.card h1{font-size:52px}}
 .settings{display:flex;gap:16px;flex-wrap:wrap;align-items:end;margin:20px 0}.settings label{display:grid;gap:7px;font-size:12px;color:#bbcfde}.settings select,.settings input{max-width:290px;background:#28425c;color:#eff6ff;padding:10px;border:1px solid #a4c1de55;border-radius:6px}.settings button{font-size:12px}#technical,#music-credit{font-size:10px;color:#b8bbd8;margin-top:6px;max-width:280px}#flow-fill{height:100%;width:0;background:#f7cb7b;transition:width 60ms linear}#trick{margin-top:10px;width:100%;font-size:11px;padding:8px 10px}#trick:disabled{opacity:.35;cursor:default}
 #hint{bottom:140px}#coach{top:180px}@media(max-width:600px){#coach{top:194px}#hint{bottom:143px}}
+
+/* Frosted rink identity: quiet chrome, clear numbers, violet performance accents. */
+:root{--panel:#182b43ed;--frost:#eef8fa;--violet:#d9c5ff}
+header .brand{letter-spacing:.23em;font-weight:800}.brand small{letter-spacing:.2em;margin-top:7px}
+header a{background:#f4fbfcaa;padding:9px 13px;border:1px solid #ffffff80;border-radius:30px;text-decoration:none}
+.stats,#movement,.dock{background:linear-gradient(135deg,#233b52f2,#18263eed);border:1px solid #ffffff35;box-shadow:0 12px 32px #20324b20,inset 0 1px #ffffff12;backdrop-filter:blur(16px)}
+.stats{gap:0;padding:15px 8px}.stats>div{padding:0 24px}.stats>div+div{border-left:1px solid #ffffff20}.stats strong{font-variant-numeric:tabular-nums;letter-spacing:-.04em;font-size:28px}.stats label{font-size:9px;letter-spacing:.16em}.stats .hot{color:#decaff}
+.actions button{border:1px solid #ffffff30;border-radius:24px;transition:background .18s,transform .18s}.actions button:hover{transform:translateY(-2px)}.actions button[aria-pressed=true]{background:#67558d}
+#movement{border-left:3px solid #c5aff0}#move{letter-spacing:-.025em}#speed-value{color:#fff;font-size:18px;font-variant-numeric:tabular-nums}
+#coach{background:linear-gradient(145deg,#fbfeffff,#e8eff6ee);border-radius:4px 18px 18px 18px;box-shadow:0 14px 40px #26385220;border-top:3px solid #a58acb}#coach .eyebrow{letter-spacing:.16em}#coach h2{font-weight:650}
+.track{height:5px;background:#8ba2bc38}#charge{background:linear-gradient(90deg,#a18ac9,#e6d5ff)}#flow-fill{background:linear-gradient(90deg,#bd98df,#ffdc9b)}
+.dock{border-radius:12px}.dock kbd{background:linear-gradient(#ffffff18,#ffffff08);border-color:#ffffff25;box-shadow:0 2px 3px #0002}.subkeys{color:#263d57}
+#overlay{background:linear-gradient(115deg,#10233e80,#40577a22);backdrop-filter:blur(3px)}
+.card{position:relative;background:radial-gradient(ellipse at 95% 0,#71609255,transparent 60%),linear-gradient(145deg,#223952fa,#13243afc);border:1px solid #dbd0f54d;border-radius:24px;padding:44px;box-shadow:0 32px 100px #12213966,inset 0 1px #ffffff20}
+.card:before{content:"✧";display:block;color:#decaff;font-size:42px;line-height:1;margin-bottom:24px}.card h1{font-size:76px;letter-spacing:-.065em;font-weight:650;text-wrap:balance}.card .eyebrow{letter-spacing:.22em;font-size:10px}.card p{text-wrap:pretty}.card button{border-radius:10px;transition:background .18s,transform .18s}.card button:hover{background:#eee3ff;transform:translateY(-2px)}.card .secondary{border:1px solid #ffffff20}.card .secondary:hover{background:#ffffff20}.card #start{background:linear-gradient(115deg,#e4d6ff,#bfcdfb);box-shadow:0 6px 24px #bba2ff20;padding:17px}
+@media(max-width:850px){.stats>div{padding:0 16px}.stats strong{font-size:23px}}
+@media(max-width:600px){.card{padding:26px}.card h1{font-size:54px}.card:before{font-size:28px;margin-bottom:15px}.stats>div{padding:0 12px}.stats strong{font-size:20px}.stats label{font-size:8px}#coach{width:170px}#movement{max-width:calc(100% - 32px);min-width:0}.actions button:hover,.card button:hover{transform:none}}
+@media(max-height:650px) and (min-width:601px){#coach{top:155px;padding:14px}#movement{bottom:125px;padding:10px 16px}.dock{padding:10px 18px}#knee{bottom:130px}.card{padding:24px}.card:before{display:none}.card h1{font-size:54px;margin:12px 0}}
+@media(prefers-reduced-motion:reduce){button,#charge,#flow-fill{transition:none!important}}
 </style>
 </head>
 <body>

@@ -34,9 +34,33 @@ export class SkateScene {
     const cx = cam.cx, cy = cam.cy;
     const project = (v: V3): [number, number] => cam.project(v.x,v.y,v.z);
     const ice = ctx.createLinearGradient(0, 0, 0, h);
-    ice.addColorStop(0, "#b8d0dd"); ice.addColorStop(0.6, "#e0eff0"); ice.addColorStop(1, "#a9cbd5");
+    ice.addColorStop(0, "#8da6bd"); ice.addColorStop(0.6, "#c7dce2"); ice.addColorStop(1, "#91b6c7");
     ctx.fillStyle = ice; ctx.fillRect(0, 0, w, h);
     ctx.save(); ctx.transform(...matrix);
+    // A dark apron frames a luminous sheet; all surface details stay in world space.
+    ctx.beginPath(); ctx.roundRect(-32, -14, 64, 64, 12);
+    ctx.fillStyle = "#45566f"; ctx.fill();
+    ctx.strokeStyle = "#72869f"; ctx.lineWidth = .22; ctx.stroke();
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(-28, -10, 56, 56, 9); ctx.clip();
+    const surface = ctx.createLinearGradient(-28, -10, 28, 46);
+    surface.addColorStop(0, "#e5f4f4"); surface.addColorStop(.45, "#c2dde4");
+    surface.addColorStop(.72, "#e2e8f5"); surface.addColorStop(1, "#a9cfda");
+    ctx.fillStyle = surface; ctx.fillRect(-28, -10, 56, 56);
+    for (const x of [-19, 0, 19]) {
+      const glow = ctx.createRadialGradient(x, 18, 0, x, 18, 20);
+      glow.addColorStop(0, "#ffffff70"); glow.addColorStop(1, "#ffffff00");
+      ctx.fillStyle = glow; ctx.fillRect(x - 20, -2, 40, 40);
+      ctx.save(); ctx.translate(x, 18); ctx.rotate(-.22);
+      ctx.fillStyle = "#ffffff28"; ctx.fillRect(-.3, -26, .6, 52);
+      ctx.fillStyle = "#ffffff14"; ctx.fillRect(-1.2, -26, 2.4, 52); ctx.restore();
+    }
+    // Fixed resurfacing arcs avoid random shimmer as the camera moves.
+    ctx.lineWidth = .018; ctx.strokeStyle = "#527f9720";
+    for (let i = 0; i < 64; i++) {
+      const x = ((i * 17.31) % 56) - 28, y = ((i * 11.73) % 56) - 10;
+      ctx.beginPath(); ctx.ellipse(x, y, 2 + i % 5, .5 + i % 3, i * .7, .2, 2.5); ctx.stroke();
+    }
     // Ice etchings, centre circle and boards establish scale and direction.
     ctx.lineWidth = 0.015; ctx.strokeStyle = "#739daa25";
     const radius = Math.max(w, h * 2) / scale;
@@ -50,6 +74,12 @@ export class SkateScene {
     ctx.strokeStyle = "#839ab34a"; ctx.lineWidth = 0.12;
     for (const y of [0, 18, 36]) { ctx.beginPath(); ctx.moveTo(-26, y); ctx.lineTo(26, y); ctx.stroke(); }
     ctx.beginPath(); ctx.arc(0, 18, 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.save(); ctx.translate(0, 18); ctx.scale(1, -1);
+    ctx.fillStyle = "#476c8a40"; ctx.textAlign = "center";
+    ctx.font = "700 1.15px system-ui"; ctx.fillText("E D G E W O R K", 0, .3);
+    ctx.font = "500 .35px system-ui"; ctx.fillText("T H E   I C E   R E M E M B E R S", 0, 1.2);
+    ctx.restore();
+    ctx.restore(); // Ice clipping; objects and blade trails keep their own bounds.
     ctx.strokeStyle = "#526c8866"; ctx.lineWidth = 0.45;
     ctx.beginPath(); ctx.roundRect(-28, -10, 56, 56, 9); ctx.stroke();
     ctx.strokeStyle = "#f9ffff"; ctx.lineWidth = 0.15; ctx.stroke();
@@ -148,7 +178,10 @@ export class SkateScene {
       for (const v of [b.hip,b.shoulder,b.head,...b.hips,...b.shoulders,...b.hands,...b.knees]) flatten(v);
     }
     const [sx,sy] = project({ ...s.pos, z: 0 });
-    ctx.fillStyle = "#213d5630"; ctx.beginPath(); ctx.ellipse(sx,sy,scale * 0.55,scale * 0.13,0,0,Math.PI*2); ctx.fill();
+    ctx.save(); ctx.translate(sx, sy); ctx.scale(1, .28);
+    const shadow = ctx.createRadialGradient(0, 0, 0, 0, 0, scale * .7);
+    shadow.addColorStop(0, "#26385155"); shadow.addColorStop(1, "#26385100");
+    ctx.fillStyle = shadow; ctx.fillRect(-scale, -scale, scale * 2, scale * 2); ctx.restore();
     ctx.lineCap = "round"; ctx.lineJoin = "round";
     const far = cam.depth(b.feet[0].x,b.feet[0].y) > cam.depth(b.feet[1].x,b.feet[1].y) ? 0 : 1;
     const leg = (i: number) => {
@@ -159,6 +192,8 @@ export class SkateScene {
     };
     leg(far); line([b.shoulders[far],b.hands[far]], "#7563a4", 0.09);
     line([b.hip,b.shoulder], "#6953a0", 0.32);
+    line([b.hip,b.shoulder], "#a798ce", 0.12);
+    line([b.shoulders[0],b.shoulders[1]], "#e4d5f3", 0.045);
     line([b.hips[0],b.hips[1]], "#403761", 0.18);
     // A short flared skating skirt: wider at speed, and flung out by a spin —
     // free, since flare only reads the pose already computed (armsOpen-style
