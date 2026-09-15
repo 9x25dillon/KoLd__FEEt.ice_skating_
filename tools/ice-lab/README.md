@@ -69,13 +69,23 @@ not yet spent by anything. Playback is presentation-only and never reaches a
 replay; `game/audio/README.md` covers where the tracks came from and why
 their tempo is an estimate pending hand correction.
 
+**The boards** (`game/rink.ts`) bound the rink scene.ts already draws: skate
+into one gently and it bounces the skater back onto the ice; hit one hard
+enough (past `CRASH_SPEED`, 3.5 m/s of perpendicular impact) and it is a fall,
+the boards named as the reason. Presentation-layer, like the music: applied to
+the state a frame renders, never inside `sim/`'s own `step()`, so a replay's
+recorded digest stays pure regardless of which wall a run touched — watching
+that replay back re-applies the same collision live, so it still looks right,
+it is simply not what a divergence check compares against.
+
 This does not implement every feature in the design bible. Stamina depletion,
 ice wear feeding back into grip, a full career/competition system and the future
 native runtime are not present in this game. Game rules live in `game/run.ts`,
-`game/rookie.ts`, `game/playground.ts` and `game/beginner.ts`, separate from the
-physics. The original lab retains its course, ghost-race, telemetry and tuning
-tools at `/app/`; build output includes the game as a separate module page, and
-the lab's single-file bundle still contains only the lab.
+`game/rookie.ts`, `game/playground.ts`, `game/beginner.ts` and `game/rink.ts`,
+separate from the physics. The original lab retains its course, ghost-race,
+telemetry and tuning tools at `/app/`; build output includes the game as a
+separate module page, and the lab's single-file bundle still contains only
+the lab.
 
 **Controls** opens a complete keyboard/controller guide and pauses skating:
 
@@ -87,6 +97,7 @@ the lab's single-file bundle still contains only the lab.
 | Weight left / right | Q / E | LB / RB |
 | Three-turn into backward skating | Carve, tap B, keep the same foot | Carve, tap B, keep the same bumper |
 | Mohawk | B, transfer Q ↔ E during turn | B, transfer LB ↔ RB |
+| Bracket (three-turn's mirror, against the curve) | Tap N instead of B | Click the right stick instead of B |
 | Forward / back crossovers | Push on a curve; turn backward first for back crossovers | Same with A and stick |
 | Spin | Hold Y; Shift for sit, W with knee released for camel | Hold Y; RT for sit, right stick forward with RT released for camel |
 | Twizzle | Hold Z | Hold X |
@@ -117,7 +128,7 @@ built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 271 tests
+node --test test/*.test.ts     # 280 tests
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 ```

@@ -139,7 +139,8 @@ export function step(
   s.pushHeld = input.push;
   // A move also starts on a fresh press, and for the same reason.
   const heldNow = (input.turn === true ? HELD.Turn : 0) | (input.twizzle === true ? HELD.Twizzle : 0)
-    | (input.spin === true ? HELD.Spin : 0) | (input.inaBauer === true ? HELD.InaBauer : 0);
+    | (input.spin === true ? HELD.Spin : 0) | (input.inaBauer === true ? HELD.InaBauer : 0)
+    | (input.bracket === true ? HELD.Bracket : 0);
   const freshMoves = heldNow & ~s.movesHeld;
   s.movesHeld = heldNow;
   if (s.fallen && freshPush) {
@@ -198,7 +199,8 @@ export function step(
     s.inaBauer.t += dt;
     if (!input.inaBauer || s.fallen || len(s.vel) < 0.5 * p.inaBauerMinSpeed) inaBauerEnd(s, events);
   }
-  if (freshMoves & HELD.Turn) turnStart(s, p);
+  if (freshMoves & HELD.Turn) turnStart(s, p, false);
+  else if (freshMoves & HELD.Bracket) turnStart(s, p, true);
   else if (freshMoves & HELD.Twizzle) twizzleStart(s, p);
   else if (freshMoves & HELD.Spin) spinStart(s, p, axis(input.carriage, 0), knee, axis(input.pitch, 0));
   else if (freshMoves & HELD.InaBauer) inaBauerStart(s, p, axis(input.lean, 0));

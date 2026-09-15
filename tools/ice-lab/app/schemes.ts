@@ -147,7 +147,7 @@ export function schemeA(c: Controls): SkatingInput {
     pitch: c.ky !== 0 ? c.ky : c.pitch,
     leanSplit: 0,
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
-    carriage: carriage(c), toe: c.toe, turn: c.turn, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
+    carriage: carriage(c), toe: c.toe, turn: c.turn, bracket: c.bracket, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
   };
 }
 
@@ -226,7 +226,7 @@ export function schemeB(
     pitch: c.ky,
     leanSplit: 0,
     knee: c.knee, weight, push: c.push, brake: c.brake,
-    carriage: carriage(c), toe: c.toe, turn: c.turn, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
+    carriage: carriage(c), toe: c.toe, turn: c.turn, bracket: c.bracket, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
   };
 }
 
@@ -263,7 +263,7 @@ export function schemeC(c: Controls): SkatingInput {
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
     // The right stick is the right blade here, so C's carriage is the
     // keyboard's alone. A pad skating C can hop but not whip a rotation.
-    carriage: clamp(c.carriage, 0, 1), toe: c.toe, turn: c.turn, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
+    carriage: clamp(c.carriage, 0, 1), toe: c.toe, turn: c.turn, bracket: c.bracket, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
   };
 }
 

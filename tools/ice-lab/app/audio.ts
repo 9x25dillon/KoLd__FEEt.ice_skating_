@@ -134,6 +134,12 @@ export class EdgeAudio {
     }
   }
 
+  /** Hit the boards hard enough to fall (game/rink.ts). The worst-quality "chk": dirty, on purpose. */
+  crash(): void {
+    if (!this.ctx) return;
+    this.chk(0);
+  }
+
   private envelope(peak: number, attack: number, decay: number, when = this.ctx!.currentTime): GainNode {
     const ctx = this.ctx!, g = ctx.createGain();
     g.gain.setValueAtTime(0, when);

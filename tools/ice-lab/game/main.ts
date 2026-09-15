@@ -3,7 +3,7 @@ import { SIM_DT } from "../sim/params.ts";
 import { Pad } from "../app/pad.ts";
 import { newSchemeState, SCHEME } from "../app/schemes.ts";
 import type { Scheme } from "../app/schemes.ts";
-import { MOVE, codeToString } from "../sim/types.ts";
+import { MOVE, TURN_KIND, FALL, codeToString } from "../sim/types.ts";
 import { JUMP_PHASE, JUMP_CODE } from "../sim/jump.ts";
 import { GAME_PARAMS, CONTROL_NAMES, gameInput } from "./controls.ts";
 import { IceRun } from "./run.ts";
@@ -12,6 +12,7 @@ import { Practice, LESSONS } from "./practice.ts";
 import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
 import { RookieCourse } from "./rookie.ts";
+import { resolveRinkCollision } from "./rink.ts";
 let courseMode = false, rookie: RookieCourse | null = null;
 import { EdgeAudio } from "../app/audio.ts";
 import type { EdgeEvent } from "../sim/types.ts";
@@ -234,11 +235,14 @@ function draw(_now: number) {
   const backward = skater.vel.x * skater.heading.x + skater.vel.y * skater.heading.y < -0.1;
   const move = skater.jump.phase === JUMP_PHASE.Air ? `AIR · ${(skater.jump.rotation / (2 * Math.PI)).toFixed(1)} rev · ${skater.jump.z.toFixed(2)} m`
     : skater.move === MOVE.Spin ? `${["UPRIGHT", "SIT", "CAMEL"][skater.spin.position]} SPIN · ${(skater.spin.swept / (2 * Math.PI)).toFixed(1)} rev`
-    : skater.move === MOVE.Turn ? "TURN · shift weight for a mohawk"
+    : skater.move === MOVE.Turn ? (skater.turn.against ? "BRACKET"
+        : skater.turn.kind === TURN_KIND.Mohawk ? "MOHAWK" : "THREE-TURN · shift weight for a mohawk")
     : skater.move === MOVE.Twizzle ? "TWIZZLE" : skater.move === MOVE.InaBauer ? "INA BAUER"
     : cantilever ? "CANTILEVER POSE" : skater.crossover && skater.strokeTime > 0 ? `${backward ? "BACK " : ""}CROSSOVER`
     : skater.jump.phase === JUMP_PHASE.Load ? "LOADING · release Shift / RT to jump" : backward ? "BACKWARD GLIDE" : "FORWARD GLIDE";
-  el("move").textContent = skater.fallen ? "FALL · tap Space / A to get up" : move;
+  el("move").textContent = skater.fallen
+    ? skater.fallReason === FALL.Collision ? "HIT THE BOARDS · tap Space / A to get up" : "FALL · tap Space / A to get up"
+    : move;
   el("stance").textContent = `${CONTROL_NAMES[scheme]} · ${codeToString(skater.blade[0].code)} / ${codeToString(skater.blade[1].code)} · ${Math.hypot(skater.vel.x, skater.vel.y).toFixed(1)} m/s`;
   el("landing").textContent = skater.landed.tick < 0 ? "" : `Last jump: ${JUMP_CODE[skater.landed.kind] ?? "hop"} · ${skater.landed.turned.toFixed(2)} rev · ${skater.landed.fall ? "fall" : skater.landed.stepOut ? "step-out" : "landed"}`;
   el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
@@ -263,6 +267,7 @@ function frame(now: number) {
     while (accumulator >= SIM_DT && mode === "playing") {
       if(playback) {
         playback.advance(); skater = playback.state; params = playback.params;
+        resolveRinkCollision(skater, playback.events);
         elapsedSkate += SIM_DT; scene.update(skater, SIM_DT);
         traceBlades();
         if(tables && skater.landed.tick >= 0 && scoredTick !== skater.landed.tick) {
@@ -293,6 +298,9 @@ function frame(now: number) {
       rookie?.sample(skater,SIM_DT);
       scene.update(skater, SIM_DT);
       recorder.capture(input, params, skater, events, (["A","B","C"] as const)[scheme]);
+      const wasUp = !skater.fallen;
+      resolveRinkCollision(skater, events);
+      if (sound && wasUp && skater.fallReason === FALL.Collision) audio.crash();
       if(tables && skater.landed.tick >= 0 && scoredTick !== skater.landed.tick) {
         scoredTick = skater.landed.tick; technical += scoreJump(tables, skater.landed)?.score ?? 0;
       }

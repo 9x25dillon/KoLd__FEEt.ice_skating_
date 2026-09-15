@@ -1,7 +1,9 @@
 import { bodyPoints } from "../app/draw.ts";
 import type { V3 } from "../app/draw.ts";
 import type { SkaterState } from "../sim/types.ts";
+import { MOVE } from "../sim/types.ts";
 import type { Params } from "../sim/params.ts";
+import { perpLeft } from "../sim/math.ts";
 import { LIGHTS, LIGHT_RADIUS } from "./run.ts";
 import { SNOWFLAKES, TARGETS } from "./playground.ts";
 import type { Playground } from "./playground.ts";
@@ -158,8 +160,38 @@ export class SkateScene {
     leg(far); line([b.shoulders[far],b.hands[far]], "#7563a4", 0.09);
     line([b.hip,b.shoulder], "#6953a0", 0.32);
     line([b.hips[0],b.hips[1]], "#403761", 0.18);
+    // A short flared skating skirt: wider at speed, and flung out by a spin —
+    // free, since flare only reads the pose already computed (armsOpen-style
+    // reasoning, not a new physical quantity). Drawn as a hem radially
+    // symmetric about the hip, in screen space, so a spin's continuously
+    // rotating heading cannot turn it edge-on and make it vanish.
+    if (!s.fallen) {
+      const speed = Math.hypot(s.vel.x, s.vel.y);
+      const flare = 0.20 + Math.min(0.12, speed * 0.012) + (s.move === MOVE.Spin ? 0.24 : 0);
+      const [hipX,hipY] = project(b.hip);
+      const [,hemY] = project({ x: b.hip.x, y: b.hip.y, z: b.hip.z - 0.34 });
+      const rx = flare * scale, ry = (hemY - hipY) * 0.32 + flare * scale * 0.28;
+      ctx.fillStyle = "#c26e93"; ctx.beginPath();
+      ctx.ellipse(hipX, hipY + (hemY - hipY) * 0.55, rx, Math.max(2, ry), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#8f4d6c"; ctx.lineWidth = Math.max(1, 0.05 * scale);
+      ctx.beginPath(); ctx.ellipse(hipX, hipY, 0.14 * scale, Math.max(1.5, 0.05 * scale), 0, 0, Math.PI * 2); ctx.stroke();
+    }
     leg(1-far); line([b.shoulders[1-far],b.hands[1-far]], "#9583c7", 0.09);
     for (const hand of b.hands) { const [x,y] = project(hand); ctx.fillStyle="#ecc1a7";ctx.beginPath();ctx.arc(x,y,scale*.044,0,Math.PI*2);ctx.fill(); }
+    // A ponytail: trails behind the direction of travel, and sways with lean
+    // rather than heading, so it reads as the body's own motion rather than
+    // just retracing the skate line.
+    if (!s.fallen) {
+      const side = perpLeft(s.heading);
+      const sway = Math.sin(s.tick / 40) * 0.05 + s.lean * 0.14;
+      const base = { x: b.head.x - s.heading.x * 0.06, y: b.head.y - s.heading.y * 0.06, z: b.head.z + 0.06 };
+      const mid = { x: b.head.x - s.heading.x * 0.22 + side.x * sway, y: b.head.y - s.heading.y * 0.22 + side.y * sway, z: b.head.z - 0.05 };
+      const tip = { x: b.head.x - s.heading.x * 0.38 + side.x * sway * 1.6, y: b.head.y - s.heading.y * 0.38 + side.y * sway * 1.6, z: b.head.z - 0.22 };
+      const [bx,by] = project(base), [mx,my] = project(mid), [tx2,ty2] = project(tip);
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(mx, my, tx2, ty2);
+      ctx.strokeStyle = "#342e46"; ctx.lineWidth = Math.max(1, 0.09 * scale); ctx.lineCap = "round"; ctx.stroke();
+    }
     const [hx,hy] = project(b.head);
     ctx.fillStyle="#342e46";ctx.beginPath();ctx.arc(hx,hy-2,scale*.13,0,Math.PI*2);ctx.fill();
     ctx.fillStyle="#f0c7ab";ctx.beginPath();ctx.arc(hx+s.heading.x*scale*.025,hy+scale*.025,scale*.10,0,Math.PI*2);ctx.fill();

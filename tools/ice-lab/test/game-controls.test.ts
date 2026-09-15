@@ -11,7 +11,7 @@ import type { Controls } from "../app/pad.ts";
 const neutral: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0, kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
   knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
-  turn: false, twizzle: false, spin: false, inaBauer: false, reset: false, pause: false,
+  turn: false, bracket: false, twizzle: false, spin: false, inaBauer: false, reset: false, pause: false,
   cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0,
   dpadStep: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1,
   cycleProfile: false, cycleMoves: false,

@@ -95,6 +95,12 @@ export interface Controls {
    * bible puts it). The solver starts a turn on the press.
    */
   turn: boolean;
+  /**
+   * The bracket button, held: keyboard N; with the moves on, pad R3 — the
+   * stick clicks were the pad's last free buttons, and the lab's own
+   * cycleGhost does not exist in the game that reads this one.
+   */
+  bracket: boolean;
   /** The twizzle button, held (keyboard Z; with the moves on, pad X, where the bible puts it). */
   twizzle: boolean;
   /** The spin button, held (keyboard Y; with the moves on, pad Y, where the bible puts it). */
@@ -137,7 +143,7 @@ export interface Controls {
 const NOTHING: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
-  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
+  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false, turn: false, bracket: false, twizzle: false, spin: false, inaBauer: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
   cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
   cycleMoves: false,
@@ -247,6 +253,7 @@ export class Pad {
       if (moves) {
         out.toe = ltDown && !this.ltWasDown;
         out.turn = gp.buttons[B]?.pressed ?? false;
+        out.bracket = gp.buttons[R3]?.pressed ?? false;
       } else {
         out.toe = (gp.buttons[B]?.pressed ?? false) && !this.prevButtons.has(B);
       }
@@ -255,9 +262,11 @@ export class Pad {
       out.cycleView = (gp.buttons[DPAD_DOWN]?.pressed ?? false) && !this.prevButtons.has(DPAD_DOWN);
       if ((gp.buttons[DPAD_RIGHT]?.pressed ?? false) && !this.prevButtons.has(DPAD_RIGHT)) out.dpadStep += 1;
       if ((gp.buttons[DPAD_LEFT]?.pressed ?? false) && !this.prevButtons.has(DPAD_LEFT)) out.dpadStep -= 1;
-      // The stick clicks were the pad's last free buttons: the game layer's two choices.
+      // The stick clicks were the pad's last free buttons: the lab's two
+      // choices. With the moves on, the game reclaims R3 for bracket —
+      // it has no course or ghost to read cycleGhost, so both readings coexist.
       out.toggleGame = (gp.buttons[L3]?.pressed ?? false) && !this.prevButtons.has(L3);
-      out.cycleGhost = (gp.buttons[R3]?.pressed ?? false) && !this.prevButtons.has(R3);
+      if (!moves) out.cycleGhost = (gp.buttons[R3]?.pressed ?? false) && !this.prevButtons.has(R3);
       this.prevButtons = new Set(gp.buttons.flatMap((b, i) => (b.pressed ? [i] : [])));
     }
 
@@ -284,6 +293,7 @@ export class Pad {
     if (this.held("c")) out.carriage = 1;
     if (this.pressed("f")) out.toe = true;
     if (this.held("b")) out.turn = true;
+    if (this.held("n")) out.bracket = true;
     if (this.held("z")) out.twizzle = true;
     if (this.held("y")) out.spin = true;
     if (this.held("i")) out.inaBauer = true;

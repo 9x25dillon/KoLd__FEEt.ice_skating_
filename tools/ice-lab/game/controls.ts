@@ -24,7 +24,7 @@ export function gameInput(c: Controls, s: SkaterState, scheme: Scheme, st: Schem
   // A simplified cantilever pose over a two-foot glide, not a new balance solver.
   // Below the load threshold so releasing the pose cannot accidentally launch a jump.
   const cantilever = lowPose && !s.fallen && s.move === MOVE.None && s.jump.phase === JUMP_PHASE.None
-    && Math.hypot(s.vel.x, s.vel.y) >= 1 && !c.turn && !c.spin && !c.twizzle && !c.inaBauer;
+    && Math.hypot(s.vel.x, s.vel.y) >= 1 && !c.turn && !c.bracket && !c.spin && !c.twizzle && !c.inaBauer;
   if (cantilever) {
     input.knee = 0.65; input.weight = 0.5; input.pitch = -0.25;
     input.push = false; input.toe = false; input.carriage = 1;

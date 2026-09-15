@@ -270,6 +270,14 @@ export interface Params {
    * placed foot scrapes less than the pivoting one.
    */
   mohawkScrub: number;
+  /**
+   * A bracket's whole pivot, against a three-turn's, at the same entry speed
+   * and rate. No motion-capture entry exists for it (data/motion-primitives.json
+   * has only three-turn and mohawk) — authored from the bible's own difficulty
+   * ordering (★★★ against ★), not measured. Above 1: fighting the curve
+   * costs more, never less.
+   */
+  againstTurnScrub: number;
   /** m/s below which there is no edge to turn on. */
   turnMinSpeed: number;
   /**
@@ -463,6 +471,7 @@ export const DEFAULT_PARAMS: Params = {
   turnTime: 0.30,
   muTurn: 0.20,              // three-turn -0.45 m/s at 6 m/s with glide and drag, data/motion-primitives.json
   mohawkScrub: 0.78,         // mohawk -0.40 m/s, the same file
+  againstTurnScrub: 1.35,    // authored, not measured; see the field comment
   turnMinSpeed: 1.0,
   turnCarry: 0.11,           // a three-turn entry worth about a third of a revolution at a full whip
   turnCarryTime: 0.5,
@@ -558,6 +567,7 @@ export function validate(p: Params): string[] {
   if (![0, 1].includes(p.movesMode)) errs.push("movesMode is 0 (the carve only) or 1 (the moves)");
   if (p.turnTime < 4 * SIM_DT) errs.push("turnTime is under four ticks: a pivot needs a cusp to flip at");
   if (p.turnCarry > 1) errs.push("turnCarry is a share of the pivot rate, 0..1");
+  if (p.againstTurnScrub < 1) errs.push("againstTurnScrub is against a three-turn's cost, and fighting the curve cannot be cheaper");
   if (p.turnCarryTime <= 0) errs.push("turnCarryTime must be positive");
   if (p.twizzleRate * SIM_DT >= Math.PI / 2)
     errs.push("twizzleRate turns a quarter revolution in a tick, so a cusp could be skipped");
