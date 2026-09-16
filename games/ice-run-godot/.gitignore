@@ -1,0 +1,7 @@
+.godot/
+runtime/
+assets/generated/*
+!assets/generated/skater.glb
+!assets/generated/skater.glb.import
+exports/
+*.tmp

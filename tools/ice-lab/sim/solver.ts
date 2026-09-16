@@ -57,6 +57,7 @@ import type {
 import type { Params } from "./params.ts";
 import { SIM_DT } from "./params.ts";
 import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean, rinkSlopeAccel } from "./blade.ts";
+import { onBeat, accentCredit } from "./music.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
 import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
 import {
@@ -101,9 +102,10 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     latAccel: 0, intAccel: 0, intHeld: 0, tiltCmd: lean, legLength: p.comHeight, legRate: 0,
     comZ: p.comHeight, supportFoot: FOOT.Right, supportMode: 2,
     knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, crossover: false, crossSide: 0, pushHeld: false,
+    strokeMusicScale: 1,
     jump: newJump(p), landed: noResult(),
     move: MOVE.None, turn: newTurn(), spin: newSpin(), inaBauer: newInaBauer(), moveDone: noMove(),
-    movesHeld: 0, flips: 0, spinCarry: 0,
+    movesHeld: 0, flips: 0, spinCarry: 0, musicCredit: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -114,6 +116,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
 export function step(
   s: SkaterState, input: SkatingInput, p: Params, dt: number, events: EdgeEvent[],
 ): void {
+  const eventsAtStart = events.length;
   const g = p.gravity;
   s.tick++;
 
@@ -136,14 +139,15 @@ export function step(
   s.pushHeld = input.push;
   // A move also starts on a fresh press, and for the same reason.
   const heldNow = (input.turn === true ? HELD.Turn : 0) | (input.twizzle === true ? HELD.Twizzle : 0)
-    | (input.spin === true ? HELD.Spin : 0) | (input.inaBauer === true ? HELD.InaBauer : 0);
+    | (input.spin === true ? HELD.Spin : 0) | (input.inaBauer === true ? HELD.InaBauer : 0)
+    | (input.bracket === true ? HELD.Bracket : 0);
   const freshMoves = heldNow & ~s.movesHeld;
   s.movesHeld = heldNow;
   if (s.fallen && freshPush) {
     // The last landing is kept: it is the record of why they are down. So is
     // the frame count, since the heading is kept and a scheme reads it.
-    const { pos, heading, tick, landed, moveDone, flips, movesHeld } = s;
-    Object.assign(s, createState(p), { pos, heading, tick, landed, moveDone, flips, movesHeld, pushHeld: true });
+    const { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit } = s;
+    Object.assign(s, createState(p), { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit, pushHeld: true });
     for (const b of s.blade) {
       b.tangent = v2(heading.x, heading.y);
       b.contact = v2(pos.x, pos.y);
@@ -195,7 +199,8 @@ export function step(
     s.inaBauer.t += dt;
     if (!input.inaBauer || s.fallen || len(s.vel) < 0.5 * p.inaBauerMinSpeed) inaBauerEnd(s, events);
   }
-  if (freshMoves & HELD.Turn) turnStart(s, p);
+  if (freshMoves & HELD.Turn) turnStart(s, p, false);
+  else if (freshMoves & HELD.Bracket) turnStart(s, p, true);
   else if (freshMoves & HELD.Twizzle) twizzleStart(s, p);
   else if (freshMoves & HELD.Spin) spinStart(s, p, axis(input.carriage, 0), knee, axis(input.pitch, 0));
   else if (freshMoves & HELD.InaBauer) inaBauerStart(s, p, axis(input.lean, 0));
@@ -245,6 +250,20 @@ export function step(
     // half a stroke into a crossover.
     s.crossover = p.movesMode >= 1 && Math.abs(s.lean) >= p.crossoverLean;
     s.crossSide = s.crossover ? sign(s.lean) : 0;
+    // The rhythm layer's beat window (sim/music.ts, bible §2.6): a crossover
+    // push either lands on tempo or it does not, decided once at the push's
+    // start, same as crossover itself.
+    if (p.musicMode >= 1 && s.crossover) {
+      const hit = onBeat(p, s.tick);
+      s.strokeMusicScale = hit ? 1 : p.musicMissedPushScale;
+      events.push({
+        tick: s.tick, type: hit ? EVENT.MusicHit : EVENT.MusicMiss, foot: s.strokeFoot,
+        prevCode: s.blade[s.strokeFoot].code, newCode: s.blade[s.strokeFoot].code,
+        prevDwell: 0, value: hit ? 1 : p.musicMissedPushScale,
+      });
+    } else {
+      s.strokeMusicScale = 1;
+    }
   }
   const stroking = s.strokeTime > 0;
 
@@ -560,7 +579,8 @@ export function step(
       // push drives backward: a C-cut rather than a stroke, and with the moves
       // on a slightly weaker one (backPushScale).
       const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? -1 : 1;
-      const wanted = p.strokePower * knee * p.mass * (back < 0 && p.movesMode >= 1 ? p.backPushScale : 1);
+      const wanted = p.strokePower * knee * p.mass * s.strokeMusicScale
+        * (back < 0 && p.movesMode >= 1 ? p.backPushScale : 1);
       const force = Math.min(wanted, push.biteCapacity);
       if (s.crossover && crossLat > 0) {
         // Forward only: the inward half was centripetal, shared with the
@@ -735,6 +755,25 @@ export function step(
   // ── 10. is the knee loading a jump, or releasing one? ─────────────────────
   if (!turning) carryDecay(s, p, dt);
   jumpGround(s, input, p, dt, events);
+
+  // ── 11. musical credit: a turn's cusp or a jump's landing, on the beat ─────
+  // sim/music.ts, bible §2.1, §2.6. Scoped to events THIS tick pushed — the
+  // array is the caller's and accumulates across a whole session.
+  if (p.musicMode >= 1) {
+    const eventsEnd = events.length;
+    for (let i = eventsAtStart; i < eventsEnd; i++) {
+      const e = events[i];
+      if (e.type !== EVENT.Turn && e.type !== EVENT.Landing) continue;
+      const credit = accentCredit(p, s.tick);
+      if (credit > 0) {
+        s.musicCredit += credit;
+        events.push({
+          tick: s.tick, type: EVENT.MusicAccent, foot: e.foot,
+          prevCode: e.newCode, newCode: e.newCode, prevDwell: 0, value: credit,
+        });
+      }
+    }
+  }
 }
 
 /** Run n ticks at the fixed rate. Convenience for tests and the replay path. */

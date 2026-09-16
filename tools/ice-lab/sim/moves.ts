@@ -101,7 +101,7 @@ export function newTurn(): TurnState {
   return {
     t: 0, swept: 0, dir: 0, rate: 0, pathRate: 0, entryDir: 1,
     foot: FOOT.Right, exitFoot: FOOT.Right, cusps: 0, release: false, kind: TURN_KIND.ThreeTurn,
-    fromCode: EDGE_CODE_NONE, entrySpeed: 0,
+    against: false, fromCode: EDGE_CODE_NONE, entrySpeed: 0,
   };
 }
 
@@ -221,7 +221,7 @@ export function turnFrame(s: SkaterState): { x: number; y: number } {
 }
 
 /** What every pivot shares at its start. Returns false when there is nothing to pivot on. */
-function beginPivot(s: SkaterState, p: Params, minSpeed: number, needEdge: boolean): boolean {
+function beginPivot(s: SkaterState, p: Params, minSpeed: number, needEdge: boolean, against = false): boolean {
   if (p.movesMode < 1 || s.fallen || s.move !== MOVE.None || s.jump.phase === JUMP_PHASE.Air) return false;
   const b = s.blade[s.supportFoot];
   const speed = len(s.vel);
@@ -230,11 +230,14 @@ function beginPivot(s: SkaterState, p: Params, minSpeed: number, needEdge: boole
   const T = s.turn;
   // Into the curve: the way the path is already turning. A twizzle off a flat
   // blade has no curve to follow and turns anticlockwise, the rig's rotation.
+  // `against` reverses it — a bracket or a choctaw fights the curve instead
+  // (bible §2.3): the button that asked for one, not a twizzle's own choice.
   const pathSense = sign(b.tilt) * sign(b.longSpeed);
   if (pathSense === 0 && needEdge) return false;
   T.t = 0;
   T.swept = 0;
-  T.dir = pathSense !== 0 ? pathSense : 1;
+  T.dir = pathSense !== 0 ? (against ? -pathSense : pathSense) : 1;
+  T.against = against;
   // The front of the rocker is tighter and turns faster: that is what "on the
   // rocker" buys, and it is why a skater rocks forward into a turn.
   T.rate = (Math.PI / p.turnTime) * (p.rocker / effectiveRocker(b.contactS, p));
@@ -244,7 +247,7 @@ function beginPivot(s: SkaterState, p: Params, minSpeed: number, needEdge: boole
   T.exitFoot = s.supportFoot;
   T.cusps = 0;
   T.release = false;
-  T.kind = TURN_KIND.ThreeTurn;
+  T.kind = against ? TURN_KIND.Bracket : TURN_KIND.ThreeTurn;
   T.fromCode = b.code;
   T.entrySpeed = speed;
   s.strokeTime = 0;
@@ -254,10 +257,12 @@ function beginPivot(s: SkaterState, p: Params, minSpeed: number, needEdge: boole
 
 /**
  * Start a turn, if the edge the skater is on permits one: moves on, on the
- * ice, one blade on an edge, moving. Returns whether it started.
+ * ice, one blade on an edge, moving. `against` asks for a bracket (or, with a
+ * foot change at the cusp, a choctaw) instead of a three-turn or mohawk.
+ * Returns whether it started.
  */
-export function turnStart(s: SkaterState, p: Params): boolean {
-  if (!beginPivot(s, p, p.turnMinSpeed, true)) return false;
+export function turnStart(s: SkaterState, p: Params, against = false): boolean {
+  if (!beginPivot(s, p, p.turnMinSpeed, true, against)) return false;
   s.move = MOVE.Turn;
   return true;
 }
@@ -327,18 +332,30 @@ export function turnPivot(s: SkaterState, p: Params, dt: number, weightR: number
   T.t += dt;
   const stepAngle = Math.min(T.rate * dt, Math.PI - T.swept);
   T.swept += stepAngle;
-  let speed = pivotStep(s, p, dt, stepAngle, T.cusps > 0 && T.kind === TURN_KIND.Mohawk ? p.mohawkScrub : 1);
+  const footChanged = T.kind === TURN_KIND.Mohawk;
+  // Fighting the curve scrapes harder throughout (bible §2.3: bracket and
+  // counter outrank a three-turn and a mohawk); a foot change's second half,
+  // on the newly placed foot, still scrapes less than the pivoting one did —
+  // measured for the mohawk (data/motion-primitives.json) and taken as the
+  // same fraction for a choctaw, since nothing distinguishes the landing.
+  const scrub = (T.against ? p.againstTurnScrub : 1) * (T.cusps > 0 && footChanged ? p.mohawkScrub : 1);
+  let speed = pivotStep(s, p, dt, stepAngle, scrub);
 
-  // The cusp: blade square to the path. The frame reverses, and the weight
-  // decides which turn this was: still on the pivot foot, a three-turn; on the
-  // other, a mohawk, and the other foot takes the exit.
+  // The cusp: blade square to the path. The frame reverses, and — entered
+  // into the curve — the weight decides which turn this was: still on the
+  // pivot foot, a three-turn; on the other, a mohawk, and the other foot
+  // takes the exit. A bracket has no such foot-changing sibling here: a real
+  // choctaw changes edge character on the new foot, which is the mohawk's
+  // OTHER axis, not this one, and this rig does not model it (sim/types.ts's
+  // `bracket` field explains why). So weight cannot move a bracket to the
+  // other foot; it stays a bracket regardless.
   let cusp = false;
   if (T.cusps === 0 && T.swept >= Math.PI / 2) {
     cusp = true;
     T.cusps = 1;
     flipFrame(s);
     const other = (1 - T.foot) as Foot;
-    const toOther = other === FOOT.Right ? weightR > 0.75 : weightR < 0.25;
+    const toOther = !T.against && (other === FOOT.Right ? weightR > 0.75 : weightR < 0.25);
     if (toOther) {
       T.kind = TURN_KIND.Mohawk;
       T.exitFoot = other;

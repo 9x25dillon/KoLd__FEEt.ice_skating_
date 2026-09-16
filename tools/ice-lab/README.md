@@ -1,5 +1,164 @@
 # Ice Lab — a browser tuning rig for edgework
 
+## Play Ice Run
+
+The game's sports-anime presentation pairs an original illustrated opening screen
+with procedural cel-shaded skaters: ink outlines, angular hair, directional faces,
+geometric costume panels, two-tone fabric shadows, and restrained action strokes
+at high speed. Both Violet and Aurora retain their selectable outfits. The key
+visual is bundled locally in `game/art/`; the live athlete is canvas-rendered and
+still follows the solver's pose, rather than using the illustration as a sprite.
+
+`game/` is a standalone browser game on the same 120 Hz solver as the lab, with
+a close, angled momentum camera: it follows **velocity**, not body heading, so
+turning backward, twizzling and rotating in the air do not spin the view around
+the athlete. Camera-relative controller aiming is transformed back into world
+space before scheme B maps it to a physical lean. **V** switches between the
+momentum view and the rink overview; the mouse wheel or **+/−** changes zoom.
+
+```sh
+cd tools/ice-lab
+node app/build.mjs
+node app/serve.mjs
+```
+
+Open **http://localhost:8123/game/**. Use **A/D or left/right arrows** to steer,
+tap/hold **Space** to push (fresh tap to get up), **X** to brake, **P** to pause, and **R** to
+restart. On a controller, the left stick aims in a direction across the ice,
+**A** pushes, **LT** held brakes, **Start** pauses, and **Back** restarts. **Y is spin.** Keyboard or
+controller required; touch controls are not implemented. **U** holds the low pose;
+**comma (,)** winds up a jump. The lab retains **U** for wind-up. A low pose
+suppresses wind-up, including right-stick wind-up, so it cannot arm a later jump.
+
+The opening card offers four modes. **Free Skate** is open practice: seven
+objectives worth 250 points each, once per run (`game/practice.ts`), plus a FLOW
+meter that rewards staying upright at speed and unlocks a scattered field of
+snowflakes and pucks to knock into gold targets (`game/playground.ts`). The
+**Rookie course** is a guided, curved 8-gate lane with two jump bars; clipping a
+cone costs 25 points, and the HUD tracks gates cleared against a clean run
+(`game/rookie.ts`). The **90-second light run** chases gold lights in order;
+pickups within 8 seconds build a chain up to ×5 — silver is 1,500 points, gold
+3,000 (`game/run.ts`) — and your personal best stays in this browser when
+storage is available. Jumps and moves are enabled in every mode.
+
+**Career mode** opens a five-event season, from First ice through the Championship
+program. Each event has a timed, ordered choreography of glides, edges, crossovers,
+clean jumps, spins and closing poses. The coach shows the current instruction,
+hold progress, and the routine checklist. Moves count from actual solver results;
+a jump performed before its cue cannot count later. Falls reset the current hold,
+but keep completed elements. Finish before the deadline to unlock the next event:
+bronze for completion, silver with at most two falls, gold with no falls.
+
+Each improved medal tier awards 150 XP once. The Career board lets you spend XP
+on push power, jump spring, edge control or balance, using the existing profile
+training costs. That career profile applies on the next career start; practice
+uses its selected sample profile. Completed medals and training save locally in
+this browser. If storage is unavailable, progress lasts for the session. Replays
+capture the baked skating physics, but playback does not award career progress.
+The routines are authored move sequences, not a choreography editor or beat-window
+judging system. Music and musical credit still work alongside the routine.
+
+**Difficulty**, in the Controls window, is Beginner or Simulation and starts a
+new run. Beginner softens keyboard lean and hands the on-screen **trick** button
+(or J / D-pad up) a full spin jump: it loads the knee, then bisects the arm
+carriage against a landing rotation predicted with the same fixed-step inertia
+and ballistic equations as the solver (`game/beginner.ts`), so the assist only
+ever chooses an input sequence — it never writes skater state. Simulation turns
+that off; jumps are the manual load-and-release, same as the lab.
+
+Free Skate starts with **Cruise** enabled. It supplies ordinary solver pushes
+below 5.5 m/s while gliding, and stops supplying them during braking, falls,
+jump loading and moves. Turn it off for manual strokes. Holding **Space / pad A**
+also repeats pushes.
+
+The **Controls** window exposes all three mappings with assisted tuning, the four
+sample skater profiles and the difficulty toggle (changing either starts a new
+run), and replay export and playback. Recording captures actual solver inputs,
+parameters, events and state digests for the first five minutes. Imports enforce
+the engine's schema and size limits, lock out live skating input, and stop on
+completion or first divergence. Replay preserves physics; the simplified
+cantilever pose overlay is not recorded.
+
+Landed jumps receive the engine's data-backed technical score, shown separately
+from practice, playground or light-run points. **Sound** enables the existing
+blade, skid and jump audio. Separate ice tracings follow the two blade contacts
+and break while airborne. The athlete uses the engine's body pose, including
+knee compression, height, lean, arm carriage and spin positions.
+
+**Style** opens a wardrobe with the original **Violet** outfit and the optional
+**Aurora** teal-and-gold outfit with a ballet bun. It is also available from the
+opening card. Selection applies immediately without resetting a run, and is
+remembered in this browser when storage is available. The wardrobe pauses skating.
+
+The game adds contact-driven ice spray for braking, skidding and deeper carves,
+plus a burst and brief result card for each landing (including step-outs, two-foot
+landings and falls). Bent elbows, push-driven arm swings, a rippling skirt hem and
+speed-responsive ponytail motion build on the solver's body pose. These effects
+are cosmetic: they never change physics, scores or replay data. They freeze while
+paused and clear when starting a run or importing a replay. Reduced-motion system
+preferences reduce particle density and disable decorative ripples and landing rings.
+
+Collected snowflakes dissolve into sparkles with floating points. Puck goals and
+timed-run lights briefly illuminate their targets; jump and spin practice rewards
+also show the points actually awarded. Celebrations pause with the game, expire
+quickly, and respect reduced motion. They do not change scoring or pickup cooldowns.
+
+**Music**, in the Controls window, picks one of five tracks (`game/audio/`);
+**Sound** starts and stops its playback alongside the procedural audio. Each
+track's estimated tempo drives the rhythm layer (`sim/music.ts`, `musicMode`):
+a crossover push lands in a beat window — full strength on tempo, weaker with
+an audible chop off it, never a failed push — and a three-turn or a jump
+landing near a downbeat earns musical credit, shown as "Musical credit" and
+not yet spent by anything. Playback is presentation-only and never reaches a
+replay; `game/audio/README.md` covers where the tracks came from and why
+their tempo is an estimate pending hand correction.
+
+**The boards** (`game/rink.ts`) bound the rink scene.ts already draws: skate
+into one gently and it bounces the skater back onto the ice; hit one hard
+enough (past `CRASH_SPEED`, 3.5 m/s of perpendicular impact) and it is a fall,
+the boards named as the reason. Presentation-layer, like the music: applied to
+the state a frame renders, never inside `sim/`'s own `step()`, so a replay's
+recorded digest stays pure regardless of which wall a run touched — watching
+that replay back re-applies the same collision live, so it still looks right,
+it is simply not what a divergence check compares against.
+
+This does not implement every feature in the design bible. Stamina depletion,
+ice wear feeding back into grip, a full career/competition system and the future
+native runtime are not present in this game. Game rules live in `game/run.ts`,
+`game/rookie.ts`, `game/playground.ts`, `game/beginner.ts` and `game/rink.ts`,
+separate from the physics. The original lab retains its course, ghost-race,
+telemetry and tuning tools at `/app/`; build output includes the game as a
+separate module page, and the lab's single-file bundle still contains only
+the lab.
+
+**Controls** opens a complete keyboard/controller guide and pauses skating:
+
+| Move | Keyboard | Controller |
+| --- | --- | --- |
+| Jump | Hold Shift ~0.3 s, release; bend again in the air for landing | Squeeze/release RT |
+| Toe pick | Tap F near the end of the jump load | Tap LT |
+| Arms open / tuck | Hold/release C | Right stick out / centred |
+| Weight left / right | Q / E | LB / RB |
+| Three-turn into backward skating | Carve, tap B, keep the same foot | Carve, tap B, keep the same bumper |
+| Mohawk | B, transfer Q ↔ E during turn | B, transfer LB ↔ RB |
+| Bracket (three-turn's mirror, against the curve) | Tap N instead of B | Click the right stick instead of B |
+| Forward / back crossovers | Push on a curve; turn backward first for back crossovers | Same with A and stick |
+| Spin | Hold Y; Shift for sit, W with knee released for camel | Hold Y; RT for sit, right stick forward with RT released for camel |
+| Twizzle | Hold Z | Hold X |
+| Ina Bauer | Hold I while gliding forward | Hold LB + RB |
+| Cantilever pose | Hold U while gliding | Hold D-pad down |
+| Change control scheme | M | Keyboard M |
+
+The cantilever is a simplified animated low-back pose over the existing two-foot
+glide, with knee compression below the jump-load threshold. It does not implement
+dedicated cantilever balance physics. Releasing it does not charge a jump.
+The skater rendering shows separate feet, pose changes, airborne height and spin;
+the HUD reports current moves, forward/backward glide, edges and the last landing.
+
+Assisted steering is the default. Game-only backward steering aims relative to
+the travel frame rather than demanding a reversal, and keyboard direct lean is
+scaled to a manageable shallow edge rather than the lab's full deflection.
+
 A 120 Hz, deterministic, inertial implementation of the KoLd__FEEt blade–ice
 model, with every constant on a slider and the whole thing running in a
 browser. It exists so the questions in
@@ -8,12 +167,13 @@ in the engineering package get answered in seconds rather than in UE5 compiles.
 
 **It is not the game and it is not an engine.** [D2 is
 closed](../../docs/open-decisions.md#d2--engine) — Unreal Engine 5.4+, resolved
-2026-09-03 — and nothing here reopens it. This is the Ice Lab from EDGE-019,
+2026-09-03 — remains the historical studio plan. The operator selected Godot 4
+for the playable rebuild on 2026-09-15; see [the Godot project](../../games/ice-run-godot/README.md). This is the Ice Lab from EDGE-019,
 built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 272 tests
+node --test test/*.test.ts     # full simulation and gameplay suite
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
 node demo.mjs                  # scripted runs to watch -> build/demos/ (import replay)
@@ -890,7 +1050,11 @@ require the exact schema, solver version, 120 Hz rate, complete finite tuning,
 bounded input axes, boolean buttons, at most 36,000 ticks and at most 64 MiB.
 Warnings about balance tuning are preserved so a bad tuning can be reproduced.
 
-`ice-lab-f64/8` (the current contract; the history is in `sim/replay.ts`) is a JavaScript regression contract. CRC32 covers every state
+The two historical `/8` branches had different schemas. The merged `/9` reader
+rejects both; use `23e3e49` for game-branch clips or `a1b4278` for fidelity-branch
+clips. Do not relabel saved clips. The pinned native `/5` oracle is unchanged.
+
+`ice-lab-f64/9` (the current contract; the history is in `sim/replay.ts`) is a JavaScript regression contract. CRC32 covers every state
 field and event using canonical JSON, with straight-blade Infinity encoded
 explicitly; it is a diagnostic, not an authenticity signature. **A clip
 verifies in any JavaScript engine**, not only the one that recorded it: every
@@ -990,7 +1154,7 @@ It is the edge cutting a groove and pushing sideways against the wall of it.
 ## What is deliberately not here
 
 Spin scoring and levels, spin variations beyond the three basic positions, flying
-entries, turns beyond the three-turn, mohawk and twizzle (brackets, rockers,
+entries, turns beyond the three-turn, mohawk, bracket and twizzle (rockers,
 counters, choctaws), falls beyond their trigger, animation, networking, stamina,
 flow, combinations and sequences, and the ice grid (tracings are
 drawn, but they do not yet feed friction or bite back into the solver as the

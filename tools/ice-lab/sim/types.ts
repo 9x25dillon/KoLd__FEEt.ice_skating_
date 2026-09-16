@@ -33,10 +33,12 @@ export const REGIME_NAME = [
 
 export const FALL = {
   None: 0, LeanExceeded: 1, BalanceTimeout: 2, ToePickTrip: 3, Landing: 4,
+  /** The boards (game/rink.ts): a hard enough hit to fall, rather than bounce off. Game-only. */
+  Collision: 5,
 } as const;
-export type Fall = 0 | 1 | 2 | 3 | 4;
+export type Fall = 0 | 1 | 2 | 3 | 4 | 5;
 
-export const FALL_NAME = ["", "LEAN EXCEEDED", "BALANCE LOST", "TOE PICK", "LANDING"] as const;
+export const FALL_NAME = ["", "LEAN EXCEEDED", "BALANCE LOST", "TOE PICK", "LANDING", "BOARDS"] as const;
 
 // ── the edge code ───────────────────────────────────────────────────────────
 
@@ -156,7 +158,7 @@ export const MOVE = { None: 0, Turn: 1, Twizzle: 2, Spin: 3, InaBauer: 4 } as co
 export const MOVE_NAME = ["", "TURN", "TWIZZLE", "SPIN", "INA BAUER"] as const;
 
 /** Bits of SkaterState.movesHeld: which move buttons were down last tick. */
-export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8 } as const;
+export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8, Bracket: 16 } as const;
 
 /**
  * An Ina Bauer in progress: both feet down on parallel tracks, the lead foot
@@ -215,7 +217,27 @@ export interface SpinState {
 }
 
 /** Which turn a pivot became, decided at the cusp by the foot the weight is on. */
-export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1 } as const;
+/**
+ * Bible §2.3's taxonomy is two axes: does the foot change, and does the body
+ * rotate into the curve or against it. ThreeTurn (same foot, into) and
+ * Mohawk (foot changes, into) were built first; Bracket (same foot, against)
+ * reuses every tick of that same pivot, entering with `dir` reversed
+ * (sim/moves.ts's `against`).
+ *
+ * The fourth cell is NOT a choctaw. `flipFrame` negates both blades' tilt
+ * unconditionally, so which edge character comes out the other side —
+ * preserved (mohawk) or changed (three-turn, bracket) — falls out of which
+ * FOOT the exit lands on, by the body's own left/right mirror, never from
+ * `dir`'s sign. A real choctaw changes edge character on a NEW foot, which
+ * needs a mechanism this rig does not have (measured by trying: an "against
+ * + foot change" built this way lands on the same preserved edge a mohawk
+ * does, just rotated the other way — no ISU turn is that). So a bracket
+ * cannot become anything at its cusp; weight is ignored while `against`.
+ *
+ * Rocker and counter — same foot, same edge, curve reverses — are a third,
+ * different mechanic (no edge change at all) and are not built either.
+ */
+export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1, Bracket: 2 } as const;
 export const TURN_NAME = ["three-turn", "mohawk"] as const;
 
 /**
@@ -249,6 +271,8 @@ export interface TurnState {
   release: boolean;
   /** TURN_KIND, final once past the cusp. */
   kind: number;
+  /** Entered rotating against the curve rather than into it: a bracket. */
+  against: boolean;
   /** Edge code at entry. */
   fromCode: number;
   /** Speed when the pivot began, m/s. */
@@ -370,6 +394,13 @@ export interface SkaterState {
    * button already held when the ice arrived is not a decision to get up.
    */
   pushHeld: boolean;
+  /**
+   * A crossover push's beat-window outcome (sim/music.ts), as a multiple of a
+   * hit's impulse: 1 off `musicMode` or on a straight stroke, `musicMissedPushScale`
+   * on a crossover push that missed tempo. Fixed for the length of the push,
+   * the way `crossover` and `crossSide` are.
+   */
+  strokeMusicScale: number;
   /** The jump in progress, if any. sim/jump.ts owns every field. */
   jump: JumpState;
   /** The last jump that came down, as the technical panel would read it. */
@@ -397,6 +428,12 @@ export interface SkaterState {
    * inherits it: why a salchow is entered off a three-turn.
    */
   spinCarry: number;
+  /**
+   * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
+   * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
+   * Tracked and replay-safe; not yet spent by sim/score.ts.
+   */
+  musicCredit: number;
   fallReason: Fall;
   fallen: boolean;
   tick: number;
@@ -454,6 +491,14 @@ export interface SkatingInput {
    * a mohawk — is the foot the weight is on at the cusp.
    */
   turn: boolean;
+  /**
+   * The bracket button, held: the same pivot as `turn`, entered rotating
+   * against the curve instead of into it (movesMode on). Weight at the cusp
+   * does nothing here — a bracket has no foot-changing sibling in this rig;
+   * see TURN_KIND's own comment for why a "choctaw" built the same way is
+   * not actually one.
+   */
+  bracket: boolean;
   /** The twizzle button, held: a travelling rotation for as long as it is (movesMode on). */
   twizzle: boolean;
   /**
@@ -468,7 +513,7 @@ export interface SkatingInput {
 
 export const NEUTRAL_INPUT: SkatingInput = {
   lean: 0, knee: 0.35, weight: 0.5, pitch: 0, leanSplit: 0, push: false, brake: false,
-  carriage: 0, windup: 0, toe: false, turn: false, twizzle: false, spin: false, inaBauer: false,
+  carriage: 0, windup: 0, toe: false, turn: false, bracket: false, twizzle: false, spin: false, inaBauer: false,
 };
 
 // ── events ──────────────────────────────────────────────────────────────────
@@ -477,13 +522,15 @@ export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
   SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
   Takeoff: 8, Landing: 9, Turn: 10, Twizzle: 11, Spin: 12, InaBauer: 13,
+  MusicHit: 14, MusicMiss: 15, MusicAccent: 16,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
   "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
   "TAKEOFF", "LANDING", "TURN", "TWIZZLE", "SPIN", "INA BAUER",
+  "MUSIC HIT", "MUSIC MISS", "MUSIC ACCENT",
 ] as const;
 
 export interface EdgeEvent {

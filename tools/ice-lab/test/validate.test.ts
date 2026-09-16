@@ -47,7 +47,7 @@ test("each verdict, for the reason the gate gives", () => {
     derivedHop("hop-wrong-on-purpose", 1.0),
     derivedHop("hop-bad-arithmetic", 0, 0.5),
     stub("a-stub"),
-    stub("a-bracket", ["bracket"]),
+    stub("a-counter", ["counter"]),
   ]);
   try {
     const r = validateCorpus(dir);
@@ -57,7 +57,7 @@ test("each verdict, for the reason the gate gives", () => {
     assert.equal(by["hop-bad-arithmetic"].verdict, "fail");
     assert.match(by["hop-bad-arithmetic"].reason ?? "", /tolerance/);
     assert.equal(by["a-stub"].verdict, "unsourced");
-    assert.equal(by["a-bracket"].verdict, "unmodelled");
+    assert.equal(by["a-counter"].verdict, "unmodelled");
     assert.deepEqual(r.summary, { cases: 5, pass: 1, fail: 2, unsourced: 1, unmodelled: 1 });
     assert.equal(r.gate.met, false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -70,9 +70,19 @@ test("the same corpus gives the same report, byte for byte", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("a modelled bracket without measurements remains unsourced, never a fidelity pass", () => {
+  const dir = corpus([stub("bracket-without-evidence", ["bracket"])]);
+  try {
+    const r = validateCorpus(dir);
+    assert.equal(r.results[0].verdict, "unsourced");
+    assert.equal(r.summary.pass, 0);
+    assert.equal(r.gate.met, false);
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
 test("exit 0 only when every sourced case passes; unsourced and unmodelled never move it", () => {
   const cli = new URL("../validate.mjs", import.meta.url).pathname;
-  const clean = corpus([derivedHop("hop-ballistic", 0), stub("a-stub"), stub("a-bracket", ["bracket"])]);
+  const clean = corpus([derivedHop("hop-ballistic", 0), stub("a-stub"), stub("a-counter", ["counter"])]);
   const dirty = corpus([derivedHop("hop-ballistic", 0), derivedHop("hop-wrong-on-purpose", 1.0)]);
   try {
     const ok = spawnSync(process.execPath, [cli, "--json", "--cases", clean], { encoding: "utf8" });
@@ -88,13 +98,13 @@ test("exit 0 only when every sourced case passes; unsourced and unmodelled never
 });
 
 test("the Markdown report is marked generated, carries every case, and is the same every run", () => {
-  const dir = corpus([derivedHop("hop-ballistic", 0), stub("a-stub"), stub("a-bracket", ["bracket"])]);
+  const dir = corpus([derivedHop("hop-ballistic", 0), stub("a-stub"), stub("a-counter", ["counter"])]);
   try {
     const a = markdown(validateCorpus(dir)), b = markdown(validateCorpus(dir));
     assert.equal(a, b);
     assert.match(a, /GENERATED — do not edit/);
     assert.match(a, /\*\*Gate not met\.\*\*/);
-    for (const id of ["hop-ballistic", "a-stub", "a-bracket"]) assert.ok(a.includes(`\`${id}\``), id);
+    for (const id of ["hop-ballistic", "a-stub", "a-counter"]) assert.ok(a.includes(`\`${id}\``), id);
     assert.ok(a.endsWith("\n"));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

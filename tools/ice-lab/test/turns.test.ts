@@ -30,7 +30,7 @@ interface Run { s: SkaterState; turns: EdgeEvent[]; takeoffTick: number; pivotEn
  * turn's cusp, so the body keeps its circle.
  */
 function drive(p: Params, speed: number, weight: number, lean: number,
-  opt: { mohawkAt?: number; pitch?: number; ticks?: number; each?: (i: number, s: SkaterState) => Partial<SkatingInput> } = {},
+  opt: { mohawkAt?: number; pitch?: number; ticks?: number; against?: boolean; each?: (i: number, s: SkaterState) => Partial<SkatingInput> } = {},
   rec?: ReplayRecorder): Run {
   const s = createState(p, speed);
   let flips = 0, sign = 1, w = weight, takeoffTick = -1, pivotEndTick = -1, speedAtPress = 0;
@@ -39,9 +39,11 @@ function drive(p: Params, speed: number, weight: number, lean: number,
     if (s.flips !== flips) { flips = s.flips; sign = -sign; }
     if (opt.mohawkAt !== undefined && i >= opt.mohawkAt) w = 1 - weight;
     if (i === 240) speedAtPress = len(s.vel);
+    const pressed = i >= 240 && i < 250;
     const input: SkatingInput = {
       ...NEUTRAL_INPUT, lean: sign * lean, weight: w, knee: 0.45,
-      pitch: i >= 230 && i < 280 ? (opt.pitch ?? 0) : 0, turn: i >= 240 && i < 250,
+      pitch: i >= 230 && i < 280 ? (opt.pitch ?? 0) : 0,
+      turn: pressed && !opt.against, bracket: pressed && opt.against === true,
       ...(opt.each?.(i, s) ?? {}),
     };
     const wasTurning = s.move === MOVE.Turn;
@@ -64,6 +66,7 @@ test("every preset skates without turns, and the turn levers validate", () => {
   assert.ok(validate({ ...DEFAULT_PARAMS, turnTime: 2 * SIM_DT }).some((e) => e.includes("turnTime")));
   assert.ok(validate({ ...DEFAULT_PARAMS, turnCarry: 1.5 }).some((e) => e.includes("turnCarry")));
   assert.ok(validate({ ...DEFAULT_PARAMS, turnCarryTime: 0 }).some((e) => e.includes("turnCarryTime")));
+  assert.ok(validate({ ...DEFAULT_PARAMS, againstTurnScrub: 0.9 }).some((e) => e.includes("againstTurnScrub")));
 });
 
 test("with the moves off, the turn button does nothing at all", () => {
@@ -106,6 +109,52 @@ test("weight on the other foot at the cusp makes it a mohawk: LFI onto RBI, a li
   // Measured: 0.421 m/s. The data: 0.40.
   const lost = r.s.moveDone.speedLost;
   assert.ok(lost > 0.36 && lost < 0.46, `mohawk cost ${lost.toFixed(3)} m/s`);
+});
+
+/** yawRate mid-pivot (tick 245: past the cusp's earliest, well before Math.PI's swept out at turnTime). */
+function midPivotYaw(p: Params, speed: number, weight: number, lean: number, opt: { against?: boolean } = {}): number {
+  let mid = 0;
+  drive(p, speed, weight, lean, { ...opt, each: (i, s) => { if (i === 245) mid = s.yawRate; return {}; } });
+  return mid;
+}
+
+test("a bracket: RFO becomes RBI too, but against the curve, and costs more than the three-turn", () => {
+  const threeTurn = drive(moves(), 6.8, 1, -0.3);
+  const r = drive(moves(), 6.8, 1, -0.3, { against: true });
+  assert.equal(r.turns.length, 1);
+  const t = r.turns[0];
+  assert.equal(t.value, TURN_KIND.Bracket);
+  // Same edge change as the three-turn — the taxonomy's other axis, not a
+  // different exit edge (bible §2.3: both are "same foot", edge changes).
+  assert.equal(codeToString(t.prevCode), "RFO");
+  assert.equal(codeToString(t.newCode), "RBI");
+  assert.equal(r.s.fallen, false);
+  // Against the curve: mid-pivot, the body is turning the OPPOSITE way round
+  // from the three-turn, off the same entry. (Once both are back to a normal
+  // glide on the same exit edge, steady-state yaw no longer remembers which
+  // way the pivot took to get there — this has to be read during the pivot.)
+  const midThree = midPivotYaw(moves(), 6.8, 1, -0.3);
+  const midBracket = midPivotYaw(moves(), 6.8, 1, -0.3, { against: true });
+  assert.ok(Math.sign(midBracket) === -Math.sign(midThree), "rotates against the curve, mid-pivot");
+  // Costs more: againstTurnScrub (1.35) scales only the muTurn term, not the
+  // glide friction and drag alongside it, so the measured ratio sits below
+  // 1.35 rather than at it. Measured: 1.28x.
+  const ratio = r.s.moveDone.speedLost / threeTurn.s.moveDone.speedLost;
+  assert.ok(ratio > 1.15 && ratio < 1.35, `bracket cost ${ratio.toFixed(2)}x the three-turn`);
+});
+
+test("weight at a bracket's cusp does not move it to the other foot: there is no choctaw here", () => {
+  const stay = drive(moves(), 6.8, 1, -0.3, { against: true });
+  const triedTransfer = drive(moves(), 6.8, 1, -0.3, { against: true, mohawkAt: 244 });
+  assert.equal(stay.turns[0].value, TURN_KIND.Bracket);
+  assert.equal(triedTransfer.turns[0].value, TURN_KIND.Bracket, "weight at the cusp is ignored while against");
+  assert.equal(codeToString(triedTransfer.turns[0].newCode), codeToString(stay.turns[0].newCode));
+});
+
+test("with the moves off, the bracket button does nothing at all", () => {
+  const r = drive({ ...PRESETS.responsive }, 6.8, 1, -0.3, { against: true });
+  assert.equal(r.turns.length, 0);
+  assert.equal(r.s.flips, 0);
 });
 
 test("on the front of the rocker a turn is quicker and cheaper: turns are made on the rocker", () => {

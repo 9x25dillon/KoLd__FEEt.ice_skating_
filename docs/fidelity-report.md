@@ -4,11 +4,11 @@
 > from the cases in [`data/validation/cases/`](../data/validation/cases/), against the specification in
 > [`fidelity-gate.md`](fidelity-gate.md). CI regenerates it on every push and fails if it differs.
 
-Preset under test **`responsive`** (the public build's boot preset); reference **`spec`**, reported, not gated. Solver `ice-lab-f64/8`.
+Preset under test **`responsive`** (the public build's boot preset); reference **`spec`**, reported, not gated. Solver `ice-lab-f64/9`.
 
 ## Gate
 
-**Gate not met.** 6 pass, 0 fail, 23 unsourced, 3 unmodelled, of 32 cases.
+**Gate not met.** 6 pass, 0 fail, 24 unsourced, 2 unmodelled, of 32 cases.
 
 | §6.3 | Condition | State |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | O1 carve relation | 6 | 4 | 0 | 2 | 0 | 0 / 3 |
 | O2 tracing curvature | 2 | 0 | 0 | 2 | 0 | 0 / 3 |
-| O3 edge transitions | 7 | 0 | 0 | 4 | 3 | 0 / 3 |
+| O3 edge transitions | 7 | 0 | 0 | 5 | 2 | 0 / 3 |
 | O4 speed decay | 5 | 0 | 0 | 5 | 0 | 0 / 3 |
 | O5 jump rotation | 6 | 2 | 0 | 4 | 0 | 0 / 3 |
 | O6 moment of inertia | 3 | 0 | 0 | 3 | 0 | 0 / 3 |
@@ -53,7 +53,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 | `stroke_gain_ms` | 1 | 0 | 0 | 1 | 0 |
 | `trace_lobe_radius_m` | 1 | 0 | 0 | 1 | 0 |
 | `trace_radius_m` | 1 | 0 | 0 | 1 | 0 |
-| `turn_entry_angle_deg` | 4 | 0 | 0 | 1 | 3 |
+| `turn_entry_angle_deg` | 4 | 0 | 0 | 2 | 2 |
 | `turn_speed_loss_ms` | 2 | 0 | 0 | 2 | 0 |
 | `twizzle_rate_rps` | 1 | 0 | 0 | 1 | 0 |
 
@@ -68,11 +68,12 @@ External passing counts literature cases only once `primary_checked` is true (§
 | `flight-residual-full-jump-moves` | derived | `air_time_height_residual_m` | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
 | `flight-residual-hop` | derived | `air_time_height_residual_m` | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
 
-## Unsourced (23)
+## Unsourced (24)
 
 Stubs waiting for a measurement. A null expectation is correct; an invented number would be a defect.
 
 - `air-time-footage` — footage, `air_time_s`
+- `bracket-unmodelled` — footage, `turn_entry_angle_deg`
 - `carve-held-deep-edge-footage` — footage, `carve_held`
 - `carve-lean-footage` — footage, `carve_lean_deg`
 - `crossover-gain-back-footage` — footage, `crossover_gain_ms`
@@ -96,8 +97,7 @@ Stubs waiting for a measurement. A null expectation is correct; an invented numb
 - `trace-radius-overhead-footage` — footage, `trace_radius_m`
 - `twizzle-rate-footage` — footage, `twizzle_rate_rps`
 
-## Unmodelled (3)
+## Unmodelled (2)
 
-- `bracket-unmodelled` — needs bracket
 - `counter-unmodelled` — needs counter
 - `rocker-turn-unmodelled` — needs rocker-turn

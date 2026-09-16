@@ -125,14 +125,26 @@ export class EdgeAudio {
     for (const e of events) {
       if (e.type === EVENT.Takeoff) this.swell();
       if (e.type === EVENT.Landing) this.chk(s.landed.landingQuality);
+      // The rhythm layer's own feedback (sim/music.ts, bible §2.6): a
+      // crossover push on tempo rings clean, off it it is "an audible chop";
+      // an accent lands a small two-tone chime, brighter for phrase credit.
+      if (e.type === EVENT.MusicHit) this.ding();
+      if (e.type === EVENT.MusicMiss) this.chop();
+      if (e.type === EVENT.MusicAccent) this.accent(e.value);
     }
   }
 
-  private envelope(peak: number, attack: number, decay: number): GainNode {
-    const ctx = this.ctx!, g = ctx.createGain(), t = ctx.currentTime;
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(peak, t + attack);
-    g.gain.exponentialRampToValueAtTime(1e-4, t + attack + decay);
+  /** Hit the boards hard enough to fall (game/rink.ts). The worst-quality "chk": dirty, on purpose. */
+  crash(): void {
+    if (!this.ctx) return;
+    this.chk(0);
+  }
+
+  private envelope(peak: number, attack: number, decay: number, when = this.ctx!.currentTime): GainNode {
+    const ctx = this.ctx!, g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(peak, when + attack);
+    g.gain.exponentialRampToValueAtTime(1e-4, when + attack + decay);
     g.connect(this.master!);
     return g;
   }
@@ -157,5 +169,33 @@ export class EdgeAudio {
     lp.type = "lowpass"; lp.frequency.value = 1800 + 4000 * (1 - quality);
     src.connect(lp).connect(this.envelope(0.12 + 0.3 * (1 - quality), 0.004, 0.10 + 0.15 * (1 - quality)));
     src.start(0, Math.random()); src.stop(ctx.currentTime + 0.3);
+  }
+
+  /** A crossover push that landed on tempo: clean, brief, and pitched — never loud enough to nag. */
+  private ding(): void {
+    const ctx = this.ctx!, o = ctx.createOscillator();
+    o.type = "sine"; o.frequency.value = 880;
+    o.connect(this.envelope(0.05, 0.002, 0.08));
+    o.start(); o.stop(ctx.currentTime + 0.1);
+  }
+
+  /** A crossover push that missed the beat window: broadband and ugly, on purpose (bible §5.3's skid). */
+  private chop(): void {
+    const ctx = this.ctx!, src = ctx.createBufferSource(), hp = ctx.createBiquadFilter();
+    src.buffer = this.noise;
+    hp.type = "highpass"; hp.frequency.value = 900;
+    src.connect(hp).connect(this.envelope(0.14, 0.001, 0.05));
+    src.start(0, Math.random()); src.stop(ctx.currentTime + 0.08);
+  }
+
+  /** Musical credit landed: a short two-tone chime, brighter for a phrase's climax (bible §2.6). */
+  private accent(credit: number): void {
+    const ctx = this.ctx!, big = credit >= 2, t = ctx.currentTime;
+    for (const [freq, delay] of [[1320, 0], [1760, 0.05]] as const) {
+      const o = ctx.createOscillator();
+      o.type = "sine"; o.frequency.value = big ? freq * 1.25 : freq;
+      o.connect(this.envelope(big ? 0.1 : 0.06, 0.003, 0.12, t + delay));
+      o.start(t + delay); o.stop(t + delay + 0.2);
+    }
   }
 }

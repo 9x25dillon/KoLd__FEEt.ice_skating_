@@ -40,6 +40,27 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       new levers at 0, the fixture and three operator clips matched on every
 //       state field and event; the fixture was re-recorded from its own inputs.
 //       /5 clips no longer load; verify one against a checkout of 8d89af2.
+// Historical game branch (through 23e3e49):
+//   /7  The rhythm layer (sim/music.ts, musicMode): Params gained musicMode
+//       and its levers, and SkaterState gained `strokeMusicScale` and
+//       `musicCredit`. With musicMode 0 — every preset — `strokeMusicScale`
+//       never leaves 1 and the accent scan never runs, so nothing kinematic
+//       changed: the full existing suite, including the fixture and the
+//       tick-for-tick move regressions, passed unchanged with the new fields
+//       present but inert; the fixture was re-recorded from its own inputs
+//       to carry them. /6 clips no longer load; verify one against a
+//       checkout of 23e675b.
+//   /8  The bracket (sim/moves.ts's `against`, TURN_KIND): Params gained
+//       `againstTurnScrub`, SkatingInput gained `bracket`, and TurnState
+//       gained `against`. Existing three-turns and mohawks always enter with
+//       `against` false, so `T.dir` and every cost are unchanged from /7 on
+//       every path that does not press the new button; the fixture, never
+//       pressing it, was re-recorded to carry the field. Tried and rejected:
+//       a foot-changing "choctaw" built the same way lands on the same
+//       preserved edge a mohawk does (TURN_KIND's own comment), so weight
+//       cannot move a bracket to the other foot at all. /7 clips no longer
+//       load; verify one against a checkout of 3b93279.
+// Historical fidelity branch (through a1b4278):
 //   /7  The rink's shape (rinkRelief, rinkHalfLength, rinkHalfWidth): Params
 //       gained them, SkaterState did not. rinkRelief is 0 in every preset and
 //       the solver skips the rink at 0, so replayed through /6 and /7 the
@@ -55,7 +76,12 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       jumps included, matched on every /7 state field and event on every
 //       tick; the fixture was re-recorded from its own inputs. /7 clips no
 //       longer load; verify one against a checkout of c0c6d96.
-export const REPLAY_SOLVER = "ice-lab-f64/8";
+//   /9  Union of both /8 branches: rhythm, bracket, rink relief and wind-up.
+//       Their /8 identities were ambiguous. Both older formats are rejected;
+//       use the recorded branch commits to play those clips, not a relabel.
+//       The fixture is re-recorded from its original inputs with neutral
+//       values for the newly introduced controls and parameters.
+export const REPLAY_SOLVER = "ice-lab-f64/9";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
@@ -186,10 +212,10 @@ export function parseReplay(json: string): Replay {
     const path = `frames[${i}]`;
     const frame = object(root.frames[i], path, ["input", "scheme", "digest"], ["params"]);
     const input = object(frame.input, `${path}.input`,
-      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "twizzle", "spin", "inaBauer"]);
+      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]);
     for (const key of ["lean", "pitch", "leanSplit", "windup"]) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["knee", "weight", "carriage"]) number(input[key], `${path}.input.${key}`, 0, 1);
-    for (const key of ["push", "brake", "toe", "turn", "twizzle", "spin", "inaBauer"]) {
+    for (const key of ["push", "brake", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]) {
       if (typeof input[key] !== "boolean") throw new Error(`${path}.input.${key}: expected a boolean`);
     }
     if (!["A", "B", "C"].includes(frame.scheme as string)) throw new Error(`${path}.scheme: expected A, B, or C`);

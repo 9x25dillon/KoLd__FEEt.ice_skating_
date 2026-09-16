@@ -6,7 +6,7 @@
     "type": "footage",
     "citation": "",
     "primary_checked": null,
-    "notes": "Recorded so the gap is visible. The solver has no bracket."
+    "notes": "Historical case ID retained. The merged solver models a bracket; external footage and measurements are still missing."
   },
   "requires": [
     "bracket"

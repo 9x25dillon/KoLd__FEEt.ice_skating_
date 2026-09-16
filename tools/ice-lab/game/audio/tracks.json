@@ -1,0 +1,47 @@
+[
+  {
+    "id": "moon-ray-glide",
+    "title": "Moon Ray Glide",
+    "file": "Moon Ray Glide.mp3",
+    "bpm": 54.3,
+    "offset": 2.84,
+    "beatsPerBar": 4,
+    "barsPerPhrase": 8
+  },
+  {
+    "id": "tongues-that-flee",
+    "title": "Tongues That Flee",
+    "file": "Tongues That Flee.m4a",
+    "bpm": 60.8,
+    "offset": 2.98,
+    "beatsPerBar": 4,
+    "barsPerPhrase": 8
+  },
+  {
+    "id": "friction-water-surface",
+    "title": "摩擦の水面",
+    "file": "摩擦の水面.mp3",
+    "bpm": 67.1,
+    "offset": 3.10,
+    "beatsPerBar": 4,
+    "barsPerPhrase": 8
+  },
+  {
+    "id": "borrowed-eyes",
+    "title": "Borrowed Eyes",
+    "file": "Borrowed Eyes.mp3",
+    "bpm": 65.8,
+    "offset": 2.90,
+    "beatsPerBar": 4,
+    "barsPerPhrase": 8
+  },
+  {
+    "id": "moonlit-alibi",
+    "title": "Moonlit Alibi",
+    "file": "Moonlit Alibi.mp3",
+    "bpm": 68.1,
+    "offset": 3.06,
+    "beatsPerBar": 4,
+    "barsPerPhrase": 8
+  }
+]

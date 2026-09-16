@@ -12,14 +12,26 @@ you take is written permanently into the ice beneath you. There is no jump butto
 > [`Hand_off.md`](Hand_off.md) — current state, conventions, artifact URLs, and the three
 > things most likely to trip you up.
 
+## Play the Godot prototype
+
+The [Godot edition of Ice Run](games/ice-run-godot/README.md) adds a 3D rink and
+rigged skater around the original Ice Lab engine, with career choreography,
+an ordered program editor, training, music and replay playback.
+
+```sh
+./games/ice-run-godot/run.sh
+```
+
+Requires Godot 4 (tested on 4.7.2), Node 24+ and FFmpeg. The project includes the
+Blender skater source and a Linux export workflow. This is a playable prototype;
+the full production design below remains a larger target.
 ## Status
 
 **Pre-production. One person, no funding.** The work is
 [`tools/ice-lab/`](tools/ice-lab/README.md) — a browser instrument running the blade–ice model —
-and it is the work, not preparation for it.
+alongside the playable browser and Godot games. The instrument remains the reference for physics validation.
 
-**The gate is fidelity.** The question this repository has to answer next is not whether carving
-is fun but whether the model is *right*: does the solver reproduce measurable properties of real
+**The gate is fidelity.** Alongside game development, the model still has to pass a separate test: is it *right*? does the solver reproduce measurable properties of real
 skating — lean against speed and radius, the radius an edge leaves on the ice, the speed a held
 edge loses, air time and rotation — within stated tolerances, well enough that a skater, a coach
 or a technical specialist recognises it. That question can be answered by one person, offline,
@@ -40,8 +52,8 @@ not fidelity, and the difference is the whole of the next phase.
   wound up with a flick against the rotation has its arms partly flown from its own geometry, more on
   the assisted presets, moving only the moment of inertia.
 - **Replay.** Capture a run, verify it headlessly in another JavaScript engine, and get the first
-  tick where two runs diverge. The replay contract is `ice-lab-f64/8`.
-- **272 tests** (as of 2026-09-13), all passing.
+  tick where two runs diverge. The replay contract is `ice-lab-f64/9` after reconciling the two historical `/8` branches.
+- **Simulation, gameplay and Godot bridge tests**; see the current [handoff](Hand_off.md) for verified counts.
 - **A public build** at **<https://9x25dillon.github.io/KoLd__FEEt.ice_skating_/>**, deployed by
   [`pages.yml`](.github/workflows/pages.yml) on every push to `main` that touches the instrument.
   The tests gate the deploy.
@@ -61,7 +73,7 @@ not fidelity, and the difference is the whole of the next phase.
 - **External evidence.** The validator (`node tools/ice-lab/validate.mjs`, run in CI on every push), a
   case corpus (`data/validation/`) and the generated [fidelity report](docs/fidelity-report.md) exist.
   Every case that needs published measurement or footage is still a stub, so the gate is not met.
-- **Parts of the model.** Brackets, rockers, counters and choctaws; spin levels; combinations and
+- **Parts of the model.** Rockers, counters and choctaws; spin levels; combinations and
   sequences; stamina. Tracings are drawn but do not yet feed friction or bite back into the solver
   as the bible's §05 requires. The stroke is the bible's semi-analytic push, not a leg model.
 - **The runtime.** `KoLdSimCore` is unbuilt, and `src/reference/` is non-compiling specification
@@ -95,9 +107,10 @@ measurements from the slice.
 Porting the solver into UE5 before it has been checked against real skating would move
 unvalidated numbers somewhere slower to correct.
 
-The decisions inside that scenario still stand. **Engine: Unreal Engine 5.4+** —
-[D2 closed](docs/open-decisions.md#d2--engine) on 2026-09-03 — is the engine the runtime will be
-built in, when it is built. **Difficulty default: adaptive** —
+For the current playable rebuild, the operator selected **Godot 4 + Blender on 2026-09-15**,
+with the original engine behind a local Node bridge. The older studio scenario retains
+**Unreal Engine 5.4+** as its historical engine assumption —
+[D2 closed](docs/open-decisions.md#d2--engine) on 2026-09-03 — describes that older studio scenario, not a requirement to undo the Godot build. **Difficulty default: adaptive** —
 [D4 closed](docs/open-decisions.md#d4--where-the-difficulty-default-sits) the same day; The Patch
 recommends an assist tier from the tracing score it already computes. **Multiplayer:
 single-player first** — [D3 closed](docs/open-decisions.md#d3--multiplayer-at-launch) at its
@@ -136,7 +149,7 @@ tools/ice-lab/             The current work — see its README
   sim/                     The solver: pure, deterministic, written to be transcribed to C++
   app/                     The browser rig, build, local server and session collector
   replay/                  Headless replay verification
-  test/                    272 tests
+  test/                    Simulation, gameplay and fidelity regression tests
   native/                  C++17 wire, math and serialization foundation — not a solver
   deploy/                  systemd unit, Caddyfile and runbook for the collector
 docs/

@@ -26,6 +26,12 @@ is the only part of the bible that scales cleanly, and it scales well.
 
 ## D2 · Engine
 
+**Current implementation exception — 2026-09-15:** the operator explicitly chose
+Godot 4 + Blender for the playable Ice Run rebuild. It uses the existing Ice Lab
+engine through a local Node bridge. The Unreal decision below records the older
+funded studio scenario; it does not override this current instruction. A native
+Godot physics port and the final production engine remain separate future decisions.
+
 **Default:** Unreal Engine 5.4+.
 
 **Status:** RESOLVED — **Unreal Engine 5.4+ (2026-09-03).** Closed ahead of pre-production
