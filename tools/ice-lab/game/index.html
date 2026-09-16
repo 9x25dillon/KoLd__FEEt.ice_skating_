@@ -31,17 +31,73 @@ header a{background:#f4fbfcaa;padding:9px 13px;border:1px solid #ffffff80;border
 @media(max-width:600px){.card{padding:26px}.card h1{font-size:54px}.card:before{font-size:28px;margin-bottom:15px}.stats>div{padding:0 12px}.stats strong{font-size:20px}.stats label{font-size:8px}#coach{width:170px}#movement{max-width:calc(100% - 32px);min-width:0}.actions button:hover,.card button:hover{transform:none}}
 @media(max-height:650px) and (min-width:601px){#coach{top:155px;padding:14px}#movement{bottom:125px;padding:10px 16px}.dock{padding:10px 18px}#knee{bottom:130px}.card{padding:24px}.card:before{display:none}.card h1{font-size:54px;margin:12px 0}}
 @media(prefers-reduced-motion:reduce){button,#charge,#flow-fill{transition:none!important}}
+
+#jump-feedback{position:absolute;top:125px;left:50%;transform:translateX(-50%);padding:12px 24px;text-align:center;background:#1b354aee;color:#e5fffa;border:1px solid #b1e4d080;border-radius:12px;box-shadow:0 8px 30px #21364c25;pointer-events:none}
+#jump-feedback strong{display:block;font-size:22px;letter-spacing:-.03em}#jump-feedback span{display:block;margin-top:4px;font-size:11px;color:#c6dbe3}#jump-feedback[data-outcome=rough]{border-color:#f1be97;color:#ffe0bc}
+#opening-style{margin-top:16px;font-size:11px;padding:8px 14px}.actions{max-width:440px}#wardrobe{max-width:650px;padding:30px;background:radial-gradient(ellipse at top right,#54608144,transparent 70%),#182c42}
+.wardrobe-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.wardrobe-heading h2{margin:8px 0;font-size:30px;letter-spacing:-.04em}.wardrobe-heading .eyebrow{font-size:9px;letter-spacing:.15em;color:#cbb8eb}#close-wardrobe{font-size:12px;padding:10px 18px;background:#d9c5ff;color:#312144}
+.skin-options{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}.skin-option{display:flex;flex-direction:column;align-items:center;padding:12px 14px 16px;gap:8px;border:2px solid #ffffff20;background:#ffffff06;color:#e8e4fa;transition:border-color .15s,background .15s}.skin-option:hover{background:#ffffff12}.skin-option[aria-pressed=true]{border-color:#d4b8ff;background:#6953a020}.skin-option.aurora[aria-pressed=true]{border-color:#9ce4d4;background:#48a6a320}.skin-option svg{display:block;width:100%;max-width:210px;border-radius:10px;background:radial-gradient(ellipse,#dbe1f2,#a7b9d1)}.skin-option.aurora svg{background:radial-gradient(ellipse,#e4f3e8,#8bbfba)}.skin-option strong{font-size:19px}.skin-option span{font-size:10px;line-height:1.5;color:#bfcfdf}.skin-option .skin-selected{visibility:hidden;color:#ece4ff}.skin-option[aria-pressed=true] .skin-selected{visibility:visible}#skin-status{color:#c4d5e2;margin-bottom:0;font-size:12px}
+@media(max-width:850px){#jump-feedback{top:145px;left:24px;transform:none;padding:10px 16px}#jump-feedback strong{font-size:18px}}
+@media(max-width:600px){#jump-feedback{top:auto;bottom:300px;left:16px}.skin-options{gap:10px}#wardrobe{padding:18px}.wardrobe-heading h2{font-size:24px}.skin-option{padding:8px}.skin-option span{font-size:9px}}
+
+/* Sports-anime art direction: ink, cel colors, and angled title-card typography. */
+body{background:#8ebcd9}header .brand{color:#18213b;font-style:italic;letter-spacing:.15em;font-weight:950}header .brand small{font-style:normal;color:#395374}
+.stats,#movement,.dock{background:#18233ef5;border:1px solid #172039;border-radius:3px;box-shadow:4px 4px 0 #627da64d;backdrop-filter:none}.stats{border-top:3px solid #baabf5}.stats strong{font-weight:900;font-style:italic}.stats .hot{color:#ffc5db}
+.actions button,.actions #pause{border-radius:3px;border:1px solid #19213b;background:#24324e;box-shadow:2px 2px 0 #16213b35}.actions button[aria-pressed=true]{background:#674c96;border-bottom:2px solid #edc4ff}
+#movement{border-left:4px solid #d3a5ec}#move{font-style:italic;font-weight:850}.track{border-radius:0}.dock kbd{border-radius:2px}
+#coach{border:1px solid #26334c;border-top:4px solid #a788d0;border-radius:2px;background:#f2f5fff2;box-shadow:5px 5px 0 #26334c20}#coach h2{font-style:italic;font-weight:850}.eyebrow{letter-spacing:.18em}
+#overlay{justify-content:flex-start;background:linear-gradient(90deg,#080f25ee 0%,#080f25cb 25%,#080f2540 60%,#080f2500),url('./art/edgework-anime.png') center center/cover no-repeat;backdrop-filter:none;padding:32px 6vw}
+#overlay .card{width:480px;max-width:100%;max-height:calc(100dvh - 64px);background:none;border:0;border-radius:0;box-shadow:none;padding:24px 0;text-align:left;overflow:auto}
+.card:before{content:"EDGEWORK";font-size:17px;font-weight:950;font-style:italic;letter-spacing:.25em;color:#f7f4ff;border-left:4px solid #d8acff;padding-left:14px;margin-bottom:32px}.card h1{font-style:italic;font-weight:950;font-size:82px;line-height:.98;letter-spacing:-.065em;text-shadow:3px 3px 0 #a591d03d}.card p{color:#d2dced;max-width:390px}.card .eyebrow{color:#c6aff1}.card #start{border-radius:2px;background:#e1ccff;border:1px solid #f2e8ff;color:#24203a;box-shadow:5px 5px 0 #77649466;font-style:italic;font-size:17px;font-weight:850;text-align:left;padding:17px 22px}.card .choices{justify-content:flex-start}.card .secondary{border-radius:2px;background:#111c32ba;border-color:#c3bcda55}.card #record{color:#b2c1d9}#opening-style{margin-top:20px}
+#jump-feedback{border-radius:2px;border:1px solid #172039;border-left:4px solid #cfb4ff;box-shadow:4px 4px 0 #17203940}#jump-feedback strong{font-style:italic;font-weight:900;text-transform:uppercase}
+#wardrobe,dialog{border-radius:3px;background:#17253e;border:1px solid #a5b8d9}.skin-option{border-radius:2px}.skin-option svg{border-radius:0}.skin-option strong{font-style:italic}.wardrobe-heading h2{font-weight:850;font-style:italic}#close-wardrobe{border-radius:2px}
+@media(max-width:850px){#overlay{padding:28px;background-position:62% center}#overlay .card{width:430px}.card h1{font-size:68px}}
+@media(max-width:600px){#overlay{padding:22px;background-image:linear-gradient(90deg,#080f25ee,#080f2599),url('./art/edgework-anime.png');background-position:64% center}#overlay .card{max-height:calc(100dvh - 44px);padding:10px 0}.card h1{font-size:60px}.card:before{margin-bottom:22px;font-size:14px}.card p{font-size:13px}.card #start{font-size:15px}.card .choices{gap:8px}}
+@media(max-height:650px) and (min-width:601px){.card:before{display:none}.card h1{font-size:54px}#overlay .card{padding:0}.card p{font-size:12px;margin:10px 0}.card #start{padding:12px 18px}#opening-style{margin-top:10px}}
 </style>
 </head>
 <body>
 <canvas id="rink" aria-label="Ice skating course. Follow the gold lights using the controls below."></canvas>
 <header><div class="brand">EDGEWORK<small>ICE RUN / 01</small></div><a href="../app/">Open Ice Lab ↗</a></header>
 <div class="stats"><div><label id="time-label">Time</label><strong id="time">90.0</strong></div><div><label>Score</label><strong id="score">0</strong></div><div><label id="combo-label">Moves learned</label><strong id="combo" class="hot">×1</strong></div></div>
-<div class="actions"><button id="camera">Rink view</button><button id="cruise" aria-pressed="true">Cruise on</button><button id="sound" aria-pressed="false">Sound off</button><button id="controls">Controls</button><button id="pause" hidden>Pause</button></div>
+<div class="actions"><button id="camera">Rink view</button><button id="cruise" aria-pressed="true">Cruise on</button><button id="sound" aria-pressed="false">Sound off</button><button id="style">Style</button><button id="controls">Controls</button><button id="pause" hidden>Pause</button></div>
+<div id="jump-feedback" role="status" aria-live="polite" hidden><strong id="jump-result"></strong><span id="jump-detail"></span></div>
 <div id="movement"><div id="move"></div><div id="stance"></div><div id="landing"></div><div id="technical"></div><div id="music-credit"></div><div id="speed">Speed · <span id="speed-value">0</span> km/h</div><div id="flow-label"></div><div class="track"><div id="flow-fill"></div></div></div>
 <aside id="coach"><span class="eyebrow">ON THE ICE / PRACTICE</span><h2 id="lesson-title">Find an edge</h2><p id="lesson-tip">Hold A or D for a smooth curve.</p><div id="lesson-progress"></div></aside><div id="knee"><span id="charge-label">Knee pressure</span><div class="track"><div id="charge"></div></div><button id="trick" class="secondary"></button></div><div id="hint"></div>
 <footer><div class="dock"><span><kbd>A D</kbd> Carve</span><span><kbd>Space</kbd> Push</span><span><kbd>Shift</kbd> Load / jump</span><span><kbd>B</kbd> Turn</span><span><kbd>Y</kbd> Spin</span><span><kbd>Z</kbd> Twizzle</span><span><kbd>I</kbd> Ina Bauer</span><span><kbd>U</kbd> Get low</span></div><div class="subkeys">X brake · Q / E foot · F toe pick · C arms · N bracket · M control scheme · V camera · P pause · R reset</div></footer>
-<div id="overlay"><div class="card"><div class="eyebrow">EDGEWORK / OPEN PRACTICE</div><h1 id="title">Feel the edge.</h1><p id="description">A fresh sheet of ice. Room to find your balance. Carve, turn backward, jump and spin — then put it all together.</p><p id="help">Start with <b>A / D</b> to carve. Cruise handles the pushes while you learn. Follow the practice tips, or switch it off and skate your own way.</p><button id="start">Free Skate →</button><div class="choices"><button id="free" class="secondary">New practice</button><button id="rookie" class="secondary">Rookie course</button><button id="timed" class="secondary">90-second light run</button></div><div id="record"></div></div></div>
+<div id="overlay"><div class="card"><div class="eyebrow">EDGEWORK / OPEN PRACTICE</div><h1 id="title">Feel the edge.</h1><p id="description">A fresh sheet of ice. Room to find your balance. Carve, turn backward, jump and spin — then put it all together.</p><p id="help">Start with <b>A / D</b> to carve. Cruise handles the pushes while you learn. Follow the practice tips, or switch it off and skate your own way.</p><button id="start">Free Skate →</button><div class="choices"><button id="free" class="secondary">New practice</button><button id="rookie" class="secondary">Rookie course</button><button id="timed" class="secondary">90-second light run</button></div><button id="opening-style" class="secondary">Choose your style ✧</button><div id="record"></div></div></div>
+<dialog id="wardrobe" aria-labelledby="wardrobe-title">
+<div class="wardrobe-heading"><div><span class="eyebrow">YOUR TIME ON THE ICE</span><h2 id="wardrobe-title">Find your signature.</h2></div><button id="close-wardrobe" autofocus>Done</button></div>
+<p>Two looks. Your skating. Change your outfit anytime.</p>
+<div class="skin-options">
+<button class="skin-option violet" id="skin-violet" aria-pressed="false">
+<svg viewBox="0 0 200 200" aria-hidden="true"><ellipse cx="100" cy="183" rx="48" ry="6" fill="#15263e20"/>
+<path d="M94 114 L83 151 L78 177 M108 114 L117 145 L130 169" fill="none" stroke="#33435e" stroke-width="10" stroke-linecap="round"/>
+<path d="M70 179 L84 179 M126 171 L138 175" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+<path d="M66 185 L88 185 M125 178 L140 181" stroke="#61768b" stroke-width="2"/>
+<path d="M90 66 L65 89 L37 79 M108 66 L135 87 L162 72" fill="none" stroke="#6953a0" stroke-width="8" stroke-linecap="round"/>
+<circle cx="35" cy="78" r="4" fill="#f0c7ab"/><circle cx="164" cy="71" r="4" fill="#f0c7ab"/>
+<path d="M86 58 Q100 65 113 58 L110 101 L90 101 Z" fill="#6953a0"/>
+<path d="M88 63 L100 78 L111 63 M90 99 L110 99" fill="none" stroke="#e4d5f3" stroke-width="2"/>
+<path d="M90 101 L110 101 Q116 118 128 127 Q101 143 74 127 Z" fill="#c26e93"/>
+<path d="M74 127 Q101 143 128 127" fill="none" stroke="#e4d5f3" stroke-width="2"/>
+<path d="M104 36 Q130 48 119 82" fill="none" stroke="#342e46" stroke-width="9" stroke-linecap="round"/><path d="M85 45 L86 32 L95 25 L109 29 L116 41 L111 56 L88 55 Z" fill="#342e46" stroke="#172039" stroke-width="1.5"/><path d="M89 38 L109 38 L111 48 L105 56 L100 60 L92 54 Z" fill="#f0c7ab" stroke="#172039" stroke-width="1"/><path d="M91 44 L98 43 L97 48 L92 48 M102 43 L109 44 L107 48 L103 48" fill="#fff" stroke="#172039" stroke-width="1"/><path d="M95 44 L95 48 M105 44 L105 48" stroke="#8064a5" stroke-width="2"/><path d="M85 40 L89 30 L101 28 L111 33 L115 48 L107 37 L102 44 L100 36 L94 43 L94 36 L87 49 Z" fill="#342e46" stroke="#172039" stroke-width="1"/>
+</svg><strong>Violet</strong><span>Plum satin · rose skirt · ponytail</span><span class="skin-selected">Selected ✓</span></button>
+<button class="skin-option aurora" id="skin-aurora" aria-pressed="false">
+<svg viewBox="0 0 200 200" aria-hidden="true"><ellipse cx="100" cy="183" rx="48" ry="6" fill="#15263e20"/>
+<path d="M94 114 L83 151 L78 177 M108 114 L117 145 L130 169" fill="none" stroke="#33435e" stroke-width="10" stroke-linecap="round"/>
+<path d="M70 179 L84 179 M126 171 L138 175" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+<path d="M66 185 L88 185 M125 178 L140 181" stroke="#61768b" stroke-width="2"/>
+<path d="M90 66 L65 89 L37 79 M108 66 L135 87 L162 72" fill="none" stroke="#186b70" stroke-width="8" stroke-linecap="round"/>
+<circle cx="35" cy="78" r="4" fill="#f0c7ab"/><circle cx="164" cy="71" r="4" fill="#f0c7ab"/>
+<path d="M86 58 Q100 65 113 58 L110 101 L90 101 Z" fill="#186b70"/>
+<path d="M88 63 L100 78 L111 63 M90 99 L110 99" fill="none" stroke="#f5d998" stroke-width="2"/>
+<path d="M90 101 L110 101 Q116 118 128 127 Q101 143 74 127 Z" fill="#48a6a3"/>
+<path d="M74 127 Q101 143 128 127" fill="none" stroke="#f5d998" stroke-width="2"/>
+<circle cx="107" cy="25" r="8" fill="#302825"/><path d="M101 22 L110 23" stroke="#f5d998" stroke-width="3"/><path d="M85 45 L86 32 L95 25 L109 29 L116 41 L111 56 L88 55 Z" fill="#342e46" stroke="#172039" stroke-width="1.5"/><path d="M89 38 L109 38 L111 48 L105 56 L100 60 L92 54 Z" fill="#f0c7ab" stroke="#172039" stroke-width="1"/><path d="M91 44 L98 43 L97 48 L92 48 M102 43 L109 44 L107 48 L103 48" fill="#fff" stroke="#172039" stroke-width="1"/><path d="M95 44 L95 48 M105 44 L105 48" stroke="#8064a5" stroke-width="2"/><path d="M85 40 L89 30 L101 28 L111 33 L115 48 L107 37 L102 44 L100 36 L94 43 L94 36 L87 49 Z" fill="#342e46" stroke="#172039" stroke-width="1"/>
+</svg><strong>Aurora</strong><span>Deep teal · champagne gold · ballet bun</span><span class="skin-selected">Selected ✓</span></button>
+</div><p id="skin-status" role="status"></p>
+</dialog>
 <dialog id="guide" aria-labelledby="guide-title">
 <button id="close-guide">Back to skating</button><h2 id="guide-title">Every edge. Every move.</h2>
 <div class="settings"><label>Control scheme <select id="scheme-select"><option value="1">Assisted steering</option><option value="0">Assisted lean & load</option><option value="2">Assisted two-foot</option></select></label><label>Skater profile — starts a new run <select id="profile-select"></select></label><label>Difficulty — starts a new run <select id="difficulty"><option value="beginner">Beginner · landing assist</option><option value="simulation">Simulation · manual jumps</option></select></label><label>Music <select id="track-select"></select></label></div>

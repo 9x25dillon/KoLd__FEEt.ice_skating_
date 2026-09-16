@@ -1,4 +1,8 @@
-import { bodyPoints } from "../app/draw.ts";
+import { animeHead } from "./anime.ts";
+import { performancePose, SKINS } from "./appearance.ts";
+import type { Skin } from "./appearance.ts";
+import { IceEffects } from "./effects.ts";
+import { REWARD_LABELS } from "./rewards.ts";
 import type { V3 } from "../app/draw.ts";
 import type { SkaterState } from "../sim/types.ts";
 import { MOVE } from "../sim/types.ts";
@@ -12,13 +16,15 @@ import type { RookieCourse } from "./rookie.ts";
 import { Camera, VIEW } from "../app/camera.ts";
 
 export class SkateScene {
+  skin: Skin = SKINS[0];
+  readonly effects = new IceEffects();
   overview = false;
   zoom = 1;
   readonly camera = new Camera();
   private map = new Camera();
   constructor() { this.camera.view = VIEW.Chase; this.camera.chaseElevation = 36; }
-  reset(s: SkaterState) { this.camera.snap(s); }
-  update(s: SkaterState, dt: number) { this.camera.update(s, dt); }
+  reset(s: SkaterState) { this.camera.snap(s); this.effects.reset(s); }
+  update(s: SkaterState, dt: number) { this.camera.update(s, dt); this.effects.update(s, dt); }
   /** A screen-space stick must rotate with the camera, not the spinning body. */
   worldAim(x: number, y: number) {
     const yaw = this.overview ? Math.PI / 2 : this.camera.yaw;
@@ -26,7 +32,7 @@ export class SkateScene {
   }
   draw(ctx: CanvasRenderingContext2D, w: number, h: number, s: SkaterState, p: Params,
     trail: Array<Array<{x:number; y:number; contact:boolean}>>, low: boolean, target: number | null, playground: Playground | null = null, rookie: RookieCourse | null = null) {
-    const scale = this.overview ? Math.max(5, Math.min(w / 67, h / 45)) : Math.min(78, Math.max(42, h / 10)) * this.zoom;
+    const scale = this.overview ? Math.max(5, Math.min(w / 67, h / 45)) : Math.min(94, Math.max(48, h / 9)) * this.zoom;
     const cam = this.overview ? this.map : this.camera;
     if(this.overview) { cam.cx=0; cam.cy=18; }
     cam.zoom = scale / 26;
@@ -34,7 +40,7 @@ export class SkateScene {
     const cx = cam.cx, cy = cam.cy;
     const project = (v: V3): [number, number] => cam.project(v.x,v.y,v.z);
     const ice = ctx.createLinearGradient(0, 0, 0, h);
-    ice.addColorStop(0, "#8da6bd"); ice.addColorStop(0.6, "#c7dce2"); ice.addColorStop(1, "#91b6c7");
+    ice.addColorStop(0, "#536c99"); ice.addColorStop(0.6, "#bedfee"); ice.addColorStop(1, "#7cbacc");
     ctx.fillStyle = ice; ctx.fillRect(0, 0, w, h);
     ctx.save(); ctx.transform(...matrix);
     // A dark apron frames a luminous sheet; all surface details stay in world space.
@@ -44,8 +50,8 @@ export class SkateScene {
     ctx.save();
     ctx.beginPath(); ctx.roundRect(-28, -10, 56, 56, 9); ctx.clip();
     const surface = ctx.createLinearGradient(-28, -10, 28, 46);
-    surface.addColorStop(0, "#e5f4f4"); surface.addColorStop(.45, "#c2dde4");
-    surface.addColorStop(.72, "#e2e8f5"); surface.addColorStop(1, "#a9cfda");
+    surface.addColorStop(0, "#d5f5ff"); surface.addColorStop(.45, "#a8d5ef");
+    surface.addColorStop(.72, "#e6ddff"); surface.addColorStop(1, "#91cadc");
     ctx.fillStyle = surface; ctx.fillRect(-28, -10, 56, 56);
     for (const x of [-19, 0, 19]) {
       const glow = ctx.createRadialGradient(x, 18, 0, x, 18, 20);
@@ -107,6 +113,26 @@ export class SkateScene {
       ctx.fillStyle = i === target ? "#e8ab4433" : "#7085a780"; ctx.fill();
       if (i === target) { ctx.strokeStyle = "#b77b28"; ctx.lineWidth = 0.08; ctx.stroke(); }
     });
+    const landing = this.effects.landing;
+    for (const reward of this.effects.rewards) {
+      if (reward.kind !== "goal" && reward.kind !== "light") continue;
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - reward.age / 1.4);
+      const radius = reward.kind === "goal" ? 2.4 : LIGHT_RADIUS;
+      ctx.beginPath(); ctx.arc(reward.x, reward.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffe3a02b"; ctx.fill();
+      ctx.lineWidth = .1; ctx.strokeStyle = "#e8b752"; ctx.stroke();
+      if (!this.effects.reducedMotion) {
+        ctx.beginPath(); ctx.arc(reward.x, reward.y, radius + reward.age * 1.5, 0, Math.PI * 2);
+        ctx.lineWidth = .035; ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if (landing && landing.age < .7 && !this.effects.reducedMotion) {
+      ctx.save(); ctx.globalAlpha = (1 - landing.age / .7) * .65;
+      ctx.beginPath(); ctx.arc(landing.x, landing.y, .3 + landing.age * 2.5, 0, Math.PI * 2);
+      ctx.strokeStyle = landing.clean ? this.skin.trim : "#b17a64";
+      ctx.lineWidth = .055; ctx.stroke(); ctx.restore();
+    }
     ctx.restore();
     const line = (points: V3[], color: string, thickness: number) => {
       ctx.beginPath(); points.forEach((v, i) => { const [x,y] = project(v); if (!i) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
@@ -162,7 +188,8 @@ export class SkateScene {
         ctx.fillStyle="#283f58";ctx.beginPath();ctx.ellipse(x,y,.27*scale,.14*scale,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#87b6c4";ctx.lineWidth=2;ctx.stroke();
       }
     }
-    const b = bodyPoints(s, p);
+    const { body: b, elbows } = performancePose(s, p, this.effects.reducedMotion);
+    const skin = this.skin;
     if (low) {
       // Pose overlay only: actual blade contacts and knee compression remain physical.
       b.shoulder = { x:b.hip.x - s.heading.x * 0.48, y:b.hip.y - s.heading.y * 0.48, z:b.hip.z + 0.05 };
@@ -175,7 +202,7 @@ export class SkateScene {
     }
     if (s.fallen) {
       const flatten = (v: V3) => { v.x += s.heading.x * v.z * 0.6; v.y += s.heading.y * v.z * 0.6; v.z *= 0.12; };
-      for (const v of [b.hip,b.shoulder,b.head,...b.hips,...b.shoulders,...b.hands,...b.knees]) flatten(v);
+      for (const v of [b.hip,b.shoulder,b.head,...b.hips,...b.shoulders,...b.hands,...b.knees,...elbows]) flatten(v);
     }
     const [sx,sy] = project({ ...s.pos, z: 0 });
     ctx.save(); ctx.translate(sx, sy); ctx.scale(1, .28);
@@ -184,57 +211,154 @@ export class SkateScene {
     ctx.fillStyle = shadow; ctx.fillRect(-scale, -scale, scale * 2, scale * 2); ctx.restore();
     ctx.lineCap = "round"; ctx.lineJoin = "round";
     const far = cam.depth(b.feet[0].x,b.feet[0].y) > cam.depth(b.feet[1].x,b.feet[1].y) ? 0 : 1;
+    const inkLine = (points: V3[], color: string, thickness: number) => {
+      line(points, "#172039", thickness + .035);
+      line(points, color, thickness);
+    };
+    const cel = (points: V3[], color: string) => {
+      polygon(points, color); line([...points, points[0]], "#172039", .018);
+    };
     const leg = (i: number) => {
-      line([b.hips[i], b.knees[i], b.feet[i]], i === far ? "#253859" : "#3e5279", 0.13);
+      inkLine([b.hips[i], b.knees[i], b.feet[i]], i === far ? skin.tightsShade : skin.tights, 0.13);
+      line([b.knees[i], b.feet[i]], i === far ? "#48516f" : "#7185a3", .025);
       const f = b.feet[i], t = s.blade[i].tangent;
-      line([{x:f.x-t.x*0.13,y:f.y-t.y*0.13,z:f.z+0.045},{x:f.x+t.x*0.18,y:f.y+t.y*0.18,z:f.z+0.045}], "#f9fbff", 0.11);
+      inkLine([{x:f.x-t.x*0.13,y:f.y-t.y*0.13,z:f.z+0.045},{x:f.x+t.x*0.18,y:f.y+t.y*0.18,z:f.z+0.045}], "#f9fbff", 0.11);
       line([{x:f.x-t.x*0.17,y:f.y-t.y*0.17,z:f.z},{x:f.x+t.x*0.22,y:f.y+t.y*0.22,z:f.z}], "#5a6c83", 0.026);
     };
-    leg(far); line([b.shoulders[far],b.hands[far]], "#7563a4", 0.09);
-    line([b.hip,b.shoulder], "#6953a0", 0.32);
-    line([b.hip,b.shoulder], "#a798ce", 0.12);
-    line([b.shoulders[0],b.shoulders[1]], "#e4d5f3", 0.045);
-    line([b.hips[0],b.hips[1]], "#403761", 0.18);
-    // A short flared skating skirt: wider at speed, and flung out by a spin —
-    // free, since flare only reads the pose already computed (armsOpen-style
-    // reasoning, not a new physical quantity). Drawn as a hem radially
-    // symmetric about the hip, in screen space, so a spin's continuously
-    // rotating heading cannot turn it edge-on and make it vanish.
+    const arm = (i: number) => inkLine(low ? [b.shoulders[i], b.hands[i]] : [b.shoulders[i], elbows[i], b.hands[i]], i === far ? skin.sleeveShade : skin.sleeve, .09);
+    leg(far); arm(far);
+    inkLine([b.shoulder, b.head], skin.skin, .075);
+    const waist = b.hips.map(v => ({...v, z:v.z+.035}));
+    cel([b.shoulders[0], b.shoulders[1], waist[1], waist[0]], skin.bodice);
+    cel([b.shoulder, b.shoulders[1], waist[1], b.hip], skin.sleeveShade);
+    polygon([b.shoulders[0], b.shoulder, b.hip, waist[0]], skin.highlight);
+    const chest = { ...b.shoulder, z:b.shoulder.z-.18 };
+    line([b.shoulders[0], chest, b.shoulders[1]], skin.trim, .033);
+    line([chest,b.hip], skin.trim, .022);
+    line([b.hips[0],b.hips[1]], skin.skirtShade, 0.18);
+    leg(1-far);
+    // Fabric hangs from the hips, opens with angular speed, and ripples at the hem.
     if (!s.fallen) {
       const speed = Math.hypot(s.vel.x, s.vel.y);
-      const flare = 0.20 + Math.min(0.12, speed * 0.012) + (s.move === MOVE.Spin ? 0.24 : 0);
-      const [hipX,hipY] = project(b.hip);
-      const [,hemY] = project({ x: b.hip.x, y: b.hip.y, z: b.hip.z - 0.34 });
-      const rx = flare * scale, ry = (hemY - hipY) * 0.32 + flare * scale * 0.28;
-      ctx.fillStyle = "#c26e93"; ctx.beginPath();
-      ctx.ellipse(hipX, hipY + (hemY - hipY) * 0.55, rx, Math.max(2, ry), 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#8f4d6c"; ctx.lineWidth = Math.max(1, 0.05 * scale);
-      ctx.beginPath(); ctx.ellipse(hipX, hipY, 0.14 * scale, Math.max(1.5, 0.05 * scale), 0, 0, Math.PI * 2); ctx.stroke();
+      const spin = s.move === MOVE.Spin ? Math.min(1, Math.abs(s.spin.omega) / 12) : 0;
+      const flare = .22 + Math.min(.1, speed * .012) + spin * .22;
+      const [hipX, hipY] = project(b.hip);
+      const [, hemY] = project({ ...b.hip, z: b.hip.z - .28 + spin * .12 });
+      const hem: Array<[number, number]> = [];
+      for (let i = 0; i <= 24; i++) {
+        const angle = i / 24 * Math.PI;
+        const ripple = this.effects.reducedMotion ? 0 : Math.sin(i * 1.8 + s.tick / 10) * .014 * Math.min(1, speed / 3 + spin);
+        hem.push([hipX - Math.cos(angle) * flare * scale,
+          hemY + Math.sin(angle) * flare * scale * .25 + ripple * scale]);
+      }
+      const fabric = ctx.createLinearGradient(hipX - flare * scale, hipY, hipX + flare * scale, hemY);
+      fabric.addColorStop(0, skin.skirtShade); fabric.addColorStop(.32, skin.skirtShade); fabric.addColorStop(.32, skin.skirt); fabric.addColorStop(.8, skin.skirt); fabric.addColorStop(.8, skin.skirtShade); fabric.addColorStop(1, skin.skirtShade);
+      ctx.beginPath(); ctx.moveTo(hipX - scale * .13, hipY);
+      for (const [x, y] of hem) ctx.lineTo(x, y);
+      ctx.lineTo(hipX + scale * .13, hipY); ctx.closePath(); ctx.fillStyle = fabric; ctx.fill(); ctx.strokeStyle="#172039"; ctx.lineWidth=Math.max(1,scale*.018); ctx.stroke();
+      ctx.strokeStyle = skin.trim; ctx.lineWidth = Math.max(1, scale * .018);
+      ctx.beginPath(); hem.forEach(([x,y], i) => i ? ctx.lineTo(x,y) : ctx.moveTo(x,y)); ctx.stroke();
+      ctx.save(); ctx.globalAlpha = .3;
+      for (const i of [4, 8, 12, 16, 20]) {
+        ctx.beginPath(); ctx.moveTo(hipX + (hem[i][0] - hipX) * .28, hipY + 2);
+        ctx.lineTo(...hem[i]); ctx.stroke();
+      }
+      ctx.restore();
+      line([b.hips[0], b.hips[1]], skin.trim, .035);
     }
-    leg(1-far); line([b.shoulders[1-far],b.hands[1-far]], "#9583c7", 0.09);
-    for (const hand of b.hands) { const [x,y] = project(hand); ctx.fillStyle="#ecc1a7";ctx.beginPath();ctx.arc(x,y,scale*.044,0,Math.PI*2);ctx.fill(); }
+    arm(1-far);
+    for (const hand of b.hands) { const [x,y] = project(hand); ctx.fillStyle=skin.skin;ctx.beginPath();ctx.arc(x,y,scale*.044,0,Math.PI*2);ctx.fill(); }
     // A ponytail: trails behind the direction of travel, and sways with lean
     // rather than heading, so it reads as the body's own motion rather than
     // just retracing the skate line.
-    if (!s.fallen) {
+    if (!s.fallen && !skin.bun) {
       const side = perpLeft(s.heading);
-      const sway = Math.sin(s.tick / 40) * 0.05 + s.lean * 0.14;
+      const sway = (this.effects.reducedMotion ? 0 : Math.sin(s.tick / 22) * Math.min(.09, Math.hypot(s.vel.x, s.vel.y) * .012)) + s.lean * 0.14;
       const base = { x: b.head.x - s.heading.x * 0.06, y: b.head.y - s.heading.y * 0.06, z: b.head.z + 0.06 };
       const mid = { x: b.head.x - s.heading.x * 0.22 + side.x * sway, y: b.head.y - s.heading.y * 0.22 + side.y * sway, z: b.head.z - 0.05 };
       const tip = { x: b.head.x - s.heading.x * 0.38 + side.x * sway * 1.6, y: b.head.y - s.heading.y * 0.38 + side.y * sway * 1.6, z: b.head.z - 0.22 };
       const [bx,by] = project(base), [mx,my] = project(mid), [tx2,ty2] = project(tip);
       ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(mx, my, tx2, ty2);
-      ctx.strokeStyle = "#342e46"; ctx.lineWidth = Math.max(1, 0.09 * scale); ctx.lineCap = "round"; ctx.stroke();
+      ctx.strokeStyle = "#172039"; ctx.lineWidth = Math.max(1, .15 * scale); ctx.lineCap = "round"; ctx.stroke();
+      ctx.strokeStyle = skin.hair; ctx.lineWidth = Math.max(1, .11 * scale); ctx.stroke();
+      ctx.strokeStyle = "#776a99"; ctx.lineWidth = Math.max(1, .025 * scale); ctx.stroke();
     }
     const [hx,hy] = project(b.head);
-    ctx.fillStyle="#342e46";ctx.beginPath();ctx.arc(hx,hy-2,scale*.13,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle="#f0c7ab";ctx.beginPath();ctx.arc(hx+s.heading.x*scale*.025,hy+scale*.025,scale*.10,0,Math.PI*2);ctx.fill();
+    const facing = -(s.heading.x * Math.cos(cam.yaw) + s.heading.y * Math.sin(cam.yaw));
+    const turn = s.heading.x * Math.sin(cam.yaw) - s.heading.y * Math.cos(cam.yaw);
+    animeHead(ctx, hx, hy, scale, skin, facing, turn);
+    ctx.save();
+    for (const particle of this.effects.particles) {
+      const [x, y] = project(particle);
+      if (x < -10 || x > w + 10 || y < -10 || y > h + 10) continue;
+      ctx.globalAlpha = Math.min(1, (1 - particle.age / particle.life) * 1.4);
+      const radius = Math.max(.7, particle.size * scale);
+      const [tailX, tailY] = project({ x: particle.x - particle.vx * .018,
+        y: particle.y - particle.vy * .018, z: Math.max(0, particle.z - particle.vz * .018) });
+      ctx.strokeStyle = "#83b4cbb0"; ctx.lineWidth = Math.max(.7, radius * .6);
+      ctx.beginPath(); ctx.moveTo(tailX, tailY + 1); ctx.lineTo(x, y); ctx.stroke();
+      ctx.fillStyle = "#f4ffff"; ctx.beginPath();
+      ctx.moveTo(x, y - radius); ctx.lineTo(x + radius * .7, y);
+      ctx.lineTo(x, y + radius); ctx.lineTo(x - radius * .5, y); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
     if (target !== null || (rookie && !rookie.done)) {
       const dest=rookie && !rookie.done ? rookie.target : LIGHTS[target!], [tx,ty]=project({...dest,z:.4});
       const ax=Math.max(35,Math.min(w-35,tx)), ay=Math.max(140,Math.min(h-160,ty));
       ctx.fillStyle="#95601b";ctx.textAlign="center";ctx.font="700 13px system-ui";
       ctx.fillText(`◆ ${Math.round(Math.hypot(dest.x-s.pos.x,dest.y-s.pos.y))} m`,ax,ay);
+    }
+    // Short, world-anchored celebrations show the exact points the rules awarded.
+    ctx.save();
+    const rewardLabels: Array<{ x: number; y: number }> = [];
+    for (const reward of this.effects.rewards) {
+      const gold = reward.kind === "goal" || reward.kind === "light";
+      const color = gold ? "#ffe0a0" : "#cdfaff";
+      const [x, y] = project({ ...reward, z: .65 });
+      if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
+      ctx.globalAlpha = Math.min(1, (1.4 - reward.age) / .4);
+      if (!this.effects.reducedMotion && reward.age < .75) {
+        ctx.save(); ctx.globalAlpha *= 1 - reward.age / .75;
+        for (let i = 0; i < (gold ? 16 : 10); i++) {
+          const angle = i * Math.PI * 2 / (gold ? 16 : 10);
+          const radius = .12 + reward.age * (gold ? 3 : 1.6);
+          const [px, py] = project({ x: reward.x + Math.cos(angle) * radius,
+            y: reward.y + Math.sin(angle) * radius, z: .65 + Math.sin(reward.age * Math.PI) * .4 });
+          const size = Math.max(1.5, Math.min(4, scale * .04));
+          ctx.strokeStyle = gold ? "#b4832e" : "#4e9ab8"; ctx.lineWidth = 1;
+          ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(px, py - size);
+          ctx.lineTo(px + size * .6, py); ctx.lineTo(px, py + size);
+          ctx.lineTo(px - size * .6, py); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+      }
+      const lift = this.effects.reducedMotion ? 0 : reward.age * 26;
+      let labelY = y - 34 - lift;
+      // Keep the athlete's silhouette visible during a landing or nearby pickup.
+      const labelX = Math.abs(x - sx) < 100 && Math.abs(labelY - sy) < scale * 2.2
+        ? sx + (sx < w / 2 + 1 ? 128 : -128) : x;
+      while (rewardLabels.some(label => Math.abs(label.x - labelX) < 122 && Math.abs(label.y - labelY) < 50)) labelY -= 50;
+      rewardLabels.push({ x: labelX, y: labelY });
+      ctx.fillStyle = "#173149ed"; ctx.beginPath(); ctx.roundRect(labelX - 58, labelY - 23, 116, 46, 10); ctx.fill();
+      ctx.textAlign = "center"; ctx.fillStyle = color; ctx.font = "750 20px system-ui";
+      ctx.fillText(`+${reward.points}`, labelX, labelY - 2);
+      ctx.fillStyle = "#d5e4ed"; ctx.font = "600 8px system-ui";
+      ctx.fillText(REWARD_LABELS[reward.kind], labelX, labelY + 13);
+    }
+    ctx.restore();
+    // Sparse action strokes at the screen edge, only at speed; never shake the camera.
+    const rush = Math.min(1, Math.max(0, (Math.hypot(s.vel.x, s.vel.y) - 6) / 5));
+    if (rush > 0 && !s.fallen && !this.overview && !this.effects.reducedMotion) {
+      ctx.save(); ctx.strokeStyle = "#f1f6ff"; ctx.globalAlpha = rush * .24; ctx.lineWidth = 1.2;
+      for (let i = 0; i < 12; i++) {
+        const side = i % 2 ? 1 : -1;
+        const y = h * (.22 + (i / 12) * .65);
+        const x = w / 2 + side * w * .46;
+        const length = 18 + ((s.tick + i * 19) % 70);
+        ctx.beginPath(); ctx.moveTo(x, y);
+        ctx.lineTo(x + side * length, y + (y - h * .45) * .09); ctx.stroke();
+      }
+      ctx.restore();
     }
     // Fixed rink map keeps bearings while the close camera follows the skater.
     const mx=w-104,my=h-190;

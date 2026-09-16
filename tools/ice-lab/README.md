@@ -2,6 +2,13 @@
 
 ## Play Ice Run
 
+The game's sports-anime presentation pairs an original illustrated opening screen
+with procedural cel-shaded skaters: ink outlines, angular hair, directional faces,
+geometric costume panels, two-tone fabric shadows, and restrained action strokes
+at high speed. Both Violet and Aurora retain their selectable outfits. The key
+visual is bundled locally in `game/art/`; the live athlete is canvas-rendered and
+still follows the solver's pose, rather than using the illustration as a sprite.
+
 `game/` is a standalone browser game on the same 120 Hz solver as the lab, with
 a close, angled momentum camera: it follows **velocity**, not body heading, so
 turning backward, twizzling and rotating in the air do not spin the view around
@@ -58,6 +65,24 @@ from practice, playground or light-run points. **Sound** enables the existing
 blade, skid and jump audio. Separate ice tracings follow the two blade contacts
 and break while airborne. The athlete uses the engine's body pose, including
 knee compression, height, lean, arm carriage and spin positions.
+
+**Style** opens a wardrobe with the original **Violet** outfit and the optional
+**Aurora** teal-and-gold outfit with a ballet bun. It is also available from the
+opening card. Selection applies immediately without resetting a run, and is
+remembered in this browser when storage is available. The wardrobe pauses skating.
+
+The game adds contact-driven ice spray for braking, skidding and deeper carves,
+plus a burst and brief result card for each landing (including step-outs, two-foot
+landings and falls). Bent elbows, push-driven arm swings, a rippling skirt hem and
+speed-responsive ponytail motion build on the solver's body pose. These effects
+are cosmetic: they never change physics, scores or replay data. They freeze while
+paused and clear when starting a run or importing a replay. Reduced-motion system
+preferences reduce particle density and disable decorative ripples and landing rings.
+
+Collected snowflakes dissolve into sparkles with floating points. Puck goals and
+timed-run lights briefly illuminate their targets; jump and spin practice rewards
+also show the points actually awarded. Celebrations pause with the game, expire
+quickly, and respect reduced motion. They do not change scoring or pickup cooldowns.
 
 **Music**, in the Controls window, picks one of five tracks (`game/audio/`);
 **Sound** starts and stops its playback alongside the procedural audio. Each

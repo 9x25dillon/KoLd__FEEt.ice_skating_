@@ -8,6 +8,7 @@ import { JUMP_PHASE, JUMP_CODE } from "../sim/jump.ts";
 import { GAME_PARAMS, CONTROL_NAMES, gameInput } from "./controls.ts";
 import { IceRun } from "./run.ts";
 import { SkateScene } from "./scene.ts";
+import { SKINS, skinById } from "./appearance.ts";
 import { Practice, LESSONS } from "./practice.ts";
 import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
@@ -74,11 +75,17 @@ void Promise.all(["scale-of-values.csv", "calls-and-deductions.csv"].map(async f
   el("technical").textContent = "Jump scoring unavailable: tables could not load";
 });
 const scene = new SkateScene(), audio = new EdgeAudio();
+const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+scene.effects.reducedMotion = motionPreference.matches;
+motionPreference.addEventListener("change", () => { scene.effects.reducedMotion = motionPreference.matches; });
+try { scene.skin = skinById(localStorage.getItem("edgework-skin")); } catch { /* Style works without storage. */ }
 let practice = new Practice(), cruise = true, sound = false, pushHeld = false;
 let scheme: Scheme = SCHEME.B, freeSkate = true, cantilever = false, lowHeld = false;
 let elapsedSkate = 0, pendingToe = false;
 const guide = el("guide") as HTMLDialogElement;
 let resumeAfterGuide = false;
+const wardrobe = el("wardrobe") as HTMLDialogElement;
+let resumeAfterWardrobe = false;
 let skater = createState(params, 4.5), steering = newSchemeState(), run = new IceRun();
 let mode: "ready" | "playing" | "paused" | "done" = "ready";
 let best = 0, accumulator = 0, last = 0, flash = 0;
@@ -147,6 +154,22 @@ el("timed").addEventListener("click", () => { freeSkate = false; courseMode = fa
 el("controls").addEventListener("click", () => {
   resumeAfterGuide = mode === "playing"; pause(); guide.showModal();
 });
+function refreshWardrobe() {
+  for (const skin of SKINS) el(`skin-${skin.id}`).setAttribute("aria-pressed", String(scene.skin.id === skin.id));
+  el("skin-status").textContent = `${scene.skin.name} selected · ready for the ice`;
+}
+for (const skin of SKINS) el(`skin-${skin.id}`).addEventListener("click", () => {
+  scene.skin = skin;
+  try { localStorage.setItem("edgework-skin", skin.id); } catch { /* Keep the choice for this session. */ }
+  refreshWardrobe();
+});
+function openWardrobe() {
+  resumeAfterWardrobe = mode === "playing"; pause(); refreshWardrobe(); wardrobe.showModal();
+}
+el("style").addEventListener("click", openWardrobe);
+el("opening-style").addEventListener("click", openWardrobe);
+el("close-wardrobe").addEventListener("click", () => wardrobe.close());
+wardrobe.addEventListener("close", () => { if (resumeAfterWardrobe) resume(); });
 (el("difficulty") as HTMLSelectElement).addEventListener("change", e => {
   beginner=(e.target as HTMLSelectElement).value==="beginner"; start(); pause();
 });
@@ -205,6 +228,15 @@ function draw(_now: number) {
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode ? playground : null, !playback ? rookie : null);
+  const landingEffect = scene.effects.landing;
+  el("jump-feedback").hidden = !landingEffect;
+  if (landingEffect) {
+    el("jump-feedback").dataset.outcome = landingEffect.clean ? "landed" : "rough";
+    el("jump-feedback").style.opacity = String(Math.min(1, (1.8 - landingEffect.age) / .35));
+    // Avoid re-announcing the same live-region text on every animation frame.
+    if (el("jump-result").textContent !== landingEffect.label) el("jump-result").textContent = landingEffect.label;
+    if (el("jump-detail").textContent !== landingEffect.detail) el("jump-detail").textContent = landingEffect.detail;
+  }
   audio.update(skater, params, sound && mode === "playing");
   schemeSelect.value = String(scheme);
   el("replay-status").textContent = recorder.full && !playback ? "Five-minute recording full · export and reset for a new clip" : replayNotice;
@@ -250,7 +282,7 @@ function draw(_now: number) {
 function frame(now: number) {
   const elapsed = Math.min((now - (last || now)) / 1000, 0.1); last = now;
   const controls = pad.read(true);
-  if (guide.open) { pendingPush = false; pendingToe = false; pendingTrick=false; draw(now); requestAnimationFrame(frame); return; }
+  if (guide.open || wardrobe.open) { pendingPush = false; pendingToe = false; pendingTrick=false; draw(now); requestAnimationFrame(frame); return; }
   if (controls.cycleView && !lowHeld && !(navigator.getGamepads?.().find(g => g?.connected)?.buttons[13]?.pressed)) scene.overview = !scene.overview;
   if (controls.zoom) scene.zoom = Math.max(0.65, Math.min(1.8, scene.zoom * Math.pow(1.15, controls.zoom)));
   if (controls.cycleScheme) { scheme = ((scheme + 1) % 3) as Scheme; steering = newSchemeState(); }
@@ -294,7 +326,10 @@ function frame(now: number) {
       step(skater, input, params, SIM_DT, events);
       if (sound) audio.onTick(input, events, skater);
       practice.sample(skater, cantilever, SIM_DT);
-      if(freeSkate && !courseMode) playground.sample(skater,SIM_DT);
+      if(freeSkate && !courseMode) {
+        playground.sample(skater,SIM_DT);
+        for (const reward of playground.rewards) scene.effects.reward(reward);
+      }
       rookie?.sample(skater,SIM_DT);
       scene.update(skater, SIM_DT);
       recorder.capture(input, params, skater, events, (["A","B","C"] as const)[scheme]);
@@ -305,7 +340,13 @@ function frame(now: number) {
         scoredTick = skater.landed.tick; technical += scoreJump(tables, skater.landed)?.score ?? 0;
       }
       elapsedSkate += SIM_DT;
-      if (!freeSkate && run.sample(skater, SIM_DT)) flash = 1.2;
+      if (!freeSkate) {
+        const target = run.target, previousScore = run.score;
+        if (run.sample(skater, SIM_DT)) {
+          flash = 1.2;
+          scene.effects.reward({ ...target, kind: "light", points: run.score - previousScore });
+        }
+      }
       flash = Math.max(0, flash - SIM_DT);
       traceBlades();
       accumulator -= SIM_DT;

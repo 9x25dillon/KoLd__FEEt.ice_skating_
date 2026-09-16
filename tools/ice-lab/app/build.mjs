@@ -100,6 +100,10 @@ emit("sim");
 emit("app");
 emit("game");
 copyFileSync(join(root, "game/index.html"), join(out, "game/index.html"));
+mkdirSync(join(out, "game/art"), { recursive: true });
+for (const file of readdirSync(join(root, "game/art"))) {
+  if (/\.(png|webp|jpg)$/.test(file)) copyFileSync(join(root, "game/art", file), join(out, "game/art", file));
+}
 copyFileSync(join(root, "app/index.html"), join(out, "app/index.html"));
 
 // The rhythm layer's tracks (game/audio/README.md): media plus the manifest,
