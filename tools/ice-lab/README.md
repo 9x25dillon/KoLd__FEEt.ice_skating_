@@ -28,7 +28,7 @@ restart. On a controller, the left stick aims in a direction across the ice,
 **A** pushes, **LT** held brakes, **Start** pauses, and **Back** restarts. **Y is spin.** Keyboard or
 controller required; touch controls are not implemented.
 
-The opening card picks one of three modes. **Free Skate** is open practice: seven
+The opening card offers four modes. **Free Skate** is open practice: seven
 objectives worth 250 points each, once per run (`game/practice.ts`), plus a FLOW
 meter that rewards staying upright at speed and unlocks a scattered field of
 snowflakes and pucks to knock into gold targets (`game/playground.ts`). The
@@ -38,6 +38,23 @@ cone costs 25 points, and the HUD tracks gates cleared against a clean run
 pickups within 8 seconds build a chain up to ×5 — silver is 1,500 points, gold
 3,000 (`game/run.ts`) — and your personal best stays in this browser when
 storage is available. Jumps and moves are enabled in every mode.
+
+**Career mode** opens a five-event season, from First ice through the Championship
+program. Each event has a timed, ordered choreography of glides, edges, crossovers,
+clean jumps, spins and closing poses. The coach shows the current instruction,
+hold progress, and the routine checklist. Moves count from actual solver results;
+a jump performed before its cue cannot count later. Falls reset the current hold,
+but keep completed elements. Finish before the deadline to unlock the next event:
+bronze for completion, silver with at most two falls, gold with no falls.
+
+Each improved medal tier awards 150 XP once. The Career board lets you spend XP
+on push power, jump spring, edge control or balance, using the existing profile
+training costs. That career profile applies on the next career start; practice
+uses its selected sample profile. Completed medals and training save locally in
+this browser. If storage is unavailable, progress lasts for the session. Replays
+capture the baked skating physics, but playback does not award career progress.
+The routines are authored move sequences, not a choreography editor or beat-window
+judging system. Music and musical credit still work alongside the routine.
 
 **Difficulty**, in the Controls window, is Beginner or Simulation and starts a
 new run. Beginner softens keyboard lean and hands the on-screen **trick** button

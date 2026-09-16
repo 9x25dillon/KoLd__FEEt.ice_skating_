@@ -12,6 +12,20 @@ you take is written permanently into the ice beneath you. There is no jump butto
 > [`Hand_off.md`](Hand_off.md) — current state, conventions, artifact URLs, and the three
 > things most likely to trip you up.
 
+## Play the Godot prototype
+
+The [Godot edition of Ice Run](games/ice-run-godot/README.md) adds a 3D rink and
+rigged skater around the original Ice Lab engine, with career choreography,
+an ordered program editor, training, music and replay playback.
+
+```sh
+./games/ice-run-godot/run.sh
+```
+
+Requires Godot 4 (tested on 4.7.2), Node 24+ and FFmpeg. The project includes the
+Blender skater source and a Linux export workflow. This is a playable prototype;
+the full production design below remains a larger target.
+
 ## Read the design bible
 
 | | |

@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "tools/ice-lab/**"
+      - "games/ice-run-godot/**"
       - ".github/workflows/ice-lab-checks.yml"
   push:
     branches: [main]
     paths:
       - "tools/ice-lab/**"
+      - "games/ice-run-godot/**"
       - ".github/workflows/ice-lab-checks.yml"
   workflow_dispatch:
 
@@ -32,3 +34,8 @@ jobs:
       - run: node --test test/*.test.ts
       - run: node app/build.mjs
       - run: node replay/verify.ts test/fixtures/replay-v1.json
+      - name: Verify the Godot engine bridge
+        working-directory: .
+        run: |
+          node games/ice-run-godot/tools/prepare.mjs --engine-only
+          node --test games/ice-run-godot/tests/*.test.mjs

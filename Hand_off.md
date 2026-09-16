@@ -1,5 +1,37 @@
 # Hand-off
 
+## Current checkpoint — 2026-09-15, resumed career / Godot session
+
+Still on **`ue-replay-01-foundation`**. The operator authorized the Godot rebuild,
+then asked to recover the latest interrupted session, continue, and commit/push.
+The previous session's career and Godot files survived on disk; its last test-path
+fix had not executed. That fix is recovered. The historical branch-divergence
+warning below still applies: this work does not merge or rewrite `main`.
+
+- Browser Ice Run now has five career events, ordered choreography, medals,
+  unlocks, XP training and local saves (`game/career.ts`).
+- `games/ice-run-godot/` is the playable Godot project. Its Node pipe host runs
+  the unchanged Ice Lab simulation; Godot renders a rigged Blender skater,
+  rink/traces, cameras, music, career and a simple ordered Composer editor.
+  This is **not yet a native GDScript/C++ physics port**.
+- Godot 4.7.2 and Linux export templates are installed locally. Launch the project
+  with `./games/ice-run-godot/run.sh`. See its README for editor, export, controls,
+  saved data, rebuild instructions and an explicit design-bible coverage table.
+- Runtime JS and converted music are generated; skater `.blend` and `.glb`, fonts,
+  source scripts and import settings are versioned. Smoke tests use isolated
+  per-process career saves. No need to reconstruct assets from `/tmp`.
+- Checks: all 296 existing Ice Lab tests and all eight Godot bridge/host tests
+  pass. Both the editor runtime and the Linux export completed the first career
+  routine. A rendered capture caught washed-out lighting, which was corrected.
+- The next substantial work is better character animation, a spatial/music
+  Composer, persistent ice affecting friction, and the stamina/flow/hype layer.
+  The roughly 75% bible direction is **not a measured completeness claim**.
+
+The operator's root play-data folder and saved HTML page remain outside these
+changes, as recorded below. All pre-2026-09-15 material below is historical context.
+
+---
+
 **Last session: 2026-09-14 (tenth), on `ue-replay-01-foundation`, three commits. Repo state: everything
 the ninth session left, plus a standalone game (Free Skate, a guided Rookie course, a 90-second light
 run) on the same solver; a rhythm layer (beat-timed crossover pushes, musical credit) with five of the

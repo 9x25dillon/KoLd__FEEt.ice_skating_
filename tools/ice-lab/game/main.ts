@@ -1,3 +1,5 @@
+import { CareerState, Choreography, CAREER_EVENTS, ELEMENTS, MEDALS } from "./career.ts";
+import { xpToRaise } from "../sim/profile.ts";
 import { createState, step } from "../sim/solver.ts";
 import { SIM_DT } from "../sim/params.ts";
 import { Pad } from "../app/pad.ts";
@@ -14,6 +16,9 @@ import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
 import { RookieCourse } from "./rookie.ts";
 import { resolveRinkCollision } from "./rink.ts";
+let careerMode = false, careerEvent = 0, choreography: Choreography | null = null;
+let career = new CareerState();
+try { career = CareerState.restore(localStorage.getItem("edgework-career-v1")); } catch { /* Storage is optional. */ }
 let courseMode = false, rookie: RookieCourse | null = null;
 import { EdgeAudio } from "../app/audio.ts";
 import type { EdgeEvent } from "../sim/types.ts";
@@ -102,8 +107,12 @@ try { best = Math.max(0, Number(localStorage.getItem("edgework-ice-run-best")) |
 el("record").textContent = `Personal best · ${best.toLocaleString()} pts`;
 
 function start() {
-  params = applyProfile(beginner ? BEGINNER_PARAMS : GAME_PARAMS, SAMPLE_PROFILES[profileIndex]);
+  params = applyProfile(beginner ? BEGINNER_PARAMS : GAME_PARAMS, careerMode ? career.profile : SAMPLE_PROFILES[profileIndex]);
   applyTrack(params);
+  choreography = careerMode ? new Choreography(CAREER_EVENTS[careerEvent]) : null;
+  document.body.dataset.career = String(careerMode);
+  el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : "ON THE ICE / PRACTICE";
+  renderRoutine();
   coach = new BeginnerCoach(); playground = new Playground(); pendingTrick = false; rookie = courseMode ? new RookieCourse() : null;
   recorder = new ReplayRecorder(params, 4.5); playback = null; replayJson = "";
   technical = 0; scoredTick = -1; replayNotice = "Recording your skating · first five minutes";
@@ -148,9 +157,9 @@ function finish() {
 }
 el("start").addEventListener("click", () => mode === "paused" && !playback?.done ? resume() : start());
 el("pause").addEventListener("click", pause);
-el("free").addEventListener("click", () => { freeSkate = true; courseMode = false; cruise = true; start(); });
-el("rookie").addEventListener("click", () => { freeSkate=true; courseMode=true; cruise=true; start(); });
-el("timed").addEventListener("click", () => { freeSkate = false; courseMode = false; cruise = false; start(); });
+el("free").addEventListener("click", () => { careerMode = false; freeSkate = true; courseMode = false; cruise = true; start(); });
+el("rookie").addEventListener("click", () => { careerMode=false; freeSkate=true; courseMode=true; cruise=true; start(); });
+el("timed").addEventListener("click", () => { careerMode = false; freeSkate = false; courseMode = false; cruise = false; start(); });
 el("controls").addEventListener("click", () => {
   resumeAfterGuide = mode === "playing"; pause(); guide.showModal();
 });
@@ -191,7 +200,7 @@ el("save-replay").addEventListener("click", () => {
   try {
     if(file.size > MAX_REPLAY_BYTES) throw new Error("Replay exceeds the 64 MiB limit");
     const json = await file.text(), clip = parseReplay(json);
-    start(); playback = new ReplayPlayer(clip); replayJson = json;
+    careerMode = false; courseMode = false; start(); playback = new ReplayPlayer(clip); replayJson = json;
     skater = playback.state; params = playback.params; freeSkate = true;
     scene.reset(skater); resumeAfterGuide = false; guide.close();
     replayNotice = `Playing ${file.name} · inputs locked`;
@@ -227,7 +236,7 @@ function draw(_now: number) {
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode ? playground : null, !playback ? rookie : null);
+  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode ? playground : null, !playback ? rookie : null);
   const landingEffect = scene.effects.landing;
   el("jump-feedback").hidden = !landingEffect;
   if (landingEffect) {
@@ -278,11 +287,12 @@ function draw(_now: number) {
   el("stance").textContent = `${CONTROL_NAMES[scheme]} · ${codeToString(skater.blade[0].code)} / ${codeToString(skater.blade[1].code)} · ${Math.hypot(skater.vel.x, skater.vel.y).toFixed(1)} m/s`;
   el("landing").textContent = skater.landed.tick < 0 ? "" : `Last jump: ${JUMP_CODE[skater.landed.kind] ?? "hop"} · ${skater.landed.turned.toFixed(2)} rev · ${skater.landed.fall ? "fall" : skater.landed.stepOut ? "step-out" : "landed"}`;
   el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
+  drawCareer();
 }
 function frame(now: number) {
   const elapsed = Math.min((now - (last || now)) / 1000, 0.1); last = now;
   const controls = pad.read(true);
-  if (guide.open || wardrobe.open) { pendingPush = false; pendingToe = false; pendingTrick=false; draw(now); requestAnimationFrame(frame); return; }
+  if (guide.open || wardrobe.open || careerBoard.open) { pendingPush = false; pendingToe = false; pendingTrick=false; draw(now); requestAnimationFrame(frame); return; }
   if (controls.cycleView && !lowHeld && !(navigator.getGamepads?.().find(g => g?.connected)?.buttons[13]?.pressed)) scene.overview = !scene.overview;
   if (controls.zoom) scene.zoom = Math.max(0.65, Math.min(1.8, scene.zoom * Math.pow(1.15, controls.zoom)));
   if (controls.cycleScheme) { scheme = ((scheme + 1) % 3) as Scheme; steering = newSchemeState(); }
@@ -326,7 +336,7 @@ function frame(now: number) {
       step(skater, input, params, SIM_DT, events);
       if (sound) audio.onTick(input, events, skater);
       practice.sample(skater, cantilever, SIM_DT);
-      if(freeSkate && !courseMode) {
+      if(freeSkate && !courseMode && !careerMode) {
         playground.sample(skater,SIM_DT);
         for (const reward of playground.rewards) scene.effects.reward(reward);
       }
@@ -351,9 +361,88 @@ function frame(now: number) {
       traceBlades();
       accumulator -= SIM_DT;
       if (!freeSkate && run.done) finish();
+      if (choreography && !playback) {
+        const previous = choreography.index;
+        choreography.sample(skater, cantilever, SIM_DT);
+        if (previous !== choreography.index) renderRoutine();
+        if (choreography.done) finishCareer();
+      }
     }
   } else { pendingPush = false; pendingToe = false; pendingTrick=false; }
   draw(now); requestAnimationFrame(frame);
+}
+
+const careerBoard = el("career-board") as HTMLDialogElement;
+let resumeAfterCareer = false, saveNotice = "Progress saves automatically on this browser.";
+function saveCareer() {
+  try { localStorage.setItem("edgework-career-v1", career.serialize()); saveNotice = "Career saved on this browser."; }
+  catch { saveNotice = "Storage is unavailable. Your career continues for this session only."; }
+}
+function refreshCareer() {
+  el("career-summary").textContent = `${career.medals.filter(Boolean).length}/${CAREER_EVENTS.length} events completed · ${career.profile.xp} XP available`;
+  const events = el("career-events"); events.replaceChildren();
+  CAREER_EVENTS.forEach((event, i) => {
+    const card = document.createElement("article"); card.className = "career-event";
+    const title = document.createElement("h3"); title.textContent = `${String(i + 1).padStart(2, "0")} / ${event.title}`;
+    const details = document.createElement("p"); details.textContent = `${event.venue} · ${event.seconds}s · ${MEDALS[career.medals[i]]}`;
+    const routine = document.createElement("p"); routine.textContent = event.routine.map(id => ELEMENTS[id].title).join(" → ");
+    const button = document.createElement("button"); button.disabled = i > career.unlocked;
+    button.textContent = button.disabled ? "Complete the previous event to unlock" : career.medals[i] ? "Replay program →" : "Skate this program →";
+    button.addEventListener("click", () => {
+      careerEvent = i; careerMode = true; courseMode = false; freeSkate = true; cruise = true;
+      resumeAfterCareer = false; careerBoard.close(); start();
+    });
+    card.append(title, details, routine, button); events.append(card);
+  });
+  const training = el("career-training"); training.replaceChildren();
+  for (const [stat, label] of [["strength", "Push power"], ["spring", "Jump spring"], ["edgeControl", "Edge control"], ["balance", "Balance"]] as const) {
+    const value = career.profile.stats[stat], cost = xpToRaise(value), button = document.createElement("button");
+    button.textContent = `${label} ${value} · ${value === 100 ? "Max" : `+1 / ${cost} XP`}`;
+    button.disabled = value === 100 || career.profile.xp < cost;
+    button.addEventListener("click", () => { career.train(stat); saveCareer(); refreshCareer(); });
+    training.append(button);
+  }
+  el("career-save").textContent = saveNotice;
+}
+function openCareer() { resumeAfterCareer = mode === "playing"; pause(); refreshCareer(); careerBoard.showModal(); }
+el("career-menu").addEventListener("click", openCareer);
+el("career-open").addEventListener("click", openCareer);
+el("career-close").addEventListener("click", () => careerBoard.close());
+careerBoard.addEventListener("close", () => { if (resumeAfterCareer) resume(); });
+function renderRoutine() {
+  const list = el("routine-list"); list.replaceChildren();
+  if (!choreography) return;
+  choreography.event.routine.forEach((id, i) => {
+    const item = document.createElement("li"); item.textContent = ELEMENTS[id].title;
+    item.dataset.state = i < choreography!.index ? "done" : i === choreography!.index ? "current" : "next";
+    if (i === choreography!.index) item.setAttribute("aria-current", "step");
+    list.append(item);
+  });
+}
+function drawCareer() {
+  el("routine-hud").hidden = !choreography || !!playback;
+  if (!choreography || playback) return;
+  const c = choreography, element = ELEMENTS[c.current];
+  el("time-label").textContent = "Program time"; el("time").textContent = c.seconds.toFixed(1);
+  el("score").textContent = String(c.index * 250);
+  el("combo-label").textContent = "Choreography"; el("combo").textContent = `${c.index}/${c.event.routine.length}`;
+  el("lesson-title").textContent = element?.title ?? "Program complete";
+  el("lesson-tip").textContent = element?.hint ?? "Your choreography is complete. See your result and next event.";
+  el("lesson-progress").textContent = `${c.index}/${c.event.routine.length} elements`;
+  const status = `${c.event.title} · ${c.falls} falls · ${c.complete ? MEDALS[c.medal] : "Finish to unlock the next event"}`;
+  if (el("routine-status").textContent !== status) el("routine-status").textContent = status;
+  (el("routine-meter") as HTMLProgressElement).value = c.complete ? 1 : element?.duration ? Math.min(1, c.held / element.duration) : 0;
+  if (!skater.fallen) el("hint").textContent = `CHOREOGRAPHY · ${element?.title ?? "Complete"} · ${c.event.routine[c.index + 1] ? `Next: ${ELEMENTS[c.event.routine[c.index + 1]].title}` : "Final element"}`;
+}
+function finishCareer() {
+  if (!choreography) return;
+  mode = "done"; musicEl.pause();
+  const c = choreography, xp = career.award(c); saveCareer();
+  el("title").textContent = c.complete ? `${MEDALS[c.medal]} on ice.` : "One more rehearsal.";
+  const next = careerEvent < CAREER_EVENTS.length - 1 ? `Next event: ${CAREER_EVENTS[careerEvent + 1].title}. Open Career to continue.` : "Season complete! Replay events to improve your medals.";
+  el("description").textContent = `${c.index}/${c.event.routine.length} elements · ${c.falls} falls · +${xp} XP. ${c.complete ? next : `Time ran out at ${ELEMENTS[c.current].title}. Follow the moves in order and try again.`} ${saveNotice}`;
+  el("help").hidden = true; el("start").textContent = "Retry this program →";
+  el("overlay").hidden = false; el("pause").hidden = true; el("start").focus();
 }
 let pendingPush = false;
 requestAnimationFrame(frame);
