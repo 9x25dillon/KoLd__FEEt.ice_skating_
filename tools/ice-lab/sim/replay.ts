@@ -40,6 +40,7 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       new levers at 0, the fixture and three operator clips matched on every
 //       state field and event; the fixture was re-recorded from its own inputs.
 //       /5 clips no longer load; verify one against a checkout of 8d89af2.
+// Historical game branch (through 23e3e49):
 //   /7  The rhythm layer (sim/music.ts, musicMode): Params gained musicMode
 //       and its levers, and SkaterState gained `strokeMusicScale` and
 //       `musicCredit`. With musicMode 0 — every preset — `strokeMusicScale`
@@ -59,7 +60,28 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       preserved edge a mohawk does (TURN_KIND's own comment), so weight
 //       cannot move a bracket to the other foot at all. /7 clips no longer
 //       load; verify one against a checkout of 3b93279.
-export const REPLAY_SOLVER = "ice-lab-f64/8";
+// Historical fidelity branch (through a1b4278):
+//   /7  The rink's shape (rinkRelief, rinkHalfLength, rinkHalfWidth): Params
+//       gained them, SkaterState did not. rinkRelief is 0 in every preset and
+//       the solver skips the rink at 0, so replayed through /6 and /7 the
+//       fixture and four operator clips matched on every state field and
+//       event on every tick; the fixture's digests are unchanged and it was
+//       re-recorded from its own inputs only for the new keys. /6 clips no
+//       longer load; verify one against a checkout of c926f39.
+//   /8  The wind-up (SkatingInput `windup`) and the jump assist it arms
+//       (jumpAssist, windupThreshold, windupWindow; JumpState
+//       `windupTick`, `windupPeak`, `armed`, `target`; JumpResult `armed`).
+//       With no wind-up nothing arms and the assist never runs, so replayed
+//       through /7 and /8 with windup 0 the fixture and four operator clips,
+//       jumps included, matched on every /7 state field and event on every
+//       tick; the fixture was re-recorded from its own inputs. /7 clips no
+//       longer load; verify one against a checkout of c0c6d96.
+//   /9  Union of both /8 branches: rhythm, bracket, rink relief and wind-up.
+//       Their /8 identities were ambiguous. Both older formats are rejected;
+//       use the recorded branch commits to play those clips, not a relabel.
+//       The fixture is re-recorded from its original inputs with neutral
+//       values for the newly introduced controls and parameters.
+export const REPLAY_SOLVER = "ice-lab-f64/9";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
@@ -160,7 +182,11 @@ function params(value: unknown, path: string): Params {
   const obj = object(value, path, Object.keys(DEFAULT_PARAMS));
   // Keep tunings the panel warns about: reproducing a BAD tuning is a reason
   // to record it. No substitution of current defaults or assist presets.
-  for (const key of Object.keys(DEFAULT_PARAMS)) number(obj[key], `${path}.${key}`, 0, 1e6);
+  for (const key of Object.keys(DEFAULT_PARAMS)) {
+    if (key !== "rinkRelief") number(obj[key], `${path}.${key}`, 0, 1e6);
+  }
+  // The one signed lever: a bowl is negative. Bounded as validate() bounds it.
+  number(obj.rinkRelief, `${path}.rinkRelief`, -0.05, 0.05);
   for (const key of ["mass", "gravity", "comHeight", "rocker", "rockerToeFraction", "minSpeedForCurv"])
     number(obj[key], `${path}.${key}`, 1e-6, 1e6);
   for (const key of ["maxLean", "maxTilt", "fallLean"])
@@ -186,8 +212,8 @@ export function parseReplay(json: string): Replay {
     const path = `frames[${i}]`;
     const frame = object(root.frames[i], path, ["input", "scheme", "digest"], ["params"]);
     const input = object(frame.input, `${path}.input`,
-      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]);
-    for (const key of ["lean", "pitch", "leanSplit"]) number(input[key], `${path}.input.${key}`, -1, 1);
+      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]);
+    for (const key of ["lean", "pitch", "leanSplit", "windup"]) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["knee", "weight", "carriage"]) number(input[key], `${path}.input.${key}`, 0, 1);
     for (const key of ["push", "brake", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]) {
       if (typeof input[key] !== "boolean") throw new Error(`${path}.input.${key}: expected a boolean`);

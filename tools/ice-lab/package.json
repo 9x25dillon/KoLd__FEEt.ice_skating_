@@ -10,6 +10,7 @@
     "serve": "node app/build.mjs && node app/serve.mjs",
     "typecheck": "tsc --noEmit -p .",
     "replay": "node replay/verify.ts",
+    "validate": "node validate.mjs",
     "native:reference": "node native/export-reference.mjs native/reference --check",
     "native:test": "node --test native/tests/*.test.mjs"
   }

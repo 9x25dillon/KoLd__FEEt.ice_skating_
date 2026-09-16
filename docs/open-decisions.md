@@ -1,6 +1,6 @@
 # Open decisions
 
-Six choices that change the shape of the project, plus the smaller specification gaps
+Seven choices that change the shape of the project, plus the smaller specification gaps
 that are known and deliberately unfilled. Each has a defensible default so work is never
 blocked — but these are the calls that are expensive to reverse later.
 
@@ -25,6 +25,12 @@ is the only part of the bible that scales cleanly, and it scales well.
 ---
 
 ## D2 · Engine
+
+**Current implementation exception — 2026-09-15:** the operator explicitly chose
+Godot 4 + Blender for the playable Ice Run rebuild. It uses the existing Ice Lab
+engine through a local Node bridge. The Unreal decision below records the older
+funded studio scenario; it does not override this current instruction. A native
+Godot physics port and the final production engine remain separate future decisions.
 
 **Default:** Unreal Engine 5.4+.
 
@@ -171,6 +177,39 @@ announcement, and buys almost nothing this game needs. Revisit only as post-laun
 the game exists and has leverage.
 
 **Affects:** §01, §07.1, §08 risk 9.
+
+---
+
+## D7 · Licence for `tools/`
+
+**Default:** None stated. `CONTRIBUTING.md` already said Apache-2.0; the README's licence table
+did not cover `tools/` at all, so the one directory with a working solver was, on paper, all
+rights reserved.
+
+**Status:** RESOLVED — **Apache-2.0, matching `src/` and `data/` (2026-09-13).**
+
+The tension was real: Ice Lab holds the tuned constants, which are the hard-won part, and a
+permissive licence lets anyone lift them. It was closed permissive for three reasons.
+
+- **A licence cannot protect the constants.** They are numbers, and numbers are facts — the same
+  argument the README already makes for the ISU values in `data/`. A restrictive licence would
+  protect the code around them, not the thing worth protecting.
+- **Publishing them is the point.** The fidelity gate asks skaters, coaches and technical
+  specialists to find where the model is wrong, and a public build ships every constant to every
+  browser. Their value comes from being validated in the open, not from being withheld.
+- **The owner is not bound by it.** Apache-2.0 limits nothing the copyright holder does with their
+  own build, and it keeps forks, contributions and a later free release simple. A no-derivatives
+  licence would have made every outside correction technically a derivative work.
+
+### What this locks
+
+- `tools/ice-lab/LICENSE` carries the Apache-2.0 text; the README table and the Ice Lab README point
+  at it. `CONTRIBUTING.md` needed no change.
+- Covers everything under `tools/`: the solver, the app, replay, `native/` and `deploy/`.
+- **Does not touch `docs/`.** The design bible stays CC BY-NC-ND 4.0. `docs/fidelity-gate.md` and
+  the generated fidelity report inherit that, which is fine: they are read, not forked.
+
+**Affects:** README licensing table, `tools/ice-lab/README.md`, `CONTRIBUTING.md` (already consistent).
 
 ---
 

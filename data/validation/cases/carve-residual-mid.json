@@ -1,0 +1,48 @@
+{
+  "id": "carve-residual-mid",
+  "kind": "carve",
+  "role": "validation",
+  "source": {
+    "type": "derived",
+    "citation": "tan φ = v² / (g r_c): the lean that balances a steady turn, point mass on a massless leg (fidelity-gate §4.2 S1)",
+    "primary_checked": null,
+    "notes": "Checks the implementation, not reality (fidelity-gate §2.2). r_c is fitted to the centre-of-mass path over the steady window, v is centre-of-mass speed; φ is state.lean. Speed decays during the window because nothing pushes; the relation is evaluated per tick and averaged. One foot, middle edge."
+  },
+  "requires": [],
+  "skater": null,
+  "venue": null,
+  "inputs": {
+    "initial": {
+      "speed_ms": 5.0,
+      "lean_rad": 0.0
+    },
+    "modes": {
+      "jumpMode": 0,
+      "movesMode": 0
+    },
+    "script": [
+      {
+        "seconds": 10.0,
+        "input": {
+          "lean": 0.3,
+          "weight": 1.0
+        }
+      }
+    ],
+    "clip": null
+  },
+  "observable": {
+    "name": "carve_lean_residual_deg",
+    "window": "steady",
+    "radius": "com"
+  },
+  "expected": {
+    "comparison": "within",
+    "value": 0.0,
+    "unit": "deg",
+    "measurement_uncertainty": 0.0,
+    "band": 0.5,
+    "tolerance": 0.5,
+    "confidence": "L0"
+  }
+}

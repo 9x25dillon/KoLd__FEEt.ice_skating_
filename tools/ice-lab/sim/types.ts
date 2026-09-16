@@ -93,6 +93,14 @@ export interface JumpState {
   toeTick: number;
   /** A toe pick was struck at some point during this load. */
   toeInLoad: boolean;
+  /** Tick of the last wind-up flick against the rotation, -1 if none or cancelled. */
+  windupTick: number;
+  /** How far that flick went, 0..1, over the flicks still inside the window. */
+  windupPeak: number;
+  /** The release came inside the wind-up window: the assist is flying this jump. */
+  armed: boolean;
+  /** Radians the assist is flying the rotation to; 0 when it is not. */
+  target: number;
   /** The support blade's edge code at the release tick. */
   takeoffCode: number;
   /** JUMP index, or JUMP_NONE for a hop or an unrecognised takeoff. */
@@ -139,6 +147,8 @@ export interface JumpResult {
   twoFoot: boolean;
   stepOut: boolean;
   fall: boolean;
+  /** The jump was wound up, and the assist flew its arms. */
+  armed: boolean;
 }
 
 // ── moves ───────────────────────────────────────────────────────────────────
@@ -465,6 +475,14 @@ export interface SkatingInput {
    * its absence is the pull-in that sets the rate.
    */
   carriage: number;
+  /**
+   * -1..1, the arms and shoulders wound round the body's axis: positive is
+   * clockwise, AGAINST the counter-clockwise rotation every jump here turns.
+   * A flick past `windupThreshold` within `windupWindow` of the release is the
+   * commitment that arms the jump's assist (`jumpAssist`, sim/jump.ts); a flick
+   * the other way cancels it. Zero, the jump is exactly the manual one.
+   */
+  windup: number;
   /** A toe-pick strike, this tick. Toe jumps need one within `toeWindow` of the release. */
   toe: boolean;
   /**
@@ -495,7 +513,7 @@ export interface SkatingInput {
 
 export const NEUTRAL_INPUT: SkatingInput = {
   lean: 0, knee: 0.35, weight: 0.5, pitch: 0, leanSplit: 0, push: false, brake: false,
-  carriage: 0, toe: false, turn: false, bracket: false, twizzle: false, spin: false, inaBauer: false,
+  carriage: 0, windup: 0, toe: false, turn: false, bracket: false, twizzle: false, spin: false, inaBauer: false,
 };
 
 // ── events ──────────────────────────────────────────────────────────────────

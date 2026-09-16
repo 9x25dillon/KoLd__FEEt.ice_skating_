@@ -46,6 +46,7 @@ profiles; career uses its own trained profile.
 | Assisted jump (Beginner only) | J | D-pad up |
 | Spin / turn / twizzle | Y / B / Z | Y / B / X |
 | Low pose | U | D-pad down |
+| Wind-up before jump release | Comma (,) | Right stick flick (schemes A/B) |
 | Foot selection | Q / E | Left / right shoulder |
 | Brake | X | Hold left trigger |
 | Toe pick | F | Tap left trigger |
@@ -59,6 +60,11 @@ atomically to `career-v1.json`. Both are in Godot's user data directory (normall
 `~/.local/share/godot/app_userdata/EDGEWORK · Ice Run/` on Linux). The settings
 screen also exports the current replay and session measurements to that directory.
 Smoke tests and screenshot captures use separate per-process test saves.
+
+The combined solver uses replay identity `ice-lab-f64/9`. Earlier `/8` game
+replays require checkout `23e3e49`; earlier fidelity-branch `/8` clips require
+`a1b4278`. Those incompatible formats are rejected, not silently migrated.
+Career saves retain their existing version and are unaffected by this replay change.
 
 ## Build and verify
 

@@ -1,0 +1,42 @@
+{
+  "id": "glide-straight-speedskate-dekoning1992",
+  "kind": "glide",
+  "role": "validation",
+  "source": {
+    "type": "literature",
+    "citation": "de Koning JJ, de Groot G, van Ingen Schenau GJ (1992). Ice friction during speed skating. Journal of Biomechanics 25(6), 565–571. doi:10.1016/0021-9290(92)90099-M",
+    "primary_checked": false,
+    "notes": "Quoted by Lever et al. 2022 p. 338: long-track speed skates, 72 kg skater, strides at 8 m/s, straights mu = 0.0046 ± 0.0004, curves 0.0059 ± 0.0004, ice surface −1.8 to −11 °C. A stride average on a different blade; likely stays unsourced for a figure skate. Recorded so it is not re-derived."
+  },
+  "requires": [],
+  "skater": null,
+  "venue": {
+    "venue_type": null,
+    "indoor": null,
+    "elevation_m": null,
+    "slab": null,
+    "ice_surface_temp_c": null,
+    "air_temp_c": null,
+    "air_rh_pct": null,
+    "air_density_kg_m3": null,
+    "water_tds_ppm": null,
+    "ice_hardness_shore_d": null,
+    "minutes_since_resurface": null,
+    "surface": {
+      "profile": "unknown",
+      "relief_mm": null,
+      "measured": false,
+      "method": ""
+    },
+    "rink_location": null,
+    "travel_direction": null,
+    "paired_case": null
+  },
+  "inputs": null,
+  "observable": {
+    "name": "glide_decel_ms2",
+    "window": "steady",
+    "radius": null
+  },
+  "expected": null
+}

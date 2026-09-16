@@ -56,7 +56,7 @@ import type {
 } from "./types.ts";
 import type { Params } from "./params.ts";
 import { SIM_DT } from "./params.ts";
-import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean } from "./blade.ts";
+import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean, rinkSlopeAccel } from "./blade.ts";
 import { onBeat, accentCredit } from "./music.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
 import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
@@ -545,7 +545,16 @@ export function step(
     dv += 0.5 * p.airDensity * dragArea * speed * speed / p.mass * dt;
 
     // Friction never reverses motion.
-    speed = Math.max(0, speed - dv);
+    //
+    // The rink's shape (rinkRelief), skipped outright on a flat sheet so every
+    // preset's arithmetic is the /6 solver's to the bit. Only the pull along
+    // the travel is applied: across it the edge holds, and at a rink's relief
+    // that side load is under a thousandth of g against the lean. It needs
+    // speed, as this whole block does — a blade standing still is held by
+    // static friction far above any slope a rink has. Not applied in the air
+    // or through a turn's pivot, which leave this block before it runs.
+    if (p.rinkRelief !== 0) speed = Math.max(0, speed - dv + dot(rinkSlopeAccel(s.pos, p), dir) * dt);
+    else speed = Math.max(0, speed - dv);
     s.vel = mul(dir, speed);
   }
 

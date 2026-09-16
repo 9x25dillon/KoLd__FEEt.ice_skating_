@@ -77,6 +77,31 @@ test("a corrupted digest cannot silently pass", () => {
   assert.equal(verifyReplay(clip).divergence?.tick, 5);
 });
 
+test("both historical /8 branch fixtures are rejected rather than silently relabelled", () => {
+  const game = JSON.parse(record(2).json);
+  game.solver = "ice-lab-f64/8";
+  const fidelity = structuredClone(game);
+  for (const f of game.frames) delete f.input.windup;
+  for (const f of fidelity.frames) delete f.input.bracket;
+  for (const clip of [game, fidelity]) assert.throws(() => parseReplay(JSON.stringify(clip)), /solver/);
+});
+
+test("the merged replay contract carries music, bracket, wind-up and rink relief together", () => {
+  const p = {...PRESETS.assisted, movesMode: 1, jumpMode: 2, musicMode: 1, rinkRelief: 0.01};
+  const s = createState(p, 5), r = new ReplayRecorder(p, 5);
+  for (let i = 0; i < 600; i++) {
+    const input = {...NEUTRAL_INPUT, lean: 0.2, weight: 1, push: i % 90 === 0,
+      bracket: i === 180, windup: i >= 300 && i < 315 ? 1 : 0,
+      knee: i >= 300 && i < 336 ? 0.9 : 0.35};
+    const events: EdgeEvent[] = [];
+    step(s, input, p, SIM_DT, events); r.capture(input, p, s, events);
+  }
+  const player = new ReplayPlayer(parseReplay(r.toJson()));
+  while (!player.done) player.advance();
+  assert.equal(player.divergence, null);
+  assert.deepEqual(player.state, s);
+});
+
 test("capture owns inputs and tuning snapshots even when the caller mutates them", () => {
   const p = { ...PRESETS.responsive }, state = createState(p, 4), input = { ...NEUTRAL_INPUT };
   const r = new ReplayRecorder(p, 4), events: EdgeEvent[] = [];

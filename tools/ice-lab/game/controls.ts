@@ -18,6 +18,8 @@ export function gameInput(c: Controls, s: SkaterState, scheme: Scheme, st: Schem
   const mapped = scheme === SCHEME.B ? c : { ...c,
     kx: c.kx * 0.35, kPrimaryX: c.kPrimaryX * 0.35, kAltX: c.kAltX * 0.35 };
   const input = applyScheme(scheme, mapped, heading, s.vel, s.yawRate, params, st, s.flips);
+  // A low pose cannot also arm the wind-up assist, including on a controller.
+  if (lowPose) input.windup = 0;
   if (scheme === SCHEME.B && backward) input.lean *= -1;
   // Right-stick forward can select camel on a controller, too.
   if (c.spin || s.move === MOVE.Spin) input.pitch = Math.max(input.pitch, c.ry);

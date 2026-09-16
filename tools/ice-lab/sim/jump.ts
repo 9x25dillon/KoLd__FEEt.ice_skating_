@@ -84,7 +84,8 @@ const TWO_FOOT_PENALTY = 0.15;
 export function newJump(p: Params): JumpState {
   return {
     phase: JUMP_PHASE.None, t: 0, peakKnee: 0, preRotation: 0, setup: 0,
-    toeTick: -1, toeInLoad: false, takeoffCode: EDGE_CODE_NONE, kind: JUMP_NONE,
+    toeTick: -1, toeInLoad: false, windupTick: -1, windupPeak: 0, armed: false, target: 0,
+    takeoffCode: EDGE_CODE_NONE, kind: JUMP_NONE,
     edgeError: 0, quality: 0, z: 0, vz: 0, height: 0, airTime: 0,
     angMomentum: 0, inertia: p.inertiaOpen, rotation: 0, peakOmega: 0,
   };
@@ -95,7 +96,7 @@ export function noResult(): JumpResult {
     tick: -1, kind: JUMP_NONE, revolutions: 0, turned: 0, shortBy: 0,
     rotationCall: ROTATION_CALL.Clean, edgeCall: EDGE_CALL.Clean, toe: false,
     takeoffQuality: 0, landingQuality: 0, height: 0, airTime: 0, peakOmega: 0,
-    twoFoot: false, stepOut: false, fall: false,
+    twoFoot: false, stepOut: false, fall: false, armed: false,
   };
 }
 
@@ -187,6 +188,18 @@ export function jumpGround(
 
   const kneeIn = finite(input.knee, 0.35);
   if (input.toe) J.toeTick = s.tick;
+  // The wind-up: a flick against the rotation commits to the jump, a flick with
+  // it takes the commitment back. Flicks still inside the window add up to the
+  // furthest one; an expired flick starts over.
+  const w = finite(input.windup, 0);
+  if (w >= p.windupThreshold) {
+    if (J.windupTick < 0 || (s.tick - J.windupTick) * dt > p.windupWindow) J.windupPeak = 0;
+    J.windupTick = s.tick;
+    J.windupPeak = Math.max(J.windupPeak, saturate(w));
+  } else if (w <= -p.windupThreshold) {
+    J.windupTick = -1;
+    J.windupPeak = 0;
+  }
   const b = s.blade[s.supportFoot];
   const o = outsideness(s.supportFoot, b.tilt, p);
 
@@ -253,13 +266,33 @@ export function jumpGround(
   // the body (spinCarry, zero without the moves), plus the whip of the free
   // side — and after this instant L never changes. A counter-clockwise skater cannot
   // spin clockwise off a bad entry, so a net negative is no rotation at all.
-  const whip = saturate(finite(input.carriage, 0));
+  //
+  // A wound-up release whips at least jumpAssist of the flick: the shoulders
+  // unwinding is the whip, and the assist is how much of it happens for you.
+  J.armed = p.jumpMode >= JUMP_MODE.Full && J.windupTick >= 0
+    && (s.tick - J.windupTick) * dt <= p.windupWindow;
+  let whip = saturate(finite(input.carriage, 0));
+  if (J.armed) whip = Math.max(whip, p.jumpAssist * J.windupPeak);
   J.angMomentum = p.jumpMode >= JUMP_MODE.Full
     ? p.inertiaOpen * Math.max(0, p.jumpRotBias * s.yawRate + s.spinCarry + p.jumpWhip * whip) * (0.80 + 0.20 * q)
     : 0;
+  J.windupTick = -1;
+  J.windupPeak = 0;
   J.inertia = p.inertiaOpen;
   J.rotation = 0; J.peakOmega = 0; J.z = 0;
   J.takeoffCode = b.code;
+  // What the assist flies to: the nearest whole revolution — half, for an
+  // axel — to what this takeoff turns with the arms pulled in from the first
+  // tick of the air, at their real rate, until the ice. Nearest, not safest,
+  // on purpose: a takeoff a little short of a triple still goes for it and
+  // comes down short; one a little past a double lands the double.
+  J.target = 0;
+  if (J.armed && J.kind !== JUMP_NONE && J.angMomentum > 0) {
+    J.t = dt;
+    const extra = J.kind === JUMP.Axel ? 0.5 : 0;
+    const reach = rotationToLand(J, p, dt, 0) / (2 * Math.PI);
+    J.target = 2 * Math.PI * (Math.max(1, Math.round(reach - extra)) + extra);
+  }
 
   events.push({
     tick: s.tick, type: EVENT.Takeoff, foot,
@@ -287,7 +320,12 @@ export function jumpAir(
   // L is conserved. The only remaining control is the moment of inertia:
   // pulling the arms and free leg to the axis roughly quarters I, which
   // roughly quadruples omega.
-  const pull = 1 - saturate(finite(input.carriage, 0));
+  //
+  // An armed jump's arms are blended jumpAssist of the way toward what its
+  // geometry asks for (`assistedCarriage`). That moves I and nothing else.
+  let carriage = saturate(finite(input.carriage, 0));
+  if (J.armed && J.target > 0 && p.jumpAssist > 0) carriage = lerp(carriage, assistedCarriage(J, p, dt), p.jumpAssist);
+  const pull = 1 - carriage;
   J.inertia = moveToward(J.inertia, lerp(p.inertiaOpen, p.inertiaTucked, pull), p.inertiaPullRate * dt);
   const omega = J.angMomentum / J.inertia;
   J.rotation += omega * dt;
@@ -311,6 +349,50 @@ export function jumpAir(
   s.knee = moveToward(s.knee, clamp(finite(input.knee, 0.35), 0, 1), p.kneeRate * dt);
 
   if (J.z <= 0 && J.t > dt) land(s, input, p, events);
+}
+
+/**
+ * Radians still to turn before the blades reach the ice, if the arms are sent
+ * to `carriage` this tick and held there. Runs the rest of the flight exactly
+ * as jumpAir will — the same ballistics, the same arm rate — so "reachable"
+ * means reachable, not reachable with an instant tuck. Called with J.t already
+ * advanced for the tick it starts on.
+ */
+export function rotationToLand(J: JumpState, p: Params, dt: number, carriage: number): number {
+  const goal = lerp(p.inertiaOpen, p.inertiaTucked, 1 - carriage);
+  let inertia = J.inertia, z = J.z, vz = J.vz, t = J.t, turned = 0;
+  for (let k = 0; k < 4096; k++) {
+    inertia = moveToward(inertia, goal, p.inertiaPullRate * dt);
+    turned += (J.angMomentum / inertia) * dt;
+    vz -= p.gravity * dt;
+    z += vz * dt;
+    if (z <= 0 && t > dt) break;
+    t += dt;
+  }
+  return turned;
+}
+
+/**
+ * The carriage the jump's geometry asks for this tick, 0 tucked .. 1 open.
+ *
+ * If full tuck cannot finish the target, full tuck: the assist never finds
+ * rotation the takeoff did not buy. If arms wide open still overshoot it, open.
+ * Otherwise the carriage, found by bisection, whose held rotation lands on the
+ * target — so a jump with rotation to spare opens early and checks out on its
+ * revolution instead of past it. Asked again every tick, so it corrects itself,
+ * and blended with the skater's own arms by jumpAssist it corrects only that much.
+ */
+export function assistedCarriage(J: JumpState, p: Params, dt: number): number {
+  const need = J.target - J.rotation;
+  if (need <= 0) return 1;
+  if (rotationToLand(J, p, dt, 0) <= need) return 0;
+  if (rotationToLand(J, p, dt, 1) >= need) return 1;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 12; i++) {
+    const mid = 0.5 * (lo + hi);
+    if (rotationToLand(J, p, dt, mid) > need) lo = mid; else hi = mid;
+  }
+  return 0.5 * (lo + hi);
 }
 
 /** Touchdown. Rotation accounting mirrors how a technical panel calls a jump. */
@@ -361,7 +443,7 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
     edgeCall: kind !== JUMP_NONE && JUMP_DEFS[kind].edgeCallable ? edgeCall(J.edgeError, p) : EDGE_CALL.Clean,
     toe: J.toeInLoad, takeoffQuality: J.quality, landingQuality,
     height: J.height, airTime: J.t, peakOmega: J.peakOmega,
-    twoFoot, stepOut: !fall && landingQuality < 0.34, fall,
+    twoFoot, stepOut: !fall && landingQuality < 0.34, fall, armed: J.armed,
   };
 
   const side = o > 0 ? EDGE.Outside : o < 0 ? EDGE.Inside : EDGE.Flat;
@@ -372,6 +454,7 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
 
   J.phase = JUMP_PHASE.None;
   J.t = 0; J.z = 0; J.vz = 0; J.angMomentum = 0; J.inertia = p.inertiaOpen;
+  J.armed = false; J.target = 0;
   s.yawRate = 0;
 
   if (fall) {

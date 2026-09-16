@@ -1,0 +1,45 @@
+{
+  "id": "glide-hockey-sled-federolf2008",
+  "kind": "glide",
+  "role": "validation",
+  "source": {
+    "type": "literature",
+    "citation": "Federolf PA, Mills R, Nigg B (2008). Ice friction of flared ice hockey skate blades. Journal of Sports Sciences 26(11), 1201–1208. doi:10.1080/02640410802027360",
+    "primary_checked": false,
+    "notes": "Quoted by Lever et al. 2022 p. 338: standard hockey blades (rocker 3.35 m, hollow 12.7 mm), weighted sled 53 kg per blade, launched at 1.8 m/s, indoor Olympic hockey rink, ice surface −5.7 to −4.9 °C, mu = 0.0071 ± 0.0005. Not entered as expected until read in the primary. A sled, not a skater: compare blade friction only, with model drag at this speed subtracted. Hockey blade, L1 transfer. See docs/ice-literature.md §9."
+  },
+  "requires": [],
+  "skater": null,
+  "venue": {
+    "venue_type": null,
+    "indoor": null,
+    "elevation_m": null,
+    "slab": null,
+    "ice_surface_temp_c": null,
+    "air_temp_c": null,
+    "air_rh_pct": null,
+    "air_density_kg_m3": null,
+    "water_tds_ppm": null,
+    "ice_hardness_shore_d": null,
+    "minutes_since_resurface": null,
+    "surface": {
+      "profile": "unknown",
+      "relief_mm": null,
+      "measured": false,
+      "method": ""
+    },
+    "rink_location": null,
+    "travel_direction": null,
+    "paired_case": null
+  },
+  "inputs": null,
+  "observable": {
+    "name": "glide_decel_ms2",
+    "window": {
+      "from_s": 0.0,
+      "to_s": 1.0
+    },
+    "radius": null
+  },
+  "expected": null
+}

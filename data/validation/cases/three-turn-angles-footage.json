@@ -1,0 +1,45 @@
+{
+  "id": "three-turn-angles-footage",
+  "kind": "transition",
+  "role": "validation",
+  "source": {
+    "type": "footage",
+    "citation": "",
+    "primary_checked": null,
+    "notes": "Tracing tangent angles 0.5 m either side of the cusp; the exit angle is the same case's second reading and gets its own case once measured."
+  },
+  "requires": [
+    "moves",
+    "three-turn"
+  ],
+  "skater": null,
+  "venue": {
+    "venue_type": null,
+    "indoor": null,
+    "elevation_m": null,
+    "slab": null,
+    "ice_surface_temp_c": null,
+    "air_temp_c": null,
+    "air_rh_pct": null,
+    "air_density_kg_m3": null,
+    "water_tds_ppm": null,
+    "ice_hardness_shore_d": null,
+    "minutes_since_resurface": null,
+    "surface": {
+      "profile": "unknown",
+      "relief_mm": null,
+      "measured": false,
+      "method": ""
+    },
+    "rink_location": null,
+    "travel_direction": null,
+    "paired_case": null
+  },
+  "inputs": null,
+  "observable": {
+    "name": "turn_entry_angle_deg",
+    "window": "element",
+    "radius": "blade"
+  },
+  "expected": null
+}

@@ -224,6 +224,31 @@ export interface Params {
   /** Takeoff-edge error that draws ! and e; the same file. */
   callEdgeUnclear: number;
   callEdgeWrong: number;
+  /**
+   * 0..1: how much of the arms a WOUND-UP jump flies for the skater.
+   *
+   * The operator's direction (2026-09-13): the arms and body positioning are
+   * partly automated from the jump's own geometry, more the more assisted the
+   * preset, and only after an initiating action — a flick of the wind-up
+   * (SkatingInput.windup) against the rotation before the release. Without the
+   * flick nothing here runs and the jump is the manual one, bit for bit.
+   *
+   * With it: the whip at takeoff is at least jumpAssist x the flick, and in the
+   * air the carriage is blended jumpAssist of the way toward what the geometry
+   * asks — the arms that land the nearest whole revolution (half, for an axel)
+   * the takeoff can really reach, opening early to check out when there is
+   * rotation to spare (sim/jump.ts `assistedCarriage`).
+   * It moves only the moment of inertia, at the arms' own rate: angular
+   * momentum is still set at takeoff and conserved, so a takeoff that cannot
+   * reach the revolution still comes down short. L3, chosen.
+   *
+   * spec 0.25, responsive 0.5, assisted 0.8.
+   */
+  jumpAssist: number;
+  /** Wind-up past which a flick counts, 0..1 of the stick. */
+  windupThreshold: number;
+  /** s before the release inside which the flick still arms the jump. */
+  windupWindow: number;
 
   // ── moves ─────────────────────────────────────────────────────────────────
   // The skating vocabulary beyond the carve: crossovers first. Added on the
@@ -384,6 +409,25 @@ export interface Params {
   musicAccentWindow: number;
   /** A crossover push that misses its beat window, as a fraction of a hit. Bible: 45%. */
   musicMissedPushScale: number;
+  // ── rink ──────────────────────────────────────────────────────────────────
+  /**
+   * m: the ice at centre ice minus the ice at the side and end boards. Positive
+   * is a crown (convex), negative a bowl (concave), 0 a flat sheet — which it
+   * is in every preset, and the solver then skips the rink entirely.
+   *
+   * The shape is h = relief (1 - (x/a)^2 - (y/b)^2) inside the boards and flat
+   * beyond them, a and b the half-length and half-width, centred on the origin;
+   * the corners sit twice as far from centre height as the board midpoints.
+   * Gravity along the ice is -g grad h (sim/blade.ts `rinkSlopeAccel`).
+   *
+   * It is here because a rink is not a plane, and a glide measured on a shaped
+   * one measures the slope as much as the friction (data/validation/README.md,
+   * the venue record). Named shapes are in RINKS below. Every value is L3.
+   */
+  rinkRelief: number;
+  /** m, half the rink's length (along x) and width (along y). */
+  rinkHalfLength: number;
+  rinkHalfWidth: number;
 
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
@@ -464,6 +508,9 @@ export const DEFAULT_PARAMS: Params = {
   callDowngrade: 0.5,
   callEdgeUnclear: 0.25,
   callEdgeWrong: 0.55,
+  jumpAssist: 0.25,          // the operator's override of spec, like jumps themselves; 0 is the package
+  windupThreshold: 0.6,
+  windupWindow: 0.6,
 
   movesMode: 0,
   crossoverLean: 0.21,       // 12 deg: the shallow-edge boundary
@@ -503,6 +550,9 @@ export const DEFAULT_PARAMS: Params = {
   musicBeatWindow: 0.10,
   musicAccentWindow: 0.08,      // bible §2.1, §2.6
   musicMissedPushScale: 0.45,   // bible §2.6
+  rinkRelief: 0,
+  rinkHalfLength: 30,        // a 60 x 30 m sheet
+  rinkHalfWidth: 15,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -564,6 +614,10 @@ export function validate(p: Params): string[] {
     errs.push("rotation call thresholds must rise q < under < downgrade");
   if (p.callEdgeUnclear >= p.callEdgeWrong)
     errs.push("callEdgeUnclear must be below callEdgeWrong");
+  if (p.jumpAssist > 1) errs.push("jumpAssist is a share of the arms, 0..1");
+  if (p.windupThreshold <= 0 || p.windupThreshold > 1)
+    errs.push("windupThreshold must be in (0, 1]: at 0 a resting stick would arm every jump");
+  if (p.windupWindow < 2 * SIM_DT) errs.push("windupWindow is under two ticks");
   if (![0, 1].includes(p.movesMode)) errs.push("movesMode is 0 (the carve only) or 1 (the moves)");
   if (p.turnTime < 4 * SIM_DT) errs.push("turnTime is under four ticks: a pivot needs a cusp to flip at");
   if (p.turnCarry > 1) errs.push("turnCarry is a share of the pivot rate, 0..1");
@@ -582,6 +636,10 @@ export function validate(p: Params): string[] {
     errs.push("backPushScale is a fraction of the forward push, in (0, 1]");
   if (p.crossoverLean < p.flatThreshold)
     errs.push("crossoverLean is below flatThreshold, so a push on a flat blade would count as a crossover");
+  if (Math.abs(p.rinkRelief) > 0.05)
+    errs.push("rinkRelief is over 5 cm: that is not a rink's shape, it is a hill");
+  if (p.rinkHalfLength <= 0 || p.rinkHalfWidth <= 0)
+    errs.push("rinkHalfLength and rinkHalfWidth must be positive");
   if (p.internalMax > 2.0 && p.internalRateGain <= 0)
     errs.push("internalMax above 2 with no internalRateGain: a proportional gain with no damping "
       + "makes balance worse, not easier — raise internalRateGain first");
@@ -598,6 +656,45 @@ export function validate(p: Params): string[] {
     errs.push("musicMissedPushScale is a fraction of a hit, in (0, 1)");
   return errs;
 }
+
+/**
+ * What the lab boots on — `responsive`, not `spec`.
+ *
+ * `spec` is the baseline every measurement is taken against and it stays that,
+ * but it cannot enter an edge deeper than 11 degrees at stroking pace, so
+ * handing it to someone as their first thirty seconds of the model is not a
+ * fair test of anything: it reads as a broken skater rather than as a recorded
+ * defect. Press the preset button (T, or X on a pad) to cycle to it.
+ *
+ * It lives here, not in app/lab.ts, because the fidelity gate makes its claims
+ * about this preset (docs/fidelity-gate.md §3) and tools/ice-lab/validate.mjs
+ * must read the same answer the public build boots on.
+ */
+export const BOOT_PRESET = "responsive";
+
+/**
+ * Named rink shapes, as `rinkRelief` in metres. The lab cycles them (O) over
+ * whatever preset is loaded; every preset itself is flat.
+ *
+ * ALL L3, and chosen, not measured. The shapes are the operator's field
+ * observations: a public rink skated in laps near the boards wears its outer
+ * ice down and crowns; an old barn on a thin poured slab settles and bowls. The
+ * magnitudes are "barely perceivable", made concrete as the slope's pull at
+ * the side boards against flat-glide friction (muGlide g, 0.059 m/s^2 in spec):
+ *
+ *   flat     0        a competition sheet
+ *   public   +4.5 mm  a crown: 2 g relief / halfWidth = 10% of that friction
+ *   barn     -9 mm    a bowl: 20% of it, since a settling slab is not bounded
+ *                     by wear the way a crown is
+ *
+ * A measured relief (data/validation/README.md, `surface.relief_mm`) replaces
+ * any of these for the case it was measured in.
+ */
+export const RINKS: Readonly<Record<string, number>> = {
+  flat: 0,
+  public: 0.0045,
+  barn: -0.009,
+};
 
 /**
  * Damping ratio of the linearized lean loop, for the tuning panel.
@@ -633,7 +730,7 @@ export const PRESETS: Readonly<Record<string, Params>> = {
   responsive: {
     ...DEFAULT_PARAMS, balanceKd: 16.0, angulationLimit: 0.70,
     internalRateGain: 2.0, internalWashout: 1.5, fallAuthorityCredit: 1.0,
-    copRateGain: 2.0, copCommandShare: 1.0,
+    copRateGain: 2.0, copCommandShare: 1.0, jumpAssist: 0.5,
   },
   /**
    * An assist tier, as a parameter overlay and nothing else.
@@ -661,6 +758,6 @@ export const PRESETS: Readonly<Record<string, Params>> = {
     ...DEFAULT_PARAMS, balanceKd: 20.0, angulationLimit: 0.70,
     controlLatency: 0.04,
     internalRateGain: 4.0, internalWashout: 1.5, internalMax: 2.5,
-    fallAuthorityCredit: 1.0, copRateGain: 2.0, copCommandShare: 1.0,
+    fallAuthorityCredit: 1.0, copRateGain: 2.0, copCommandShare: 1.0, jumpAssist: 0.8,
   },
 };

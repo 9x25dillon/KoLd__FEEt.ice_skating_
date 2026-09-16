@@ -39,7 +39,7 @@ test("carving emits a lighter spray; flat glides emit none", () => {
 });
 test("each landing fires once, reports its result, freezes without a tick, and clears on reset", () => {
   const state = createState(GAME_PARAMS, 4), effects = new IceEffects();
-  effects.reset(state); effects.update(state, SIM_DT); assert.equal(effects.landing, null);
+  effects.reset(state); effects.update(state, SIM_DT); assert.equal(effects.landing === null, true);
   state.landed.tick = 20; state.landed.height = .5; state.landed.turned = 1;
   effects.update(state, SIM_DT); assert.equal(effects.landing?.label, "Landed");
   const count = effects.particles.length;
@@ -51,7 +51,7 @@ test("each landing fires once, reports its result, freezes without a tick, and c
   state.landed.tick = 60; state.landed.fall = true;
   effects.update(state, SIM_DT); assert.equal(effects.landing?.label, "Fall");
   effects.reset(state); effects.update(state, SIM_DT);
-  assert.equal(effects.landing, null); assert.equal(effects.particles.length, 0);
+  assert.equal(effects.landing === null, true); assert.equal(effects.particles.length, 0);
 });
 test("cosmetic effects and poses do not mutate replay state or move blade contacts", () => {
   const state = braking(); state.strokeTime = .15; state.tick = 12;

@@ -291,7 +291,7 @@ function draw(_now: number) {
 }
 function frame(now: number) {
   const elapsed = Math.min((now - (last || now)) / 1000, 0.1); last = now;
-  const controls = pad.read(true);
+  const controls = pad.read(true, ","); // U remains the game's low pose; comma winds up.
   if (guide.open || wardrobe.open || careerBoard.open) { pendingPush = false; pendingToe = false; pendingTrick=false; draw(now); requestAnimationFrame(frame); return; }
   if (controls.cycleView && !lowHeld && !(navigator.getGamepads?.().find(g => g?.connected)?.buttons[13]?.pressed)) scene.overview = !scene.overview;
   if (controls.zoom) scene.zoom = Math.max(0.65, Math.min(1.8, scene.zoom * Math.pow(1.15, controls.zoom)));

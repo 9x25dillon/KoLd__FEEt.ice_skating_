@@ -10,11 +10,11 @@ import type { Controls } from "../app/pad.ts";
 
 const neutral: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0, kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
-  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, toe: false,
+  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, windup: 0, toe: false,
   turn: false, bracket: false, twizzle: false, spin: false, inaBauer: false, reset: false, pause: false,
   cyclePreset: false, cycleScheme: false, cycleJump: false, cycleView: false, zoom: 0,
   dpadStep: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1,
-  cycleProfile: false, cycleMoves: false,
+  cycleProfile: false, cycleMoves: false, cycleRink: false,
 };
 function rig(speed = 5) {
   const s = createState(GAME_PARAMS, speed), steering = newSchemeState();
@@ -50,7 +50,8 @@ test("Ina Bauer and cantilever pose have distinct inputs; low pose does not char
   const r = rig(); r.tick({ inaBauer: true }); assert.equal(r.s.move, MOVE.InaBauer);
   const low = rig();
   for (let i = 0; i < 120; i++) {
-    const result = low.tick({}, true);
+    const result = low.tick({windup: 1}, true);
+    assert.equal(result.input.windup, 0, "a low pose must not arm a later jump");
     assert.equal(result.cantilever, true); assert.equal(result.input.weight, 0.5);
     assert.equal(low.s.jump.phase, JUMP_PHASE.None);
   }

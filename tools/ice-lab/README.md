@@ -26,7 +26,9 @@ Open **http://localhost:8123/game/**. Use **A/D or left/right arrows** to steer,
 tap/hold **Space** to push (fresh tap to get up), **X** to brake, **P** to pause, and **R** to
 restart. On a controller, the left stick aims in a direction across the ice,
 **A** pushes, **LT** held brakes, **Start** pauses, and **Back** restarts. **Y is spin.** Keyboard or
-controller required; touch controls are not implemented.
+controller required; touch controls are not implemented. **U** holds the low pose;
+**comma (,)** winds up a jump. The lab retains **U** for wind-up. A low pose
+suppresses wind-up, including right-stick wind-up, so it cannot arm a later jump.
 
 The opening card offers four modes. **Free Skate** is open practice: seven
 objectives worth 250 points each, once per run (`game/practice.ts`), plus a FLOW
@@ -165,14 +167,19 @@ in the engineering package get answered in seconds rather than in UE5 compiles.
 
 **It is not the game and it is not an engine.** [D2 is
 closed](../../docs/open-decisions.md#d2--engine) — Unreal Engine 5.4+, resolved
-2026-09-03 — and nothing here reopens it. This is the Ice Lab from EDGE-019,
+2026-09-03 — remains the historical studio plan. The operator selected Godot 4
+for the playable rebuild on 2026-09-15; see [the Godot project](../../games/ice-run-godot/README.md). This is the Ice Lab from EDGE-019,
 built early and built cheap, so that `KoLdSimCore` can be written in C++ as
 transcription rather than as discovery.
 
 ```sh
-node --test test/*.test.ts     # 280 tests
+node --test test/*.test.ts     # full simulation and gameplay suite
 node app/build.mjs             # -> build/
 node app/serve.mjs             # -> http://localhost:8123/
+node demo.mjs                  # scripted runs to watch -> build/demos/ (import replay)
+node validate.mjs              # the fidelity gate, headless (--json for CI)
+node validate.mjs --report ../../docs/fidelity-report.md   # regenerate the committed report
+node validate.mjs --clips build/clips   # and every run as a replay clip: open one with import replay to watch its inputs
 ```
 
 `tsconfig.json` is there for editors and for an optional `tsc --noEmit`; it is
@@ -452,7 +459,7 @@ an Ina Bauer.
 
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
 weight, **Y** reset, **X** preset, **Back** scheme; for jumps, **right stick**
-carriage, **B** toe pick, **D-pad ↑** jump mode (and past full jumps, the moves), **D-pad ↓** camera view, **D-pad ← →**
+carriage (flicked **right** before the release, the wind-up), **B** toe pick, **D-pad ↑** jump mode (and past full jumps, the moves), **D-pad ↓** camera view, **D-pad ← →**
 zoom — or, in the jump challenge, the previous / next jump. The courses are on
 the stick clicks: **left stick click** next course, **right stick click** next
 ghost. With the moves on the face buttons take the bible's §2.1 layout: **B** is the
@@ -645,6 +652,49 @@ full whip and a tuck off RBO with a pick is a clean **3T** (3.04 rev); half a
 whip is a **2Lo<** and a fall. Those are the bible's own numbers doing what they
 say.
 
+### The wind-up, and the arms it flies for you
+
+Added 2026-09-13 on the operator's direction. The arms can be partly automated from the jump's own
+geometry, but only after the skater commits: a **wind-up flick against the rotation** before the
+release. That is **U** on the keyboard, or the **right stick thrown right** in schemes A and B (C's right
+stick is a blade, so C winds on the keyboard only). A flick left, with the rotation, takes the commitment
+back. A flick more than `windupWindow` (0.6 s) before the release has expired.
+
+A wound-up jump does two things, both scaled by `jumpAssist` (`spec` 0.25, `responsive` 0.5, `assisted`
+0.8):
+
+- **At takeoff**, the whip is at least `jumpAssist` × the flick. The shoulders unwinding is the whip, and
+  the assist is how much of it happens for you. On `assisted`, the flick alone is enough to rotate.
+- **In the air**, the carriage is blended `jumpAssist` of the way toward what the geometry asks for.
+  `rotationToLand` runs the rest of the flight tick for tick, with the same ballistics and arm rate as
+  `jumpAir`. The target is the nearest whole revolution (half, for an axel) that the takeoff can really
+  reach with the arms pulled in. `assistedCarriage` then bisects for the arms that land exactly on it.
+  That means full tuck when the target is out of reach, and opening early to check out when there is
+  rotation to spare.
+
+It moves the moment of inertia and nothing else. Angular momentum is still set at takeoff and conserved,
+and air time is untouched. So the assist never finds rotation the takeoff did not buy, and a skater who
+holds the arms out against it still comes down short.
+
+Measured, `test/windup.test.ts`:
+
+| Jump | Manual | Wound up |
+| --- | --- | --- |
+| `responsive` toe loop, full whip | 3T, 3.041 rev, LQ 0.53 | 3T, **3.000**, LQ 0.61 |
+| `spec` at a deeper edge | 3T, 3.107 (over-rotated) | 3T, **3.002** |
+| `assisted`, half a whip | 2T< and a fall | clean 2T, **2.000** |
+| `assisted`, no whip | — | clean 2T, **2.000** |
+| `spec`, a takeoff short of a triple (2.812) | 3Tq | the same 2.812: nothing found |
+
+With no wind-up nothing arms, and the jump is the manual one bit for bit. Replay contract `/8` added the
+input and the levers. Replayed through `/7` and `/8`, the fixture and four operator clips (49,539 ticks,
+including the operator's two jumps) matched on every `/7` state field and event.
+
+**Watch it.** `node demo.mjs` writes `build/demos/`: a carve figure, and this toe loop manual, wound up,
+wound the wrong way, and wound up on `assisted` with no whip at all. Each is a replay clip to open with
+**import replay**, where the input overlay shows every stick and button tick by tick, next to a `.txt`
+timeline of the same inputs.
+
 **`sim/score.ts` is the jump half of `ScoreCalculator.cs`**, reading
 `data/scale-of-values.csv` and `data/calls-and-deductions.csv` (fetched beside
 the page; the single-file bundle has none and shows no score). Base value with
@@ -822,6 +872,30 @@ crossovers through an outside mohawk onto LFO — each identified by the resolve
 from how it left the ice (`test/entries.test.ts`). In the jump challenge, with the
 moves on, the panel shows the entry speed the target wants beside your own.
 
+## The rink's shape
+
+The ice is not a plane. `rinkRelief` is centre ice minus the boards, on a 60 × 30 m sheet centred on the
+origin: positive is a crown, negative a bowl, and the surface between is a paraboloid that is flat past
+the boards. **O** cycles the named shapes in `RINKS`:
+
+- **flat:** a competition sheet, and every preset
+- **public:** a +4.5 mm crown, from session skating wearing the outer ice down
+- **barn:** a −9 mm bowl, from an old thin slab settling
+
+The shapes are the operator's field observations. Their sizes are chosen, not measured (L3), to be
+barely perceivable: at the side boards, the pull is a tenth (public) or a fifth (barn) of flat-glide
+friction.
+
+Gravity along the ice is applied only along the travel, in the losses (`sim/solver.ts` §5). Across the
+travel the edge holds, and that load is under a thousandth of g. A skater standing still stays still.
+The rink is not applied in the air or through a turn's pivot. At 0 relief the solver skips the rink
+entirely.
+
+Replay contract `/7` added these three levers and nothing else. Replayed through `/6` and `/7`, the
+fixture and four operator clips (49,539 ticks, twelve falls, two jumps) matched on every state field
+and event on every tick. `test/rink.test.ts` holds the pull's direction and closed form, the paired-glide
+rule the validation cases rely on, and the bit-for-bit flat sheet. `?playtest=1` never leaves flat.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in
@@ -976,7 +1050,11 @@ require the exact schema, solver version, 120 Hz rate, complete finite tuning,
 bounded input axes, boolean buttons, at most 36,000 ticks and at most 64 MiB.
 Warnings about balance tuning are preserved so a bad tuning can be reproduced.
 
-`ice-lab-f64/6` is a JavaScript regression contract. CRC32 covers every state
+The two historical `/8` branches had different schemas. The merged `/9` reader
+rejects both; use `23e3e49` for game-branch clips or `a1b4278` for fidelity-branch
+clips. Do not relabel saved clips. The pinned native `/5` oracle is unchanged.
+
+`ice-lab-f64/9` (the current contract; the history is in `sim/replay.ts`) is a JavaScript regression contract. CRC32 covers every state
 field and event using canonical JSON, with straight-blade Infinity encoded
 explicitly; it is a diagnostic, not an authenticity signature. **A clip
 verifies in any JavaScript engine**, not only the one that recorded it: every
@@ -1076,7 +1154,7 @@ It is the edge cutting a groove and pushing sideways against the wall of it.
 ## What is deliberately not here
 
 Spin scoring and levels, spin variations beyond the three basic positions, flying
-entries, turns beyond the three-turn, mohawk and twizzle (brackets, rockers,
+entries, turns beyond the three-turn, mohawk, bracket and twizzle (rockers,
 counters, choctaws), falls beyond their trigger, animation, networking, stamina,
 flow, combinations and sequences, and the ice grid (tracings are
 drawn, but they do not yet feed friction or bite back into the solver as the
@@ -1100,3 +1178,11 @@ The whole point. `sim/` is written to be transcribed:
 
 Export a tuned parameter set with **params.json** in the panel; it emits only
 what differs from `spec`, which is what a tuning-log entry should contain.
+
+## Licence
+
+Ice Lab is **Apache-2.0** — see [`LICENSE`](LICENSE). That covers everything under
+`tools/`, tuned constants included, on the same terms as `src/` and `data/`. The
+design bible in `docs/` is licensed separately; the reasoning is in
+[the root README](../../README.md#licensing) and
+[D7](../../docs/open-decisions.md#d7--licence-for-tools).
