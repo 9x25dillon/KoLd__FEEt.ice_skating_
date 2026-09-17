@@ -1,38 +1,60 @@
 # Hand-off
 
-## Current checkpoint — 2026-09-15, resumed career / Godot session
+## Current checkpoint — 2026-09-15, origin/main merged into ue-replay-01-foundation
 
-Still on **`ue-replay-01-foundation`**. The operator authorized the Godot rebuild,
-then asked to recover the latest interrupted session, continue, and commit/push.
-The previous session's career and Godot files survived on disk; its last test-path
-fix had not executed. That fix is recovered. The historical branch-divergence
-warning below still applies: this work does not merge or rewrite `main`.
+Still on **`ue-replay-01-foundation`**. This closes the branch-divergence reconciliation
+`## 0 · Start here` below had flagged as open for three sessions running (its old item 1,
+now marked resolved). The operator asked to find the latest interrupted session — a merge
+of `origin/main` into this branch, conflicts already hand-resolved in the working tree but
+nothing staged, committed, or pushed — and finish it.
 
-- Browser Ice Run now has five career events, ordered choreography, medals,
-  unlocks, XP training and local saves (`game/career.ts`).
-- `games/ice-run-godot/` is the playable Godot project. Its Node pipe host runs
-  the unchanged Ice Lab simulation; Godot renders a rigged Blender skater,
-  rink/traces, cameras, music, career and a simple ordered Composer editor.
-  This is **not yet a native GDScript/C++ physics port**.
-- Godot 4.7.2 and Linux export templates are installed locally. Launch the project
-  with `./games/ice-run-godot/run.sh`. See its README for editor, export, controls,
-  saved data, rebuild instructions and an explicit design-bible coverage table.
-- Runtime JS and converted music are generated; skater `.blend` and `.glb`, fonts,
-  source scripts and import settings are versioned. Smoke tests use isolated
-  per-process career saves. No need to reconstruct assets from `/tmp`.
-- Checks: all 296 existing Ice Lab tests and all eight Godot bridge/host tests
-  pass. Both the editor runtime and the Linux export completed the first career
-  routine. A rendered capture caught washed-out lighting, which was corrected.
-- The next substantial work is better character animation, a spatial/music
-  Composer, persistent ice affecting friction, and the stamina/flow/hype layer.
-  The roughly 75% bible direction is **not a measured completeness claim**.
+- All 13 conflicted files (`.github/workflows/ice-lab-checks.yml`, `README.md`,
+  `tools/ice-lab/README.md`, `app/pad.ts`, `app/schemes.ts`, `sim/params.ts`, `sim/replay.ts`,
+  `sim/solver.ts`, `sim/types.ts`, `test/fixtures/replay-v1.json`, `test/padview.test.ts`,
+  `test/rink.test.ts`, `test/schemes.test.ts`) had already been resolved with no leftover
+  conflict markers — verified rather than trusted, file by file.
+- The `test/rink.test.ts` naming collision is resolved as prescribed: this branch's
+  game-boundary test kept the name; main's ice-surface-curvature test moved to
+  `test/rink-relief.test.ts`. Both suites pass.
+- `REPLAY_SOLVER` renumbered to **`ice-lab-f64/9`** (this branch's music/bracket and main's
+  rink-relief/wind-up had each independently reached `/8`); `test/fixtures/replay-v1.json`
+  regenerated for the union.
+- The **U**-key collision (this branch's low pose/cantilever vs. main's jump wind-up) is
+  resolved: **U** stays low pose; wind-up now arms on comma; a low pose disarms wind-up
+  (`game/controls.ts`, `game/main.ts`).
+- `docs/fidelity-report.md` regenerated against the merged solver so CI's byte-identical
+  check passes; the bracket case moves from unmodelled to unsourced now that the turn
+  exists on this branch.
+- Found and fixed one real bug on the way, unrelated to the merge itself: `test/game-effects.test.ts`
+  had `assert.equal(effects.landing, null)` — `assert.strict`'s `strictEqual<T>(actual, expected):
+  asserts actual is T` — pinning the mutable `landing` property to `null` clear across a later
+  method call, a `tsc` failure (`test/game-effects.test.ts(44,64)` etc., "Property does not exist
+  on type 'never'"). Fixed by asserting the boolean (`effects.landing === null`) instead of the
+  property directly.
+- Verified clean before committing: 322 Ice Lab tests, 8 Godot bridge/host tests, `tsc --noEmit`,
+  `app/build.mjs`, `replay/verify.ts` (240 ticks), and `validate.mjs` — fidelity gate still **not
+  met**, deliberately: no case in the corpus is externally sourced yet, only the derived ones pass.
+- Committed as `32f6d3c` and pushed to `origin/ue-replay-01-foundation`.
 
-The operator's root play-data folder and saved HTML page remain outside these
-changes, as recorded below. All pre-2026-09-15 material below is historical context.
+The operator's root play-data folder, the saved HTML page, and `session-notes/` remain
+untracked on purpose — left alone, per the note below.
 
 ---
 
-**Last session: 2026-09-14 (tenth), on `ue-replay-01-foundation`, three commits. Repo state: everything
+**Last session: 2026-09-15 (career/Godot resume), on `ue-replay-01-foundation`.** Recovered another
+interrupted session's career and Godot work, on the operator's ask to continue and commit/push it:
+browser Ice Run gained five career events, ordered choreography, medals, unlocks, XP training and
+local saves (`game/career.ts`); `games/ice-run-godot/` became a playable Godot project whose Node
+pipe host runs the unchanged Ice Lab simulation and renders a rigged Blender skater, rink/traces,
+cameras, music, career and a simple ordered Composer editor — **not yet a native GDScript/C++
+physics port**. 296 Ice Lab tests and 8 Godot bridge/host tests passed; both the editor runtime and
+the Linux export completed a full career routine, and a rendered capture caught washed-out lighting
+that was corrected. Explicitly did not touch `main` or attempt the branch-divergence merge below —
+that fell to the next session, above.
+
+---
+
+**Before that: 2026-09-14 (tenth), on `ue-replay-01-foundation`, three commits. Repo state: everything
 the ninth session left, plus a standalone game (Free Skate, a guided Rookie course, a 90-second light
 run) on the same solver; a rhythm layer (beat-timed crossover pushes, musical credit) with five of the
 operator's own tracks actually playing; a new turn, the bracket; a skirt and a ponytail on the skater;
@@ -50,7 +72,11 @@ hold the document set together, and the things most likely to trip you up.
 
 ### First, before anything else
 
-1. **`main` and this branch have diverged hard. Do not assume a merge is a fast-forward.** This
+1. **Resolved 2026-09-15 — see the checkpoint at the top of this file (`32f6d3c`).** The table and
+   detail below are kept as the record of what each side contained and how the collisions were
+   settled, not as an open task.
+
+   **`main` and this branch have diverged hard. Do not assume a merge is a fast-forward.** This
    session's checkout stayed on **`ue-replay-01-foundation`** (three commits, ending `667b3a9`,
    pushed) the whole time. In parallel, a *different* branch — `fidelity-00-repo-correction`, in a
    **separate worktree** at `/home/kill/KoLd__FEEt.fidelity` — merged into `main` as PR #5 while this
@@ -802,6 +828,8 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-15 (merge completion) | Found another session's `origin/main` → `ue-replay-01-foundation` merge mid-flight: all 13 conflicts hand-resolved in the working tree, nothing staged or committed. Verified the resolution rather than trusting it — the `test/rink.test.ts` rename, the `/9` replay renumbering, and the **U**-key split were all done correctly — fixed one real `tsc` bug it hadn't caught (a `strictEqual` "asserts" narrowing pinning `IceEffects.landing` to `null` across a later method call in `test/game-effects.test.ts`), regenerated `docs/fidelity-report.md` against the merged solver, and confirmed 322 + 8 tests, build, replay verify and the fidelity validator all clean before committing and pushing. `32f6d3c`. |
+| 2026-09-15 (career/Godot resume) | Recovered another interrupted session's in-progress work on the operator's ask to continue and commit/push: a browser career mode (`game/career.ts` — events, choreography, medals, unlocks, XP, local saves) and `games/ice-run-godot/`, a playable Godot project whose Node pipe host runs the unchanged Ice Lab simulation, not yet a native physics port. 296 + 8 tests pass; both the editor and a Linux export completed a full career routine. Did not touch `main`. |
 | 2026-09-14 (tenth) | The bracket, a redesigned skater, and rink walls: `sim/moves.ts` gained a same-foot, against-the-curve turn (replay `/8`); `game/scene.ts` gained a skirt and a ponytail; `game/rink.ts` gave the game a rounded-rectangle boundary to bounce off of or crash into, deliberately outside what a replay verifies. A "choctaw" was built and removed the same session when a test showed it wasn't one. 280 tests. `667b3a9`. |
 | 2026-09-14 (tenth) | The rhythm layer and real music: `sim/music.ts` (replay `/7`) gives crossover pushes a beat window and turns/landings musical credit near an accent, off in every preset. Five of the operator's own tracks, found in a sibling worktree after some searching, now play for real via `game/audio/`; their tempo is `aubiotrack`'s estimate, halved for a likely octave error. Operator laid out a future stamina/flow/hype bridge to the career module, not built. 271 tests. `3b93279`. |
 | 2026-09-14 (tenth) | Took over another session's in-progress game (`game/`): fixed a blank-page crash (missing DOM ids), cleaned up a doubled-up README draft, verified all three modes in headless Chromium. 262 tests. `23e675b`. |

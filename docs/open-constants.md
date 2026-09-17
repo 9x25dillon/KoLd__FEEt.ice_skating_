@@ -141,6 +141,49 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
   - Range: > 0
   - Fixed by: the venue's dimensions, as a case input
 
+### Ice wear
+
+`sim/ice.ts`'s `IceGrid`, design-bible §3.2. All four are inert at `iceGridMode` 0 (every preset) or with
+no grid passed into `step()` at all, and none has a data file behind it — every level below is L2 or L3.
+
+- **`iceGridMode`** — 0 the sheet never wears, 1 every blade pass writes and reads it back
+  - Value: `0` in every preset
+  - Used: `sim/solver.ts` `step`, gating whether `IceGrid.condition`/`deposit` are ever called
+  - Level: L1, a switch rather than a measurement
+  - Range: `{0, 1}` (`validate`)
+  - Fixed by: not physical. It is a gate on the mechanic, the way `movesMode` is.
+
+- **`iceDamagePerPass`** — local wear one blade pass adds, saturating at 1
+  - Value: `0.004` (~250 passes over one cell to fully chew it)
+  - Used: `sim/ice.ts` `IceGrid.deposit`
+  - Level: L3
+  - Range: `(0, 1]` (`validate`)
+  - Fixed by: a warm-up group's measured glide loss, skater by skater, on a sheet timed since its last
+    resurfacing — the bible's own example of what this constant is for.
+
+- **`iceSnowPerScrub`** — snow deposited per (m/s² of skid scrub) × dt
+  - Value: `0.05`
+  - Used: `sim/ice.ts` `IceGrid.deposit`, fed `latSlipAccel` from `sim/solver.ts` step 3
+  - Level: L3. Reuses the same excess-acceleration quantity step 5 already scrubs off as speed
+    ("mu_skid * excess * dt is a speed decrement, which is where the snow comes from") rather than
+    inventing a second model of where snow comes from.
+  - Range: ≥ 0 (`validate`)
+  - Fixed by: a measured snow ridge's depth against a skater's recorded hockey-stop scrub
+
+- **`iceMuChewed`** — longitudinal glide friction at full local wear
+  - Value: `0.015`
+  - Used: `sim/blade.ts` `muLong`, blended with `muGlide` by local `condition`
+  - Level: L2. The bible gives this number directly: "rising toward 0.015 on soft or chewed ice."
+  - Range: ≥ `muGlide` (`validate`): chewed ice cannot be slicker than fresh
+  - Source: design-bible.md §3.2
+
+- **`iceBiteLossMax`** — share of bite capacity full local wear removes
+  - Value: `0.35`
+  - Used: `sim/blade.ts` `biteCapacity`
+  - Level: L3. The bible states the direction ("damage... lowers bite") but not a number.
+  - Range: `[0, 1]` (`validate`)
+  - Fixed by: `carve_held` on a known-chewed patch against fresh ice at the same lean and speed
+
 ---
 
 ## 2 · Air and body

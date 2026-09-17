@@ -429,6 +429,30 @@ export interface Params {
   rinkHalfLength: number;
   rinkHalfWidth: number;
 
+  // ── ice wear ──────────────────────────────────────────────────────────────
+  // sim/ice.ts, design-bible.md §3.2: a grid over the rink storing damage and
+  // snow, written by every blade pass and read back into friction and bite.
+  // The grid itself lives outside Params — an IceGrid, passed into step()
+  // explicitly, never a hidden global — so at `iceGridMode` 0, or with no
+  // grid passed at all, nothing below is ever read and nothing kinematic
+  // changes. 0 in every preset, the way jumps, moves and music are.
+  /** 0 the sheet never wears; 1 every blade pass writes it and reads it back. */
+  iceGridMode: number;
+  /** Local wear a single pass adds, saturating at 1. No data file gives a
+   *  rate for this — authored to visibly dull a sheet over a session's worth
+   *  of laps, not a single stroke. */
+  iceDamagePerPass: number;
+  /** Snow per (m/s^2 of skid scrub) x dt: the same excess acceleration
+   *  step 5 already scrubs off as speed ("mu_skid * excess * dt is a speed
+   *  decrement, which is where the snow comes from"), deposited here instead
+   *  of only being spent as a loss. */
+  iceSnowPerScrub: number;
+  /** Longitudinal glide friction at full wear, blended with muGlide by local
+   *  condition. Bible: "rising toward 0.015 on soft or chewed ice." */
+  iceMuChewed: number;
+  /** Share of bite capacity full wear removes, 0..1: "damage... lowers bite." */
+  iceBiteLossMax: number;
+
   // ── skater ────────────────────────────────────────────────────────────────
   mass: number;
   comHeight: number;
@@ -554,6 +578,12 @@ export const DEFAULT_PARAMS: Params = {
   rinkHalfLength: 30,        // a 60 x 30 m sheet
   rinkHalfWidth: 15,
 
+  iceGridMode: 0,
+  iceDamagePerPass: 0.004,   // ~250 passes over one cell to fully chew it
+  iceSnowPerScrub: 0.05,
+  iceMuChewed: 0.015,        // bible §3.2
+  iceBiteLossMax: 0.35,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -654,6 +684,14 @@ export function validate(p: Params): string[] {
     errs.push("musicAccentWindow must be positive and below half a bar, or every landing is an accent");
   if (p.musicMissedPushScale <= 0 || p.musicMissedPushScale >= 1)
     errs.push("musicMissedPushScale is a fraction of a hit, in (0, 1)");
+  if (![0, 1].includes(p.iceGridMode)) errs.push("iceGridMode is 0 (off) or 1 (the sheet wears)");
+  if (p.iceDamagePerPass <= 0 || p.iceDamagePerPass > 1)
+    errs.push("iceDamagePerPass is a per-pass saturating share, in (0, 1]");
+  if (p.iceSnowPerScrub < 0) errs.push("iceSnowPerScrub cannot be negative");
+  if (p.iceMuChewed < p.muGlide)
+    errs.push("iceMuChewed must be at least muGlide: chewed ice is not slicker than fresh ice");
+  if (p.iceBiteLossMax < 0 || p.iceBiteLossMax > 1)
+    errs.push("iceBiteLossMax is a share of bite capacity, 0..1");
   return errs;
 }
 
