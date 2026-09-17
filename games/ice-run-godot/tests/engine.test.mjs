@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {IceEngine,emptyControls} from '../bridge/engine.mjs';
 import {createState,step} from '../runtime/sim/solver.js';
 import {IceGrid} from '../runtime/sim/ice.js';
-import {NEUTRAL_INPUT} from '../runtime/sim/types.js';
+import {NEUTRAL_INPUT,MOVE} from '../runtime/sim/types.js';
 import {verifyReplay,parseReplay} from '../runtime/sim/replay.js';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -19,6 +19,23 @@ test('Godot host executes the exact Ice Lab solver across 240 input ticks',()=>{
   assert.deepEqual(engine.state,s,`solver state at tick ${i+1}`);
  }
  assert.equal(verifyReplay(parseReplay(engine.exportReplay())).divergence,null);
+});
+
+test('a completed spin reaches snapshot().spinLevel, the free-skate readout game/main.ts already has',()=>{
+ // The exact carve-then-hold-then-release recipe tools/ice-lab/test/spin.test.ts
+ // itself drives a spin with, fed through engine.tick() the same way the first
+ // test in this file drives the solver directly (GAME_PARAMS already carries
+ // movesMode 1, so a fresh 'free' engine can spin with no extra setup).
+ const e=new IceEngine();
+ assert.equal(e.snapshot().spinLevel,-1,'nothing scored yet');
+ for(let i=0;i<240+400+120;i++){
+  const t=i-240;
+  const input={...NEUTRAL_INPUT,weight:0,lean:t<0?.3:0,knee:.45,spin:t>=0&&t<400};
+  e.tick(input);
+ }
+ assert.notEqual(e.state.move,MOVE.Spin,'the spin has been released and exited');
+ const level=e.snapshot().spinLevel;
+ assert.ok(level>=0&&level<=4,`spinLevel should be a real, scored level, got ${level}`);
 });
 
 test('bridge runs full physical choreography and persists earned progression',()=>{

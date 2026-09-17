@@ -7,7 +7,7 @@ import {ReplayRecorder,ReplayPlayer,parseReplay} from '../runtime/sim/replay.js'
 import {SessionMeter} from '../runtime/sim/session.js';
 import {applyProfile,SAMPLE_PROFILES,xpToRaise} from '../runtime/sim/profile.js';
 import {loadTables,scoreJump} from '../runtime/sim/score.js';
-import {loadSpinFeatureThresholds} from '../runtime/sim/spinLevel.js';
+import {loadSpinFeatureThresholds,SpinLevelTracker,scoreSpinLevel} from '../runtime/sim/spinLevel.js';
 import {newSchemeState} from '../runtime/app/schemes.js';
 import {gameInput,GAME_PARAMS} from '../runtime/game/controls.js';
 import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
@@ -47,6 +47,10 @@ export class IceEngine {
   this.steering=newSchemeState();this.coach=new BeginnerCoach();this.practice=new Practice();this.run=new IceRun();this.rookie=new RookieCourse();this.playground=new Playground();
   this.routine=mode==='career'?new Choreography(CAREER_EVENTS[index],tables,spinThresholds):mode==='composer'?new Choreography({id:'authored',title:'Your signature program',venue:'Composer rehearsal',seconds:180,routine:this.sequence},tables,spinThresholds):null;
   this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
+  // The live free-skate readout game/main.ts already has (frame.technical above is its jump half) —
+  // sample every tick a spin is live, score the moment it ends. -1 means no spin has finished yet;
+  // scoreSpinLevel's own 0 is a real result, "level B", so it cannot double as that sentinel.
+  this.spinTracker=new SpinLevelTracker();this.wasSpinning=false;this.spinLevel=-1;
   return this.snapshot();
  }
  configure(o) {
@@ -95,6 +99,10 @@ export class IceEngine {
   if(this.mode==='timed')this.run.sample(this.state,SIM_DT);
   // Free Skate stays quiet per the bible. The original playground remains available in runtime.
   if(this.state.landed.tick>=0&&this.scoredTick!==this.state.landed.tick){this.scoredTick=this.state.landed.tick;this.technical+=scoreJump(tables,this.state.landed)?.score??0;}
+  const spinning=this.state.move===MOVE.Spin;
+  if(spinning)this.spinTracker.sample(this.state.spin);
+  else if(this.wasSpinning){this.spinLevel=scoreSpinLevel(this.spinTracker.finish(),spinThresholds).level;this.spinTracker.reset();}
+  this.wasSpinning=spinning;
   if(this.routine)this.routine.sample(this.state,this.low,SIM_DT);
   if(this.routine?.done) {
    const r=this.routine,xp=this.mode==='career'?this.career.award(r):0;
@@ -107,7 +115,7 @@ export class IceEngine {
  snapshot() {
   const s=this.state,r=this.routine;
   const move=s.fallen?'Recover · press Space / A':s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Turn?'Turn':this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
-  return {state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+  return {state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    routine:r?{title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal}:null,
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},

@@ -55,6 +55,14 @@ profiles; career uses its own trained profile.
 | Pause / restart | Esc / R | Start / Back |
 | Camera | V | — |
 
+The lower-left HUD carries a running jump TES total and, once you finish one,
+the ISU level your last spin actually reached ("Last spin: level 2", or
+"level B" below level 1) — the same live readout the browser game's
+`#technical`/`#spin-level` already have. `bridge/engine.mjs` scores it with
+`sim/spinLevel.ts` the moment a spin ends, the same way it already scored
+jump TES; before that, `scripts/main.gd` had nowhere to read a spin level
+from at all.
+
 Settings and the authored sequence save to `preferences.json`; career saves
 atomically to `career-v1.json`. Both are in Godot's user data directory (normally
 `~/.local/share/godot/app_userdata/EDGEWORK · Ice Run/` on Linux). The settings

@@ -29,6 +29,7 @@ var coach_tip: Label
 var coach_progress: Label
 var hud_time: Label
 var hud_move: Label
+var hud_technical: Label
 var notice: Label
 var ribbon: Control
 var catalog: Dictionary = {}
@@ -192,6 +193,13 @@ func build_ui() -> void:
 	hud_move.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	hud_move.position = Vector2(42,-58)
 	root.add_child(hud_move)
+	# The live readouts the browser game's #technical/#spin-level already show
+	# (game/main.ts) — engine.mjs now tracks a spin's level the same way it
+	# already tracked jump TES; this just surfaces both here too.
+	hud_technical = label("",11,Color("94b6be"))
+	hud_technical.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	hud_technical.position = Vector2(42,-78)
+	root.add_child(hud_technical)
 	ribbon = Ribbon.new()
 	ribbon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -464,6 +472,10 @@ func cycle_camera() -> void:
 func update_hud() -> void:
 	var s: Dictionary = frame.state
 	hud_move.text = "%s   ·   %.1f m/s" % [str(frame.move),Vector2(s.vel.x,s.vel.y).length()]
+	var spin_level := int(frame.get("spinLevel",-1))
+	hud_technical.text = "Jump TES %.2f" % float(frame.get("technical",0.0))
+	if spin_level >= 0:
+		hud_technical.text += "   ·   Last spin: level %s" % (str(spin_level) if spin_level > 0 else "B")
 	hud_time.text = ""
 	coach_title.text = ""
 	coach_tip.text = ""
