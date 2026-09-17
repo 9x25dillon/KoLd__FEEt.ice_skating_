@@ -7,7 +7,10 @@ import type { Controls } from "../app/pad.ts";
 import { applyScheme, SCHEME } from "../app/schemes.ts";
 import type { Scheme, SchemeState } from "../app/schemes.ts";
 
-export const GAME_PARAMS = { ...PRESETS.assisted, movesMode: 1, jumpMode: 2, musicMode: 1 };
+export const GAME_PARAMS = {
+  ...PRESETS.assisted, movesMode: 1, jumpMode: 2, musicMode: 1,
+  staminaMode: 1, hypeMode: 1, flowMode: 1, iceGridMode: 1,
+};
 export const CONTROL_NAMES = ["Lean & load", "Assisted steering", "Two-foot control"];
 
 /** Game-only mapping; the lab's blind control schemes and replay contract stay intact. */

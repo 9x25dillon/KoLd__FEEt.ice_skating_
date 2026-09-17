@@ -3,6 +3,7 @@
 import { DEFAULT_PARAMS, SIM_DT, SIM_HZ } from "./params.ts";
 import type { Params } from "./params.ts";
 import { createState, step } from "./solver.ts";
+import { IceGrid } from "./ice.ts";
 import { crc32 } from "./math.ts";
 import type { SkaterState, SkatingInput, EdgeEvent } from "./types.ts";
 
@@ -290,11 +291,24 @@ export class ReplayPlayer {
   scheme: ReplayFrame["scheme"] = "A";
   divergence: ReplayDivergence | null = null;
   private readonly clip: Replay;
+  /**
+   * Not part of the wire format, for the same reason it is never serialized
+   * anywhere else: the grid is fully determined by the same recorded inputs
+   * that determine everything else, so replaying them into a fresh sheet
+   * reproduces it exactly. Sized from the INITIAL params only — a tuning
+   * change mid-clip does not resize a sheet already being skated on.
+   * Without this, a clip recorded with `iceGridMode` on (any live game
+   * session, once GAME_PARAMS turns it on) would silently diverge on
+   * replay: friction fed from an always-fresh sheet instead of the one the
+   * original run actually chewed.
+   */
+  private readonly ice: IceGrid;
 
   constructor(clip: Replay) {
     this.clip = clip;
     this.params = { ...clip.initial.params };
     this.state = createState(this.params, clip.initial.speed, clip.initial.lean);
+    this.ice = new IceGrid(clip.initial.params.rinkHalfLength, clip.initial.params.rinkHalfWidth);
   }
 
   get total(): number { return this.clip.frames.length; }
@@ -308,7 +322,7 @@ export class ReplayPlayer {
     if (frame.params) this.params = { ...frame.params };
     this.scheme = frame.scheme;
     this.events.length = 0;
-    step(this.state, frame.input, this.params, SIM_DT, this.events);
+    step(this.state, frame.input, this.params, SIM_DT, this.events, this.ice);
     const actual = replayDigest(this.state, this.events);
     this.index++;
     if (actual !== frame.digest) this.divergence = { tick: this.index, expected: frame.digest, actual };

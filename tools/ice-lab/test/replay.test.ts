@@ -10,6 +10,7 @@ import { NEUTRAL_INPUT } from "../sim/types.ts";
 import type { EdgeEvent, SkaterState } from "../sim/types.ts";
 import { ReplayRecorder, ReplayPlayer, parseReplay, verifyReplay, replayDigest,
   MAX_REPLAY_TICKS } from "../sim/replay.ts";
+import { IceGrid } from "../sim/ice.ts";
 
 function record(ticks = 1200): { json: string; state: SkaterState } {
   const p = { ...PRESETS.responsive }, state = createState(p, 4);
@@ -100,6 +101,26 @@ test("the merged replay contract carries music, bracket, wind-up and rink relief
   while (!player.done) player.advance();
   assert.equal(player.divergence, null);
   assert.deepEqual(player.state, s);
+});
+
+test("iceGridMode's own sheet replays deterministically, from nothing but the recorded inputs", () => {
+  // ReplayPlayer owns no serialized grid: it is fully determined by the same
+  // inputs everything else is, so a fresh IceGrid, replayed the same way,
+  // must reproduce a live run's friction exactly — not just its inputs.
+  const p = { ...PRESETS.responsive, iceGridMode: 1, iceDamagePerPass: 0.05 };
+  const grid = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
+  const s = createState(p, 5), r = new ReplayRecorder(p, 5);
+  for (let i = 0; i < 600; i++) {
+    const input = { ...NEUTRAL_INPUT, lean: 0.3 * Math.sin(i * 0.02), weight: 0.5, push: i % 90 === 0 };
+    const events: EdgeEvent[] = [];
+    step(s, input, p, SIM_DT, events, grid);
+    r.capture(input, p, s, events);
+  }
+  const player = new ReplayPlayer(parseReplay(r.toJson()));
+  while (!player.done) player.advance();
+  assert.equal(player.divergence, null);
+  assert.deepEqual(player.state, s);
+  assert.notDeepEqual(s, createState(p, 5), "exercise a run the grid actually changed, not a no-op");
 });
 
 test("capture owns inputs and tuning snapshots even when the caller mutates them", () => {

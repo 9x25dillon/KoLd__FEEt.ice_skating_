@@ -1130,6 +1130,44 @@ drains over 5 s in the first place; both scale together over a longer program.
 
 Replay contract `/13` added `flowMode` and its eight levers to `Params`, and `flow` to `SkaterState`.
 
+## Wiring it all in — the ice grid, stamina, hype and flow, live
+
+Added 2026-09-17. All four of the above shipped as `sim/`-only work: real, tested, calibrated, and
+**inert in actual play** — `GAME_PARAMS` never turned any of their `Mode` flags on, so a player never
+saw a single tick of them. This closes that gap.
+
+**`GAME_PARAMS`** (`game/controls.ts`) now sets `staminaMode: 1, hypeMode: 1, flowMode: 1, iceGridMode: 1`
+alongside the moves/jumps/music it already had on. `BEGINNER_PARAMS` spreads `GAME_PARAMS`, so beginner
+mode inherits all four; no separate decision needed.
+
+**A live `IceGrid`.** `game/main.ts` creates one in `start()` — a fresh sheet each run, "resurfaced
+between skaters" — and passes it to the live `step()` call. `games/ice-run-godot/bridge/engine.mjs`
+(a hand-maintained mirror of the same host logic, for the Godot bridge) needed the identical fix.
+
+**What it found, twice, the same bug in two places.** `sim/replay.ts`'s `ReplayPlayer` never owned a
+grid at all — inert in every test so far, because no test had turned `iceGridMode` on for a live
+recording — so a session recorded from now on, with a real grid affecting friction, would have replayed
+against an always-fresh sheet and silently diverged the moment the grid did anything. Fixed by giving
+`ReplayPlayer` its own `IceGrid`, sized from the initial params and never serialized, for the same
+reason the grid is never part of the wire format anywhere else: it is fully determined by the same
+recorded inputs that determine everything. `games/ice-run-godot/tests/engine.test.mjs` then caught the
+mirror image of the same bug one layer up: its own reference `step()` call, kept deliberately separate
+from `IceEngine`'s to prove the bridge runs "the exact Ice Lab solver," had no grid of its own either,
+so it silently disagreed with `engine.mjs`'s now-live one. Both fixed the same way: give the reference
+path its own grid, matching what the live path actually does.
+
+**A naming collision, caught before it shipped.** `game/index.html` already had a `FLOW` bar
+(`playground.flow`, the free-skate speed/style meter) — an unrelated, pre-existing mechanic. The new
+bible-§2.6 flow scalar reads in the HUD as **EDGE** instead (`#edge-fill`/`#edge-label`, "clean,
+unskidded edges build it"), its own colour, directly below the original FLOW bar rather than replacing
+or renaming it. Stamina reads as `Wind NN% · Legs NN%`; hype as `Hype NN%` plus a streak count once one
+is running. All four hide in career/choreography mode, the same as the pre-existing FLOW bar, keeping
+that panel to routine progress only.
+
+**Verified in the actual game**, not just in tests: built, served, and driven in headless Chromium —
+pushing to speed then holding a steady carve took EDGE from 0 to 97% with Wind and Legs barely moving
+(carving is cheap), no console errors, both bars legible and visually distinct on screen.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in

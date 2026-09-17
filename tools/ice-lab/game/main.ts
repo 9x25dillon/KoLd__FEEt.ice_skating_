@@ -16,6 +16,7 @@ import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
 import { RookieCourse } from "./rookie.ts";
 import { resolveRinkCollision } from "./rink.ts";
+import { IceGrid } from "../sim/ice.ts";
 let careerMode = false, careerEvent = 0, choreography: Choreography | null = null;
 let career = new CareerState();
 try { career = CareerState.restore(localStorage.getItem("edgework-career-v1")); } catch { /* Storage is optional. */ }
@@ -92,6 +93,8 @@ let resumeAfterGuide = false;
 const wardrobe = el("wardrobe") as HTMLDialogElement;
 let resumeAfterWardrobe = false;
 let skater = createState(params, 4.5), steering = newSchemeState(), run = new IceRun();
+/** A fresh sheet each run: resurfaced between skaters, the way a rink actually is. */
+let ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
 let mode: "ready" | "playing" | "paused" | "done" = "ready";
 let best = 0, accumulator = 0, last = 0, flash = 0;
 let width = 0, height = 0;
@@ -117,6 +120,7 @@ function start() {
   recorder = new ReplayRecorder(params, 4.5); playback = null; replayJson = "";
   technical = 0; scoredTick = -1; replayNotice = "Recording your skating · first five minutes";
   skater = createState(params, 4.5); steering = newSchemeState(); run = new IceRun();
+  ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
   trail.forEach(t => t.length = 0); accumulator = 0; flash = 0; pendingPush = false; mode = "playing";
   pendingToe = false; cantilever = false; elapsedSkate = 0;
   practice = new Practice(); scene.reset(skater);
@@ -251,6 +255,10 @@ function draw(_now: number) {
   el("replay-status").textContent = recorder.full && !playback ? "Five-minute recording full · export and reset for a new clip" : replayNotice;
   if(tables) el("technical").textContent = `Jump technical total · ${technical.toFixed(2)} (separate from practice points)`;
   el("music-credit").textContent = `Musical credit · ${skater.musicCredit.toFixed(0)}`;
+  el("stamina-label").textContent = `Wind ${Math.round(skater.wind * 100)}% · Legs ${Math.round(skater.legs * 100)}%`;
+  el("hype-label").textContent = `Hype ${Math.round(skater.hype * 100)}%${skater.hypeStreak > 1 ? ` · ${skater.hypeStreak} in a row` : ""}`;
+  el("edge-fill").style.width = `${skater.flow * 100}%`;
+  el("edge-label").textContent = `EDGE ${Math.round(skater.flow * 100)} · clean, unskidded edges build it`;
   el("time").textContent = freeSkate ? `${Math.floor(elapsedSkate / 60)}:${String(Math.floor(elapsedSkate % 60)).padStart(2, "0")}` : run.seconds.toFixed(1);
   el("time-label").textContent = playback ? "Replay" : freeSkate ? "Free skate" : "Time";
   el("score").textContent = (freeSkate ? practice.count * 250 + playground.score + (rookie?.score ?? 0) : run.score).toLocaleString();
@@ -333,7 +341,7 @@ function frame(now: number) {
       pendingTrick = false; cantilever = mapped.cantilever;
       pendingPush = false; pendingToe = false;
       const events: EdgeEvent[] = [];
-      step(skater, input, params, SIM_DT, events);
+      step(skater, input, params, SIM_DT, events, ice);
       if (sound) audio.onTick(input, events, skater);
       practice.sample(skater, cantilever, SIM_DT);
       if(freeSkate && !courseMode && !careerMode) {

@@ -2,16 +2,20 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {IceEngine,emptyControls} from '../bridge/engine.mjs';
 import {createState,step} from '../runtime/sim/solver.js';
+import {IceGrid} from '../runtime/sim/ice.js';
 import {NEUTRAL_INPUT} from '../runtime/sim/types.js';
 import {verifyReplay,parseReplay} from '../runtime/sim/replay.js';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 
 test('Godot host executes the exact Ice Lab solver across 240 input ticks',()=>{
- const engine=new IceEngine(),s=createState(engine.params,4.5);
+ // A reference sheet of its own, the same shape engine.mjs gives its live
+ // one: iceGridMode is on in GAME_PARAMS, so without this the reference path
+ // and the engine's own tick() would silently disagree on friction.
+ const engine=new IceEngine(),s=createState(engine.params,4.5),ice=new IceGrid(engine.params.rinkHalfLength,engine.params.rinkHalfWidth);
  for(let i=0;i<240;i++){
   const input={...NEUTRAL_INPUT,lean:.18*Math.sin(i*.013),knee:.45,weight:.5,push:i%90===0,carriage:.6};
-  step(s,input,engine.params,1/120,[]);engine.tick(input);
+  step(s,input,engine.params,1/120,[],ice);engine.tick(input);
   assert.deepEqual(engine.state,s,`solver state at tick ${i+1}`);
  }
  assert.equal(verifyReplay(parseReplay(engine.exportReplay())).divergence,null);
