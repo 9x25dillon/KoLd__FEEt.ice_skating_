@@ -118,7 +118,7 @@ for (const f of readdirSync(join(root, "game/audio"))) {
 // (convention 3.2). The lab fetches them to score a landed jump; a host that
 // cannot serve them — the single-file bundle — simply shows no score.
 mkdirSync(join(out, "data"), { recursive: true });
-for (const f of ["scale-of-values.csv", "calls-and-deductions.csv"]) {
+for (const f of ["scale-of-values.csv", "calls-and-deductions.csv", "spin-features.json"]) {
   copyFileSync(join(root, "..", "..", "data", f), join(out, "data", f));
 }
 

@@ -1,4 +1,5 @@
 import {createState,step} from '../runtime/sim/solver.js';
+import {IceGrid} from '../runtime/sim/ice.js';
 import {SIM_DT,PRESETS} from '../runtime/sim/params.js';
 import {MOVE,NEUTRAL_INPUT,codeToString} from '../runtime/sim/types.js';
 import {JUMP_PHASE,JUMP_CODE} from '../runtime/sim/jump.js';
@@ -40,6 +41,7 @@ export class IceEngine {
   this.state=createState(this.params=applyProfile(this.beginner?BEGINNER_PARAMS:GAME_PARAMS,mode==='career'?this.career.profile:SAMPLE_PROFILES[this.profile]),4.5);
   const t=tracks[this.track]; Object.assign(this.params,{musicBpm:t.bpm,musicOffset:t.offset,musicBeatsPerBar:t.beatsPerBar,musicBarsPerPhrase:t.barsPerPhrase});
   this.state=createState(this.params,4.5);
+  this.ice=new IceGrid(this.params.rinkHalfLength,this.params.rinkHalfWidth);
   this.steering=newSchemeState();this.coach=new BeginnerCoach();this.practice=new Practice();this.run=new IceRun();this.rookie=new RookieCourse();this.playground=new Playground();
   this.routine=mode==='career'?new Choreography(CAREER_EVENTS[index]):mode==='composer'?new Choreography({id:'authored',title:'Your signature program',venue:'Composer rehearsal',seconds:180,routine:this.sequence}):null;
   this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
@@ -82,7 +84,7 @@ export class IceEngine {
  /** Same solver and recording order as Ice Run; renderer never writes physics. */
  tick(input) {
   const events=[];
-  step(this.state,input,this.params,SIM_DT,events);
+  step(this.state,input,this.params,SIM_DT,events,this.ice);
   this.recorder.capture(input,this.params,this.state,events,['A','B','C'][this.scheme]);
   this.meter.sample(this.state,input,events,SIM_DT);
   resolveRinkCollision(this.state,events);this.events.push(...events);

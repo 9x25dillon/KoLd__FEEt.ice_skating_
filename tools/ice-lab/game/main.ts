@@ -16,6 +16,7 @@ import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
 import { RookieCourse } from "./rookie.ts";
 import { resolveRinkCollision } from "./rink.ts";
+import { IceGrid } from "../sim/ice.ts";
 let careerMode = false, careerEvent = 0, choreography: Choreography | null = null;
 let career = new CareerState();
 try { career = CareerState.restore(localStorage.getItem("edgework-career-v1")); } catch { /* Storage is optional. */ }
@@ -26,6 +27,8 @@ import { SAMPLE_PROFILES, applyProfile, TIERS } from "../sim/profile.ts";
 import { ReplayRecorder, ReplayPlayer, parseReplay, MAX_REPLAY_BYTES } from "../sim/replay.ts";
 import { loadTables, scoreJump } from "../sim/score.ts";
 import type { ScoreTables } from "../sim/score.ts";
+import { SpinLevelTracker, loadSpinFeatureThresholds, scoreSpinLevel } from "../sim/spinLevel.ts";
+import type { SpinFeatureThresholds } from "../sim/spinLevel.ts";
 
 const el = (id: string) => document.getElementById(id)!;
 const canvas = el("rink") as HTMLCanvasElement;
@@ -72,6 +75,11 @@ let coach = new BeginnerCoach(), playground = new Playground(), pendingTrick = f
 let recorder = new ReplayRecorder(params, 4.5), playback: ReplayPlayer | null = null;
 let replayJson = "", technical = 0, scoredTick = -1, tables: ScoreTables | null = null;
 let replayNotice = "Recording your skating · first five minutes";
+let spinThresholds: SpinFeatureThresholds | null = null;
+const spinTracker = new SpinLevelTracker();
+let lastSpinLabel = "", wasSpinning = false;
+void fetch("../data/spin-features.json").then(r => r.ok ? r.text() : Promise.reject(r.status))
+  .then(json => { spinThresholds = loadSpinFeatureThresholds(json); }).catch(() => { /* Spin level stays unshown. */ });
 void Promise.all(["scale-of-values.csv", "calls-and-deductions.csv"].map(async file => {
   const response = await fetch(`../data/${file}`);
   if (!response.ok) throw new Error(`Scoring table ${response.status}`);
@@ -92,6 +100,8 @@ let resumeAfterGuide = false;
 const wardrobe = el("wardrobe") as HTMLDialogElement;
 let resumeAfterWardrobe = false;
 let skater = createState(params, 4.5), steering = newSchemeState(), run = new IceRun();
+/** A fresh sheet each run: resurfaced between skaters, the way a rink actually is. */
+let ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
 let mode: "ready" | "playing" | "paused" | "done" = "ready";
 let best = 0, accumulator = 0, last = 0, flash = 0;
 let width = 0, height = 0;
@@ -117,6 +127,8 @@ function start() {
   recorder = new ReplayRecorder(params, 4.5); playback = null; replayJson = "";
   technical = 0; scoredTick = -1; replayNotice = "Recording your skating · first five minutes";
   skater = createState(params, 4.5); steering = newSchemeState(); run = new IceRun();
+  ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
+  spinTracker.reset(); lastSpinLabel = ""; wasSpinning = false;
   trail.forEach(t => t.length = 0); accumulator = 0; flash = 0; pendingPush = false; mode = "playing";
   pendingToe = false; cantilever = false; elapsedSkate = 0;
   practice = new Practice(); scene.reset(skater);
@@ -251,6 +263,10 @@ function draw(_now: number) {
   el("replay-status").textContent = recorder.full && !playback ? "Five-minute recording full · export and reset for a new clip" : replayNotice;
   if(tables) el("technical").textContent = `Jump technical total · ${technical.toFixed(2)} (separate from practice points)`;
   el("music-credit").textContent = `Musical credit · ${skater.musicCredit.toFixed(0)}`;
+  el("stamina-label").textContent = `Wind ${Math.round(skater.wind * 100)}% · Legs ${Math.round(skater.legs * 100)}%`;
+  el("hype-label").textContent = `Hype ${Math.round(skater.hype * 100)}%${skater.hypeStreak > 1 ? ` · ${skater.hypeStreak} in a row` : ""}`;
+  el("edge-fill").style.width = `${skater.flow * 100}%`;
+  el("edge-label").textContent = `EDGE ${Math.round(skater.flow * 100)} · clean, unskidded edges build it`;
   el("time").textContent = freeSkate ? `${Math.floor(elapsedSkate / 60)}:${String(Math.floor(elapsedSkate % 60)).padStart(2, "0")}` : run.seconds.toFixed(1);
   el("time-label").textContent = playback ? "Replay" : freeSkate ? "Free skate" : "Time";
   el("score").textContent = (freeSkate ? practice.count * 250 + playground.score + (rookie?.score ?? 0) : run.score).toLocaleString();
@@ -286,6 +302,7 @@ function draw(_now: number) {
     : move;
   el("stance").textContent = `${CONTROL_NAMES[scheme]} · ${codeToString(skater.blade[0].code)} / ${codeToString(skater.blade[1].code)} · ${Math.hypot(skater.vel.x, skater.vel.y).toFixed(1)} m/s`;
   el("landing").textContent = skater.landed.tick < 0 ? "" : `Last jump: ${JUMP_CODE[skater.landed.kind] ?? "hop"} · ${skater.landed.turned.toFixed(2)} rev · ${skater.landed.fall ? "fall" : skater.landed.stepOut ? "step-out" : "landed"}`;
+  el("spin-level").textContent = lastSpinLabel;
   el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
   drawCareer();
 }
@@ -333,7 +350,20 @@ function frame(now: number) {
       pendingTrick = false; cantilever = mapped.cantilever;
       pendingPush = false; pendingToe = false;
       const events: EdgeEvent[] = [];
-      step(skater, input, params, SIM_DT, events);
+      step(skater, input, params, SIM_DT, events, ice);
+      // sim/spinLevel.ts: sample every tick a spin is live, score the moment
+      // it ends (fallen or released — either way, s.move leaves MOVE.Spin).
+      const spinning = skater.move === MOVE.Spin;
+      if (spinning) spinTracker.sample(skater.spin);
+      else if (wasSpinning) {
+        const segments = spinTracker.finish();
+        if (spinThresholds) {
+          const result = scoreSpinLevel(segments, spinThresholds);
+          lastSpinLabel = `Last spin: level ${result.level > 0 ? result.level : "B"}`;
+        }
+        spinTracker.reset();
+      }
+      wasSpinning = spinning;
       if (sound) audio.onTick(input, events, skater);
       practice.sample(skater, cantilever, SIM_DT);
       if(freeSkate && !courseMode && !careerMode) {

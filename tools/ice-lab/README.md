@@ -1130,6 +1130,102 @@ drains over 5 s in the first place; both scale together over a longer program.
 
 Replay contract `/13` added `flowMode` and its eight levers to `Params`, and `flow` to `SkaterState`.
 
+## Wiring it all in — the ice grid, stamina, hype and flow, live
+
+Added 2026-09-17. All four of the above shipped as `sim/`-only work: real, tested, calibrated, and
+**inert in actual play** — `GAME_PARAMS` never turned any of their `Mode` flags on, so a player never
+saw a single tick of them. This closes that gap.
+
+**`GAME_PARAMS`** (`game/controls.ts`) now sets `staminaMode: 1, hypeMode: 1, flowMode: 1, iceGridMode: 1`
+alongside the moves/jumps/music it already had on. `BEGINNER_PARAMS` spreads `GAME_PARAMS`, so beginner
+mode inherits all four; no separate decision needed.
+
+**A live `IceGrid`.** `game/main.ts` creates one in `start()` — a fresh sheet each run, "resurfaced
+between skaters" — and passes it to the live `step()` call. `games/ice-run-godot/bridge/engine.mjs`
+(a hand-maintained mirror of the same host logic, for the Godot bridge) needed the identical fix.
+
+**What it found, twice, the same bug in two places.** `sim/replay.ts`'s `ReplayPlayer` never owned a
+grid at all — inert in every test so far, because no test had turned `iceGridMode` on for a live
+recording — so a session recorded from now on, with a real grid affecting friction, would have replayed
+against an always-fresh sheet and silently diverged the moment the grid did anything. Fixed by giving
+`ReplayPlayer` its own `IceGrid`, sized from the initial params and never serialized, for the same
+reason the grid is never part of the wire format anywhere else: it is fully determined by the same
+recorded inputs that determine everything. `games/ice-run-godot/tests/engine.test.mjs` then caught the
+mirror image of the same bug one layer up: its own reference `step()` call, kept deliberately separate
+from `IceEngine`'s to prove the bridge runs "the exact Ice Lab solver," had no grid of its own either,
+so it silently disagreed with `engine.mjs`'s now-live one. Both fixed the same way: give the reference
+path its own grid, matching what the live path actually does.
+
+**A naming collision, caught before it shipped.** `game/index.html` already had a `FLOW` bar
+(`playground.flow`, the free-skate speed/style meter) — an unrelated, pre-existing mechanic. The new
+bible-§2.6 flow scalar reads in the HUD as **EDGE** instead (`#edge-fill`/`#edge-label`, "clean,
+unskidded edges build it"), its own colour, directly below the original FLOW bar rather than replacing
+or renaming it. Stamina reads as `Wind NN% · Legs NN%`; hype as `Hype NN%` plus a streak count once one
+is running. All four hide in career/choreography mode, the same as the pre-existing FLOW bar, keeping
+that panel to routine progress only.
+
+**Verified in the actual game**, not just in tests: built, served, and driven in headless Chromium —
+pushing to speed then holding a steady carve took EDGE from 0 to 97% with Wind and Legs barely moving
+(carving is cheap), no console errors, both bars legible and visually distinct on screen.
+
+### Hype and flow reach career scoring
+
+Live in play is not yet the same as live in career: hype and flow could raise EDGE and change how a
+skater controls, but a career event's medal only ever counted falls. `game/career.ts`'s `Choreography`
+now averages `s.hype` and `s.flow` over every sampled tick of a routine — including fallen ones, so a
+fall drags the mean down rather than being ignored — and `CareerState.award` adds up to
+`HYPE_FLOW_BONUS_MAX` (75) XP for each at a mean of 1.0, on top of a medal's own 150. The bonus rides
+the same anti-farming gate the medal XP already had: it pays only alongside a genuine medal
+improvement, so replaying an already-earned gold for the bonus alone earns nothing, at any hype or flow.
+
+## A spin's level — two features out of ten
+
+`docs/level-features.md` specifies how a spin or step sequence earns its ISU level, 1 to 4 (or B),
+from **declared** features (an authored asset says a position, entry or exit is difficult; the
+simulation only verifies it was attained and held) and **observed** ones (computed purely from
+physics). `sim/score.ts` had never scored a spin at all — only jumps. `sim/spinLevel.ts` closes part
+of that gap, and is explicit in its own header about the part it does not.
+
+**Every declared feature is out of reach by construction.** This rig has no pose or joint-angle
+representation — design-bible.md §3.1 is explicit that the sim is a reduced-order model, animation
+reads it — and a spin's position is exactly three values (`SPIN_POSITION`: upright, sit, camel), not a
+catalogue of named variations with a reference pose to check a skater's own joints against.
+
+**Five of the seven observed features need a mechanic this rig does not have either.**
+`change_foot_by_jump`, `difficult_change_of_foot` and `all_three_positions_second_foot` all need a
+combination spin with a foot change mid-element — `spinStart` sets the spinning foot once and
+`spinTick` never reassigns it. `jump_within_spin` needs a small jump mid-spin that resumes spinning,
+which the jump and spin systems do not compose into. `both_directions` needs reversing rotation
+direction mid-spin; `Sp.dir` is set once at entry and never reassigned — there is no input that flips
+it. `change_of_edge` is not merely unbuilt: in this model a spin's blade tilt is `-Sp.dir * SPIN_EDGE`,
+so edge sign **is** rotation direction here, not an independent quantity — scoring it apart from
+`both_directions` would double-count the same event.
+
+**That leaves two:** `increase_of_speed` (the ratio of peak to trough angular velocity within one
+held position, at least 1.30× over at least 2 revolutions — "emerges naturally from the player pulling
+in: ω = L / I", the doc's own words, and the same physics `test/spin.test.ts`'s "a camel is slow and
+an upright fast" case already measures) and `eight_revolutions_no_change` (a single unbroken segment
+of 8 or more revolutions). Both are real ISU features, read straight from `data/spin-features.json`
+(never hardcoded — the same "scoring is data" convention `sim/score.ts` already follows) rather than
+authored numbers, so a rules update to that file moves the thresholds without a code change.
+
+`sim/moves.ts`'s own `SpinState` only keeps the **current** segment's stats, overwritten the moment
+position changes — enough for its own purposes, not enough to score a whole spin afterward.
+`SpinLevelTracker` rebuilds the doc's own "list of segments" (§2) as a small external history, sampled
+once per tick by the caller; `scoreSpinLevel` is then pure, the same segment list always scoring the
+same result. Wired into `game/main.ts`: every tick of a live spin is sampled, and the moment it ends —
+released or fallen, either way `s.move` leaves `MOVE.Spin` — the level is scored and shown
+(`Last spin: level N`). Verified in the actual game via headless Chromium: a real held spin, entered
+with the arms out and pulled in mid-hold, scored **level 2** — both features, for real, from physics
+alone.
+
+**A level built from two of ten features tops out at 2, never 4 — an honest ceiling, not a bug.**
+Levels 3 and 4 need the combination-spin and direction-reversal mechanics above; `sim/spinLevel.ts` is
+not a substitute for building those, and its own header says so. Not wired into
+`games/ice-run-godot/bridge/engine.mjs`: unlike the ice grid, this is a pure read-only analysis over
+already-recorded state — it never touches `SkaterState` or `Params` — so there is no replay-determinism
+risk in leaving it browser-only for now.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in
