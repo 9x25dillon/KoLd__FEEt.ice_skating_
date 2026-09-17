@@ -154,8 +154,8 @@ export function jumpValue(t: ScoreTables, r: JumpResult): JumpValue | null {
   return { label, scoredAs, baseValue: round2(row.baseValue * factor), goeStep: round2(row.goeStep * factor) };
 }
 
-/** A standard normal from two uniforms, for judge noise. */
-function gaussian(u: () => number): number {
+/** A standard normal from two uniforms, for judge noise. Shared with sim/pcs.ts's own panel. */
+export function gaussian(u: () => number): number {
   const a = Math.max(u(), 1e-12), b = u();
   return Math.sqrt(-2 * log(a)) * cos(2 * Math.PI * b);
 }

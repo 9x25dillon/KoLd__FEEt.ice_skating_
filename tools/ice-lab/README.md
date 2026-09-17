@@ -1318,6 +1318,52 @@ at 0 — it lives under the existing `movesMode`, which live game sessions alrea
 is only affected if it also drives a real reversal; the committed fixture never enables moves at all,
 confirmed directly rather than assumed, so its 240 digests are untouched and only `initial.params` grew.
 
+## Program Component Score
+
+Added 2026-09-17. design-bible.md §2.7: `Total Segment Score = TES + PCS − Deductions`. TES has existed
+since the jump scoring work; `sim/pcs.ts` is the PCS half — three components (Composition,
+Presentation, Skating Skills, since the 2022–23 season), each a nine-judge trimmed mean times a
+`componentFactor`. The formula and the factor are transcribed, the same convention `sim/score.ts`
+follows: `data/segment-rules.csv` already carried `component_factor` per discipline and segment (1.33 /
+1.67 short, 2.67 / 3.33 free) — a real data file this rig had never read yet, not a new one — and it
+matches `src/reference/ScoreCalculator.cs`'s own inline comment exactly (`test/pcs.test.ts` checks both
+free-skate factors against it, the same cross-check `score.test.ts` runs for the jump base values).
+
+**The formula is transcribed. The physics-to-score mapping is not, and `pcs.ts`'s own header says so in
+those words.** No data file says "this much mean flow is a 7.5" the way `spin-features.json` gives
+`both_directions` an exact revolution count — Composition, Presentation and Skating Skills are judged
+qualities in real skating. What exists is an authored, monotonic, openly-labelled proxy over what this
+reduced-order rig can actually observe, checked one bible bullet at a time in the file's own comment:
+
+- **Skating Skills** — four of five bullets: mean flow and mean lean depth read directly;
+  `sim/session.ts`'s own `skidRatio` inverted (fewer skids is the skill); `edgeChangesPerMinute` stands
+  in for "multi-directional skating", the bible's own phrase for the whole component. "Speed retained
+  through transitions" has no clean per-tick signal in `SessionMeter` — left out.
+- **Presentation** — one of five: musical credit's own accumulation rate, which already folds in accent
+  usage (every credit is a hit accent, `sim/music.ts`). Carriage activity, gaze and posture need
+  telemetry this rig does not keep, or — gaze — data it cannot observe at all.
+- **Composition** — one of four: `IceGrid.coverage()`, a new method, share of the sheet a blade has ever
+  touched — the exact "ice-coverage map from the tracing buffer" the bible names. Lobe variety needs the
+  same curvature-direction tracker flow's own "alternating lobes" is still missing; element distribution
+  and Composer layout are real gaps too, not built yet.
+
+`sim/session.ts` is deliberately reserved for pre-production-plan.md §6's own gate metrics ("inventing a
+parallel set would produce numbers that look like evidence and answer nothing" — that file's own words)
+so the one extra signal PCS needs that it does not carry, flow's session mean, gets its own small
+`PcsMeter` rather than growing `SessionMeter` past its stated purpose.
+
+**Post-hoc, not per-tick — computed once at the end of a program, over already-recorded state
+(`SessionMeter`, `PcsMeter`, an `IceGrid`). It never touches `SkaterState` or `Params`, the same as
+`sim/spinLevel.ts`, so there is no replay-determinism risk and no contract bump.** `ice` is a required
+argument to `scorePcs`, not optional the way `step()`'s own grid is: this runs once after a program, not
+once a tick, so there is no need for a silent-no-op fallback — a caller with no grid should not call
+this at all, the same way one with no score tables skips `scoreJump`.
+
+**Not yet wired into `game/career.ts` or either live game** — `sim/pcs.ts` exists the same way
+`sim/spinLevel.ts` first did, as a real, tested scoring module with nowhere in play that calls it yet.
+Wiring it in needs a discipline/segment assigned to each `CareerEvent` (none exists today — the five
+events have no short/free distinction at all) as much as it needs the plumbing itself.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in

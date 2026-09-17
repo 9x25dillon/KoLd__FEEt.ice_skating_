@@ -92,4 +92,11 @@ export class IceGrid {
     this.damage.fill(0);
     this.snow.fill(0);
   }
+
+  /** Share of the sheet a blade has ever touched, 0..1 — design-bible.md §2.7's Composition, "ice-coverage map". */
+  coverage(): number {
+    let visited = 0;
+    for (let i = 0; i < this.damage.length; i++) if (this.damage[i] > 0 || this.snow[i] > 0) visited++;
+    return visited / this.damage.length;
+  }
 }
