@@ -135,7 +135,31 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       field and event on every tick; the fixture was re-recorded from
 //       its own inputs only to carry the new keys. /12 clips no longer
 //       load; verify one against a checkout of 8686590.
-export const REPLAY_SOLVER = "ice-lab-f64/13";
+//   /14 Mid-spin direction reversal (data/spin-features.json's
+//       both_directions, `sim/moves.ts` spinTick): Params gained four
+//       levers, no SkaterState change. Unlike every bump above, this is not
+//       guarded by a brand-new Mode flag at 0 — it lives under the existing
+//       `movesMode`, which some clips (any live game session) already carry
+//       at 1. A clip is only affected if it also drives an actual spin with
+//       `input.lean` held opposite `Sp.dir` past `spinReverseStick`
+//       (0.6) for long enough to check it — verified false for the
+//       committed fixture directly (movesMode 0, and no frame ever presses
+//       `spin` at all), so its 240 digests are byte-identical before and
+//       after this bump; only `initial.params` grew the four new keys. A
+//       clip that DOES do this will diverge under /14 and must be
+//       re-recorded; there is no way to detect that case generically, the
+//       same as every other kinematic change a version bump ever covers.
+//   /15 Flow's "dead air between elements" (bible §2.6, `solver.ts` §14):
+//       Params gained flowDeadAirTime/flowDeadAirLoss, no SkaterState
+//       change. Lives under the existing `flowMode`, the same situation as
+//       /14's `movesMode` — some clips already carry it at 1 — so this was
+//       checked directly too: the committed fixture has flowMode 0, so the
+//       whole of §14 (this term included) never executes for it, and its
+//       240 digests are byte-identical before and after; only
+//       `initial.params` grew the two new keys. A clip that has flowMode 1
+//       and a completed element followed by an idle stretch will diverge
+//       under /15 and must be re-recorded.
+export const REPLAY_SOLVER = "ice-lab-f64/15";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
@@ -310,6 +334,9 @@ export class ReplayPlayer {
     this.state = createState(this.params, clip.initial.speed, clip.initial.lean);
     this.ice = new IceGrid(clip.initial.params.rinkHalfLength, clip.initial.params.rinkHalfWidth);
   }
+
+  /** For a renderer only — not part of the wire format, same reason as the field above. */
+  get grid(): IceGrid { return this.ice; }
 
   get total(): number { return this.clip.frames.length; }
   get done(): boolean { return this.index >= this.total || this.divergence !== null; }

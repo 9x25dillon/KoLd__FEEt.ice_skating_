@@ -324,7 +324,8 @@ export function step(
   if (turning) {
     pivot = s.move === MOVE.Turn ? turnPivot(s, p, dt, weightR)
       : s.move === MOVE.Twizzle ? twizzleTick(s, p, dt, leanCmd, axis(input.carriage, 0), input.twizzle === true)
-        : spinTick(s, pFatigue, dt, knee, axis(input.pitch, 0), axis(input.carriage, 0), input.spin === true);
+        : spinTick(s, pFatigue, dt, knee, axis(input.pitch, 0), axis(input.carriage, 0), input.spin === true,
+            axis(input.lean, 0));
     latForceTotal = pivot.lat * p.mass;
     // A sit position, held: bible §2.8's "low spin positions" drain Legs.
     if (staminaOn && s.move === MOVE.Spin && knee >= p.spinSitKnee)
@@ -865,8 +866,8 @@ export function step(
   // design-bible.md §2.6. Ground-based terms only; the beat-grid bonus is
   // handled in landingAndTurnCredit below, alongside music and hype, for the
   // same early-return reason. The bible's own table also has "alternating
-  // lobes", "repeated lobes in the same direction" and "dead air between
-  // elements" — none of those three is modelled here; see README.md.
+  // lobes" and "repeated lobes in the same direction" — one signal, not
+  // modelled: no per-tick curvature-direction tracker exists; see README.md.
   if (flowOn && alive && !turning) {
     const speed = len(s.vel);
     const regime = s.blade[s.supportFoot].regime;
@@ -877,6 +878,17 @@ export function step(
     // Re-crossing already-damaged ice, only while the ice grid is in play.
     if (iceOn && condAt(s.blade[s.supportFoot].contact) >= p.flowDamagedIceThreshold)
       s.flow = clamp(s.flow - p.flowDamagedIceLoss * dt, 0, 1);
+    // "Dead air between elements": once at least one has actually happened
+    // (moveDone/landed both start at -1, so an opening glide before the
+    // first element is not dead air), a grace period past it, with no new
+    // one under way (s.jump.phase === None is this same gate's jump half —
+    // `!turning` already covers a turn/twizzle/spin/Ina Bauer in progress;
+    // a jump's own airborne phase never reaches this line at all, the 0b
+    // early return above takes it).
+    const sinceElement = s.moveDone.tick < 0 && s.landed.tick < 0 ? -1
+      : (s.tick - Math.max(s.moveDone.tick, s.landed.tick)) * dt;
+    if (sinceElement > p.flowDeadAirTime && s.jump.phase === JUMP_PHASE.None)
+      s.flow = clamp(s.flow - p.flowDeadAirLoss * dt, 0, 1);
   }
 }
 

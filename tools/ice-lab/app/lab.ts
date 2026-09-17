@@ -11,6 +11,7 @@ import { SAMPLE_PROFILES, applyProfile, overall, tierOf, level } from "../sim/pr
 import type { SkaterProfile } from "../sim/profile.ts";
 import { createState, step } from "../sim/solver.ts";
 import { ReplayRecorder, ReplayPlayer, parseReplay, MAX_REPLAY_BYTES } from "../sim/replay.ts";
+import { IceGrid } from "../sim/ice.ts";
 import { Telemetry } from "../sim/telemetry.ts";
 import { SessionMeter } from "../sim/session.ts";
 import type { SkaterState, EdgeEvent } from "../sim/types.ts";
@@ -66,6 +67,14 @@ const RINK_NAMES = Object.keys(RINKS);
 export class Lab {
   private params: Params = { ...PRESETS[BOOT_PRESET] };
   private state: SkaterState;
+  /**
+   * The sheet under the live skater — sim/ice.ts. A fresh one every reset,
+   * "resurfaced between skaters" (bible §3.2), the same as game/main.ts's own
+   * `ice`. `iceGridMode` is 0 in every preset, so this is inert (`step()`'s
+   * own `ice` argument being present changes nothing at mode 0) until the Ice
+   * group in the panel turns it on.
+   */
+  private ice: IceGrid;
   private pad = new Pad();
   private renderer: Renderer;
   private panel: Panel;
@@ -146,7 +155,9 @@ export class Lab {
 
   constructor(canvas: HTMLCanvasElement, panelRoot: HTMLElement) {
     this.state = createState(this.params, this.startSpeed, 0);
+    this.ice = new IceGrid(this.params.rinkHalfLength, this.params.rinkHalfWidth);
     this.renderer = new Renderer(canvas);
+    this.renderer.clearWear(this.ice);
     this.panel = new Panel(panelRoot, this.params, () => { /* live: nothing to rebake */ });
     this.clock = new FixedStep(() => this.tick(), () => this.render());
 
@@ -227,6 +238,7 @@ export class Lab {
           this.telemetry.capture(this.player.state);
           this.telemetry.pushEvents(this.player.events);
           this.renderer.recordTrace(this.player.state);
+          if (this.player.params.iceGridMode >= 1) this.renderer.paintWear(this.player.grid, this.player.state);
         } catch (error) {
           this.replayMessage = `Replay stopped: ${error instanceof Error ? error.message : String(error)}`;
           this.clock.paused = true;
@@ -286,7 +298,7 @@ export class Lab {
 
     this.renderer.pad.note(c, it, this.params.movesMode >= 1);
     this.events.length = 0;
-    step(this.state, it, this.params, SIM_DT, this.events);
+    step(this.state, it, this.params, SIM_DT, this.events, this.ice);
     this.audio.onTick(it, this.events, this.state);
     this.meter.sample(this.state, it, this.events, SIM_DT);
     this.camera.update(this.state, SIM_DT);
@@ -294,6 +306,7 @@ export class Lab {
     this.telemetry.capture(this.state);
     this.telemetry.pushEvents(this.events);
     this.renderer.recordTrace(this.state);
+    if (this.params.iceGridMode >= 1) this.renderer.paintWear(this.ice, this.state);
     if (!this.recordingError) {
       try {
         this.recorder.capture(it, this.params, this.state, this.events, SCHEME_LABEL[this.scheme]);
@@ -585,6 +598,9 @@ export class Lab {
     this.startGhost();
     this.telemetry.reset();
     this.renderer.clearTrace();
+    // A fresh sheet each run, the way a rink is actually resurfaced between skaters.
+    this.ice = new IceGrid(this.params.rinkHalfLength, this.params.rinkHalfWidth);
+    this.renderer.clearWear(this.ice);
     this.scored = null;
     this.scoredTick = -1;
   }
@@ -662,6 +678,7 @@ export class Lab {
       this.recordingError = "";
       this.telemetry.reset();
       this.renderer.clearTrace();
+      this.renderer.clearWear(player.grid);
       const panel = document.getElementById("panel");
       if (panel) panel.style.display = "none";
       this.clock.paused = false;

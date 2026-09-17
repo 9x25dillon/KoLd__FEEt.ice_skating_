@@ -6,6 +6,7 @@
 // simulation can disagree, and the overlay is the thing you are trusting.
 
 import type { SkaterState, BladeState } from "../sim/types.ts";
+import type { IceGrid } from "../sim/ice.ts";
 import {
   EDGE, REGIME, REGIME_NAME, FALL_NAME, FOOT, MOVE, TURN_NAME, SPIN_POSITION_NAME,
   codeToString, codeSide, EDGE_CODE_NONE,
@@ -208,9 +209,22 @@ const edgeColour = (b: BladeState): string => {
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
-  /** Persistent blade tracings. The ice keeps the record. */
+  /** Persistent blade tracings, capped: roughly each foot's last 30 s. */
   trace: TracePoint[][] = [[], []];
   private maxTrace = 4000;
+  /**
+   * The whole run, uncapped: `sim/ice.ts`'s own `IceGrid`, read back rather
+   * than re-accumulated — the bible's "one system, two payoffs" (§3.2). One
+   * pixel per cell, painted from `condition()` at the blade's own contact
+   * cell each tick (`paintWear`), so two skaters crossing the same ice read
+   * the same wear the physics itself would give them. `null` until a grid
+   * exists to size it from (`clearWear`); harmless and invisible until then.
+   */
+  private wear: HTMLCanvasElement | null = null;
+  private wearCtx: CanvasRenderingContext2D | null = null;
+  private wearHalfLength = 0;
+  private wearHalfWidth = 0;
+  private wearCell = 0;
 
   private canvas: HTMLCanvasElement;
   /** Pixels per metre this frame, so widths set as "n / px" stay n pixels. */
@@ -228,6 +242,50 @@ export class Renderer {
   }
 
   clearTrace(): void { this.trace = [[], []]; }
+
+  /** A fresh sheet: size the wear canvas to this grid, one pixel per cell, and blank it. */
+  clearWear(ice: IceGrid): void {
+    this.wear = document.createElement("canvas");
+    this.wear.width = ice.cols;
+    this.wear.height = ice.rows;
+    this.wearCtx = this.wear.getContext("2d");
+    this.wearHalfLength = ice.halfLength;
+    this.wearHalfWidth = ice.halfWidth;
+    this.wearCell = ice.cell;
+  }
+
+  /**
+   * Once per simulation tick: read `condition()` back at each blade in
+   * contact and paint that one cell. `clearRect` first because `fillRect`
+   * would otherwise blend onto whatever was already there — condition is a
+   * saturating snapshot, not something to layer paint on top of.
+   */
+  paintWear(ice: IceGrid, s: SkaterState): void {
+    if (!this.wearCtx) return;
+    for (const b of s.blade) {
+      if (!b.inContact) continue;
+      const cell = ice.cellAt(b.contact);
+      if (!cell) continue;
+      const { damage, snow } = ice.sample(b.contact);
+      const cond = Math.min(1, damage + snow);
+      this.wearCtx.clearRect(cell.col, cell.row, 1, 1);
+      if (cond <= 0) continue;
+      this.wearCtx.fillStyle = `rgba(159,179,194,${(0.6 * cond).toFixed(3)})`;
+      this.wearCtx.fillRect(cell.col, cell.row, 1, 1);
+    }
+  }
+
+  /** The wear canvas, blitted into world space under the current ground transform. */
+  private iceWear(): void {
+    if (!this.wear) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(-this.wearHalfLength, -this.wearHalfWidth);
+    ctx.scale(this.wearCell, this.wearCell);
+    ctx.drawImage(this.wear, 0, 0);
+    ctx.restore();
+  }
 
   recordTrace(s: SkaterState): void {
     for (let i = 0; i < 2; i++) {
@@ -270,7 +328,7 @@ export class Renderer {
     // screen space. A fallen skater IS flat on the ice, so they stay here.
     const tilted = cam.elevation < 89.5;
     this.grid(cam, w, h);
-    if (opt.tracing) this.tracings();
+    if (opt.tracing) { this.iceWear(); this.tracings(); }
     if (opt.carveCircle) this.carveCircles(s, p);
     extras?.ground?.(ctx, this.px);
     const ghost = extras?.ghost;

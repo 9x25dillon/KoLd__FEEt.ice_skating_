@@ -62,6 +62,10 @@ test("every preset skates without spins, and the spin levers validate", () => {
   assert.deepEqual(validate(DEFAULT_PARAMS), []);
   assert.ok(validate({ ...DEFAULT_PARAMS, spinTravelKeep: 2 }).some((e) => e.includes("spinTravelKeep")));
   assert.ok(validate({ ...DEFAULT_PARAMS, spinMinSpeed: 0 }).some((e) => e.includes("spinMinSpeed")));
+  assert.ok(validate({ ...DEFAULT_PARAMS, spinReverseStick: 0 }).some((e) => e.includes("spinReverseStick")));
+  assert.ok(validate({ ...DEFAULT_PARAMS, spinReverseRate: 0 }).some((e) => e.includes("spinReverseRate")));
+  assert.ok(validate({ ...DEFAULT_PARAMS, spinReverseFloor: 0 }).some((e) => e.includes("spinReverseFloor")));
+  assert.ok(validate({ ...DEFAULT_PARAMS, spinReverseRegen: 0 }).some((e) => e.includes("spinReverseRegen")));
 });
 
 test("the positions' moments of inertia are data/spin-positions.json's", () => {
@@ -92,6 +96,30 @@ test("a checked entry is a faster spin", () => {
   const plain = spin(4.5, 240), checked = spin(4.5, 240, () => ({}), 1);
   assert.ok(checked.omegaAt(0.5) > 1.3 * plain.omegaAt(0.5),
     `checked ${(checked.omegaAt(0.5) * RPS).toFixed(2)} against ${(plain.omegaAt(0.5) * RPS).toFixed(2)} rev/s`);
+});
+
+test("a held, opposing stick checks and reverses Sp.dir — data/spin-features.json's both_directions", () => {
+  // This file's standard entry (lean 0.3 during the 240-tick carve) always
+  // hooks +1 (anticlockwise): "the spinning blade is on the back edge..."
+  // below confirms it directly. A few revolutions in sit, then the stick held
+  // hard against +1, then released once the flip has room to run.
+  const r = spin(4.5, 900, (t) => ({ knee: 0.7, lean: t < 150 ? 0 : t < 500 ? -1 : 0 }));
+  assert.equal(r.s.spin.dir, -1, "held opposition past spinReverseStick must flip it");
+  // Measured: about 2.3 s of held opposition to check a typical entry.
+  assert.ok(r.s.moveDone.revolutions > 10, `${r.s.moveDone.revolutions.toFixed(1)} revolutions total: a real respin, not a stall`);
+});
+
+test("letting go of a check before it completes never flips: the threshold is a real gate", () => {
+  const r = spin(4.5, 900, (t) => ({ knee: 0.7, lean: t < 150 ? 0 : t < 200 ? -1 : 0 }));
+  assert.equal(r.s.spin.dir, 1, "released long before spinReverseFloor: the entry direction stands");
+  assert.equal(r.ends.length, 1, "and the spin still ends normally when the button is released");
+});
+
+test("a light push against the direction, under spinReverseStick, costs nothing: it is not a check at all", () => {
+  const held = spin(4.5, 480, () => ({ knee: 0.7, lean: -0.2 }));
+  const bare = spin(4.5, 480, () => ({ knee: 0.7 }));
+  assert.equal(held.s.spin.dir, 1);
+  assert.ok(Math.abs(held.omegaAt(2) - bare.omegaAt(2)) < 1e-9, "under the stick threshold, `against` is clamped to 0");
 });
 
 test("the spinning blade is on the back edge the rotation curves, and letting go checks out backward", () => {

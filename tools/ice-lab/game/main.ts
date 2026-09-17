@@ -29,6 +29,8 @@ import { loadTables, scoreJump } from "../sim/score.ts";
 import type { ScoreTables } from "../sim/score.ts";
 import { SpinLevelTracker, loadSpinFeatureThresholds, scoreSpinLevel } from "../sim/spinLevel.ts";
 import type { SpinFeatureThresholds } from "../sim/spinLevel.ts";
+import { loadStepFeatureThresholds } from "../sim/stepLevel.ts";
+import type { StepFeatureThresholds } from "../sim/stepLevel.ts";
 
 const el = (id: string) => document.getElementById(id)!;
 const canvas = el("rink") as HTMLCanvasElement;
@@ -80,6 +82,9 @@ const spinTracker = new SpinLevelTracker();
 let lastSpinLabel = "", wasSpinning = false;
 void fetch("../data/spin-features.json").then(r => r.ok ? r.text() : Promise.reject(r.status))
   .then(json => { spinThresholds = loadSpinFeatureThresholds(json); }).catch(() => { /* Spin level stays unshown. */ });
+let stepThresholds: StepFeatureThresholds | null = null;
+void fetch("../data/step-features.json").then(r => r.ok ? r.text() : Promise.reject(r.status))
+  .then(json => { stepThresholds = loadStepFeatureThresholds(json); }).catch(() => { /* Step level stays unscored. */ });
 void Promise.all(["scale-of-values.csv", "calls-and-deductions.csv"].map(async file => {
   const response = await fetch(`../data/${file}`);
   if (!response.ok) throw new Error(`Scoring table ${response.status}`);
@@ -119,7 +124,7 @@ el("record").textContent = `Personal best · ${best.toLocaleString()} pts`;
 function start() {
   params = applyProfile(beginner ? BEGINNER_PARAMS : GAME_PARAMS, careerMode ? career.profile : SAMPLE_PROFILES[profileIndex]);
   applyTrack(params);
-  choreography = careerMode ? new Choreography(CAREER_EVENTS[careerEvent], tables ?? undefined, spinThresholds ?? undefined) : null;
+  choreography = careerMode ? new Choreography(CAREER_EVENTS[careerEvent], tables ?? undefined, spinThresholds ?? undefined, stepThresholds ?? undefined) : null;
   document.body.dataset.career = String(careerMode);
   el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : "ON THE ICE / PRACTICE";
   renderRoutine();
@@ -393,7 +398,7 @@ function frame(now: number) {
       if (!freeSkate && run.done) finish();
       if (choreography && !playback) {
         const previous = choreography.index;
-        choreography.sample(skater, cantilever, SIM_DT);
+        choreography.sample(skater, cantilever, SIM_DT, events);
         if (previous !== choreography.index) renderRoutine();
         if (choreography.done) finishCareer();
       }

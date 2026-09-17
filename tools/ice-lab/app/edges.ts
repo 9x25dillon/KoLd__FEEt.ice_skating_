@@ -41,7 +41,15 @@ export const GATE_WIDTH = 2.6;
 export const START_SPEED = 5;
 /** Pace is measured against the course skated at this speed. m/s. */
 const PAR_SPEED = 4.5;
-const WEIGHT = { clean: 0.8, pace: 0.2 } as const;
+/**
+ * A tracing this far off `guideY`, RMS, scores nothing for line — the same
+ * idea as the Figure Eight's `RMS_ZERO` (app/figure8.ts), against this
+ * course's own weave rather than a circle. Authored, not measured: a touch
+ * under `WEAVE` itself, so drifting flat past the gate you are aiming for
+ * already costs real accuracy rather than only a missed gate.
+ */
+const RMS_ZERO = 1.2;
+const WEIGHT = { clean: 0.6, accuracy: 0.2, pace: 0.2 } as const;
 
 /** Right turns at the +y gates, left turns at the -y gates: each edge turns its gate's way. */
 export const EDGE_SEQUENCE = ["RFO", "LFO", "LFI", "RFI", "RFO", "LFO", "LFI", "RFI"] as const;
@@ -66,6 +74,9 @@ export interface EdgeResult extends CourseResult {
   missed: number;
   pace: number;
   gates: GateResult[];
+  /** RMS distance from `guideY`, m — the same measure figure8.ts's `deviation()` takes from a circle. */
+  rms: number;
+  accuracy: number;
 }
 
 /** Where the tracing is: the support blade on the ice, or the body above it. */
@@ -82,6 +93,8 @@ export class EdgeCourse implements Course {
   readonly gates: GateResult[] = [];
   private lastX: number;
   private dt = 0;
+  private sq = 0;
+  private samples = 0;
 
   constructor(s: SkaterState) { this.lastX = tracePoint(s).x; }
 
@@ -93,6 +106,9 @@ export class EdgeCourse implements Course {
     this.dt = dt;
     if (s.fallen) { this.state = "fell"; return; }
     const p = tracePoint(s);
+    const dev = p.y - guideY(p.x);
+    this.sq += dev * dev;
+    this.samples++;
     const g = GATES[this.next];
     if (this.lastX < g.x && p.x >= g.x) {
       const b = s.blade[s.supportFoot];
@@ -115,11 +131,13 @@ export class EdgeCourse implements Course {
     const to = this.next < GATES.length ? GATES[this.next].x : from;
     const along = this.state === "done" || to === from ? 0
       : Math.min(1, Math.max(0, (this.lastX - from) / (to - from)));
-    const total = WEIGHT.clean * (100 * clean) / GATES.length + WEIGHT.pace * pace;
+    const rms = this.samples > 0 ? Math.sqrt(this.sq / this.samples) : 0;
+    const accuracy = 100 * Math.max(0, 1 - rms / RMS_ZERO);
+    const total = WEIGHT.clean * (100 * clean) / GATES.length + WEIGHT.accuracy * accuracy + WEIGHT.pace * pace;
     return {
       state: this.state, seconds, progress: this.next + along,
       score: this.state === "done" ? Math.round(total) : 0,
-      clean, wrong: count("wrong"), missed: count("missed"), pace, gates: this.gates.slice(),
+      clean, wrong: count("wrong"), missed: count("missed"), pace, gates: this.gates.slice(), rms, accuracy,
     };
   }
 }
@@ -192,14 +210,15 @@ export function edgeLines(course: EdgeCourse | null, s: SkaterState, best: Best 
         : last.outcome === "wrong" ? [`gate ${last.gate + 1} wanted ${want}, you were on ${last.code}`, RED]
           : [`gate ${last.gate + 1} missed`, DIM]);
     }
-    lines.push([`clean ${r.clean} · wrong ${r.wrong} · missed ${r.missed} · ${r.seconds.toFixed(1)} s`, INK]);
+    lines.push([`clean ${r.clean} · wrong ${r.wrong} · missed ${r.missed} · off the line ${r.rms.toFixed(2)} m`, INK]);
   } else if (r?.state === "done") {
     lines.push([`SCORE ${r.score}${newBest ? "   NEW BEST" : ""}`, GOLD]);
-    lines.push([`clean ${r.clean} of ${GATES.length} · pace ${Math.round(r.pace)} · ${r.seconds.toFixed(1)} s`, INK]);
+    lines.push([`clean ${r.clean} of ${GATES.length} · line ${Math.round(r.accuracy)} · pace ${Math.round(r.pace)}`
+      + ` · ${r.seconds.toFixed(1)} s · ${r.rms.toFixed(2)} m`, INK]);
   } else if (r?.state === "fell" && course) {
     lines.push([`down before gate ${course.next + 1} · R to go again`, RED]);
   }
   lines.push([best ? `best ${best.score} · ${best.seconds.toFixed(1)} s · ${best.clean ?? "?"} of ${GATES.length} clean`
-    : "no best yet: finish one", DIM]);
+    + (best.rms !== undefined ? ` · ${best.rms.toFixed(2)} m` : "") : "no best yet: finish one", DIM]);
   return lines;
 }

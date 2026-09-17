@@ -977,12 +977,48 @@ the grid is not part of it. Replayed through `/9` and `/10` with no grid passed,
 operator play clips matched on every `/9` state field and event on every tick; the fixture was
 re-recorded from its own inputs only to carry the four new keys.
 
-Not yet built: reading `condition()` back into a persistent, whole-run trace (today `app/draw.ts` keeps
-only each foot's last ~30 seconds) and a live "off the line" number for a course. The operator's own
-call, asked directly rather than assumed from an old note: the line a course scores against is a
-**designed curve** — hand-authored per course, the way the Figure Eight's two circles already are
-(`app/figure8.ts`, `deviation()`) — not a replay re-simulating as a ghost. That pattern is proven and
-reusable the moment a course wants one; none has asked for a second yet.
+**Both of the two things this section used to call "not yet built" now are**, added 2026-09-17. The
+line a course scores against is still a **designed curve** — hand-authored per course, the way the
+Figure Eight's two circles are (`app/figure8.ts`, `deviation()`) — never a replay re-simulating as a
+ghost; that pattern has a second user now.
+
+**The Slalom got its own curve.** `app/edges.ts` already drew `guideY(x)`, the sine through every
+gate's apex, as the dashed line a player steers by — it was decoration, not a score. `EdgeCourse`
+now accumulates `(p.y - guideY(p.x))²` every tick alongside the existing gate checks, the same RMS
+measure `deviation()` takes from a circle, and reports it live ("off the line 0.64 m", mid-run) and
+at the finish (`rms`, `accuracy`). `WEIGHT` moved from `{clean 0.8, pace 0.2}` to
+`{clean 0.6, accuracy 0.2, pace 0.2}` — a course can now be threaded gate-clean and still lose to a
+tighter line between them, which a slalom's own name says it should. `RMS_ZERO` (1.2 m, a touch
+under `WEAVE`'s 1.5 m) is authored the same way `figure8.ts`'s own zero-credit distance is — a
+balance lever, not a rule (hand-off §3.3) — and, like that one, is out of `open-constants.md`'s scope:
+that register is `sim/` only, and both courses live in `app/`.
+
+**`condition()` reads back into a persistent, whole-run trace.** `app/draw.ts`'s `trace` array is
+still there, capped at ~4,000 points a foot (roughly 30 s) — the sharp, edge-coloured line a tester
+is skating right now. Underneath it, `Renderer` now keeps a second, uncapped picture: a canvas sized
+one pixel per `IceGrid` cell, painted by `paintWear()` once a tick from `ice.sample()` at each blade's
+own contact cell — reading back the exact value `deposit()` just wrote, not a second bookkeeping of
+the same thing, which is the whole point of "one system, two payoffs" (bible §3.2). `clearRect` before
+every `fillRect` because `condition` is a saturating snapshot, not something to paint over —
+compositing alpha on alpha would read a cell as more worn than the grid says it is. The canvas blits
+in one `drawImage` a frame, so cost stays O(1) regardless of how long the sheet has been skated on,
+unlike re-walking every cell in view would be. Gated the same way the grid already was: with
+`iceGridMode` 0 (every preset's default), `paintWear` is never called and the canvas stays blank —
+no behaviour change for the tuning work this rig mostly exists for. A new **Ice** group in the panel
+(`iceGridMode`, `iceDamagePerPass`, `iceSnowPerScrub`) is what turns it on inside the Lab itself —
+previously only `GAME_PARAMS` did, so the tuning rig had no way to see its own sheet wear at all.
+`sim/replay.ts`'s `ReplayPlayer` already owned a private grid (finding, §0 of the hand-off, "wired all
+four into the actual game"); it now also exposes it read-only (`get grid()`) so a loaded replay's own
+wear paints the same way a live session's does. `IceGrid` gained one small public method, `cellAt()`
+— the cell-index arithmetic `index()` already had, pulled out so a renderer (or a test) can ask for it
+without duplicating the formula; `index()` is now built on it, unchanged in behaviour
+(`test/ice.test.ts`).
+
+**Verified in the actual browser**, not only in tests: built, served, driven with Playwright — the
+Slalom's live panel read "off the line 0.64 m" mid-run and the finish line carried a real `accuracy`
+alongside `clean`; with `iceDamagePerPass` turned up for visibility, a held lean left a visible grey
+trail behind the skater that the point-trace alone does not draw, before and after a camera follow.
+No console errors either way.
 
 ## Stamina — Wind and Legs
 
@@ -1107,9 +1143,17 @@ falls again, separately, while re-crossing ice the grid (`sim/ice.ts`) reports a
 `flowDamagedIceThreshold` — a modifier alongside carving, not a veto: a good edge still gains flow on
 chewed ice, just less of it, the same comparative shape the ice grid's own "last skater in a warm-up
 group" measurement uses. A flat bonus, `flowBeatGain`, applies when the same turn or landing that
-already earns `musicMode` credit lands on the beat grid. **Not modelled**, the bible's own remaining
-three bullets: "alternating lobes", "repeated lobes in the same direction", and "dead air between
-elements" — none has a clean per-tick signal yet.
+already earns `musicMode` credit lands on the beat grid.
+
+**"Dead air between elements," added 2026-09-17,** the clearest-defined of the bible's three
+remaining bullets: once a turn, twizzle, spin, Ina Bauer or jump has actually finished at least once
+(`moveDone.tick`/`landed.tick` both start at -1, so an opening glide before the first element is never
+dead air — checked directly, not assumed), a `flowDeadAirTime` grace period past it, with no new
+element under way, costs `flowDeadAirLoss` a second. **Still not modelled**, the bible's other two
+bullets — "alternating lobes" and "repeated lobes in the same direction" — because they are one signal,
+not two: a per-tick curvature-direction tracker (has the current arc's sign held long enough to call it
+a lobe, and did the *next* one match or oppose it) that this rig does not have yet and that has no
+calibration data of its own to build against, unlike `both_directions`' precise ISU thresholds.
 
 **Feeds stamina efficiency**, the one link with an actual bible quote behind the number: *"high flow
 means you carry speed and push less, so it is literally cheaper to skate well."* Wind's own drain
@@ -1129,6 +1173,9 @@ of stroking — Wind at 0.9950 (flow 0) against 0.9959 (flow 1) — proportionat
 drains over 5 s in the first place; both scale together over a longer program.
 
 Replay contract `/13` added `flowMode` and its eight levers to `Params`, and `flow` to `SkaterState`.
+`/15` added dead air's two levers to `Params`, no `SkaterState` change — checked directly against the
+committed fixture (`flowMode` 0 there, so §14 never runs at all) rather than assumed safe the way every
+bump under a brand-new Mode flag at 0 already was.
 
 ## Wiring it all in — the ice grid, stamina, hype and flow, live
 
@@ -1194,7 +1241,7 @@ tables into every `Choreography` they construct; with neither supplied (data sti
 that does not care), both stay 0 — the same graceful degradation the free-skate HUD's own jump scoring
 already has.
 
-## A spin's level — two features out of ten
+## A spin's level — three features out of ten
 
 `docs/level-features.md` specifies how a spin or step sequence earns its ISU level, 1 to 4 (or B),
 from **declared** features (an authored asset says a position, entry or exit is difficult; the
@@ -1207,40 +1254,179 @@ representation — design-bible.md §3.1 is explicit that the sim is a reduced-o
 reads it — and a spin's position is exactly three values (`SPIN_POSITION`: upright, sit, camel), not a
 catalogue of named variations with a reference pose to check a skater's own joints against.
 
-**Five of the seven observed features need a mechanic this rig does not have either.**
+**Four of the seven observed features still need a mechanic this rig does not have.**
 `change_foot_by_jump`, `difficult_change_of_foot` and `all_three_positions_second_foot` all need a
 combination spin with a foot change mid-element — `spinStart` sets the spinning foot once and
 `spinTick` never reassigns it. `jump_within_spin` needs a small jump mid-spin that resumes spinning,
-which the jump and spin systems do not compose into. `both_directions` needs reversing rotation
-direction mid-spin; `Sp.dir` is set once at entry and never reassigned — there is no input that flips
-it. `change_of_edge` is not merely unbuilt: in this model a spin's blade tilt is `-Sp.dir * SPIN_EDGE`,
-so edge sign **is** rotation direction here, not an independent quantity — scoring it apart from
-`both_directions` would double-count the same event.
+which the jump and spin systems do not compose into. `change_of_edge` is not merely unbuilt: in this
+model a spin's blade tilt is `-Sp.dir * SPIN_EDGE`, so edge sign **is** rotation direction here, not an
+independent quantity — scoring it apart from `both_directions` (below) would double-count the same
+event.
 
-**That leaves two:** `increase_of_speed` (the ratio of peak to trough angular velocity within one
+**That leaves three:** `increase_of_speed` (the ratio of peak to trough angular velocity within one
 held position, at least 1.30× over at least 2 revolutions — "emerges naturally from the player pulling
 in: ω = L / I", the doc's own words, and the same physics `test/spin.test.ts`'s "a camel is slow and
-an upright fast" case already measures) and `eight_revolutions_no_change` (a single unbroken segment
-of 8 or more revolutions). Both are real ISU features, read straight from `data/spin-features.json`
-(never hardcoded — the same "scoring is data" convention `sim/score.ts` already follows) rather than
-authored numbers, so a rules update to that file moves the thresholds without a code change.
+an upright fast" case already measures), `eight_revolutions_no_change` (a single unbroken segment of 8
+or more revolutions), and — added 2026-09-17 — `both_directions`, described below. All three are real
+ISU features, read straight from `data/spin-features.json` (never hardcoded — the same "scoring is
+data" convention `sim/score.ts` already follows) rather than authored numbers, so a rules update to
+that file moves the thresholds without a code change.
 
 `sim/moves.ts`'s own `SpinState` only keeps the **current** segment's stats, overwritten the moment
-position changes — enough for its own purposes, not enough to score a whole spin afterward.
-`SpinLevelTracker` rebuilds the doc's own "list of segments" (§2) as a small external history, sampled
-once per tick by the caller; `scoreSpinLevel` is then pure, the same segment list always scoring the
-same result. Wired into `game/main.ts`: every tick of a live spin is sampled, and the moment it ends —
-released or fallen, either way `s.move` leaves `MOVE.Spin` — the level is scored and shown
-(`Last spin: level N`). Verified in the actual game via headless Chromium: a real held spin, entered
-with the arms out and pulled in mid-hold, scored **level 2** — both features, for real, from physics
-alone.
+position (or, now, direction) changes — enough for its own purposes, not enough to score a whole spin
+afterward. `SpinLevelTracker` rebuilds the doc's own "list of segments" (§2) as a small external
+history, sampled once per tick by the caller; `scoreSpinLevel` is then pure, the same segment list
+always scoring the same result. Wired into `game/main.ts`: every tick of a live spin is sampled, and
+the moment it ends — released or fallen, either way `s.move` leaves `MOVE.Spin` — the level is scored
+and shown (`Last spin: level N`). `games/ice-run-godot/bridge/engine.mjs` tracks the same thing live
+(`spinLevel` in its snapshot, added the same session as the Godot HUD label that reads it) — both paths
+share `sim/spinLevel.ts`, so a rules change or a new feature reaches both at once.
 
-**A level built from two of ten features tops out at 2, never 4 — an honest ceiling, not a bug.**
-Levels 3 and 4 need the combination-spin and direction-reversal mechanics above; `sim/spinLevel.ts` is
-not a substitute for building those, and its own header says so. Not wired into
-`games/ice-run-godot/bridge/engine.mjs`: unlike the ice grid, this is a pure read-only analysis over
-already-recorded state — it never touches `SkaterState` or `Params` — so there is no replay-determinism
-risk in leaving it browser-only for now.
+### `both_directions`, and the reversal mechanic that makes it reachable
+
+data/spin-features.json's own note on this feature: *"Rare and spectacular. Physically this requires
+killing all angular momentum and regenerating it in the opposite sense, so the simulation gets this
+almost for free: the sign of L flips."* `sim/moves.ts`'s `spinTick` does close to exactly that. Held
+lean opposite `Sp.dir`, past `spinReverseStick` (a raw stick threshold, not a body-lean angle), checks
+the spin: extra angular-momentum decay (`spinReverseRate`) on top of the ordinary kind, gated so a
+stick that is merely imprecise or off-centre costs nothing at all. Checked down to near zero
+(`spinReverseFloor`), the direction flips and regenerates (`spinReverseRegen`, scaled by how hard the
+check was held) — a fresh segment starts right there, the same as a position change already does, so
+the pre-flip revolutions cannot bleed into the new direction's count.
+
+**The one real wrinkle:** the spin's ordinary "too slow, check out by itself" exit
+(`Sp.omega < spinMinOmega`) would otherwise fire during the deliberate near-zero dip a check *is* —
+the whole move would just end instead of reversing. Held off for exactly as long as an active check is
+in progress (`against >= spinReverseStick`), and for no other reason, so a released or failed check
+still ends the spin normally, exactly as it always did.
+
+**Verified three ways.** `test/spin.test.ts`: a held check flips `Sp.dir`, a released one does not, and
+a light push under the threshold changes nothing measurable — bounds-checked with a real driven spin,
+not hand-fed state. `test/spinLevel.test.ts`: `scoreSpinLevel` finds a reversal only across adjacent
+segments (a direction change is always a segment boundary, so there is no other kind of pair to check),
+only with `min_revolutions_each_direction` on both sides, only in sit or camel — and a full physics run,
+driven the way a player would drive it, reaches **level 3** end to end. Verified live in the browser
+too, with Playwright: carve into a spin, watch the HUD's direction arrow (↺/↻), hold the opposite stick
+for about two seconds, watch it flip mid-spin, let the new direction run out — `LAST RFO spin 18.8 rev,
+best 12.7 in one position` on check-out, no console errors either side of the flip.
+
+**A level built from three of ten features tops out at 3, not 4 — an honest ceiling, not a bug.** Level
+4 needs the combination-spin mechanic above; `sim/spinLevel.ts` is not a substitute for building it, and
+its own header still says so. Replay contract `/14` (`sim/replay.ts`): Params gained the four levers
+above, `SkaterState` unchanged. Unlike every bump before it this is not guarded by a brand-new Mode flag
+at 0 — it lives under the existing `movesMode`, which live game sessions already carry at 1 — so a clip
+is only affected if it also drives a real reversal; the committed fixture never enables moves at all,
+confirmed directly rather than assumed, so its 240 digests are untouched and only `initial.params` grew.
+
+## Program Component Score
+
+Added 2026-09-17. design-bible.md §2.7: `Total Segment Score = TES + PCS − Deductions`. TES has existed
+since the jump scoring work; `sim/pcs.ts` is the PCS half — three components (Composition,
+Presentation, Skating Skills, since the 2022–23 season), each a nine-judge trimmed mean times a
+`componentFactor`. The formula and the factor are transcribed, the same convention `sim/score.ts`
+follows: `data/segment-rules.csv` already carried `component_factor` per discipline and segment (1.33 /
+1.67 short, 2.67 / 3.33 free) — a real data file this rig had never read yet, not a new one — and it
+matches `src/reference/ScoreCalculator.cs`'s own inline comment exactly (`test/pcs.test.ts` checks both
+free-skate factors against it, the same cross-check `score.test.ts` runs for the jump base values).
+
+**The formula is transcribed. The physics-to-score mapping is not, and `pcs.ts`'s own header says so in
+those words.** No data file says "this much mean flow is a 7.5" the way `spin-features.json` gives
+`both_directions` an exact revolution count — Composition, Presentation and Skating Skills are judged
+qualities in real skating. What exists is an authored, monotonic, openly-labelled proxy over what this
+reduced-order rig can actually observe, checked one bible bullet at a time in the file's own comment:
+
+- **Skating Skills** — four of five bullets: mean flow and mean lean depth read directly;
+  `sim/session.ts`'s own `skidRatio` inverted (fewer skids is the skill); `edgeChangesPerMinute` stands
+  in for "multi-directional skating", the bible's own phrase for the whole component. "Speed retained
+  through transitions" has no clean per-tick signal in `SessionMeter` — left out.
+- **Presentation** — one of five: musical credit's own accumulation rate, which already folds in accent
+  usage (every credit is a hit accent, `sim/music.ts`). Carriage activity, gaze and posture need
+  telemetry this rig does not keep, or — gaze — data it cannot observe at all.
+- **Composition** — one of four: `IceGrid.coverage()`, a new method, share of the sheet a blade has ever
+  touched — the exact "ice-coverage map from the tracing buffer" the bible names. Lobe variety needs the
+  same curvature-direction tracker flow's own "alternating lobes" is still missing; element distribution
+  and Composer layout are real gaps too, not built yet.
+
+`sim/session.ts` is deliberately reserved for pre-production-plan.md §6's own gate metrics ("inventing a
+parallel set would produce numbers that look like evidence and answer nothing" — that file's own words)
+so the one extra signal PCS needs that it does not carry, flow's session mean, gets its own small
+`PcsMeter` rather than growing `SessionMeter` past its stated purpose.
+
+**Post-hoc, not per-tick — computed once at the end of a program, over already-recorded state
+(`SessionMeter`, `PcsMeter`, an `IceGrid`). It never touches `SkaterState` or `Params`, the same as
+`sim/spinLevel.ts`, so there is no replay-determinism risk and no contract bump.** `ice` is a required
+argument to `scorePcs`, not optional the way `step()`'s own grid is: this runs once after a program, not
+once a tick, so there is no need for a silent-no-op fallback — a caller with no grid should not call
+this at all, the same way one with no score tables skips `scoreJump`.
+
+**Not yet wired into `game/career.ts` or either live game** — `sim/pcs.ts` exists the same way
+`sim/spinLevel.ts` first did, as a real, tested scoring module with nowhere in play that calls it yet.
+Wiring it in needs a discipline/segment assigned to each `CareerEvent` (none exists today — the five
+events have no short/free distinction at all) as much as it needs the plumbing itself.
+
+## Step sequences
+
+Added 2026-09-17, at the operator's own ask, alongside a live `game/career.ts` wiring — unlike
+`sim/pcs.ts` above, this one is not a standalone module waiting for a caller. `sim/stepLevel.ts` scores
+`data/step-features.json`'s **variety ladder** (level = how many distinct pieces of footwork a rolling
+stretch of skating shows, in how many "difficult" turns, on how many feet); a new `step` element in
+`game/career.ts`'s `ELEMENTS` makes a step sequence a real, choreographable, Composer-authorable part of
+a program — the same list `sequence: string[]` already validates against, generically, in both
+`bridge/engine.mjs` and `scripts/main.gd`, so nothing there had to learn a new element by name.
+
+**The taxonomy names three sets of footwork this reduced-order rig can only partly observe — read
+straight, never padded:**
+
+| Set | ISU's full set | This rig has |
+| --- | --- | --- |
+| Difficult | rocker, counter, bracket, twizzle, loop | bracket, twizzle |
+| Simple | three-turn, mohawk, choctaw | three-turn, mohawk (`TURN_KIND`'s own comment: a choctaw built the same way as a mohawk is not actually one) |
+| Steps | cross roll, chassé, toe step, change of edge, running step, cross behind, cross in front | change of edge (already an `EdgeEvent`, nothing new to build) |
+
+A crossover is not in the ISU's own taxonomy at all, but is unambiguously its own piece of footwork —
+`sim/moves.ts`'s crossover push, distinct from an ordinary stroke — so it counts as a seventh,
+rig-specific type. **Six types total, against a ladder whose second grade needs seven.** This scorer's
+own honest ceiling is grade 1 ("minimum variety"), exactly — not because a given routine happens to
+fall short, but because `data/step-features.json`'s own grade 2 needs seven distinct types full stop,
+and six can never be seven, however they are combined. `test/stepLevel.test.ts` checks this directly:
+all six of this rig's types, on both feet, still scores grade 1.
+
+**How a "distinct type" is observed, live, in `Choreography.sample()`:** a turn or twizzle's completion
+(`s.moveDone`, already real state — the same field `bestSpinLevel` reads for spins); a crossover's own
+false-to-true transition (`s.crossover && s.strokeTime > 0`, the same condition the existing `crossover`
+element already checks); an ordinary change of edge while gliding, from this tick's own `EdgeEvent`s —
+excluded during a stroke's push-roll and during a formal move, the same filtering `sim/session.ts`'s
+`edgeChangesPerMinute` already applies for the identical reason. Recorded into a `StepSequenceTracker`
+unconditionally, a fall included — footwork that already happened is not erased by falling over next —
+and scored from a rolling `STEP_WINDOW_SECONDS` (12 s) window every tick, the same "immediately
+following" spirit `both_directions`' `max_gap_s` asks for, operationalised the same way: a real window,
+not a time check this model has no state to make. The `step` element itself is active whenever that
+window's own grade reaches 1; `bestStepLevel`, tracked across the whole routine the same way
+`bestSpinLevel` is, feeds `STEP_LEVEL_XP` under the identical anti-farming gate every other bonus uses.
+
+**Found on the way, unrelated to the mechanic itself:** `data/step-features.json` was fetched by
+`game/main.ts` from the moment spin scoring first needed a sibling file to sit beside — but
+`app/build.mjs`'s data-file copy list was still the three files spin scoring alone needed, so the
+actual served build 404'd on it silently, invisible to every test that imports the module rather than
+fetching it. Fixed, and `test/app-loads.test.ts` now scans `game/main.ts`'s own `fetch("../data/...")`
+calls against `build.mjs`'s copy list directly, so a future file with the same gap fails loudly here
+instead of silently in a browser — caught in the act by testing this session's own change in the real
+served build with Playwright, the same discipline every other feature here has followed.
+
+**Reachable today via the Composer (`games/ice-run-godot`), not yet in any of the five fixed
+`CAREER_EVENTS`** — adding "step" to one of those hand-authored routines is a content decision about an
+existing difficulty progression, not a plumbing one, and is left for the operator to make rather than
+assumed here.
+
+Verified: `test/stepLevel.test.ts` (the variety-ladder scorer, pure); `test/career.test.ts` (the live
+`Choreography` wiring — five distinct types on both feet activates the element and scores grade 1, one
+foot or too few types never does, six types still cap at grade 1, no thresholds supplied degrades to
+never-active exactly like the spin and technical bonuses already do); `games/ice-run-godot/tests/
+engine.test.mjs` (a `step` sequence is real and composer-authorable through the whole bridge); a Godot
+headless smoke test (`--smoke-test`, career routine unaffected); and a live browser check with
+Playwright, after the 404 fix, with zero console errors. 408 Ice Lab tests (up from 394), 10 Godot
+bridge tests, `tsc` clean. No replay contract change: this lives entirely in `game/career.ts`
+external analysis over already-recorded state, the same situation `sim/spinLevel.ts` is already in.
 
 ## What a session measures
 

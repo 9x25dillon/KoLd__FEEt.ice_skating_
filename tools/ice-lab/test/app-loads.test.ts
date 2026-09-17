@@ -131,6 +131,22 @@ test("every slider names a parameter that exists", async () => {
   panel.refresh();
 });
 
+test("every data/ file game/main.ts fetches is one app/build.mjs actually ships", () => {
+  // Found the hard way: step-features.json was fetched by game/main.ts and
+  // scored real routines against it, but build.mjs's copy list still only
+  // had the three files spin scoring needed — a 404 in the actual served
+  // build, invisible to every test that imports the module rather than
+  // fetching it. The build's own list is now checked against the source
+  // directly, so a new fetch() with no matching copy fails loudly here
+  // instead of silently in a browser.
+  const main = readFileSync(join(root, "game", "main.ts"), "utf8");
+  const fetched = [...main.matchAll(/fetch\([`"]\.\.\/data\/([\w.-]+)/g)].map((m) => m[1]);
+  assert.ok(fetched.length >= 2, "game/main.ts should fetch at least the jump and spin score data");
+  const build = readFileSync(join(root, "app", "build.mjs"), "utf8");
+  const shipped = new Set([...build.matchAll(/"([\w.-]+\.(?:csv|json))"/g)].map((m) => m[1]));
+  for (const f of fetched) assert.ok(shipped.has(f), `game/main.ts fetches "${f}" but app/build.mjs never copies it into build/data/`);
+});
+
 test("the three control schemes are labelled A, B and C and nothing else", async () => {
   installDom();
   const { SCHEME_LABEL, SCHEME } = await import(join(root, "app", "schemes.ts"));

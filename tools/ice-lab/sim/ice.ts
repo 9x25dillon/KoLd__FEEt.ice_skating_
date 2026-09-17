@@ -47,12 +47,17 @@ export class IceGrid {
     this.snow = new Float32Array(this.cols * this.rows);
   }
 
-  /** -1 off the sheet: a fresh boards' worth of ice with nothing to read. */
-  private index(pos: Vec2): number {
+  /** The cell under a point, or null off the sheet. Public for a renderer that wants the cell itself, not just its condition. */
+  cellAt(pos: Vec2): { col: number; row: number } | null {
     const col = Math.floor((pos.x + this.halfLength) / this.cell);
     const row = Math.floor((pos.y + this.halfWidth) / this.cell);
-    if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) return -1;
-    return row * this.cols + col;
+    return col < 0 || col >= this.cols || row < 0 || row >= this.rows ? null : { col, row };
+  }
+
+  /** -1 off the sheet: a fresh boards' worth of ice with nothing to read. */
+  private index(pos: Vec2): number {
+    const c = this.cellAt(pos);
+    return c ? c.row * this.cols + c.col : -1;
   }
 
   /** damage + snow at a point, saturating: what friction and bite read. */
@@ -86,5 +91,12 @@ export class IceGrid {
   resurface(): void {
     this.damage.fill(0);
     this.snow.fill(0);
+  }
+
+  /** Share of the sheet a blade has ever touched, 0..1 — design-bible.md §2.7's Composition, "ice-coverage map". */
+  coverage(): number {
+    let visited = 0;
+    for (let i = 0; i < this.damage.length; i++) if (this.damage[i] > 0 || this.snow[i] > 0) visited++;
+    return visited / this.damage.length;
   }
 }

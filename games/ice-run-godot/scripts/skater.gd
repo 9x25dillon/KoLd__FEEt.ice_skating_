@@ -5,9 +5,26 @@ var state: Dictionary = {}
 var pose_low := false
 var model: Node3D
 var initialized := false
+var model_path := "res://assets/generated/skater.glb"
 
 func _ready() -> void:
-	model = load("res://assets/generated/skater.glb").instantiate()
+	load_model(model_path)
+
+# Any rigged glTF answers to this the same way, provided it poses the eleven
+# bones aim_bone() below drives by exact name (Hips, Spine, Head, Thigh/Shin/
+# Foot L/R, Arm/Forearm L/R) — see games/ice-run-godot/tools/build_skater.py
+# and build_berserker.py, which both build to that same skeleton on purpose.
+# A bone this does not find is simply never posed (see aim_bone's early
+# return), so a mismatched rig would stand in its rest pose rather than error.
+func load_model(path: String) -> void:
+	if model and path == model_path:
+		return
+	if model:
+		model.queue_free()
+		skeleton = null
+		bone_ids.clear()
+	model_path = path
+	model = load(model_path).instantiate()
 	add_child(model)
 	skeleton = find_skeleton(model)
 	if skeleton:

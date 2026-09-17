@@ -355,6 +355,21 @@ export interface Params {
   /** Knee at or above which a spin is a sit, and stick forward at or above which a camel. */
   spinSitKnee: number;
   spinCamelPitch: number;
+  // ── mid-spin direction reversal ──────────────────────────────────────────
+  // data/spin-features.json's spin.both_directions, "rare and spectacular...
+  // physically this requires killing all angular momentum and regenerating it
+  // in the opposite sense, so the simulation gets this almost for free: the
+  // sign of L flips." Held lean opposite Sp.dir, past spinReverseStick, drains
+  // angMomentum on top of the ordinary decay; once it is checked to near zero
+  // the direction flips and regenerates, scaled by how hard the stick is held.
+  /** 0..1, the held-stick threshold (raw axis, not radians) that starts a check. */
+  spinReverseStick: number;
+  /** Extra 1/s of angMomentum decay at full opposition (spinReverseStick's own scale, 0..1). */
+  spinReverseRate: number;
+  /** angMomentum at or below which a sustained check flips Sp.dir. Near zero: spinMinOmega's own too-slow exit is held off while against is past spinReverseStick, so this does not have to compete with it. */
+  spinReverseFloor: number;
+  /** angMomentum the flip regenerates, at full opposition — comparable to a fresh entry's own. */
+  spinReverseRegen: number;
   /** m/s an Ina Bauer needs: it is a glide, and a slow one falls over. */
   inaBauerMinSpeed: number;
   /**
@@ -487,8 +502,10 @@ export interface Params {
   // ── flow ──────────────────────────────────────────────────────────────────
   // design-bible.md §2.6: "a single value in [0,1], integrated continuously".
   // The bible's own rises-with/falls-with table is wider than this models —
-  // "alternating lobes", "turns on the beat grid" beyond a flat bonus, and
-  // "dead air between elements" are not modelled; README.md says so. Feeds
+  // "alternating lobes" / "repeated lobes in the same direction" (one signal,
+  // not modelled: no per-tick curvature-direction tracker exists) and "turns
+  // on the beat grid" beyond a flat bonus are not modelled; README.md says
+  // so. "Dead air between elements" now is (flowDeadAirTime/-Loss). Feeds
   // "stamina efficiency" (bible: "high flow means... cheaper to skate well")
   // while both flowMode and staminaMode are on. 0 in every preset.
   /** 0 off, 1 flow is integrated and feeds stamina efficiency. */
@@ -507,6 +524,10 @@ export interface Params {
   flowDamagedIceThreshold: number;
   /** Flow lost per second on damaged ice past the threshold above, while iceGridMode is on. */
   flowDamagedIceLoss: number;
+  /** Seconds after an element (a turn/twizzle/spin/Ina Bauer or a jump) finishes before "dead air" starts costing. */
+  flowDeadAirTime: number;
+  /** Flow lost per second past flowDeadAirTime with no new element under way: "dead air between elements". */
+  flowDeadAirLoss: number;
   /** Wind drain multiplier at flow 1: "cheaper to skate well". */
   flowStaminaEfficiencyMin: number;
 
@@ -662,6 +683,10 @@ export const DEFAULT_PARAMS: Params = {
   spinExitSpeed: 2.0,
   spinSitKnee: 0.6,
   spinCamelPitch: 0.5,
+  spinReverseStick: 0.6,
+  spinReverseRate: 1.5,      // measured: kills a typical entry L in under 2 s of held opposition
+  spinReverseFloor: 0.5,     // near-zero: the too-slow exit is held off while a check is in progress
+  spinReverseRegen: 25.0,    // a fresh spin's own entry L is roughly 17-40 across spinMinSpeed..5 m/s
   inaBauerMinSpeed: 2.0,
   inaBauerDrag: 2.0,
   inaBauerScrub: 0.13,
@@ -711,6 +736,8 @@ export const DEFAULT_PARAMS: Params = {
   flowBeatGain: 0.05,
   flowDamagedIceThreshold: 0.5,
   flowDamagedIceLoss: 0.2,
+  flowDeadAirTime: 1.5,
+  flowDeadAirLoss: 0.15,
   flowStaminaEfficiencyMin: 0.6,
 
   rinkRelief: 0,
@@ -799,6 +826,10 @@ export function validate(p: Params): string[] {
   if (p.spinTravelKeep > 1) errs.push("spinTravelKeep is a share of the entry velocity, 0..1");
   if (p.spinTravelTime <= 0) errs.push("spinTravelTime must be positive");
   if (p.spinMinSpeed <= 0) errs.push("spinMinSpeed must be positive: a spin from a standstill has no angular momentum");
+  if (p.spinReverseStick <= 0 || p.spinReverseStick > 1) errs.push("spinReverseStick is a stick threshold, in (0, 1]");
+  if (p.spinReverseRate <= 0) errs.push("spinReverseRate must be positive: a reversal has to actually check the spin");
+  if (p.spinReverseFloor <= 0) errs.push("spinReverseFloor must be positive: angMomentum decays toward it, never past zero");
+  if (p.spinReverseRegen <= 0) errs.push("spinReverseRegen must be positive: the flip has to regenerate real momentum");
   if (p.inaBauerDrag < 1) errs.push("inaBauerDrag multiplies the upright drag area: a side-on body has more, not less");
   if (p.jumpSpeedShare > 1) errs.push("jumpSpeedShare is a share of the lift, 0..1");
   if (p.backPushScale <= 0 || p.backPushScale > 1)
@@ -842,6 +873,8 @@ export function validate(p: Params): string[] {
   if (p.flowDamagedIceThreshold < 0 || p.flowDamagedIceThreshold > 1)
     errs.push("flowDamagedIceThreshold is an ice condition share, 0..1");
   if (p.flowDamagedIceLoss < 0) errs.push("flowDamagedIceLoss cannot be negative");
+  if (p.flowDeadAirTime < 0) errs.push("flowDeadAirTime cannot be negative");
+  if (p.flowDeadAirLoss < 0) errs.push("flowDeadAirLoss cannot be negative");
   if (p.flowStaminaEfficiencyMin <= 0 || p.flowStaminaEfficiencyMin > 1)
     errs.push("flowStaminaEfficiencyMin is a multiplier that shrinks Wind's drain, in (0, 1]");
   if (![0, 1].includes(p.staminaMode)) errs.push("staminaMode is 0 (off) or 1 (the pools drain)");

@@ -30,7 +30,8 @@ godot4 --editor --path games/ice-run-godot
 
 Press **F6/F5** to run the main scene/project. Select **The Season** for five
 career events or **The Composer** to build and reorder a program of up to sixteen
-phrases. Gold requires no falls; silver permits two; completing the routine earns
+phrases — glide, edge, crossover, jump, spin, **step sequence**, and closing pose.
+Gold requires no falls; silver permits two; completing the routine earns
 bronze. Improved medals earn training XP and unlock the next event. Rehearsals
 and replay playback cannot earn career rewards.
 
@@ -54,6 +55,14 @@ profiles; career uses its own trained profile.
 | Bracket | N | Right stick click |
 | Pause / restart | Esc / R | Start / Back |
 | Camera | V | — |
+
+The lower-left HUD carries a running jump TES total and, once you finish one,
+the ISU level your last spin actually reached ("Last spin: level 2", or
+"level B" below level 1) — the same live readout the browser game's
+`#technical`/`#spin-level` already have. `bridge/engine.mjs` scores it with
+`sim/spinLevel.ts` the moment a spin ends, the same way it already scored
+jump TES; before that, `scripts/main.gd` had nowhere to read a spin level
+from at all.
 
 Settings and the authored sequence save to `preferences.json`; career saves
 atomically to `career-v1.json`. Both are in Godot's user data directory (normally
@@ -101,6 +110,16 @@ blender --background --python games/ice-run-godot/tools/build_skater.py
 
 This replaces both the source `.blend` and exported `.glb`; save manual Blender
 edits separately before regenerating.
+
+**A second, selectable skater** — the Black Berserker — is built the same way,
+from `tools/build_berserker.py`, to `assets/source/skater-berserker.blend` and
+`assets/generated/skater-berserker.glb`. Pick it from Settings → Skater; the
+choice is saved to `preferences.json` and takes effect on your next skate.
+`scripts/skater.gd` poses whichever glb is loaded purely by bone name (`Hips,
+Spine, Head, Thigh/Shin/Foot L/R, Arm/Forearm L/R`) every frame, straight from
+the physics state — a bone it does not find is simply left in its rest pose,
+never an error — so both build scripts construct the identical skeleton
+`build_skater.py` originated, and a third character only needs to do the same.
 
 ## Design direction and current limits
 

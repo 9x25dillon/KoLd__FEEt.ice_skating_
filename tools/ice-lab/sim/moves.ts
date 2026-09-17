@@ -477,6 +477,8 @@ export function spinStart(s: SkaterState, p: Params, carriage: number, knee: num
  */
 export function spinTick(
   s: SkaterState, p: Params, dt: number, knee: number, pitch: number, carriage: number, held: boolean,
+  /** Raw stick, -1..1 — NOT solver.ts's own radian-scaled `leanCmd`; only a reversal check reads this. */
+  leanAxis = 0,
 ): PivotTick {
   const Sp = s.spin;
   Sp.t += dt;
@@ -493,9 +495,28 @@ export function spinTick(
   const target = SPIN_INERTIA_SCALE[pos] * lerp(p.inertiaTucked, p.inertiaOpen, clamp(carriage, 0, 1));
   Sp.inertia = moveToward(Sp.inertia, target, p.inertiaPullRate * dt);
 
+  // data/spin-features.json's both_directions: held stick against Sp.dir, past
+  // spinReverseStick, checks the spin's own angular momentum on top of its
+  // ordinary decay; once that is checked to spinReverseFloor the direction
+  // flips and regenerates, scaled by how hard the check was held. Free while
+  // the stick agrees with Sp.dir or sits near neutral — `against` is 0 there.
+  const against = Math.max(0, -Sp.dir * leanAxis);
+  // Below the threshold this is not a check at all — a stick imperfectly
+  // centred, or nudged the "wrong" way by a little, costs nothing. Only past
+  // it does the extra decay (and the possibility of a flip) apply.
+  const checking = against >= p.spinReverseStick;
   const drift = len(s.vel);
   s.vel = mul(s.vel, Math.max(0, 1 - dt / p.spinTravelTime));
-  Sp.angMomentum *= Math.max(0, 1 - (p.spinDecay + p.spinTravelDecay * drift) * dt);
+  Sp.angMomentum *= Math.max(0, 1 - (p.spinDecay + p.spinTravelDecay * drift + p.spinReverseRate * (checking ? against : 0)) * dt);
+  if (checking && Sp.angMomentum <= p.spinReverseFloor) {
+    Sp.dir = -Sp.dir;
+    Sp.angMomentum = p.spinReverseRegen * against;
+    // A fresh segment, the same reason a position change starts one: the
+    // pre-flip revolutions must not bleed into the new direction's count.
+    Sp.segRevs = 0;
+    Sp.segOmegaMin = Sp.angMomentum / Sp.inertia;
+    Sp.segOmegaMax = Sp.segOmegaMin;
+  }
   Sp.omega = Sp.angMomentum / Sp.inertia;
 
   const dAngle = Sp.omega * dt;
@@ -527,7 +548,12 @@ export function spinTick(
     }
   }
 
-  const ended = !held || Sp.omega < p.spinMinOmega;
+  // A reversal in progress is deliberately, briefly slower than spinMinOmega
+  // — that dip through near-zero is what "killing all angular momentum" IS —
+  // so an active check (against past the stick threshold) is exempted from
+  // the ordinary too-slow exit for as long as it is held. Letting go without
+  // completing one still ends the spin exactly as before.
+  const ended = !held || (Sp.omega < p.spinMinOmega && !checking);
   if (ended) {
     if (Sp.segRevs >= 2) Sp.positionsHeld |= 1 << Sp.position;
     const exitFoot = (Sp.dir > 0 ? FOOT.Right : FOOT.Left) as Foot;

@@ -1,8 +1,9 @@
 // The flow scalar, design-bible.md §2.6: "a single value in [0,1], integrated
-// continuously." Only the ground-based rises-with/falls-with terms and the
-// beat-grid bonus are modelled — "alternating lobes", "repeated lobes in the
-// same direction" and "dead air between elements" are not. Off in every
-// preset, the way everything else here is.
+// continuously." Only the ground-based rises-with/falls-with terms, the
+// beat-grid bonus, and — added 2026-09-17 — "dead air between elements" are
+// modelled. "Alternating lobes" and "repeated lobes in the same direction"
+// (one signal: no per-tick curvature-direction tracker exists) are still
+// not. Off in every preset, the way everything else here is.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -87,6 +88,43 @@ test("re-crossing damaged ice costs flow against the same carve, only while the 
   assert.equal(noGrid.flow, fresh.flow, "with no grid, damaged ice cannot be read, so it must match the fresh case exactly");
 });
 
+test("an opening glide, before any element has ever finished, is never dead air", () => {
+  const p = mk();
+  const s = createState(p, 5);
+  // moveDone.tick and landed.tick both start at -1: nothing has finished yet.
+  assert.equal(s.moveDone.tick, -1);
+  assert.equal(s.landed.tick, -1);
+  run(s, { ...NEUTRAL_INPUT, lean: 0.3, weight: 1 }, p, 600); // 5 s, well past flowDeadAirTime
+  const pureCarve = createState({ ...p, flowDeadAirLoss: 0 }, 5);
+  run(pureCarve, { ...NEUTRAL_INPUT, lean: 0.3, weight: 1 }, p, 600);
+  assert.equal(s.flow, pureCarve.flow, "no element yet: identical to a run where dead air could never cost anything");
+});
+
+test("dead air costs flow once an element has finished and none is under way", () => {
+  const carve = { ...NEUTRAL_INPUT, lean: 0.3, weight: 1 };
+  const noElement = createState(mk(), 5);
+  run(noElement, carve, mk(), 600); // 5 s of the same carve, nothing has finished
+
+  const afterElement = createState(mk(), 5);
+  afterElement.moveDone.tick = 0; // a move finished on the very first tick
+  run(afterElement, carve, mk(), 600);
+
+  assert.ok(afterElement.flow < noElement.flow,
+    `dead air must cost the identical carve something: ${afterElement.flow.toFixed(4)} vs ${noElement.flow.toFixed(4)}`);
+});
+
+test("within the grace period after an element, there is no dead-air cost yet", () => {
+  const p = mk();
+  const carve = { ...NEUTRAL_INPUT, lean: 0.3, weight: 1 };
+  const grace = Math.round(p.flowDeadAirTime * 120) - 5; // a few ticks short of the grace period
+  const s = createState(p, 5);
+  s.moveDone.tick = 0;
+  run(s, carve, p, grace);
+  const pureCarve = createState({ ...p, flowDeadAirLoss: 0 }, 5);
+  run(pureCarve, carve, p, grace);
+  assert.equal(s.flow, pureCarve.flow, "still inside the grace period: dead air has not started costing anything");
+});
+
 test("high flow makes stamina cheaper: Wind drains slower the more flow is banked", () => {
   const p = { ...mk(), staminaMode: 1 };
   const low = createState(p, 6); low.flow = 0;
@@ -105,6 +143,8 @@ test("flow validates, and a bad lever is caught", () => {
   assert.ok(validate({ ...p, flowDamagedIceThreshold: 1.5 }).length > 0);
   assert.ok(validate({ ...p, flowStaminaEfficiencyMin: 0 }).length > 0);
   assert.ok(validate({ ...p, flowStaminaEfficiencyMin: 1.5 }).length > 0);
+  assert.ok(validate({ ...p, flowDeadAirTime: -1 }).length > 0);
+  assert.ok(validate({ ...p, flowDeadAirLoss: -1 }).length > 0);
 });
 
 test("flow replays tick for tick", () => {

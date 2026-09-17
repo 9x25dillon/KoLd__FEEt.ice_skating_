@@ -7,7 +7,8 @@ import {ReplayRecorder,ReplayPlayer,parseReplay} from '../runtime/sim/replay.js'
 import {SessionMeter} from '../runtime/sim/session.js';
 import {applyProfile,SAMPLE_PROFILES,xpToRaise} from '../runtime/sim/profile.js';
 import {loadTables,scoreJump} from '../runtime/sim/score.js';
-import {loadSpinFeatureThresholds} from '../runtime/sim/spinLevel.js';
+import {loadSpinFeatureThresholds,SpinLevelTracker,scoreSpinLevel} from '../runtime/sim/spinLevel.js';
+import {loadStepFeatureThresholds} from '../runtime/sim/stepLevel.js';
 import {newSchemeState} from '../runtime/app/schemes.js';
 import {gameInput,GAME_PARAMS} from '../runtime/game/controls.js';
 import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
@@ -21,6 +22,7 @@ import {readFileSync} from 'node:fs';
 
 const tables=loadTables(readFileSync(new URL('../runtime/data/scale-of-values.csv',import.meta.url),'utf8'),readFileSync(new URL('../runtime/data/calls-and-deductions.csv',import.meta.url),'utf8'));
 const spinThresholds=loadSpinFeatureThresholds(readFileSync(new URL('../runtime/data/spin-features.json',import.meta.url),'utf8'));
+const stepThresholds=loadStepFeatureThresholds(readFileSync(new URL('../runtime/data/step-features.json',import.meta.url),'utf8'));
 export const tracks=JSON.parse(readFileSync(new URL('../runtime/tracks.json',import.meta.url),'utf8'));
 export const emptyControls=()=>({lx:0,ly:0,rx:0,ry:0,lean:0,pitch:0,kx:0,ky:0,kPrimaryX:0,kAltX:0,knee:.35,weight:.5,carriage:0,windup:0,push:false,brake:false,toe:false,turn:false,bracket:false,twizzle:false,spin:false,inaBauer:false,reset:false,pause:false,cyclePreset:false,cycleScheme:false,cycleJump:false,cycleView:false,zoom:0,dpadStep:0,tilt:0,toggleGame:false,cycleGhost:false,pickJump:-1,cycleProfile:false,cycleMoves:false,cycleRink:false});
 export class IceEngine {
@@ -45,8 +47,12 @@ export class IceEngine {
   this.state=createState(this.params,4.5);
   this.ice=new IceGrid(this.params.rinkHalfLength,this.params.rinkHalfWidth);
   this.steering=newSchemeState();this.coach=new BeginnerCoach();this.practice=new Practice();this.run=new IceRun();this.rookie=new RookieCourse();this.playground=new Playground();
-  this.routine=mode==='career'?new Choreography(CAREER_EVENTS[index],tables,spinThresholds):mode==='composer'?new Choreography({id:'authored',title:'Your signature program',venue:'Composer rehearsal',seconds:180,routine:this.sequence},tables,spinThresholds):null;
+  this.routine=mode==='career'?new Choreography(CAREER_EVENTS[index],tables,spinThresholds,stepThresholds):mode==='composer'?new Choreography({id:'authored',title:'Your signature program',venue:'Composer rehearsal',seconds:180,routine:this.sequence},tables,spinThresholds,stepThresholds):null;
   this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
+  // The live free-skate readout game/main.ts already has (frame.technical above is its jump half) —
+  // sample every tick a spin is live, score the moment it ends. -1 means no spin has finished yet;
+  // scoreSpinLevel's own 0 is a real result, "level B", so it cannot double as that sentinel.
+  this.spinTracker=new SpinLevelTracker();this.wasSpinning=false;this.spinLevel=-1;
   return this.snapshot();
  }
  configure(o) {
@@ -95,7 +101,11 @@ export class IceEngine {
   if(this.mode==='timed')this.run.sample(this.state,SIM_DT);
   // Free Skate stays quiet per the bible. The original playground remains available in runtime.
   if(this.state.landed.tick>=0&&this.scoredTick!==this.state.landed.tick){this.scoredTick=this.state.landed.tick;this.technical+=scoreJump(tables,this.state.landed)?.score??0;}
-  if(this.routine)this.routine.sample(this.state,this.low,SIM_DT);
+  const spinning=this.state.move===MOVE.Spin;
+  if(spinning)this.spinTracker.sample(this.state.spin);
+  else if(this.wasSpinning){this.spinLevel=scoreSpinLevel(this.spinTracker.finish(),spinThresholds).level;this.spinTracker.reset();}
+  this.wasSpinning=spinning;
+  if(this.routine)this.routine.sample(this.state,this.low,SIM_DT,events);
   if(this.routine?.done) {
    const r=this.routine,xp=this.mode==='career'?this.career.award(r):0;
    this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls · ${this.technical.toFixed(2)} jump TES`,xp,complete:r.complete};
@@ -107,7 +117,7 @@ export class IceEngine {
  snapshot() {
   const s=this.state,r=this.routine;
   const move=s.fallen?'Recover · press Space / A':s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Turn?'Turn':this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
-  return {state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+  return {state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    routine:r?{title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal}:null,
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},

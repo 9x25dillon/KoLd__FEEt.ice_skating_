@@ -3,23 +3,27 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import {
   CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX, TECHNICAL_XP_PER_POINT, SPIN_LEVEL_XP,
+  STEP_LEVEL_XP,
 } from "../game/career.ts";
 import type { CareerEvent, ElementId } from "../game/career.ts";
 import { createState, step } from "../sim/solver.ts";
 import { GAME_PARAMS } from "../game/controls.ts";
-import { MOVE, NEUTRAL_INPUT } from "../sim/types.ts";
+import { MOVE, NEUTRAL_INPUT, TURN_KIND, EVENT, FOOT, DIR, EDGE, makeCode } from "../sim/types.ts";
 import type { SkatingInput } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import { SIM_DT } from "../sim/params.ts";
 import { applyProfile, overall, TIERS } from "../sim/profile.ts";
 import { loadTables } from "../sim/score.ts";
 import { loadSpinFeatureThresholds } from "../sim/spinLevel.ts";
+import { loadStepFeatureThresholds } from "../sim/stepLevel.ts";
 
 const tables = loadTables(
   readFileSync(new URL("../../../data/scale-of-values.csv", import.meta.url), "utf8"),
   readFileSync(new URL("../../../data/calls-and-deductions.csv", import.meta.url), "utf8"));
 const spinThresholds = loadSpinFeatureThresholds(
   readFileSync(new URL("../../../data/spin-features.json", import.meta.url), "utf8"));
+const stepThresholds = loadStepFeatureThresholds(
+  readFileSync(new URL("../../../data/step-features.json", import.meta.url), "utf8"));
 
 const state = () => createState(GAME_PARAMS, 4.5);
 const program = (...routine: ElementId[]) => new Choreography({ id: "test", title: "Test", venue: "Test", seconds: 30, routine });
@@ -126,21 +130,120 @@ test("hype and flow, averaged over a real routine, bonus career XP only alongsid
   assert.equal(fresh.award(flat), 3 * 150);
 });
 
-test("real jump TES and spin level bonus career XP, the same anti-farming gate as hype and flow", () => {
-  const c = new Choreography(CAREER_EVENTS[0], tables, spinThresholds);
-  c.technicalScore = 5.5; c.bestSpinLevel = 2;
+test("real jump TES, spin level and step level bonus career XP, the same anti-farming gate as hype and flow", () => {
+  const c = new Choreography(CAREER_EVENTS[0], tables, spinThresholds, stepThresholds);
+  c.technicalScore = 5.5; c.bestSpinLevel = 2; c.bestStepLevel = 1;
   c.index = CAREER_EVENTS[0].routine.length; // finish() 's own shortcut, for the award math alone
   assert.equal(c.medal, 3);
 
   const cs = new CareerState();
   const earned = cs.award(c);
-  assert.equal(earned, 3 * 150 + Math.round(TECHNICAL_XP_PER_POINT * 5.5) + SPIN_LEVEL_XP * 2);
+  assert.equal(earned, 3 * 150 + Math.round(TECHNICAL_XP_PER_POINT * 5.5) + SPIN_LEVEL_XP * 2 + STEP_LEVEL_XP * 1);
 
-  // No medal improvement the second time: no technical or spin bonus either,
-  // even though both are still sitting at their full values.
-  const c2 = new Choreography(CAREER_EVENTS[0], tables, spinThresholds);
-  c2.technicalScore = 5.5; c2.bestSpinLevel = 2; c2.index = CAREER_EVENTS[0].routine.length;
+  // No medal improvement the second time: no technical, spin or step bonus
+  // either, even though all three are still sitting at their full values.
+  const c2 = new Choreography(CAREER_EVENTS[0], tables, spinThresholds, stepThresholds);
+  c2.technicalScore = 5.5; c2.bestSpinLevel = 2; c2.bestStepLevel = 1; c2.index = CAREER_EVENTS[0].routine.length;
   assert.equal(cs.award(c2), 0);
+});
+
+test("step sequence: five distinct types on both feet inside the window makes the element active and scores grade 1", () => {
+  const c = new Choreography(
+    { id: "test", title: "Test", venue: "Test", seconds: 30, routine: ["step"] },
+    undefined, undefined, stepThresholds);
+  const s = state();
+  const code = (foot: 0 | 1) => makeCode(foot, DIR.Backward, EDGE.Outside);
+
+  s.tick = 0; s.moveDone.tick = 0; s.moveDone.kind = MOVE.Turn; s.moveDone.detail = TURN_KIND.ThreeTurn;
+  s.moveDone.toCode = code(FOOT.Right);
+  c.sample(s, false, 0.01);
+  s.tick = 100; s.moveDone.tick = 100; s.moveDone.detail = TURN_KIND.Mohawk; s.moveDone.toCode = code(FOOT.Left);
+  c.sample(s, false, 0.01);
+  s.tick = 200; s.moveDone.tick = 200; s.moveDone.detail = TURN_KIND.Bracket; s.moveDone.toCode = code(FOOT.Right);
+  c.sample(s, false, 0.01);
+  s.tick = 300; s.moveDone.tick = 300; s.moveDone.kind = MOVE.Twizzle; s.moveDone.toCode = code(FOOT.Left);
+  c.sample(s, false, 0.01);
+  assert.equal(c.index, 0, "only four distinct types so far: not enough for grade 1's own five");
+  // A crossover: not a MOVE, so the tracker sees the false-to-true transition.
+  s.tick = 400; s.crossover = true; s.strokeTime = 0.1; s.strokeFoot = FOOT.Right;
+  c.sample(s, false, 0.01);
+  assert.equal(c.index, 0, "active now, but the element's own 2 s hold has not accumulated yet");
+  s.tick = 401; c.sample(s, false, 1);
+  s.tick = 402; c.sample(s, false, 1);
+  assert.equal(c.index, 1, "five distinct types, both feet, held 2 s: the step element is satisfied");
+  assert.equal(c.bestStepLevel, 1, "exactly grade 1 — this rig's own honest ceiling with six observable types");
+});
+
+test("a change of edge while gliding is a sixth distinct type, but six still cannot reach grade 2", () => {
+  const c = new Choreography(
+    { id: "test", title: "Test", venue: "Test", seconds: 30, routine: ["step"] },
+    undefined, undefined, stepThresholds);
+  const s = state();
+  const types = [
+    [MOVE.Turn, TURN_KIND.ThreeTurn, FOOT.Right], [MOVE.Turn, TURN_KIND.Mohawk, FOOT.Left],
+    [MOVE.Turn, TURN_KIND.Bracket, FOOT.Right], [MOVE.Twizzle, 0, FOOT.Left],
+  ] as const;
+  types.forEach(([kind, detail, foot], i) => {
+    s.tick = i * 100; s.moveDone.tick = i * 100; s.moveDone.kind = kind; s.moveDone.detail = detail;
+    s.moveDone.toCode = makeCode(foot, DIR.Backward, EDGE.Outside);
+    c.sample(s, false, 0.01);
+  });
+  s.tick = 400; s.crossover = true; s.strokeTime = 0.1; s.strokeFoot = FOOT.Right;
+  c.sample(s, false, 0.01);
+  s.tick = 500;
+  const changeOfEdge = { tick: 500, type: EVENT.EdgeChanged, foot: FOOT.Left, prevCode: 0, newCode: 0, prevDwell: 0, value: 0 };
+  c.sample(s, false, 0.01, [changeOfEdge]);
+  s.tick = 501; c.sample(s, false, 1);
+  s.tick = 502; c.sample(s, false, 1);
+  assert.equal(c.bestStepLevel, 1, "six of this rig's six observable types is still grade 1: grade 2 needs seven");
+});
+
+test("step sequence: fewer than five distinct types, or only one foot, never activates the element", () => {
+  const oneType = new Choreography(
+    { id: "test", title: "Test", venue: "Test", seconds: 30, routine: ["step"] },
+    undefined, undefined, stepThresholds);
+  const s = state();
+  s.tick = 0; s.moveDone.tick = 0; s.moveDone.kind = MOVE.Turn; s.moveDone.detail = TURN_KIND.ThreeTurn;
+  s.moveDone.toCode = makeCode(FOOT.Right, DIR.Backward, EDGE.Outside);
+  oneType.sample(s, false, 3);
+  assert.equal(oneType.index, 0);
+  assert.equal(oneType.bestStepLevel, 0);
+
+  const oneFoot = new Choreography(
+    { id: "test", title: "Test", venue: "Test", seconds: 30, routine: ["step"] },
+    undefined, undefined, stepThresholds);
+  const s2 = state();
+  const kinds: Array<[number, number]> = [
+    [MOVE.Turn, TURN_KIND.ThreeTurn], [MOVE.Turn, TURN_KIND.Mohawk],
+    [MOVE.Turn, TURN_KIND.Bracket], [MOVE.Twizzle, 0],
+  ];
+  kinds.forEach(([kind, detail], i) => {
+    s2.tick = i * 100; s2.moveDone.tick = i * 100; s2.moveDone.kind = kind; s2.moveDone.detail = detail;
+    s2.moveDone.toCode = makeCode(FOOT.Right, DIR.Backward, EDGE.Outside); // every one on the right foot
+    oneFoot.sample(s2, false, 0.01);
+  });
+  s2.tick = 400; s2.crossover = true; s2.strokeTime = 0.1; s2.strokeFoot = FOOT.Right;
+  oneFoot.sample(s2, false, 3);
+  assert.equal(oneFoot.index, 0, "five distinct types, but never the left foot: both_feet_used fails");
+  assert.equal(oneFoot.bestStepLevel, 0);
+});
+
+test("without stepThresholds, the step element never activates — the same graceful degradation as spin/technical", () => {
+  const c = new Choreography({ id: "test", title: "Test", venue: "Test", seconds: 30, routine: ["step"] });
+  const s = state();
+  const types: Array<[number, number, 0 | 1]> = [
+    [MOVE.Turn, TURN_KIND.ThreeTurn, FOOT.Right], [MOVE.Turn, TURN_KIND.Mohawk, FOOT.Left],
+    [MOVE.Turn, TURN_KIND.Bracket, FOOT.Right], [MOVE.Twizzle, 0, FOOT.Left],
+  ];
+  types.forEach(([kind, detail, foot], i) => {
+    s.tick = i * 100; s.moveDone.tick = i * 100; s.moveDone.kind = kind; s.moveDone.detail = detail;
+    s.moveDone.toCode = makeCode(foot, DIR.Backward, EDGE.Outside);
+    c.sample(s, false, 0.01);
+  });
+  s.tick = 400; s.crossover = true; s.strokeTime = 0.1; s.strokeFoot = FOOT.Right;
+  c.sample(s, false, 3);
+  assert.equal(c.index, 0);
+  assert.equal(c.bestStepLevel, 0);
 });
 
 test("technicalScore and bestSpinLevel accumulate from real physics, not just the checklist", () => {

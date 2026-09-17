@@ -22,6 +22,20 @@ test("a fresh grid reports no wear, and a resurface clears one that has some", (
   assert.equal(g.condition(v2(0, 0)), 0);
 });
 
+test("coverage: a fresh grid is 0, and depositing raises it by exactly the cells touched", () => {
+  const g = new IceGrid(1, 1); // small: cols/rows are easy to reason about by hand
+  const p = DEFAULT_PARAMS;
+  assert.equal(g.coverage(), 0);
+  g.deposit(v2(0, 0), 0, 1, p);
+  assert.equal(g.coverage(), 1 / (g.cols * g.rows));
+  g.deposit(v2(0, 0), 0, 1, p); // the same cell again: coverage does not double-count
+  assert.equal(g.coverage(), 1 / (g.cols * g.rows));
+  g.deposit(v2(0.9, 0.9), 4, 1, p); // scrub only, no plain pass — snow alone still counts as visited
+  assert.equal(g.coverage(), 2 / (g.cols * g.rows));
+  g.resurface();
+  assert.equal(g.coverage(), 0, "a resurfaced sheet forgets it was ever skated on");
+});
+
 test("damage saturates at 1 and never goes past it", () => {
   const g = new IceGrid(5, 5);
   const p = { ...DEFAULT_PARAMS, iceDamagePerPass: 0.9 };
@@ -38,6 +52,19 @@ test("snow comes only from scrub; an ordinary pass leaves none", () => {
 
   g.deposit(v2(1, 1), 4, 1 / 120, p);
   assert.ok(g.sample(v2(1, 1)).snow > 0, "scrub deposits snow too");
+});
+
+test("cellAt agrees with condition/sample: the same cell, or null off the sheet", () => {
+  const g = new IceGrid(5, 5, 0.5);   // a coarse cell, so the arithmetic is easy to check by hand
+  assert.deepEqual(g.cellAt(v2(0, 0)), { col: 10, row: 10 }, "the centre cell of a 20x20 grid at 0.5 m cells");
+  assert.deepEqual(g.cellAt(v2(-5, -5)), { col: 0, row: 0 }, "the low corner");
+  assert.equal(g.cellAt(v2(5, 0)), null, "exactly on the far edge is one cell past the last one");
+  assert.equal(g.cellAt(v2(50, 50)), null);
+  g.deposit(v2(0, 0), 0, 1 / 120, DEFAULT_PARAMS);
+  const cell = g.cellAt(v2(0, 0))!;
+  // A renderer reading the cell back should find the same wear condition() gives at the same point.
+  assert.ok(g.condition(v2(0, 0)) > 0);
+  assert.deepEqual(cell, { col: 10, row: 10 });
 });
 
 test("off the sheet is a no-op: nothing to write, nothing to read", () => {

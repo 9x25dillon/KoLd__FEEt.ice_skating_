@@ -1,12 +1,15 @@
-import { MOVE } from "../sim/types.ts";
-import type { SkaterState } from "../sim/types.ts";
+import { MOVE, TURN_KIND, EVENT, FOOT, codeToString } from "../sim/types.ts";
+import type { SkaterState, EdgeEvent } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
+import { SIM_HZ } from "../sim/params.ts";
 import { makeProfile, train, xpToRaise, STAT_NAMES, overall, TIERS } from "../sim/profile.ts";
 import type { SkaterProfile, StatName } from "../sim/profile.ts";
 import { scoreJump } from "../sim/score.ts";
 import type { ScoreTables } from "../sim/score.ts";
 import { SpinLevelTracker, scoreSpinLevel } from "../sim/spinLevel.ts";
 import type { SpinFeatureThresholds } from "../sim/spinLevel.ts";
+import { StepSequenceTracker, scoreStepLevel, STEP_TYPE } from "../sim/stepLevel.ts";
+import type { StepFeatureThresholds } from "../sim/stepLevel.ts";
 
 export const ELEMENTS = {
   glide: { title: "Opening glide", hint: "Hold Space / A to push. Glide upright above 3 m/s for 3 seconds.", duration: 3 },
@@ -14,8 +17,11 @@ export const ELEMENTS = {
   crossover: { title: "Crossover phrase", hint: "Carve and push with Space / A. Keep the curve through a crossover.", duration: 0.08 },
   jump: { title: "Jump accent", hint: "Build speed, then J / D-pad up in Beginner. In Simulation, load Shift / RT and release. Land without a fall or step-out.", duration: 0 },
   spin: { title: "Spin phrase", hint: "Carve at speed, then hold Y for one new full rotation. Release to exit.", duration: 0 },
+  step: { title: "Step sequence", hint: "Chain different footwork: three-turns, mohawks, brackets, twizzles, crossovers, edge changes. Five distinct types, both feet, inside a rolling stretch of skating.", duration: 2 },
   pose: { title: "Closing pose", hint: "Glide above 2 m/s and hold U / D-pad down for 2 seconds.", duration: 2 },
 } as const;
+/** Seconds a step sequence's own variety must show up within — a real one spans a stretch of the program, not an instant. */
+export const STEP_WINDOW_SECONDS = 12;
 export type ElementId = keyof typeof ELEMENTS;
 export interface CareerEvent { id: string; title: string; venue: string; seconds: number; routine: readonly ElementId[] }
 export const CAREER_EVENTS: readonly CareerEvent[] = [
@@ -33,8 +39,11 @@ export const HYPE_FLOW_BONUS_MAX = 75;
  *  pass/fail check on the "jump" element, the judged score itself. */
 export const TECHNICAL_XP_PER_POINT = 15;
 /** XP per ISU level (sim/spinLevel.ts) the best spin performed in the routine actually reached.
- *  That scorer's own honest ceiling is 2, so this XP tops out at SPIN_LEVEL_XP * 2. */
+ *  That scorer's own honest ceiling is 3, so this XP tops out at SPIN_LEVEL_XP * 3. */
 export const SPIN_LEVEL_XP = 40;
+/** XP per ISU grade (sim/stepLevel.ts) the best step-sequence variety window actually reached.
+ *  That scorer's own honest ceiling is grade 1, so this XP is either 0 or STEP_LEVEL_XP. */
+export const STEP_LEVEL_XP = 40;
 
 /** Ordered choreography reads live solver results; no input press earns a move. */
 export class Choreography {
@@ -62,19 +71,30 @@ export class Choreography {
   private spinThresholds?: SpinFeatureThresholds;
   private spinTracker = new SpinLevelTracker();
   private wasSpinning = false;
+  private stepThresholds?: StepFeatureThresholds;
+  private stepTracker = new StepSequenceTracker();
+  private stepWindowTicks = Math.round(STEP_WINDOW_SECONDS * SIM_HZ);
+  private lastMoveDoneTick = -1;
+  private wasCrossover = false;
   /**
    * The real judged numbers, not the pass/fail checklist below: every jump's
-   * actual TES (sim/score.ts) landed anywhere in the routine, summed, and
-   * the best ISU level (sim/spinLevel.ts) any spin performed actually
-   * reached. Both are 0 if `tables`/`spinThresholds` were never supplied —
-   * the same graceful-degradation the free-skate HUD already has when the
-   * scoring data fails to load — and CareerState.award reads both for a
-   * bonus on top of the medal; they do nothing on their own.
+   * actual TES (sim/score.ts) landed anywhere in the routine, summed, the
+   * best ISU level (sim/spinLevel.ts) any spin performed actually reached,
+   * and the best ISU grade (sim/stepLevel.ts) any rolling variety window
+   * actually reached. All three are 0 if their own tables/thresholds were
+   * never supplied — the same graceful-degradation the free-skate HUD
+   * already has when the scoring data fails to load — and CareerState.award
+   * reads all three for a bonus on top of the medal; they do nothing alone.
    */
   technicalScore = 0;
   bestSpinLevel = 0;
-  constructor(event: CareerEvent, tables?: ScoreTables, spinThresholds?: SpinFeatureThresholds) {
+  bestStepLevel = 0;
+  constructor(
+    event: CareerEvent, tables?: ScoreTables, spinThresholds?: SpinFeatureThresholds,
+    stepThresholds?: StepFeatureThresholds,
+  ) {
     this.event = event; this.tables = tables; this.spinThresholds = spinThresholds;
+    this.stepThresholds = stepThresholds;
   }
   get complete() { return this.index === this.event.routine.length; }
   get done() { return this.complete || this.elapsed >= this.event.seconds; }
@@ -83,7 +103,7 @@ export class Choreography {
   get medal() { return !this.complete ? 0 : this.falls === 0 ? 3 : this.falls <= 2 ? 2 : 1; }
   get hypeMean() { return this.samples > 0 ? this.hypeSum / this.samples : 0; }
   get flowMean() { return this.samples > 0 ? this.flowSum / this.samples : 0; }
-  sample(s: SkaterState, low: boolean, dt: number) {
+  sample(s: SkaterState, low: boolean, dt: number, events: readonly EdgeEvent[] = []) {
     if (this.done || !Number.isFinite(dt) || dt <= 0) return;
     this.elapsed = Math.min(this.event.seconds, this.elapsed + dt);
     this.hypeSum += s.hype; this.flowSum += s.flow; this.samples++;
@@ -108,6 +128,34 @@ export class Choreography {
     const swept = spinningNow ? s.spin.swept : 0;
     const spinDelta = Math.max(0, swept - this.lastSpin);
     this.lastSpin = swept;
+    // Step-sequence footwork (sim/stepLevel.ts): every genuinely distinct
+    // type is recorded the tick it happens, unconditionally, like the spin
+    // tracker above — a fall does not erase footwork that already happened,
+    // only the element's own progress (below) resets on one.
+    if (s.moveDone.tick >= 0 && s.moveDone.tick !== this.lastMoveDoneTick) {
+      this.lastMoveDoneTick = s.moveDone.tick;
+      const foot = codeToString(s.moveDone.toCode)[0] === "R" ? FOOT.Right : FOOT.Left;
+      const stepType = s.moveDone.kind === MOVE.Turn
+        ? (s.moveDone.detail === TURN_KIND.ThreeTurn ? STEP_TYPE.ThreeTurn
+          : s.moveDone.detail === TURN_KIND.Mohawk ? STEP_TYPE.Mohawk
+            : s.moveDone.detail === TURN_KIND.Bracket ? STEP_TYPE.Bracket : null)
+        : s.moveDone.kind === MOVE.Twizzle ? STEP_TYPE.Twizzle : null;
+      if (stepType !== null) this.stepTracker.record(stepType, foot, s.moveDone.tick);
+    }
+    // A crossover is not a MOVE — s.crossover is a continuous flag alongside
+    // an ordinary stroke — so its own "type" is the tick it starts, the same
+    // false-to-true edge session.ts's own stroke counter watches for.
+    const crossingOver = s.crossover && s.strokeTime > 0;
+    if (crossingOver && !this.wasCrossover) this.stepTracker.record(STEP_TYPE.Crossover, s.strokeFoot, s.tick);
+    this.wasCrossover = crossingOver;
+    // An ordinary change of edge while gliding — not a push-roll (excluded
+    // by strokeTime <= 0) and not part of a formal move (s.move === None).
+    for (const e of events) {
+      if (e.type === EVENT.EdgeChanged && s.move === MOVE.None && s.strokeTime <= 0)
+        this.stepTracker.record(STEP_TYPE.ChangeOfEdge, e.foot, s.tick);
+    }
+    const stepWindow = this.stepThresholds ? scoreStepLevel(this.stepTracker.recent(s.tick, this.stepWindowTicks), this.stepThresholds) : null;
+    if (stepWindow) this.bestStepLevel = Math.max(this.bestStepLevel, stepWindow.level);
     if (this.done || s.fallen) { this.held = 0; this.spinProgress = 0; return; }
     const speed = Math.hypot(s.vel.x, s.vel.y);
     const grounded = s.jump.phase === JUMP_PHASE.None;
@@ -118,6 +166,7 @@ export class Choreography {
       crossover: grounded && speed >= 2 && s.crossover && s.strokeTime > 0,
       jump: freshLanding && !s.landed.fall && !s.landed.stepOut && s.landed.height > 0.05,
       spin: this.spinProgress >= Math.PI * 2,
+      step: (stepWindow?.level ?? 0) >= 1,
       pose: grounded && s.move === MOVE.None && low && speed >= 2,
     };
     this.held = active[this.current] ? this.held + dt : 0;
@@ -167,6 +216,7 @@ export class CareerState {
     const bonus = improved > 0
       ? Math.round(HYPE_FLOW_BONUS_MAX * routine.hypeMean) + Math.round(HYPE_FLOW_BONUS_MAX * routine.flowMean)
         + Math.round(TECHNICAL_XP_PER_POINT * routine.technicalScore) + SPIN_LEVEL_XP * routine.bestSpinLevel
+        + STEP_LEVEL_XP * routine.bestStepLevel
       : 0;
     const earned = improved * 150 + bonus;
     this.medals[i] = Math.max(this.medals[i], routine.medal);
