@@ -149,7 +149,17 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       clip that DOES do this will diverge under /14 and must be
 //       re-recorded; there is no way to detect that case generically, the
 //       same as every other kinematic change a version bump ever covers.
-export const REPLAY_SOLVER = "ice-lab-f64/14";
+//   /15 Flow's "dead air between elements" (bible §2.6, `solver.ts` §14):
+//       Params gained flowDeadAirTime/flowDeadAirLoss, no SkaterState
+//       change. Lives under the existing `flowMode`, the same situation as
+//       /14's `movesMode` — some clips already carry it at 1 — so this was
+//       checked directly too: the committed fixture has flowMode 0, so the
+//       whole of §14 (this term included) never executes for it, and its
+//       240 digests are byte-identical before and after; only
+//       `initial.params` grew the two new keys. A clip that has flowMode 1
+//       and a completed element followed by an idle stretch will diverge
+//       under /15 and must be re-recorded.
+export const REPLAY_SOLVER = "ice-lab-f64/15";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

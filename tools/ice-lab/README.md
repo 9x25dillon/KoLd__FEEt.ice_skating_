@@ -1143,9 +1143,17 @@ falls again, separately, while re-crossing ice the grid (`sim/ice.ts`) reports a
 `flowDamagedIceThreshold` — a modifier alongside carving, not a veto: a good edge still gains flow on
 chewed ice, just less of it, the same comparative shape the ice grid's own "last skater in a warm-up
 group" measurement uses. A flat bonus, `flowBeatGain`, applies when the same turn or landing that
-already earns `musicMode` credit lands on the beat grid. **Not modelled**, the bible's own remaining
-three bullets: "alternating lobes", "repeated lobes in the same direction", and "dead air between
-elements" — none has a clean per-tick signal yet.
+already earns `musicMode` credit lands on the beat grid.
+
+**"Dead air between elements," added 2026-09-17,** the clearest-defined of the bible's three
+remaining bullets: once a turn, twizzle, spin, Ina Bauer or jump has actually finished at least once
+(`moveDone.tick`/`landed.tick` both start at -1, so an opening glide before the first element is never
+dead air — checked directly, not assumed), a `flowDeadAirTime` grace period past it, with no new
+element under way, costs `flowDeadAirLoss` a second. **Still not modelled**, the bible's other two
+bullets — "alternating lobes" and "repeated lobes in the same direction" — because they are one signal,
+not two: a per-tick curvature-direction tracker (has the current arc's sign held long enough to call it
+a lobe, and did the *next* one match or oppose it) that this rig does not have yet and that has no
+calibration data of its own to build against, unlike `both_directions`' precise ISU thresholds.
 
 **Feeds stamina efficiency**, the one link with an actual bible quote behind the number: *"high flow
 means you carry speed and push less, so it is literally cheaper to skate well."* Wind's own drain
@@ -1165,6 +1173,9 @@ of stroking — Wind at 0.9950 (flow 0) against 0.9959 (flow 1) — proportionat
 drains over 5 s in the first place; both scale together over a longer program.
 
 Replay contract `/13` added `flowMode` and its eight levers to `Params`, and `flow` to `SkaterState`.
+`/15` added dead air's two levers to `Params`, no `SkaterState` change — checked directly against the
+committed fixture (`flowMode` 0 there, so §14 never runs at all) rather than assumed safe the way every
+bump under a brand-new Mode flag at 0 already was.
 
 ## Wiring it all in — the ice grid, stamina, hype and flow, live
 

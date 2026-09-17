@@ -891,7 +891,8 @@ and no motion-capture or footage case to anchor it — the numbers above are cho
 ## 15 · Flow
 
 `sim/solver.ts`'s `flowMode`, design-bible.md §2.6. Only part of the bible's own rises-with/falls-with
-table is modelled — see `README.md`'s own section for which three bullets are not. All eight are L3
+table is modelled — see `README.md`'s own section for which two bullets ("alternating lobes" and
+"repeated lobes in the same direction" are one signal, still not modelled) are not. All ten are L3
 except where noted; inert at `flowMode` 0, every preset.
 
 - **`flowCarveGain`** — flow gained per second on a real, unskidded, held edge while moving
@@ -930,6 +931,19 @@ except where noted; inert at `flowMode` 0, every preset.
 - **`flowDamagedIceLoss`** — flow lost per second on damaged ice past the threshold above, while
   `iceGridMode` is also on
   - Value: `0.2` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowDeadAirTime`** — seconds after an element (a turn/twizzle/spin/Ina Bauer or a jump) finishes
+  before "dead air between elements" starts costing anything
+  - Value: `1.5` s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+  - Notes: gated on `moveDone.tick`/`landed.tick` both starting at -1, so an opening glide before the
+    first element ever finishes is never dead air — see `test/flow.test.ts`
+
+- **`flowDeadAirLoss`** — flow lost per second past `flowDeadAirTime` with no new element under way
+  - Value: `0.15` /s
   - Used: `solver.ts` §14
   - Range: `>= 0` (`validate`)
 
