@@ -93,7 +93,48 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       every tick, and the fixture was re-recorded from its own inputs
 //       only to carry the four new keys. /9 clips no longer load; verify one
 //       against a checkout of 87bac5f.
-export const REPLAY_SOLVER = "ice-lab-f64/10";
+//   /11 Stamina (design-bible.md §2.8, `staminaMode`): Params gained it and
+//       fourteen levers, and SkaterState gained the two pools, `wind` and
+//       `legs`. `staminaMode` is 0 in every preset and step()'s own fatigue
+//       blend (`pFatigue`) is identical to `p` whenever it is, so a clip
+//       recorded before this contract reads and writes nothing new when
+//       replayed under it. Replayed through /10 and /11 with staminaMode 0,
+//       the fixture and three operator play clips matched on every /10
+//       state field and event on every tick; the fixture was re-recorded
+//       from its own inputs only to carry the new keys. A fall now
+//       preserves `wind`/`legs` rather than resetting them, found while
+//       wiring the two pools through the same get-up path every other
+//       per-session field already takes. /10 clips no longer load; verify
+//       one against a checkout of 0bb3a53.
+//   /12 Hype (the operator's own bridge, `hypeMode`): Params gained it and
+//       eight levers, and SkaterState gained `hype` and `hypeStreak`.
+//       `hypeMode` is 0 in every preset and step()'s own `pEff` blend is
+//       identical to `pFatigue` whenever it is, so a clip recorded before
+//       this contract reads and writes nothing new when replayed under it.
+//       Found on the way: a landing resolves inside jumpAir, on step()'s
+//       0b early-return path, which had always skipped music credit for a
+//       landing (only a turn's cusp ever reached it) — real, silent, and
+//       pre-existing. Fixed by factoring the event scan into
+//       `landingAndTurnCredit` and calling it from both places; musicMode
+//       is 0 in every preset, so no recorded measurement moved. Replayed
+//       through /11 and /12 with hypeMode 0, the fixture and three
+//       operator play clips matched on every /11 state field and event on
+//       every tick; the fixture was re-recorded from its own inputs only
+//       to carry the new keys. /11 clips no longer load; verify one
+//       against a checkout of 68f6088.
+//   /13 The flow scalar (bible §2.6, `flowMode`): Params gained it and eight
+//       levers, and SkaterState gained `flow`. `flowMode` is 0 in every
+//       preset and its own continuous update (§14) and beat bonus
+//       (landingAndTurnCredit) are both gated on it, so a clip recorded
+//       before this contract reads and writes nothing new when replayed
+//       under it. Also gained: flow's own scale on Wind's drain in §12
+//       (staminaMode's own section), gated the same way and 1x whenever
+//       flowMode is off. Replayed through /12 and /13 with flowMode 0, the
+//       fixture and three operator play clips matched on every /12 state
+//       field and event on every tick; the fixture was re-recorded from
+//       its own inputs only to carry the new keys. /12 clips no longer
+//       load; verify one against a checkout of 8686590.
+export const REPLAY_SOLVER = "ice-lab-f64/13";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

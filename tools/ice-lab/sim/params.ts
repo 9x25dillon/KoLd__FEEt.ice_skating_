@@ -380,6 +380,51 @@ export interface Params {
    */
   jumpSpeedShare: number;
 
+  // ── stamina ───────────────────────────────────────────────────────────────
+  // design-bible.md §2.8: two pools, Wind (aerobic) and Legs (anaerobic),
+  // draining and recovering at different rates and feeding back into jump
+  // height, how tight a spin or jump air position can pull in, how deep an
+  // edge still holds, and balance noise. src/reference/SkateSolver.cpp calls
+  // UpdateStamina/StaminaGain but never defines either — only one number
+  // survives from it (`staminaLegsPerPush`, its own S.LegPool -= 0.011f *
+  // Knee) — so the rest is authored from the bible's own table, L2/L3, and 0
+  // in every preset the way jumps, moves, music and the ice grid are.
+  /** 0 the pools never move and every effect below is inert; 1 they drain and feed back. */
+  staminaMode: number;
+  /** 1/s: Wind's floor drain just from being on the ice. Bible: "elapsed time... continuously". */
+  staminaWindTimeDrain: number;
+  /** 1/s per (m/s)^2 of speed: the bulk of Wind's drain at pace. */
+  staminaWindSpeedDrain: number;
+  /** 1/s recovered while genuinely low-effort. Competes with the drain above; net positive only
+   *  once speed and tilt are both low, which is the point. */
+  staminaWindRecover: number;
+  /** |tiltCmd| at or below which the skater counts as "low-effort", for both pools' recovery. */
+  staminaLowEffortTilt: number;
+  /** Legs lost per push, scaled by knee depth. Source: SkateSolver.cpp, S.LegPool -= 0.011f * Knee. */
+  staminaLegsPerPush: number;
+  /** 1/s per radian |tiltCmd| runs past depthShallow: Legs drain from holding
+   *  a genuinely DEEP edge, not from ordinary cruising. */
+  staminaLegsPerDeepEdge: number;
+  /** Legs lost on one jump takeoff, flat, regardless of the jump's size. */
+  staminaLegsPerJump: number;
+  /** 1/s while spinning with the knee at or past a sit position (`spinSitKnee`). */
+  staminaLegsPerSitSpin: number;
+  /** 1/s recovered while low-effort — but only when Wind clears the floor below. */
+  staminaLegsRecover: number;
+  /** Wind must be at least this high for Legs to recover at all: "gated by Wind". */
+  staminaLegsRecoverWindFloor: number;
+  /** jumpImpulse multiplier at Legs 0. Bible: "Jump height falls... 1.00 -> 0.82". */
+  staminaJumpImpulseMin: number;
+  /** kg m^2: the tightest inertiaTucked can reach at Legs 0. Bible: "0.95 -> 1.55". */
+  staminaInertiaFloorMax: number;
+  /** rad subtracted from maxLean and maxTilt at Legs 0. Bible: "maximum sustainable lean -8 deg". */
+  staminaMaxLeanLoss: number;
+  /** m/s^2: baseline balance-loop noise amplitude, present only while staminaMode is on — 0 in
+   *  every preset means the balance loop has no noise at all until this system is turned on. */
+  staminaBalanceNoiseBase: number;
+  /** Multiplier on that noise at Legs 0. Bible: "Balance noise grows... x1.0 -> x2.4". */
+  staminaBalanceNoiseMax: number;
+
   // ── music ─────────────────────────────────────────────────────────────────
   // sim/music.ts, design-bible.md §2.1, §2.6, §5.2. Off in every preset the
   // way jumps and moves were: 0 here leaves every lever below inert, so
@@ -409,6 +454,62 @@ export interface Params {
   musicAccentWindow: number;
   /** A crossover push that misses its beat window, as a fraction of a hit. Bible: 45%. */
   musicMissedPushScale: number;
+
+  // ── hype ──────────────────────────────────────────────────────────────────
+  // The operator's own bridge (2026-09-1x): "the stamina, strength, flow
+  // state and hype from successive trick landing has to be the bridge
+  // between the musical and career parts of the game... engaging more and
+  // more assist engines with performance increases." Not in the design
+  // bible under this name — authored from that brief, L3 throughout — and
+  // deliberately does not wait for flow (bible §2.6), a separate,
+  // still-unbuilt system. 0 in every preset, the same convention as
+  // everything else here; reads `musicMode`'s own accent events when both
+  // are on, but needs neither music nor stamina to function on its own.
+  /** 0 off, 1 successive clean landings build hype and it feeds a small assist. */
+  hypeMode: number;
+  /** Hype added per clean landing (no fall, step-out or two-foot), scaled by landingQuality. */
+  hypeLandingGain: number;
+  /** Extra share of that gain per consecutive clean landing already in the streak. */
+  hypeStreakBonus: number;
+  /** Flat bonus when the same landing also earned a musicMode accent (sim/music.ts). */
+  hypeMusicBonus: number;
+  /** 1/s: hype fades on its own, so a bare meter is not a permanent buff. */
+  hypeDecayPerSecond: number;
+  /** Share of banked hype a fall costs, on top of resetting the streak. */
+  hypeFallLoss: number;
+  /** controlLatency multiplier at hype 1: the neuromuscular lag shrinks. */
+  hypeControlLatencyMin: number;
+  /** internalMax multiplier at hype 1: more recovery authority to spend. */
+  hypeInternalMaxGain: number;
+  /** angulationLimit multiplier at hype 1: the blade may run a little deeper than the body leans. */
+  hypeAngulationGain: number;
+
+  // ── flow ──────────────────────────────────────────────────────────────────
+  // design-bible.md §2.6: "a single value in [0,1], integrated continuously".
+  // The bible's own rises-with/falls-with table is wider than this models —
+  // "alternating lobes", "turns on the beat grid" beyond a flat bonus, and
+  // "dead air between elements" are not modelled; README.md says so. Feeds
+  // "stamina efficiency" (bible: "high flow means... cheaper to skate well")
+  // while both flowMode and staminaMode are on. 0 in every preset.
+  /** 0 off, 1 flow is integrated and feeds stamina efficiency. */
+  flowMode: number;
+  /** Flow gained per second on a real, unskidded, held edge (REGIME.Carve or .Edge) while moving. */
+  flowCarveGain: number;
+  /** Flow lost per second on a flat blade while moving: "skating on flat feet". */
+  flowFlatLoss: number;
+  /** Flow lost per second while skidding: "skids and chops". */
+  flowSkidLoss: number;
+  /** Flow lost per second under MOVING speed: "stopping or coasting straight". */
+  flowStopLoss: number;
+  /** Flat bonus when a turn's cusp or a jump's landing lands within musicMode's own accent window. */
+  flowBeatGain: number;
+  /** Local ice condition (sim/ice.ts) at or past this counts as "damaged" for flow. */
+  flowDamagedIceThreshold: number;
+  /** Flow lost per second on damaged ice past the threshold above, while iceGridMode is on. */
+  flowDamagedIceLoss: number;
+  /** Wind drain multiplier at flow 1: "cheaper to skate well". */
+  flowStaminaEfficiencyMin: number;
+
   // ── rink ──────────────────────────────────────────────────────────────────
   /**
    * m: the ice at centre ice minus the ice at the side and end boards. Positive
@@ -566,6 +667,23 @@ export const DEFAULT_PARAMS: Params = {
   inaBauerScrub: 0.13,
   jumpSpeedShare: 0.2,
 
+  staminaMode: 0,
+  staminaWindTimeDrain: 0.0002,
+  staminaWindSpeedDrain: 0.00004,
+  staminaWindRecover: 0.0006,
+  staminaLowEffortTilt: 0.10,
+  staminaLegsPerPush: 0.011,      // SkateSolver.cpp, taken directly
+  staminaLegsPerDeepEdge: 0.015,
+  staminaLegsPerJump: 0.05,
+  staminaLegsPerSitSpin: 0.03,
+  staminaLegsRecover: 0.0008,
+  staminaLegsRecoverWindFloor: 0.3,
+  staminaJumpImpulseMin: 0.82,     // bible §2.8
+  staminaInertiaFloorMax: 1.55,    // bible §2.8
+  staminaMaxLeanLoss: 0.1396,      // 8 deg, bible §2.8
+  staminaBalanceNoiseBase: 0.15,
+  staminaBalanceNoiseMax: 2.4,     // bible §2.8
+
   musicMode: 0,
   musicBpm: 128,
   musicOffset: 0,
@@ -574,6 +692,27 @@ export const DEFAULT_PARAMS: Params = {
   musicBeatWindow: 0.10,
   musicAccentWindow: 0.08,      // bible §2.1, §2.6
   musicMissedPushScale: 0.45,   // bible §2.6
+
+  hypeMode: 0,
+  hypeLandingGain: 0.12,
+  hypeStreakBonus: 0.15,
+  hypeMusicBonus: 0.05,
+  hypeDecayPerSecond: 0.03,
+  hypeFallLoss: 0.5,
+  hypeControlLatencyMin: 0.7,
+  hypeInternalMaxGain: 1.3,
+  hypeAngulationGain: 1.15,
+
+  flowMode: 0,
+  flowCarveGain: 0.35,
+  flowFlatLoss: 0.25,
+  flowSkidLoss: 0.9,
+  flowStopLoss: 0.4,
+  flowBeatGain: 0.05,
+  flowDamagedIceThreshold: 0.5,
+  flowDamagedIceLoss: 0.2,
+  flowStaminaEfficiencyMin: 0.6,
+
   rinkRelief: 0,
   rinkHalfLength: 30,        // a 60 x 30 m sheet
   rinkHalfWidth: 15,
@@ -684,6 +823,48 @@ export function validate(p: Params): string[] {
     errs.push("musicAccentWindow must be positive and below half a bar, or every landing is an accent");
   if (p.musicMissedPushScale <= 0 || p.musicMissedPushScale >= 1)
     errs.push("musicMissedPushScale is a fraction of a hit, in (0, 1)");
+  if (![0, 1].includes(p.hypeMode)) errs.push("hypeMode is 0 (off) or 1 (hype builds and assists)");
+  if (p.hypeLandingGain < 0) errs.push("hypeLandingGain cannot be negative");
+  if (p.hypeStreakBonus < 0) errs.push("hypeStreakBonus cannot be negative");
+  if (p.hypeMusicBonus < 0) errs.push("hypeMusicBonus cannot be negative");
+  if (p.hypeDecayPerSecond < 0) errs.push("hypeDecayPerSecond cannot be negative");
+  if (p.hypeFallLoss < 0 || p.hypeFallLoss > 1) errs.push("hypeFallLoss is a share of banked hype, 0..1");
+  if (p.hypeControlLatencyMin <= 0 || p.hypeControlLatencyMin > 1)
+    errs.push("hypeControlLatencyMin is a multiplier that shrinks the lag, in (0, 1]");
+  if (p.hypeInternalMaxGain < 1) errs.push("hypeInternalMaxGain cannot reduce recovery authority below its own base");
+  if (p.hypeAngulationGain < 1) errs.push("hypeAngulationGain cannot reduce angulation below its own base");
+  if (![0, 1].includes(p.flowMode)) errs.push("flowMode is 0 (off) or 1 (flow is integrated)");
+  if (p.flowCarveGain < 0) errs.push("flowCarveGain cannot be negative");
+  if (p.flowFlatLoss < 0) errs.push("flowFlatLoss cannot be negative");
+  if (p.flowSkidLoss < 0) errs.push("flowSkidLoss cannot be negative");
+  if (p.flowStopLoss < 0) errs.push("flowStopLoss cannot be negative");
+  if (p.flowBeatGain < 0) errs.push("flowBeatGain cannot be negative");
+  if (p.flowDamagedIceThreshold < 0 || p.flowDamagedIceThreshold > 1)
+    errs.push("flowDamagedIceThreshold is an ice condition share, 0..1");
+  if (p.flowDamagedIceLoss < 0) errs.push("flowDamagedIceLoss cannot be negative");
+  if (p.flowStaminaEfficiencyMin <= 0 || p.flowStaminaEfficiencyMin > 1)
+    errs.push("flowStaminaEfficiencyMin is a multiplier that shrinks Wind's drain, in (0, 1]");
+  if (![0, 1].includes(p.staminaMode)) errs.push("staminaMode is 0 (off) or 1 (the pools drain)");
+  if (p.staminaWindTimeDrain < 0) errs.push("staminaWindTimeDrain cannot be negative");
+  if (p.staminaWindSpeedDrain < 0) errs.push("staminaWindSpeedDrain cannot be negative");
+  if (p.staminaWindRecover <= p.staminaWindTimeDrain)
+    errs.push("staminaWindRecover must exceed staminaWindTimeDrain, or low-effort gliding never nets a recovery");
+  if (p.staminaLowEffortTilt < 0) errs.push("staminaLowEffortTilt cannot be negative");
+  if (p.staminaLegsPerPush < 0) errs.push("staminaLegsPerPush cannot be negative");
+  if (p.staminaLegsPerDeepEdge < 0) errs.push("staminaLegsPerDeepEdge cannot be negative");
+  if (p.staminaLegsPerJump < 0) errs.push("staminaLegsPerJump cannot be negative");
+  if (p.staminaLegsPerSitSpin < 0) errs.push("staminaLegsPerSitSpin cannot be negative");
+  if (p.staminaLegsRecover < 0) errs.push("staminaLegsRecover cannot be negative");
+  if (p.staminaLegsRecoverWindFloor < 0 || p.staminaLegsRecoverWindFloor > 1)
+    errs.push("staminaLegsRecoverWindFloor is a share of Wind, 0..1");
+  if (p.staminaJumpImpulseMin <= 0 || p.staminaJumpImpulseMin > 1)
+    errs.push("staminaJumpImpulseMin is a multiplier on jumpImpulse, in (0, 1]");
+  if (p.staminaInertiaFloorMax < p.inertiaTucked)
+    errs.push("staminaInertiaFloorMax must be at least inertiaTucked: fatigue cannot pull in tighter than fresh");
+  if (p.staminaMaxLeanLoss < 0) errs.push("staminaMaxLeanLoss cannot be negative");
+  if (p.staminaMaxLeanLoss > p.maxLean) errs.push("staminaMaxLeanLoss cannot exceed maxLean itself");
+  if (p.staminaBalanceNoiseBase < 0) errs.push("staminaBalanceNoiseBase cannot be negative");
+  if (p.staminaBalanceNoiseMax < 1) errs.push("staminaBalanceNoiseMax is a multiplier at Legs 0, and fatigue cannot reduce noise");
   if (![0, 1].includes(p.iceGridMode)) errs.push("iceGridMode is 0 (off) or 1 (the sheet wears)");
   if (p.iceDamagePerPass <= 0 || p.iceDamagePerPass > 1)
     errs.push("iceDamagePerPass is a per-pass saturating share, in (0, 1]");

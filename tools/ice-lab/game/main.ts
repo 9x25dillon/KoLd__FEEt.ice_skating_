@@ -22,7 +22,7 @@ try { career = CareerState.restore(localStorage.getItem("edgework-career-v1")); 
 let courseMode = false, rookie: RookieCourse | null = null;
 import { EdgeAudio } from "../app/audio.ts";
 import type { EdgeEvent } from "../sim/types.ts";
-import { SAMPLE_PROFILES, applyProfile } from "../sim/profile.ts";
+import { SAMPLE_PROFILES, applyProfile, TIERS } from "../sim/profile.ts";
 import { ReplayRecorder, ReplayPlayer, parseReplay, MAX_REPLAY_BYTES } from "../sim/replay.ts";
 import { loadTables, scoreJump } from "../sim/score.ts";
 import type { ScoreTables } from "../sim/score.ts";
@@ -387,7 +387,9 @@ function refreshCareer() {
     const details = document.createElement("p"); details.textContent = `${event.venue} · ${event.seconds}s · ${MEDALS[career.medals[i]]}`;
     const routine = document.createElement("p"); routine.textContent = event.routine.map(id => ELEMENTS[id].title).join(" → ");
     const button = document.createElement("button"); button.disabled = i > career.unlocked;
-    button.textContent = button.disabled ? "Complete the previous event to unlock" : career.medals[i] ? "Replay program →" : "Skate this program →";
+    button.textContent = !button.disabled ? (career.medals[i] ? "Replay program →" : "Skate this program →")
+      : i > career.medalCap ? "Complete the previous event to unlock"
+      : `Train to ${TIERS[i].name} overall (${TIERS[i].floor}) to unlock`;
     button.addEventListener("click", () => {
       careerEvent = i; careerMode = true; courseMode = false; freeSkate = true; cruise = true;
       resumeAfterCareer = false; careerBoard.close(); start();

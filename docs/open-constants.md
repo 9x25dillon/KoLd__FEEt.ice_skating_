@@ -710,7 +710,8 @@ their absence above is deliberate.
 - **Skater stats**, `profile.ts` `STAT_EFFECTS`. Cases hold every stat at the neutral 50, which bakes
   to the preset bit for bit. Spans at 0 and 100: `strokePower` 0.70–1.30, `jumpImpulse` 0.82–1.18,
   `inertiaPullRate` 0.80–1.20, `angulationLimit` 0.75–1.35, `controlLatency` 1.40–0.60, `balanceKd`
-  0.80–1.30, `internalGain` 0.80–1.25. Also the curve shape (t<sup>0.75</sup> above 50).
+  0.80–1.30, `internalGain` 0.80–1.25, `staminaWindTimeDrain` 1.5–0.5, `staminaLegsPerPush` 1.5–0.5.
+  Also the curve shape (t<sup>0.75</sup> above 50).
 - **Blade wear**, `profile.ts`: `SHARPNESS_FRESH` 1.05, `SHARPNESS_DULL` 0.80, `BLADE_LIFE_HOURS` 20.
   The reference wear bakes to `sharpness` 1.0.
 - **Career**, `profile.ts`: `XP_BASE` 10, `XP_QUAD` 0.04, `XP_PER_LEVEL` 25, level weights, tier floors
@@ -722,3 +723,210 @@ their absence above is deliberate.
 
 If any of these starts affecting a case — for example, if the gate begins testing a non-reference
 skater — it moves up into the sections above.
+
+---
+
+## 13 · Stamina
+
+`sim/solver.ts`'s `staminaMode`, design-bible.md §2.8. All fourteen are inert at `staminaMode` 0 (every
+preset), the way section 8's moves levers are at `movesMode` 0. Only one is sourced; the rest are L2/L3,
+first-pass-calibrated against the scenarios in `test/stamina.test.ts` rather than measured.
+
+- **`staminaLegsPerPush`** — Legs lost per push, scaled by knee depth
+  - Value: `0.011`
+  - Used: `solver.ts` §1b, once per push
+  - Level: **L1** — taken directly, not authored
+  - Range: none recorded
+  - Source: `src/reference/SkateSolver.cpp`, `S.LegPool -= 0.011f * Knee` — the only one of the two
+    referenced stamina functions (`UpdateStamina`, `StaminaGain`) that survives as an actual number;
+    neither function is itself defined in that file
+
+- **`staminaWindTimeDrain`**, **`staminaWindSpeedDrain`** — Wind's continuous drain, flat and per (m/s)²
+  - Value: `0.0002` /s, `0.00004` /s per (m/s)²
+  - Used: `solver.ts` §12
+  - Level: L3
+  - Range: none recorded
+  - Fixed by: a measured Wind decay curve over a real timed program, at a known pace
+
+- **`staminaWindRecover`** — Wind recovered per second, genuinely low-effort only
+  - Value: `0.0006` /s
+  - Used: `solver.ts` §12
+  - Level: L3. Deliberately several times the time-drain above it (`validate`: it must exceed
+    `staminaWindTimeDrain`), so recovery reads as "slow", not as a pause button.
+  - Range: must exceed `staminaWindTimeDrain` (`validate`)
+
+- **`staminaLowEffortTilt`** — |tiltCmd| at or below which the skater counts as low-effort
+  - Value: `0.10` rad
+  - Used: `solver.ts` §12, gating both pools' recovery
+  - Level: L3
+  - Range: none recorded
+
+- **`staminaLegsPerDeepEdge`** — Legs drain per radian |tiltCmd| runs past `depthShallow`
+  - Value: `0.015` /s per rad
+  - Used: `solver.ts` §12
+  - Level: L3. Ordinary cruising (at or under `depthShallow`) is free; only the genuinely deep part of
+    an edge costs anything.
+  - Range: none recorded
+
+- **`staminaLegsPerJump`** — Legs lost on one takeoff, flat
+  - Value: `0.05`
+  - Used: `solver.ts` §10, on the ground-to-air transition
+  - Level: L3
+  - Range: none recorded
+
+- **`staminaLegsPerSitSpin`** — Legs drain per second, spinning with the knee past `spinSitKnee`
+  - Value: `0.03` /s
+  - Used: `solver.ts` §1c
+  - Level: L3
+  - Range: none recorded
+
+- **`staminaLegsRecover`**, **`staminaLegsRecoverWindFloor`** — Legs recovered per second while
+  low-effort, and the Wind share required before any of it applies at all
+  - Value: `0.0008` /s, `0.3`
+  - Used: `solver.ts` §12
+  - Level: L3. The floor is the bible's own "gated by Wind — once Wind is low, Legs stop coming back",
+    made a number.
+  - Range: floor is `[0, 1]` (`validate`)
+
+- **`staminaJumpImpulseMin`** — `jumpImpulse` multiplier at Legs 0
+  - Value: `0.82`
+  - Used: `solver.ts`'s `pFatigue`, read by `jump.ts`
+  - Level: **L2** — the bible states the span directly ("1.00 → 0.82")
+  - Range: `(0, 1]` (`validate`)
+  - Source: design-bible.md §2.8
+
+- **`staminaInertiaFloorMax`** — the loosest `inertiaTucked` can be forced to by Legs 0
+  - Value: `1.55` kg·m²
+  - Used: `solver.ts`'s `pFatigue`, read by `jump.ts` and `moves.ts`'s spin
+  - Level: **L2** — the bible states the span directly ("0.95 → 1.55")
+  - Range: at least `inertiaTucked` itself (`validate`)
+  - Source: design-bible.md §2.8
+
+- **`staminaMaxLeanLoss`** — radians subtracted from `maxLean` and `maxTilt` at Legs 0
+  - Value: `0.1396` rad (8°)
+  - Used: `solver.ts`'s `pFatigue`
+  - Level: **L2** — the bible states it directly ("maximum sustainable lean −8°")
+  - Range: `[0, maxLean]` (`validate`)
+  - Source: design-bible.md §2.8
+
+- **`staminaBalanceNoiseBase`**, **`staminaBalanceNoiseMax`** — baseline balance-loop noise amplitude,
+  and its multiplier at Legs 0
+  - Value: `0.15` m/s², `2.4`×
+  - Used: `solver.ts` §2, added to `aCmd`, seeded from `s.tick` alone (`rng`) so a replay reproduces the
+    same wobble on the same tick
+  - Level: base is L3 (chosen to be perceptible without dominating the command); the multiplier is
+    **L2** — the bible states it directly ("×1.0 → ×2.4")
+  - Range: multiplier at least 1 (`validate`): fatigue cannot reduce noise
+  - Source (multiplier only): design-bible.md §2.8
+
+---
+
+## 14 · Hype
+
+`sim/solver.ts`'s `hypeMode`. Not in the design bible under this name — the operator's own bridge
+between the musical and career layers, quoted in full in `README.md`'s own section. All nine are L3,
+first-pass-calibrated against `test/hype.test.ts` rather than measured or bible-sourced; inert at
+`hypeMode` 0, every preset.
+
+- **`hypeLandingGain`** — hype added per clean landing, scaled by `landingQuality`
+  - Value: `0.12`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+
+- **`hypeStreakBonus`** — extra share of that gain per consecutive clean landing already in the streak
+  - Value: `0.15`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+
+- **`hypeMusicBonus`** — flat bonus when the same landing also earned a `musicMode` accent
+  - Value: `0.05`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+  - Fixed by: nothing yet ties this specific number to anything measurable; it is a design choice about
+    how much reading the music engine's credit should matter next to the landing itself.
+
+- **`hypeDecayPerSecond`** — hype lost per second, always, so a banked meter is not permanent
+  - Value: `0.03` /s
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+
+- **`hypeFallLoss`** — share of banked hype a fall costs, proportional, on top of resetting the streak
+  - Value: `0.5`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `[0, 1]` (`validate`)
+
+- **`hypeControlLatencyMin`** — `controlLatency` multiplier at hype 1
+  - Value: `0.7`
+  - Used: `solver.ts`'s `pEff`, layered on `pFatigue`
+  - Range: `(0, 1]` (`validate`): cannot lengthen the lag
+
+- **`hypeInternalMaxGain`** — `internalMax` multiplier at hype 1
+  - Value: `1.3`
+  - Used: `solver.ts`'s `pEff`
+  - Range: `>= 1` (`validate`): cannot reduce recovery authority below its own base
+
+- **`hypeAngulationGain`** — `angulationLimit` multiplier at hype 1
+  - Value: `1.15`
+  - Used: `solver.ts`'s `pEff`
+  - Range: `>= 1` (`validate`): cannot reduce angulation below its own base
+
+Fixed by, for the whole group: nothing yet. This is a fresh mechanic with no reference implementation
+and no motion-capture or footage case to anchor it — the numbers above are chosen to be perceptible in
+`test/hype.test.ts`'s own scenarios, not measured against anything external.
+
+---
+
+## 15 · Flow
+
+`sim/solver.ts`'s `flowMode`, design-bible.md §2.6. Only part of the bible's own rises-with/falls-with
+table is modelled — see `README.md`'s own section for which three bullets are not. All eight are L3
+except where noted; inert at `flowMode` 0, every preset.
+
+- **`flowCarveGain`** — flow gained per second on a real, unskidded, held edge while moving
+  - Value: `0.35` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowFlatLoss`** — flow lost per second on a flat blade while moving
+  - Value: `0.25` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowSkidLoss`** — flow lost per second while skidding
+  - Value: `0.9` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowStopLoss`** — flow lost per second under moving speed (0.5 m/s, the same floor `session.ts`'s
+  own `MOVING` uses, inlined rather than a lever of its own)
+  - Value: `0.4` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowBeatGain`** — flat bonus when a turn's cusp or a jump's landing lands within `musicMode`'s own
+  accent window
+  - Value: `0.05`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+
+- **`flowDamagedIceThreshold`** — local ice condition (`sim/ice.ts`) at or past which it counts as
+  "damaged" for flow
+  - Value: `0.5`
+  - Used: `solver.ts` §14
+  - Range: `[0, 1]` (`validate`)
+
+- **`flowDamagedIceLoss`** — flow lost per second on damaged ice past the threshold above, while
+  `iceGridMode` is also on
+  - Value: `0.2` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowStaminaEfficiencyMin`** — Wind drain multiplier at flow 1
+  - Value: `0.6`
+  - Used: `solver.ts` §12 (stamina's own section), while both `flowMode` and `staminaMode` are on
+  - Level: **L2** — the bible states the direction directly ("cheaper to skate well"), though not a number
+  - Range: `(0, 1]` (`validate`)
+  - Source (direction only): design-bible.md §2.6
+
+Fixed by, for the whole group: nothing yet, the same as hype — a fresh mechanic with no reference
+implementation or footage case behind its specific numbers, only the bible's own qualitative table.
