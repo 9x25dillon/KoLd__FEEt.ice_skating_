@@ -1364,6 +1364,70 @@ this at all, the same way one with no score tables skips `scoreJump`.
 Wiring it in needs a discipline/segment assigned to each `CareerEvent` (none exists today — the five
 events have no short/free distinction at all) as much as it needs the plumbing itself.
 
+## Step sequences
+
+Added 2026-09-17, at the operator's own ask, alongside a live `game/career.ts` wiring — unlike
+`sim/pcs.ts` above, this one is not a standalone module waiting for a caller. `sim/stepLevel.ts` scores
+`data/step-features.json`'s **variety ladder** (level = how many distinct pieces of footwork a rolling
+stretch of skating shows, in how many "difficult" turns, on how many feet); a new `step` element in
+`game/career.ts`'s `ELEMENTS` makes a step sequence a real, choreographable, Composer-authorable part of
+a program — the same list `sequence: string[]` already validates against, generically, in both
+`bridge/engine.mjs` and `scripts/main.gd`, so nothing there had to learn a new element by name.
+
+**The taxonomy names three sets of footwork this reduced-order rig can only partly observe — read
+straight, never padded:**
+
+| Set | ISU's full set | This rig has |
+| --- | --- | --- |
+| Difficult | rocker, counter, bracket, twizzle, loop | bracket, twizzle |
+| Simple | three-turn, mohawk, choctaw | three-turn, mohawk (`TURN_KIND`'s own comment: a choctaw built the same way as a mohawk is not actually one) |
+| Steps | cross roll, chassé, toe step, change of edge, running step, cross behind, cross in front | change of edge (already an `EdgeEvent`, nothing new to build) |
+
+A crossover is not in the ISU's own taxonomy at all, but is unambiguously its own piece of footwork —
+`sim/moves.ts`'s crossover push, distinct from an ordinary stroke — so it counts as a seventh,
+rig-specific type. **Six types total, against a ladder whose second grade needs seven.** This scorer's
+own honest ceiling is grade 1 ("minimum variety"), exactly — not because a given routine happens to
+fall short, but because `data/step-features.json`'s own grade 2 needs seven distinct types full stop,
+and six can never be seven, however they are combined. `test/stepLevel.test.ts` checks this directly:
+all six of this rig's types, on both feet, still scores grade 1.
+
+**How a "distinct type" is observed, live, in `Choreography.sample()`:** a turn or twizzle's completion
+(`s.moveDone`, already real state — the same field `bestSpinLevel` reads for spins); a crossover's own
+false-to-true transition (`s.crossover && s.strokeTime > 0`, the same condition the existing `crossover`
+element already checks); an ordinary change of edge while gliding, from this tick's own `EdgeEvent`s —
+excluded during a stroke's push-roll and during a formal move, the same filtering `sim/session.ts`'s
+`edgeChangesPerMinute` already applies for the identical reason. Recorded into a `StepSequenceTracker`
+unconditionally, a fall included — footwork that already happened is not erased by falling over next —
+and scored from a rolling `STEP_WINDOW_SECONDS` (12 s) window every tick, the same "immediately
+following" spirit `both_directions`' `max_gap_s` asks for, operationalised the same way: a real window,
+not a time check this model has no state to make. The `step` element itself is active whenever that
+window's own grade reaches 1; `bestStepLevel`, tracked across the whole routine the same way
+`bestSpinLevel` is, feeds `STEP_LEVEL_XP` under the identical anti-farming gate every other bonus uses.
+
+**Found on the way, unrelated to the mechanic itself:** `data/step-features.json` was fetched by
+`game/main.ts` from the moment spin scoring first needed a sibling file to sit beside — but
+`app/build.mjs`'s data-file copy list was still the three files spin scoring alone needed, so the
+actual served build 404'd on it silently, invisible to every test that imports the module rather than
+fetching it. Fixed, and `test/app-loads.test.ts` now scans `game/main.ts`'s own `fetch("../data/...")`
+calls against `build.mjs`'s copy list directly, so a future file with the same gap fails loudly here
+instead of silently in a browser — caught in the act by testing this session's own change in the real
+served build with Playwright, the same discipline every other feature here has followed.
+
+**Reachable today via the Composer (`games/ice-run-godot`), not yet in any of the five fixed
+`CAREER_EVENTS`** — adding "step" to one of those hand-authored routines is a content decision about an
+existing difficulty progression, not a plumbing one, and is left for the operator to make rather than
+assumed here.
+
+Verified: `test/stepLevel.test.ts` (the variety-ladder scorer, pure); `test/career.test.ts` (the live
+`Choreography` wiring — five distinct types on both feet activates the element and scores grade 1, one
+foot or too few types never does, six types still cap at grade 1, no thresholds supplied degrades to
+never-active exactly like the spin and technical bonuses already do); `games/ice-run-godot/tests/
+engine.test.mjs` (a `step` sequence is real and composer-authorable through the whole bridge); a Godot
+headless smoke test (`--smoke-test`, career routine unaffected); and a live browser check with
+Playwright, after the 404 fix, with zero console errors. 408 Ice Lab tests (up from 394), 10 Godot
+bridge tests, `tsc` clean. No replay contract change: this lives entirely in `game/career.ts`
+external analysis over already-recorded state, the same situation `sim/spinLevel.ts` is already in.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in

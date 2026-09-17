@@ -676,7 +676,7 @@ func load_preferences() -> void:
 	if ids is Array and ids.size()>0 and ids.size()<=16:
 		var valid := true
 		for id in ids:
-			valid = valid and id in ["glide","edge","crossover","jump","spin","pose"]
+			valid = valid and id in ["glide","edge","crossover","jump","spin","step","pose"]
 		if valid:
 			sequence = ids
 

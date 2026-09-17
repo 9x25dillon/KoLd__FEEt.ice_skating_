@@ -30,7 +30,8 @@ godot4 --editor --path games/ice-run-godot
 
 Press **F6/F5** to run the main scene/project. Select **The Season** for five
 career events or **The Composer** to build and reorder a program of up to sixteen
-phrases. Gold requires no falls; silver permits two; completing the routine earns
+phrases — glide, edge, crossover, jump, spin, **step sequence**, and closing pose.
+Gold requires no falls; silver permits two; completing the routine earns
 bronze. Improved medals earn training XP and unlock the next event. Rehearsals
 and replay playback cannot earn career rewards.
 

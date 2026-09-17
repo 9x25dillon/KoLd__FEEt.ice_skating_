@@ -58,6 +58,16 @@ test('authored programs validate and preserve order without granting career XP',
  e.start({mode:'free'});assert.equal(e.finished,false);assert.equal(e.state.tick,0);
 });
 
+test('a step sequence is a real, composer-authorable element (sim/stepLevel.ts)',()=>{
+ const e=new IceEngine();
+ const hello=e.catalog();
+ assert.ok(Object.hasOwn(hello.elements,'step'),'ELEMENTS.step must reach the catalog the Composer picker reads');
+ const snap=e.start({mode:'composer',sequence:['step']});
+ assert.equal(snap.routine.sequence[0],'step');
+ for(let i=0;i<50&&!e.finished;i++)e.advance({},2);
+ assert.equal(e.routine.bestStepLevel,0,'no footwork driven: the honest zero, not an error');
+});
+
 test('replay playback does not grant progression or mutate the live recorder',()=>{
  const e=new IceEngine();for(let i=0;i<50;i++)e.advance({},2);
  const replay=e.exportReplay();const save=e.career.serialize();e.replay(replay);
