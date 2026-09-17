@@ -57,6 +57,8 @@ import type {
 import type { Params } from "./params.ts";
 import { SIM_DT } from "./params.ts";
 import { effectiveRocker, carveRadius, biteCapacity, muLong, equilibriumLean, rinkSlopeAccel } from "./blade.ts";
+import type { IceGrid } from "./ice.ts";
+import type { Vec2 } from "./math.ts";
 import { onBeat, accentCredit } from "./music.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
 import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
@@ -115,10 +117,16 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
 
 export function step(
   s: SkaterState, input: SkatingInput, p: Params, dt: number, events: EdgeEvent[],
+  ice?: IceGrid,
 ): void {
   const eventsAtStart = events.length;
   const g = p.gravity;
   s.tick++;
+  // Explicit resource, not a hidden global (sim/ice.ts): with no grid passed,
+  // or `iceGridMode` 0, `condAt` is 0 everywhere and every call site below
+  // reads exactly what it did before this file existed.
+  const iceOn = !!ice && p.iceGridMode >= 1;
+  const condAt = (pos: Vec2): number => (iceOn ? ice!.condition(pos) : 0);
 
   // ── 0. getting up ─────────────────────────────────────────────────────────
   // The bible's §3.4 machine goes Fall -> grounded -> GetUp -> locomotion. The
@@ -343,7 +351,7 @@ export function step(
         if (s.crossover) {
           const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? p.backPushScale : 1;
           crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * knee * p.mass * back,
-            biteCapacity(pb.normalLoad, s.crossSide * p.strokeEdge, p));
+            biteCapacity(pb.normalLoad, s.crossSide * p.strokeEdge, p, condAt(pb.contact)));
         }
       }
     }
@@ -396,7 +404,7 @@ export function step(
       // of drift over fourteen metres of travel before this was added.
       const nFlat = perpLeft(b.tangent);
       const vLatFlat = dot(s.vel, nFlat);
-      const capFlat = biteCapacity(b.normalLoad, b.tilt, p);
+      const capFlat = biteCapacity(b.normalLoad, b.tilt, p, condAt(b.contact));
       const wanted = Math.abs(vLatFlat) * (b.normalLoad / g);
       const allowed = Math.min(wanted, capFlat * dt);
       flatImpulse = add(flatImpulse, mul(nFlat, -sign(vLatFlat) * allowed));
@@ -427,7 +435,7 @@ export function step(
     const arcMass = inCross ? massShare + share * pushMass : massShare;
     const fArc = arcMass * vLong * vLong / rGeo;
     const fNeed = inCross ? Math.abs(fArc - helped) : fArc;
-    const fBite = biteCapacity(b.normalLoad, b.tilt, p);
+    const fBite = biteCapacity(b.normalLoad, b.tilt, p, condAt(b.contact));
 
     // `excess` is an ACCELERATION (m/s^2): the part of the demand the edge
     // could not answer. It is what gets scrubbed off as speed below.
@@ -532,7 +540,7 @@ export function step(
     for (let i = 0; i < 2; i++) {
       const b = s.blade[i];
       if (!b.inContact) continue;
-      dv += muLong(b.tilt, b.latSlipAccel > 0, p) * b.normalLoad / p.mass * dt;
+      dv += muLong(b.tilt, b.latSlipAccel > 0, p, condAt(b.contact)) * b.normalLoad / p.mass * dt;
     }
     if (input.brake) dv += p.muSkid * nTotal / p.mass * dt;
     // An Ina Bauer's trailing foot is never turned out quite square to the lead.
@@ -680,6 +688,14 @@ export function step(
     s.blade[1 - lead].contact = add(s.blade[1 - lead].contact, mul(frameH, -INA_BAUER_STRIDE));
   }
 
+  // Write the sheet where each blade ends up this tick — one tick after the
+  // position friction and bite above read, the same lag `pushRoll` already
+  // has in session.ts, and harmless at 120 Hz.
+  if (iceOn) for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    if (b.inContact) ice!.deposit(b.contact, b.latSlipAccel, dt, p);
+  }
+
   // ── 8. classify, and say so ───────────────────────────────────────────────
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
@@ -779,8 +795,9 @@ export function step(
 /** Run n ticks at the fixed rate. Convenience for tests and the replay path. */
 export function run(
   s: SkaterState, input: SkatingInput, p: Params, ticks: number, events: EdgeEvent[] = [],
+  ice?: IceGrid,
 ): SkaterState {
-  for (let i = 0; i < ticks; i++) step(s, input, p, SIM_DT, events);
+  for (let i = 0; i < ticks; i++) step(s, input, p, SIM_DT, events, ice);
   return s;
 }
 

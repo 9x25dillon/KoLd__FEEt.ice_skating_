@@ -42,22 +42,32 @@ export function carveRadius(tilt: number, rhoEff: number): number {
 /**
  * Lateral holding capacity, N.
  *
- *   F_bite = N (c0 + c1 sin|theta|) * sharpness * hardness
+ *   F_bite = N (c0 + c1 sin|theta|) * sharpness * hardness * (1 - biteLossMax * ice)
  *
  * Note what c1 means once it is above about 1: that is not Coulomb friction —
  * steel on ice cannot supply it — it is the edge cutting a groove and pushing
  * sideways against the wall of it. The model is a caricature of an interlock,
  * and it is a game constant. It is also the single number most likely to be
  * wrong, which is why the rig puts it on a slider.
+ *
+ * `ice`, 0..1, is the local wear sim/ice.ts's IceGrid reports under this
+ * blade (bible §3.2: "damage... lowers bite"); 0 when no grid is in play,
+ * which is every preset and every call site that omits it.
  */
-export function biteCapacity(normalLoad: number, tilt: number, p: Params): number {
+export function biteCapacity(normalLoad: number, tilt: number, p: Params, ice = 0): number {
   return normalLoad * (p.biteC0 + p.biteC1 * Math.abs(sin(tilt)))
-    * p.sharpness * p.iceHardness;
+    * p.sharpness * p.iceHardness * (1 - p.iceBiteLossMax * ice);
 }
 
-/** Longitudinal friction coefficient. A deep edge costs speed; a skid costs more. */
-export function muLong(tilt: number, skidding: boolean, p: Params): number {
-  const mu = p.muGlide * (1 + p.muEdgeGain * (1 - cos(tilt)));
+/**
+ * Longitudinal friction coefficient. A deep edge costs speed; a skid costs
+ * more. `ice`, 0..1, blends `muGlide` toward `iceMuChewed` — the bible's
+ * "rising toward 0.015 on soft or chewed ice" — and is 0 wherever sim/ice.ts
+ * is not in play.
+ */
+export function muLong(tilt: number, skidding: boolean, p: Params, ice = 0): number {
+  const muGlideEff = lerp(p.muGlide, p.iceMuChewed, ice);
+  const mu = muGlideEff * (1 + p.muEdgeGain * (1 - cos(tilt)));
   return skidding ? mu + p.muSkid : mu;
 }
 

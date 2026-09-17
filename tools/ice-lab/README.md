@@ -896,6 +896,52 @@ fixture and four operator clips (49,539 ticks, twelve falls, two jumps) matched 
 and event on every tick. `test/rink.test.ts` holds the pull's direction and closed form, the paired-glide
 rule the validation cases rely on, and the bit-for-bit flat sheet. `?playtest=1` never leaves flat.
 
+## The ice itself — wear, snow, and what it costs
+
+Added 2026-09-16 (`sim/ice.ts`), the physics half of the operator's queued "carve as a feature": design
+bible §3.2, *"a 2D grid over the rink at roughly 12 cm resolution storing damage and snow. Every blade
+pass writes to it; damage raises local friction and lowers bite, and snow accumulates in ridges at
+stops... Resurfaced between skaters, which is why the last skater in a warm-up group is genuinely at a
+disadvantage."* The bible also names this grid as the tracing buffer (§04, §09) — one system behind both
+the physics and whatever draws a line on the ice.
+
+**`IceGrid` is explicit state, not a hidden global.** `sim/solver.ts`'s own header explains why: replays,
+ghosts and server verification depend on `step()` being "state in, state out... no hidden globals", and a
+grid this persistent cannot live inside it. It is passed into `step()` as a sixth, optional argument
+instead — the same reason `SkaterState` is passed rather than owned — so a replay never has to serialize
+it: the same recorded inputs chew the same ice, deterministically, on any machine that replays them.
+`iceGridMode` is 0 in every preset, the way `movesMode`, `jumpMode` and `musicMode` are, and `step()`'s
+`ice` argument being merely absent has the same effect: with neither, friction and bite read exactly what
+they did before this file existed. `run()` (tests, the replay path) takes the same optional argument.
+
+Damage and snow are stored apart but read back as one blended `condition` (0..1, saturating): both alike
+raise `muLong` toward `iceMuChewed` (0.015, the bible's own ceiling) and lower `biteCapacity` by up to
+`iceBiteLossMax`, because the rig has no way yet to tell a judge a chewed patch from a snow ridge apart.
+Every blade pass adds `iceDamagePerPass`; snow additionally comes from skid scrub — `latSlipAccel`, the
+same quantity solver.ts's own step-5 comment names as *"where the snow comes from"*, deposited at the
+blade's position instead of only being spent as a speed loss. None of the four levers has a data file
+behind it (open-constants.md), so all are L2/L3, authored to be visible over a session's laps rather than
+a single stroke.
+
+**Measured** (`test/ice.test.ts`), two skaters on the same fresh `spec` grid, gliding straight at 5 m/s
+for 2.5 s each, one behind the other: the first keeps 4.5158 m/s, the second — same start, same input,
+ice the first skater already chewed — 4.5032 m/s. Small on purpose (`iceDamagePerPass` defaults to a
+sheet that dulls over a warm-up group's laps, not one lap), but the right sign and the bible's own claim,
+checked rather than assumed. A `resurface()` between them gives the second skater the first one's own
+deal back, exactly.
+
+Replay contract `/10` added `iceGridMode` and the three levers under it, and nothing to `SkaterState` —
+the grid is not part of it. Replayed through `/9` and `/10` with no grid passed, the fixture and three
+operator play clips matched on every `/9` state field and event on every tick; the fixture was
+re-recorded from its own inputs only to carry the four new keys.
+
+Not yet built: reading `condition()` back into a persistent, whole-run trace (today `app/draw.ts` keeps
+only each foot's last ~30 seconds) and a live "off the line" number for a course. The operator's own
+call, asked directly rather than assumed from an old note: the line a course scores against is a
+**designed curve** — hand-authored per course, the way the Figure Eight's two circles already are
+(`app/figure8.ts`, `deviation()`) — not a replay re-simulating as a ghost. That pattern is proven and
+reusable the moment a course wants one; none has asked for a second yet.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in

@@ -81,7 +81,19 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       use the recorded branch commits to play those clips, not a relabel.
 //       The fixture is re-recorded from its original inputs with neutral
 //       values for the newly introduced controls and parameters.
-export const REPLAY_SOLVER = "ice-lab-f64/9";
+//   /10 The ice grid (sim/ice.ts, `iceGridMode`): Params gained it and its
+//       four levers. The grid itself is NOT part of the replay format — it
+//       is an IceGrid, passed into step() as an explicit argument, never
+//       serialized — because it is fully determined by the same recorded
+//       inputs that already determine everything else a replay reproduces.
+//       `iceGridMode` is 0 in every preset and step()'s own `ice` argument
+//       is optional, so a clip recorded with no grid at all reads and writes
+//       nothing new; replayed through /9 and /10 the fixture and three
+//       operator play clips matched on every /9 state field and event on
+//       every tick, and the fixture was re-recorded from its own inputs
+//       only to carry the four new keys. /9 clips no longer load; verify one
+//       against a checkout of 87bac5f.
+export const REPLAY_SOLVER = "ice-lab-f64/10";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
