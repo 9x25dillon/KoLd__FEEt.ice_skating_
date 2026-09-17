@@ -80,8 +80,16 @@ operator. PCS is not called from anywhere in play yet.
 **Verified at every step in the actual running app** — browser (Playwright, the Ice Lab and the game
 both), Godot (a headless `--smoke-test` after every physics-affecting change, plus one standalone
 Blender render) — never only in tests. 408 Ice Lab tests (up from 374), 10 Godot bridge tests, `tsc`
-clean throughout, `docs/fidelity-report.md` untouched (nothing this session touches the fidelity gate's
-own solver corpus). Replay contract `ice-lab-f64/15`.
+clean throughout. Replay contract `ice-lab-f64/15`.
+
+**One real miss, caught only by CI, not before pushing PR #12:** `docs/fidelity-report.md`'s own header
+names the solver string verbatim (`Solver \`ice-lab-f64/13\``), and CI regenerates the report on every
+push and fails if it differs — this session's own reasoning ("nothing touches the fidelity gate's own
+solver *corpus*, so the report is untouched") checked the right thing for the gate's PASS/FAIL result
+and the wrong thing for the report's own text. Fixed by actually running
+`node tools/ice-lab/validate.mjs --report docs/fidelity-report.md` (§5 item 33 says so for next time) —
+a one-line diff, gate result unchanged (6 pass, 0 fail, 24 unsourced, 2 unmodelled, still not met).
+`fc19e47`.
 
 The operator's root play-data folder, the saved HTML page, and `session-notes/` remain untracked on
 purpose — left alone, per the note further down.
@@ -859,6 +867,15 @@ If you add a sixth page, copy the head from `docs/web/production.html`.
    scans `game/main.ts`'s own `fetch("../data/...")` calls against `build.mjs`'s list directly, so this
    specific gap cannot recur silently — but the general shape (a curated file list next to a dynamic
    fetch) can recur elsewhere; check for it deliberately when adding a new fetched asset anywhere.
+
+33. **`docs/fidelity-report.md` is generated but its own header names `REPLAY_SOLVER` verbatim — a
+   version bump changes its *text* even when the gate's own PASS/FAIL result does not move at all.**
+   "Nothing this session touches the fidelity gate's own solver corpus" is true and is not the same
+   question as "is the report's committed text still what the generator would produce right now" —
+   CI checks the second one, on every push, via `git diff --exit-code` after regenerating. After ANY
+   `REPLAY_SOLVER` bump, actually run `node tools/ice-lab/validate.mjs --report docs/fidelity-report.md`
+   and commit whatever it produces, even a one-line diff, rather than reasoning from "the gate result
+   can't have changed" to "the file needs nothing." Caught by CI on PR #12, not before pushing it.
 
 ---
 
