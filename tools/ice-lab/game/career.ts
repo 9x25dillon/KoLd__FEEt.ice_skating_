@@ -22,6 +22,9 @@ export const CAREER_EVENTS: readonly CareerEvent[] = [
   { id: "finale", title: "Championship program", venue: "Championship arena · your complete routine", seconds: 150, routine: ["glide", "crossover", "jump", "edge", "spin", "jump", "pose"] },
 ];
 export const MEDALS = ["Unplayed", "Bronze", "Silver", "Gold"] as const;
+/** XP each of hypeMean and flowMean can add at 1.0, on top of a medal's own 150 — the operator's
+ *  bridge, made a number: a routine skated with sustained hype and flow can be worth as much again. */
+export const HYPE_FLOW_BONUS_MAX = 75;
 
 /** Ordered choreography reads live solver results; no input press earns a move. */
 export class Choreography {
@@ -34,15 +37,29 @@ export class Choreography {
   private lastLanding = -1;
   private spinProgress = 0;
   private lastSpin = 0;
+  /**
+   * The operator's own bridge, read back into career: hype and flow (both
+   * 0..1, sim/solver.ts's staminaMode-adjacent systems) averaged over every
+   * sampled tick, including fallen ones — a fall drags both down (flow
+   * resets to 0 on one outright), so the mean rewards skating clean AND
+   * with hype and flow banked, not just finishing. CareerState.award reads
+   * these for a bonus on top of the medal; they do nothing on their own.
+   */
+  private hypeSum = 0;
+  private flowSum = 0;
+  private samples = 0;
   constructor(event: CareerEvent) { this.event = event; }
   get complete() { return this.index === this.event.routine.length; }
   get done() { return this.complete || this.elapsed >= this.event.seconds; }
   get seconds() { return Math.max(0, this.event.seconds - this.elapsed); }
   get current() { return this.event.routine[this.index]; }
   get medal() { return !this.complete ? 0 : this.falls === 0 ? 3 : this.falls <= 2 ? 2 : 1; }
+  get hypeMean() { return this.samples > 0 ? this.hypeSum / this.samples : 0; }
+  get flowMean() { return this.samples > 0 ? this.flowSum / this.samples : 0; }
   sample(s: SkaterState, low: boolean, dt: number) {
     if (this.done || !Number.isFinite(dt) || dt <= 0) return;
     this.elapsed = Math.min(this.event.seconds, this.elapsed + dt);
+    this.hypeSum += s.hype; this.flowSum += s.flow; this.samples++;
     const freshLanding = s.landed.tick >= 0 && s.landed.tick !== this.lastLanding;
     this.lastLanding = s.landed.tick;
     if (s.fallen && !this.wasFallen) this.falls++;
@@ -102,7 +119,14 @@ export class CareerState {
   award(routine: Choreography): number {
     const i = CAREER_EVENTS.indexOf(routine.event);
     if (i < 0 || i > this.unlocked || !routine.done) return 0;
-    const earned = Math.max(0, routine.medal - this.medals[i]) * 150;
+    const improved = Math.max(0, routine.medal - this.medals[i]);
+    // Hype and flow only pay out alongside a genuine medal improvement — the
+    // same anti-farming gate the medal XP itself already has, so a repeat of
+    // an already-earned medal cannot be replayed purely for the bonus.
+    const bonus = improved > 0
+      ? Math.round(HYPE_FLOW_BONUS_MAX * routine.hypeMean) + Math.round(HYPE_FLOW_BONUS_MAX * routine.flowMean)
+      : 0;
+    const earned = improved * 150 + bonus;
     this.medals[i] = Math.max(this.medals[i], routine.medal);
     this.profile = { ...this.profile, xp: this.profile.xp + earned };
     return earned;

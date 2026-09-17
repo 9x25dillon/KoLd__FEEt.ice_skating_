@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { CareerState, Choreography, CAREER_EVENTS } from "../game/career.ts";
+import { CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX } from "../game/career.ts";
 import type { CareerEvent, ElementId } from "../game/career.ts";
 import { createState } from "../sim/solver.ts";
 import { GAME_PARAMS } from "../game/controls.ts";
@@ -77,6 +77,40 @@ test("career unlocks sequentially and pays only improved medals, once", () => {
   assert.deepEqual(c.medals, [3, 3, 0, 0, 0]);
   assert.equal(c.statCap, 1); assert.equal(c.unlocked, 1);
   assert.equal(c.profile.xp, 900, "450 for event 0's climb to gold, 450 for the one event 1 the stat gate allowed");
+});
+
+test("hype and flow, averaged over a real routine, bonus career XP only alongside a medal improvement", () => {
+  // CAREER_EVENTS[0]'s own routine (glide, edge, pose), driven for real
+  // through sample() rather than finish()'s shortcut, so hypeMean/flowMean
+  // accumulate from actual ticks the way a play session would leave them.
+  const run = () => {
+    const c = new Choreography(CAREER_EVENTS[0]), s = state();
+    s.hype = 1; s.flow = 1;
+    c.sample(s, false, 3);      // glide: grounded, no move, >=3 m/s, held 3s
+    s.lean = 0.2;
+    c.sample(s, false, 2);      // edge: a moving edge held 2s
+    c.sample(s, true, 2);       // pose: low=true, held 2s
+    return c;
+  };
+  const c = run();
+  assert.equal(c.complete, true);
+  assert.equal(c.medal, 3, "no fall: gold");
+  assert.ok(c.hypeMean > 0.99 && c.flowMean > 0.99, `hypeMean ${c.hypeMean} flowMean ${c.flowMean}`);
+
+  const cs = new CareerState();
+  const first = cs.award(c);
+  assert.equal(first, 3 * 150 + Math.round(HYPE_FLOW_BONUS_MAX * c.hypeMean) + Math.round(HYPE_FLOW_BONUS_MAX * c.flowMean));
+
+  const second = cs.award(run());
+  assert.equal(second, 0, "no medal improvement this time, so no bonus either, even at full hype and flow");
+
+  // Zero hype and flow throughout: no bonus, only the medal itself, on a
+  // career that has not yet earned this event's gold.
+  const fresh = new CareerState();
+  const flat = new Choreography(CAREER_EVENTS[0]), s = state();
+  flat.sample(s, false, 3); s.lean = 0.2; flat.sample(s, false, 2); flat.sample(s, true, 2);
+  assert.equal(flat.hypeMean, 0); assert.equal(flat.flowMean, 0);
+  assert.equal(fresh.award(flat), 3 * 150);
 });
 
 test("stats gate progression independent of medals: a neutral profile holds at regionals", () => {
