@@ -122,7 +122,19 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       every tick; the fixture was re-recorded from its own inputs only
 //       to carry the new keys. /11 clips no longer load; verify one
 //       against a checkout of 68f6088.
-export const REPLAY_SOLVER = "ice-lab-f64/12";
+//   /13 The flow scalar (bible §2.6, `flowMode`): Params gained it and eight
+//       levers, and SkaterState gained `flow`. `flowMode` is 0 in every
+//       preset and its own continuous update (§14) and beat bonus
+//       (landingAndTurnCredit) are both gated on it, so a clip recorded
+//       before this contract reads and writes nothing new when replayed
+//       under it. Also gained: flow's own scale on Wind's drain in §12
+//       (staminaMode's own section), gated the same way and 1x whenever
+//       flowMode is off. Replayed through /12 and /13 with flowMode 0, the
+//       fixture and three operator play clips matched on every /12 state
+//       field and event on every tick; the fixture was re-recorded from
+//       its own inputs only to carry the new keys. /12 clips no longer
+//       load; verify one against a checkout of 8686590.
+export const REPLAY_SOLVER = "ice-lab-f64/13";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

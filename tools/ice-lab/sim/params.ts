@@ -484,6 +484,32 @@ export interface Params {
   /** angulationLimit multiplier at hype 1: the blade may run a little deeper than the body leans. */
   hypeAngulationGain: number;
 
+  // ── flow ──────────────────────────────────────────────────────────────────
+  // design-bible.md §2.6: "a single value in [0,1], integrated continuously".
+  // The bible's own rises-with/falls-with table is wider than this models —
+  // "alternating lobes", "turns on the beat grid" beyond a flat bonus, and
+  // "dead air between elements" are not modelled; README.md says so. Feeds
+  // "stamina efficiency" (bible: "high flow means... cheaper to skate well")
+  // while both flowMode and staminaMode are on. 0 in every preset.
+  /** 0 off, 1 flow is integrated and feeds stamina efficiency. */
+  flowMode: number;
+  /** Flow gained per second on a real, unskidded, held edge (REGIME.Carve or .Edge) while moving. */
+  flowCarveGain: number;
+  /** Flow lost per second on a flat blade while moving: "skating on flat feet". */
+  flowFlatLoss: number;
+  /** Flow lost per second while skidding: "skids and chops". */
+  flowSkidLoss: number;
+  /** Flow lost per second under MOVING speed: "stopping or coasting straight". */
+  flowStopLoss: number;
+  /** Flat bonus when a turn's cusp or a jump's landing lands within musicMode's own accent window. */
+  flowBeatGain: number;
+  /** Local ice condition (sim/ice.ts) at or past this counts as "damaged" for flow. */
+  flowDamagedIceThreshold: number;
+  /** Flow lost per second on damaged ice past the threshold above, while iceGridMode is on. */
+  flowDamagedIceLoss: number;
+  /** Wind drain multiplier at flow 1: "cheaper to skate well". */
+  flowStaminaEfficiencyMin: number;
+
   // ── rink ──────────────────────────────────────────────────────────────────
   /**
    * m: the ice at centre ice minus the ice at the side and end boards. Positive
@@ -677,6 +703,16 @@ export const DEFAULT_PARAMS: Params = {
   hypeInternalMaxGain: 1.3,
   hypeAngulationGain: 1.15,
 
+  flowMode: 0,
+  flowCarveGain: 0.35,
+  flowFlatLoss: 0.25,
+  flowSkidLoss: 0.9,
+  flowStopLoss: 0.4,
+  flowBeatGain: 0.05,
+  flowDamagedIceThreshold: 0.5,
+  flowDamagedIceLoss: 0.2,
+  flowStaminaEfficiencyMin: 0.6,
+
   rinkRelief: 0,
   rinkHalfLength: 30,        // a 60 x 30 m sheet
   rinkHalfWidth: 15,
@@ -797,6 +833,17 @@ export function validate(p: Params): string[] {
     errs.push("hypeControlLatencyMin is a multiplier that shrinks the lag, in (0, 1]");
   if (p.hypeInternalMaxGain < 1) errs.push("hypeInternalMaxGain cannot reduce recovery authority below its own base");
   if (p.hypeAngulationGain < 1) errs.push("hypeAngulationGain cannot reduce angulation below its own base");
+  if (![0, 1].includes(p.flowMode)) errs.push("flowMode is 0 (off) or 1 (flow is integrated)");
+  if (p.flowCarveGain < 0) errs.push("flowCarveGain cannot be negative");
+  if (p.flowFlatLoss < 0) errs.push("flowFlatLoss cannot be negative");
+  if (p.flowSkidLoss < 0) errs.push("flowSkidLoss cannot be negative");
+  if (p.flowStopLoss < 0) errs.push("flowStopLoss cannot be negative");
+  if (p.flowBeatGain < 0) errs.push("flowBeatGain cannot be negative");
+  if (p.flowDamagedIceThreshold < 0 || p.flowDamagedIceThreshold > 1)
+    errs.push("flowDamagedIceThreshold is an ice condition share, 0..1");
+  if (p.flowDamagedIceLoss < 0) errs.push("flowDamagedIceLoss cannot be negative");
+  if (p.flowStaminaEfficiencyMin <= 0 || p.flowStaminaEfficiencyMin > 1)
+    errs.push("flowStaminaEfficiencyMin is a multiplier that shrinks Wind's drain, in (0, 1]");
   if (![0, 1].includes(p.staminaMode)) errs.push("staminaMode is 0 (off) or 1 (the pools drain)");
   if (p.staminaWindTimeDrain < 0) errs.push("staminaWindTimeDrain cannot be negative");
   if (p.staminaWindSpeedDrain < 0) errs.push("staminaWindSpeedDrain cannot be negative");

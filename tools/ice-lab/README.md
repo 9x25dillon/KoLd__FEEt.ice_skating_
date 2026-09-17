@@ -1093,6 +1093,43 @@ Replay contract `/12` added `hypeMode` and its eight levers to `Params`, and `hy
 `SkaterState`, alongside the landing-credit fix above. Neither is part of the replay format's grid or
 pool exceptions — they are ordinary `SkaterState` fields, replayed the way every other one is.
 
+## Flow
+
+Added 2026-09-17, the last piece of the operator's own bridge quoted above — stamina and hype are the
+"stamina... and hype", this is the "flow state" the same sentence names. Design-bible.md §2.6: *"a
+single value in [0,1], integrated continuously"*, rising with clean unskidded edges and continuous
+motion, falling with skids, flat feet, stopping, and re-crossing already-damaged ice. Off in every
+preset (`flowMode`), the same convention as everything else on this page.
+
+**Only part of the bible's own table is modelled.** Rises with a real held edge (`REGIME.Carve` or
+`.Edge`) while moving; falls with a skid, a flat blade while moving, or falling under moving speed;
+falls again, separately, while re-crossing ice the grid (`sim/ice.ts`) reports at or past
+`flowDamagedIceThreshold` — a modifier alongside carving, not a veto: a good edge still gains flow on
+chewed ice, just less of it, the same comparative shape the ice grid's own "last skater in a warm-up
+group" measurement uses. A flat bonus, `flowBeatGain`, applies when the same turn or landing that
+already earns `musicMode` credit lands on the beat grid. **Not modelled**, the bible's own remaining
+three bullets: "alternating lobes", "repeated lobes in the same direction", and "dead air between
+elements" — none has a clean per-tick signal yet.
+
+**Feeds stamina efficiency**, the one link with an actual bible quote behind the number: *"high flow
+means you carry speed and push less, so it is literally cheaper to skate well."* Wind's own drain
+(`solver.ts` §12) is scaled by a flow-dependent multiplier down to `flowStaminaEfficiencyMin` (0.6) at
+flow 1 — active only while both `flowMode` and `staminaMode` are on, read as last tick's flow, the same
+one-tick lag `pFatigue`/`pEff` already carry. The bible's other three consumers — PCS's Skating Skills
+and Composition, camera bloom, and the crowd clapping along — are presentation or scoring-architecture
+layers this rig does not have yet, and are not touched here.
+
+A fall resets flow to 0 rather than preserving it the way `wind`/`legs`/`hype` do — the one deliberate
+difference from that precedent, since a fall is a harder break in continuous motion than anything else
+in the bible's own "falls with" list, and the field simply is not in the get-up path's preserved set.
+
+**Measured** (`test/flow.test.ts`): 2 s of a held carve from a 5 m/s glide reaches flow 0.6771; 1 s
+flat from a full 1.0 drops to 0.7500. Stamina efficiency's effect is small at this calibration over 5 s
+of stroking — Wind at 0.9950 (flow 0) against 0.9959 (flow 1) — proportionate to how little Wind itself
+drains over 5 s in the first place; both scale together over a longer program.
+
+Replay contract `/13` added `flowMode` and its eight levers to `Params`, and `flow` to `SkaterState`.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in

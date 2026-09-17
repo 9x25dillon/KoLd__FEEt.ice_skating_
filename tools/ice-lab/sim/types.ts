@@ -462,6 +462,17 @@ export interface SkaterState {
   /** Consecutive clean landings (no fall, step-out or two-foot). Resets on
    *  any landing that is not, and on a fall. */
   hypeStreak: number;
+  /**
+   * The flow scalar, design-bible.md §2.6: 0..1, integrated continuously.
+   * Rises on a real, unskidded edge and continuous motion; falls on a skid,
+   * a flat blade, stopping, or re-crossing already-damaged ice. Feeds
+   * stamina efficiency (bible: "high flow means... cheaper to skate well")
+   * while both `flowMode` and `staminaMode` are on. "Alternating lobes",
+   * "turns on the beat grid" (partly modelled — a beat-grid bonus, not the
+   * full table) and "dead air between elements" are the bible's own list;
+   * only some of it is modelled here, and README.md says which.
+   */
+  flow: number;
   fallReason: Fall;
   fallen: boolean;
   tick: number;

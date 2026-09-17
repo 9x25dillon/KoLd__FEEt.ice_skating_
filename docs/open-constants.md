@@ -873,3 +873,60 @@ first-pass-calibrated against `test/hype.test.ts` rather than measured or bible-
 Fixed by, for the whole group: nothing yet. This is a fresh mechanic with no reference implementation
 and no motion-capture or footage case to anchor it — the numbers above are chosen to be perceptible in
 `test/hype.test.ts`'s own scenarios, not measured against anything external.
+
+---
+
+## 15 · Flow
+
+`sim/solver.ts`'s `flowMode`, design-bible.md §2.6. Only part of the bible's own rises-with/falls-with
+table is modelled — see `README.md`'s own section for which three bullets are not. All eight are L3
+except where noted; inert at `flowMode` 0, every preset.
+
+- **`flowCarveGain`** — flow gained per second on a real, unskidded, held edge while moving
+  - Value: `0.35` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowFlatLoss`** — flow lost per second on a flat blade while moving
+  - Value: `0.25` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowSkidLoss`** — flow lost per second while skidding
+  - Value: `0.9` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowStopLoss`** — flow lost per second under moving speed (0.5 m/s, the same floor `session.ts`'s
+  own `MOVING` uses, inlined rather than a lever of its own)
+  - Value: `0.4` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowBeatGain`** — flat bonus when a turn's cusp or a jump's landing lands within `musicMode`'s own
+  accent window
+  - Value: `0.05`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+
+- **`flowDamagedIceThreshold`** — local ice condition (`sim/ice.ts`) at or past which it counts as
+  "damaged" for flow
+  - Value: `0.5`
+  - Used: `solver.ts` §14
+  - Range: `[0, 1]` (`validate`)
+
+- **`flowDamagedIceLoss`** — flow lost per second on damaged ice past the threshold above, while
+  `iceGridMode` is also on
+  - Value: `0.2` /s
+  - Used: `solver.ts` §14
+  - Range: `>= 0` (`validate`)
+
+- **`flowStaminaEfficiencyMin`** — Wind drain multiplier at flow 1
+  - Value: `0.6`
+  - Used: `solver.ts` §12 (stamina's own section), while both `flowMode` and `staminaMode` are on
+  - Level: **L2** — the bible states the direction directly ("cheaper to skate well"), though not a number
+  - Range: `(0, 1]` (`validate`)
+  - Source (direction only): design-bible.md §2.6
+
+Fixed by, for the whole group: nothing yet, the same as hype — a fresh mechanic with no reference
+implementation or footage case behind its specific numbers, only the bible's own qualitative table.

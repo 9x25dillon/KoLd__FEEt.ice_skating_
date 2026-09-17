@@ -108,7 +108,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     jump: newJump(p), landed: noResult(),
     move: MOVE.None, turn: newTurn(), spin: newSpin(), inaBauer: newInaBauer(), moveDone: noMove(),
     movesHeld: 0, flips: 0, spinCarry: 0, musicCredit: 0,
-    wind: 1, legs: 1, hype: 0, hypeStreak: 0,
+    wind: 1, legs: 1, hype: 0, hypeStreak: 0, flow: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -155,6 +155,12 @@ export function step(
     internalMax: lerp(pFatigue.internalMax, pFatigue.internalMax * p.hypeInternalMaxGain, hype),
     angulationLimit: lerp(pFatigue.angulationLimit, pFatigue.angulationLimit * p.hypeAngulationGain, hype),
   } : pFatigue;
+
+  // Flow (design-bible.md §2.6): read here as last tick's value, the same
+  // one-tick lag pFatigue/pEff already carry, so section 12 below can scale
+  // Wind's drain by it without needing this tick's own flow, which is not
+  // known until section 14 runs.
+  const flowOn = p.flowMode >= 1;
 
   // ── 0. getting up ─────────────────────────────────────────────────────────
   // The bible's §3.4 machine goes Fall -> grounded -> GetUp -> locomotion. The
@@ -205,7 +211,7 @@ export function step(
     // A landing resolves INSIDE jumpAir, on this early-return path — the only
     // one there is, every landing goes through it — so this is the one place
     // music credit and hype can ever see EVENT.Landing.
-    landingAndTurnCredit(s, p, events, eventsAtStart, hypeOn, dt);
+    landingAndTurnCredit(s, p, events, eventsAtStart, hypeOn, flowOn, dt);
     return;
   }
 
@@ -832,7 +838,7 @@ export function step(
   // thing after it. Without this call landings could turn a jump but never
   // credit music or hype, found while wiring hype through the exact same
   // "scan this tick's events" pattern music already used.
-  landingAndTurnCredit(s, p, events, eventsAtStart, hypeOn, dt);
+  landingAndTurnCredit(s, p, events, eventsAtStart, hypeOn, flowOn, dt);
 
   // ── 12. stamina: the two pools drain and recover ──────────────────────────
   // Continuous terms only; the event-driven ones (a push, a jump, a sit
@@ -841,8 +847,11 @@ export function step(
   if (staminaOn && alive) {
     const speed = len(s.vel);
     const lowEffort = !stroking && !turning && Math.abs(s.tiltCmd) <= p.staminaLowEffortTilt;
+    // "High flow means you carry speed and push less, so it is literally
+    // cheaper to skate well" — flowMode 0 makes this 1, exactly as before.
+    const flowEfficiency = flowOn ? lerp(1, p.flowStaminaEfficiencyMin, clamp(s.flow, 0, 1)) : 1;
     s.wind = clamp(s.wind
-      - (p.staminaWindTimeDrain + p.staminaWindSpeedDrain * speed * speed) * dt
+      - (p.staminaWindTimeDrain + p.staminaWindSpeedDrain * speed * speed) * flowEfficiency * dt
       + (lowEffort ? p.staminaWindRecover * dt : 0), 0, 1);
     // Legs, gated by Wind: "once Wind is low, Legs stop coming back."
     const legsRecover = lowEffort && s.wind >= p.staminaLegsRecoverWindFloor ? p.staminaLegsRecover * dt : 0;
@@ -851,18 +860,37 @@ export function step(
     const deepBy = Math.max(0, Math.abs(s.tiltCmd) - p.depthShallow);
     s.legs = clamp(s.legs - p.staminaLegsPerDeepEdge * deepBy * dt + legsRecover, 0, 1);
   }
+
+  // ── 14. flow: continuous motion, held on a real edge ──────────────────────
+  // design-bible.md §2.6. Ground-based terms only; the beat-grid bonus is
+  // handled in landingAndTurnCredit below, alongside music and hype, for the
+  // same early-return reason. The bible's own table also has "alternating
+  // lobes", "repeated lobes in the same direction" and "dead air between
+  // elements" — none of those three is modelled here; see README.md.
+  if (flowOn && alive && !turning) {
+    const speed = len(s.vel);
+    const regime = s.blade[s.supportFoot].regime;
+    if (regime === REGIME.Skid) s.flow = clamp(s.flow - p.flowSkidLoss * dt, 0, 1);
+    else if (speed < 0.5) s.flow = clamp(s.flow - p.flowStopLoss * dt, 0, 1);
+    else if (regime === REGIME.Carve || regime === REGIME.Edge) s.flow = clamp(s.flow + p.flowCarveGain * dt, 0, 1);
+    else if (regime === REGIME.Glide) s.flow = clamp(s.flow - p.flowFlatLoss * dt, 0, 1);
+    // Re-crossing already-damaged ice, only while the ice grid is in play.
+    if (iceOn && condAt(s.blade[s.supportFoot].contact) >= p.flowDamagedIceThreshold)
+      s.flow = clamp(s.flow - p.flowDamagedIceLoss * dt, 0, 1);
+  }
 }
 
 /**
  * Sections 11 & 13: musical credit (sim/music.ts, bible §2.1, §2.6) for a
- * turn's cusp or a jump's landing, and hype's own read of the same events —
- * a landing that also earned an accent this tick. A function, not inline
- * code, because a landing resolves inside jumpAir on step()'s early-return
- * path (0b), before either system's usual place in the tick, so both call
- * sites need the identical scan.
+ * turn's cusp or a jump's landing, hype's own read of the same events — a
+ * landing that also earned an accent this tick — and flow's beat-grid
+ * bonus. A function, not inline code, because a landing resolves inside
+ * jumpAir on step()'s early-return path (0b), before any of these systems'
+ * usual place in the tick, so both call sites need the identical scan.
  */
 function landingAndTurnCredit(
-  s: SkaterState, p: Params, events: EdgeEvent[], eventsAtStart: number, hypeOn: boolean, dt: number,
+  s: SkaterState, p: Params, events: EdgeEvent[], eventsAtStart: number,
+  hypeOn: boolean, flowOn: boolean, dt: number,
 ): void {
   if (p.musicMode >= 1) {
     const eventsEnd = events.length;
@@ -880,12 +908,20 @@ function landingAndTurnCredit(
     }
   }
 
+  // Shared between hype and flow: did THIS tick's turn or landing earn an
+  // accent above. Scanned once rather than twice.
+  let musicHit = false;
+  if (hypeOn || flowOn) {
+    for (let i = eventsAtStart; i < events.length; i++) {
+      if (events[i].type === EVENT.MusicAccent) { musicHit = true; break; }
+    }
+  }
+
   if (hypeOn) {
-    let landedThisTick = false, musicHit = false, fellThisTick = false;
+    let landedThisTick = false, fellThisTick = false;
     for (let i = eventsAtStart; i < events.length; i++) {
       const e = events[i];
       if (e.type === EVENT.Landing) landedThisTick = true;
-      else if (e.type === EVENT.MusicAccent) musicHit = true;
       else if (e.type === EVENT.Fall) fellThisTick = true;
     }
     if (fellThisTick) {
@@ -906,6 +942,12 @@ function landingAndTurnCredit(
     // the airborne early return, once per tick either way.
     s.hype = clamp(s.hype - p.hypeDecayPerSecond * dt, 0, 1);
   }
+
+  // "Turns executed on the beat grid" (bible §2.6): the flat bonus half of
+  // that bullet. It needs no landing/fall branching of its own — a turn's
+  // cusp reaches this function through the normal end of a tick, never the
+  // early return, but sharing the call keeps one scan for both systems.
+  if (flowOn && musicHit) s.flow = clamp(s.flow + p.flowBeatGain, 0, 1);
 }
 
 /** Run n ticks at the fixed rate. Convenience for tests and the replay path. */
