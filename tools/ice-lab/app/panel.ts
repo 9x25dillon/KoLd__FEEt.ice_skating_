@@ -110,6 +110,16 @@ const GROUPS: Array<{ title: string; note: string; sliders: Slider[] }> = [
     ],
   },
   {
+    title: "Ice",
+    note: "Off in every preset, like jumps and the moves: the sheet wears as it is skated on, and a chewed cell costs friction and bite until it is resurfaced. G's Figure Eight and Slalom both draw the whole run's wear once this is on; with it off the grid is passed but never written, and the trace is the recent line only.",
+    sliders: [
+      { key: "iceGridMode", label: "0 off · 1 the sheet wears", min: 0, max: 1, step: 1 },
+      { key: "iceDamagePerPass", label: "damage per pass", min: 0.001, max: 0.05, step: 0.001,
+        note: "~250 passes over one cell to chew it fully, at the default." },
+      { key: "iceSnowPerScrub", label: "snow per scrub", min: 0, max: 0.3, step: 0.005 },
+    ],
+  },
+  {
     title: "Edge classification",
     note: "Scoring reads the ESTABLISHED timestamp, not the first tick over a threshold.",
     sliders: [

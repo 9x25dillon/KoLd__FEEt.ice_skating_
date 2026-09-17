@@ -311,6 +311,9 @@ export class ReplayPlayer {
     this.ice = new IceGrid(clip.initial.params.rinkHalfLength, clip.initial.params.rinkHalfWidth);
   }
 
+  /** For a renderer only — not part of the wire format, same reason as the field above. */
+  get grid(): IceGrid { return this.ice; }
+
   get total(): number { return this.clip.frames.length; }
   get done(): boolean { return this.index >= this.total || this.divergence !== null; }
   /** The input the last advanced frame fed the solver; null before the first. */

@@ -977,12 +977,48 @@ the grid is not part of it. Replayed through `/9` and `/10` with no grid passed,
 operator play clips matched on every `/9` state field and event on every tick; the fixture was
 re-recorded from its own inputs only to carry the four new keys.
 
-Not yet built: reading `condition()` back into a persistent, whole-run trace (today `app/draw.ts` keeps
-only each foot's last ~30 seconds) and a live "off the line" number for a course. The operator's own
-call, asked directly rather than assumed from an old note: the line a course scores against is a
-**designed curve** — hand-authored per course, the way the Figure Eight's two circles already are
-(`app/figure8.ts`, `deviation()`) — not a replay re-simulating as a ghost. That pattern is proven and
-reusable the moment a course wants one; none has asked for a second yet.
+**Both of the two things this section used to call "not yet built" now are**, added 2026-09-17. The
+line a course scores against is still a **designed curve** — hand-authored per course, the way the
+Figure Eight's two circles are (`app/figure8.ts`, `deviation()`) — never a replay re-simulating as a
+ghost; that pattern has a second user now.
+
+**The Slalom got its own curve.** `app/edges.ts` already drew `guideY(x)`, the sine through every
+gate's apex, as the dashed line a player steers by — it was decoration, not a score. `EdgeCourse`
+now accumulates `(p.y - guideY(p.x))²` every tick alongside the existing gate checks, the same RMS
+measure `deviation()` takes from a circle, and reports it live ("off the line 0.64 m", mid-run) and
+at the finish (`rms`, `accuracy`). `WEIGHT` moved from `{clean 0.8, pace 0.2}` to
+`{clean 0.6, accuracy 0.2, pace 0.2}` — a course can now be threaded gate-clean and still lose to a
+tighter line between them, which a slalom's own name says it should. `RMS_ZERO` (1.2 m, a touch
+under `WEAVE`'s 1.5 m) is authored the same way `figure8.ts`'s own zero-credit distance is — a
+balance lever, not a rule (hand-off §3.3) — and, like that one, is out of `open-constants.md`'s scope:
+that register is `sim/` only, and both courses live in `app/`.
+
+**`condition()` reads back into a persistent, whole-run trace.** `app/draw.ts`'s `trace` array is
+still there, capped at ~4,000 points a foot (roughly 30 s) — the sharp, edge-coloured line a tester
+is skating right now. Underneath it, `Renderer` now keeps a second, uncapped picture: a canvas sized
+one pixel per `IceGrid` cell, painted by `paintWear()` once a tick from `ice.sample()` at each blade's
+own contact cell — reading back the exact value `deposit()` just wrote, not a second bookkeeping of
+the same thing, which is the whole point of "one system, two payoffs" (bible §3.2). `clearRect` before
+every `fillRect` because `condition` is a saturating snapshot, not something to paint over —
+compositing alpha on alpha would read a cell as more worn than the grid says it is. The canvas blits
+in one `drawImage` a frame, so cost stays O(1) regardless of how long the sheet has been skated on,
+unlike re-walking every cell in view would be. Gated the same way the grid already was: with
+`iceGridMode` 0 (every preset's default), `paintWear` is never called and the canvas stays blank —
+no behaviour change for the tuning work this rig mostly exists for. A new **Ice** group in the panel
+(`iceGridMode`, `iceDamagePerPass`, `iceSnowPerScrub`) is what turns it on inside the Lab itself —
+previously only `GAME_PARAMS` did, so the tuning rig had no way to see its own sheet wear at all.
+`sim/replay.ts`'s `ReplayPlayer` already owned a private grid (finding, §0 of the hand-off, "wired all
+four into the actual game"); it now also exposes it read-only (`get grid()`) so a loaded replay's own
+wear paints the same way a live session's does. `IceGrid` gained one small public method, `cellAt()`
+— the cell-index arithmetic `index()` already had, pulled out so a renderer (or a test) can ask for it
+without duplicating the formula; `index()` is now built on it, unchanged in behaviour
+(`test/ice.test.ts`).
+
+**Verified in the actual browser**, not only in tests: built, served, driven with Playwright — the
+Slalom's live panel read "off the line 0.64 m" mid-run and the finish line carried a real `accuracy`
+alongside `clean`; with `iceDamagePerPass` turned up for visibility, a held lean left a visible grey
+trail behind the skater that the point-trace alone does not draw, before and after a camera follow.
+No console errors either way.
 
 ## Stamina — Wind and Legs
 

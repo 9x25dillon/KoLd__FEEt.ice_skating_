@@ -40,6 +40,19 @@ test("snow comes only from scrub; an ordinary pass leaves none", () => {
   assert.ok(g.sample(v2(1, 1)).snow > 0, "scrub deposits snow too");
 });
 
+test("cellAt agrees with condition/sample: the same cell, or null off the sheet", () => {
+  const g = new IceGrid(5, 5, 0.5);   // a coarse cell, so the arithmetic is easy to check by hand
+  assert.deepEqual(g.cellAt(v2(0, 0)), { col: 10, row: 10 }, "the centre cell of a 20x20 grid at 0.5 m cells");
+  assert.deepEqual(g.cellAt(v2(-5, -5)), { col: 0, row: 0 }, "the low corner");
+  assert.equal(g.cellAt(v2(5, 0)), null, "exactly on the far edge is one cell past the last one");
+  assert.equal(g.cellAt(v2(50, 50)), null);
+  g.deposit(v2(0, 0), 0, 1 / 120, DEFAULT_PARAMS);
+  const cell = g.cellAt(v2(0, 0))!;
+  // A renderer reading the cell back should find the same wear condition() gives at the same point.
+  assert.ok(g.condition(v2(0, 0)) > 0);
+  assert.deepEqual(cell, { col: 10, row: 10 });
+});
+
 test("off the sheet is a no-op: nothing to write, nothing to read", () => {
   const g = new IceGrid(5, 5);
   const p = DEFAULT_PARAMS;

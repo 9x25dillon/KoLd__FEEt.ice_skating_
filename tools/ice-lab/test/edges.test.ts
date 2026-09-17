@@ -70,7 +70,22 @@ test("a clean run: every gate clean, done, and scored", () => {
   assert.equal(r.progress, GATES.length);
   // The last gate at 5 m/s, against a 4.5 m/s par: full pace.
   assert.equal(r.pace, 100);
+  // Skated exactly on guideY throughout: a perfect line too.
+  assert.ok(r.rms < 1e-9, `on the line ought to measure zero, measured ${r.rms}`);
+  assert.equal(r.accuracy, 100);
   assert.equal(r.score, 100);
+});
+
+test("a designed curve, like the Figure Eight's: drifting off guideY costs accuracy even with every gate clean", () => {
+  const s = createState(p, 5), course = new EdgeCourse(s);
+  const OFF = 0.5;   // still inside GATE_WIDTH/2 (1.3 m) at every apex
+  skate(course, s, (g) => GATES[g].edge, (x) => guideY(x) + OFF);
+  const r = course.result();
+  assert.equal(r.state, "done");
+  assert.equal(r.clean, GATES.length, "still every gate, just off the drawn line between them");
+  assert.ok(Math.abs(r.rms - OFF) < 1e-9, `a constant offset's RMS is the offset itself, measured ${r.rms}`);
+  assert.ok(r.accuracy < 100 && r.accuracy > 0, `accuracy ${r.accuracy} should be docked, not zeroed`);
+  assert.ok(r.score < 100, `a clean but off-line run must score below a clean on-line one: ${r.score}`);
 });
 
 test("the wrong edge is named, and a gate you go round is missed", () => {
