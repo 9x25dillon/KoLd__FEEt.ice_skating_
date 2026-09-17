@@ -1,6 +1,82 @@
 # Hand-off
 
-## Current checkpoint — 2026-09-15, origin/main merged into ue-replay-01-foundation
+## Current checkpoint — 2026-09-17, the whole 2026-09-14 queue closed, plus three loops back
+
+Still on **`ue-replay-01-foundation`**, seven commits today, each verified and merged to `main`
+individually (PRs #7–#10, all green). This is the session that finally cleared **every item** the
+tenth session's queue (below, now historical) left open — the carve question, the career module, the
+stat-balance link, the stamina pools — and then kept finding the same shape of gap twice more after
+that.
+
+**In order:**
+
+1. **The carve question, asked first, as the old §0 said to.** The operator chose **a designed curve**
+   over a replay ghost. `sim/ice.ts`: a 12 cm damage/snow grid, read back into friction (`muLong`,
+   `biteCapacity`) and deposited by every blade pass, 0 in every preset (`iceGridMode`). Passed into
+   `step()` as an explicit optional argument — never a hidden global — the same way `SkaterState`
+   itself is. Replay `/10`. `0bb3a53`.
+2. **The career module already existed** (`game/career.ts`, built 2026-09-15 and not yet visible in
+   this file's own queue below — the tenth session's queue was already one session stale when this one
+   opened). What was missing was the operator's chosen link: **stat balance tied to the competitive
+   scoring**. `CareerState` now tracks `medalCap` (the old sequential unlock) and `statCap` (the
+   highest of `profile.ts`'s `TIERS` `overall()` clears) separately; `unlocked` is the lower of the
+   two — a clean program can no longer outrun the training behind it.
+3. **Stamina** (bible §2.8): `Wind`/`Legs`, draining from time/speed/pushes/jumps/sit-spins/deep edges,
+   recovering slowly (`Legs` gated by `Wind`). Feeds jump height, pull-in tightness, edge depth, and a
+   new deterministic balance-loop noise term. `staminaLegsPerPush` is the one number that survives from
+   `src/reference/SkateSolver.cpp`'s otherwise-undefined `UpdateStamina`/`StaminaGain`. Replay `/11`.
+   `68f6088`.
+4. **Hype** — the operator's own bridge, quoted below at the tenth session's own entry, finally built:
+   builds from clean landing streaks, reads `musicMode`'s accent credit as an input, feeds back into
+   control assist on top of stamina's own fatigue blend. **Found a real, silent, pre-existing bug
+   while wiring it**: a landing resolves inside `jumpAir`, on `step()`'s early-return path, which had
+   *always* skipped music credit for a landing — only a turn's cusp ever reached it, since nothing had
+   ever driven a jump with `musicMode` on and checked `musicCredit` itself. Fixed by factoring the
+   event scan into a shared `landingAndTurnCredit`, called from both places. Replay `/12`. `8686590`.
+5. **Flow** (bible §2.6), the last of the three the operator's own brief named. Only the
+   physics-observable half of the bible's rises/falls table is modelled — no pose data, and a spin's
+   blade tilt *is* its rotation direction here, so `change_of_edge` would double-count `both_directions`.
+   Feeds Wind's own drain rate. Replay `/13`. `4635e92`.
+6. **Wired all four into the actual game.** Discovery: none of the above had ever been turned on for a
+   real player — `GAME_PARAMS` never set any of their `Mode` flags. Turned them on, gave `game/main.ts`
+   a real `IceGrid`, added HUD readouts (`Wind NN% · Legs NN%`, `Hype NN%`, and an **EDGE** bar — *not*
+   called "flow" on purpose, see below). **Found the same shape of bug as item 4, in a different
+   place**: `ReplayPlayer` never owned an ice grid either, so a live session recorded with one would
+   silently diverge on replay — and `games/ice-run-godot/bridge/engine.mjs`, a hand-maintained mirror
+   of the same host logic, had the identical bug twice over (its live engine, and its own test's
+   reference solver call). All three fixed the same way: give the reference path its own grid. `a9ecac4`.
+7. **Two more rounds of the exact same gap, found by asking "what else is computed and shown but never
+   scored."** Hype/flow reached career XP (averaged over a routine, bonus gated the same anti-farming
+   way the medal XP already was). Then **a spin's ISU level, for the first time** (`sim/spinLevel.ts`):
+   went through all ten features in `docs/level-features.md` and found eight genuinely out of reach —
+   three need pose/joint data this reduced-order rig does not have, five need a combination-spin or
+   direction-reversal mechanic it does not have either — documented feature by feature in the file's
+   own header rather than faked. The remaining two score from `data/spin-features.json`, never
+   hardcoded, capping honestly at level 2. Then the real jump TES and that spin level *also* reached
+   career scoring, the same gap closed a third time. `c0ce9e8`, `fbb7eee`.
+
+**The EDGE-vs-FLOW naming collision, caught before it shipped**: `game/index.html` already had an
+unrelated `FLOW` bar (`playground.flow`, a free-skate speed/style meter, nothing to do with bible
+§2.6). The new scalar reads as **EDGE** in the HUD instead, its own colour, beside the original.
+
+**Verified at every step in the actual browser, not only in tests**: built, served
+(`node app/build.mjs && node app/serve.mjs`), and driven headlessly with **Playwright**, found already
+installed (with its Chromium binary) under a *different* local project's `node_modules`
+(`/home/kill/astro-aae/frontend/node_modules/playwright`) — a much better tool for this than the raw
+CDP scripting the tenth session's toolchain notes describe; see the updated notes below. Pushing to
+speed and holding a carve took EDGE from 0 to 97%; a held spin, arms pulled in mid-hold, scored a real
+level 2; career mode opened and played with no console errors. No `puppeteer`/`playwright` is a
+project dependency — it was borrowed, read-only, from a sibling checkout each time.
+
+374 Ice Lab tests (up from 322), 8 Godot bridge tests, `tsc` clean, `docs/fidelity-report.md`
+byte-identical throughout (the gate's own configuration never touches any of the new `Mode` flags).
+
+The operator's root play-data folder, the saved HTML page, and `session-notes/` remain untracked on
+purpose — left alone, per the note further down.
+
+---
+
+**Last session: 2026-09-15, origin/main merged into `ue-replay-01-foundation`.**
 
 Still on **`ue-replay-01-foundation`**. This closes the branch-divergence reconciliation
 `## 0 · Start here` below had flagged as open for three sessions running (its old item 1,
@@ -68,182 +144,122 @@ hold the document set together, and the things most likely to trip you up.
 > true: `tools/ice-lab/` is real, runs, and has 249 passing tests, including replay capture and a
 > verifier that replays a clip recorded in one JavaScript engine in another.
 
-## 0 · Start here (written at the close of 2026-09-14, tenth session)
+## 0 · Start here (written at the close of 2026-09-17, twelfth session)
 
 ### First, before anything else
 
-1. **Resolved 2026-09-15 — see the checkpoint at the top of this file (`32f6d3c`).** The table and
-   detail below are kept as the record of what each side contained and how the collisions were
-   settled, not as an open task.
+1. **The tenth session's queue below (carve question, career module, stat balance, stamina) is fully
+   closed.** Its detail is kept as the historical record of what was decided and why — the carve's
+   designed-curve-vs-ghost question in particular, since a future session might otherwise reopen it —
+   not as an open task. See the checkpoint at the top of this file for what actually shipped.
+2. **`sim/spinLevel.ts` scores 2 of the 10 ISU spin features.** The other 8 are named individually in
+   that file's own header, with the specific reason each is out of reach. Read it before assuming a
+   combination spin or a direction-reversing spin is a small addition — both need real new mechanics in
+   `sim/moves.ts`, not just a scoring change:
+   - **Direction reversal mid-spin** unlocks `both_directions`. `Sp.dir` is set once at entry
+     (`spinStart`) and never reassigned; there is no input that flips it yet.
+   - **A foot change mid-spin (a real combination spin)** unlocks `change_foot_by_jump`,
+     `difficult_change_of_foot` and `all_three_positions_second_foot`. `spinStart` sets `Sp.foot` once;
+     `spinTick` never reassigns it.
+   - **A small jump that resumes a spin** unlocks `jump_within_spin`. The jump and spin systems do not
+     compose that way yet.
+   - The three **declared** features (`difficult_variation`, `difficult_entrance`, `difficult_exit`)
+     need pose or joint-angle data. This rig has none — design-bible.md §3.1 is explicit that the sim
+     is a reduced-order model — and building a pose layer just to unlock scoring would be the tail
+     wagging the dog. Leave these alone unless a session is explicitly about adding pose fidelity for
+     its own sake.
+3. **`games/ice-run-godot`'s HUD has no surface for the spin level at all.** `engine.mjs` now scores
+   it (this session wired `tables`/`spinThresholds` into every `Choreography` it builds) but nothing in
+   the Godot-side UI shows it — check whether the Godot renderer's own HUD needs the same
+   `bestSpinLevel`/`technicalScore` readout `game/main.ts` got, or whether the bridge's `snapshot()`
+   needs to expose them for the Godot side to draw.
+4. **Every new number this session is L3: authored, not measured.** `staminaLegsPerPush` (0.011) is
+   the one exception, taken directly from `src/reference/SkateSolver.cpp`. Everything else —
+   `staminaWindTimeDrain`, `hypeLandingGain`, `flowCarveGain`, `TECHNICAL_XP_PER_POINT`,
+   `SPIN_LEVEL_XP`, all of it — was chosen to be *directionally* right and *perceptible* in its own
+   test, never validated against a played session or real skating data. If a future session has actual
+   playtest data (fall rates, how fast Wind/Legs actually feel like they drain, whether the XP bonuses
+   feel proportionate to the medal XP), that is a calibration pass waiting to happen, not a redesign.
+5. **`BEGINNER_PARAMS` inherited all four new systems (`staminaMode`/`hypeMode`/`flowMode`/
+   `iceGridMode`) by spreading `GAME_PARAMS`, without a deliberate check of whether a total beginner
+   should feel fatigue, balance noise and a worn sheet on their very first minute of play.** This was
+   an implicit inheritance, not an examined decision — worth a real look, possibly with the operator
+   watching a fresh player, before assuming it is fine.
 
-   **`main` and this branch have diverged hard. Do not assume a merge is a fast-forward.** This
-   session's checkout stayed on **`ue-replay-01-foundation`** (three commits, ending `667b3a9`,
-   pushed) the whole time. In parallel, a *different* branch — `fidelity-00-repo-correction`, in a
-   **separate worktree** at `/home/kill/KoLd__FEEt.fidelity` — merged into `main` as PR #5 while this
-   session ran. The two branches share a merge-base (`3571cff`) and have both moved a long way past
-   it, touching the same files:
+**Untracked on purpose, at the repo root:** `E_W_replays_sessions_eng_bld/` (the operator's play data),
+`Ice Lab — KoLd__FEEt edgework.html` (a browser save page), and `session-notes/`. Use only the play
+data that is there; commit or delete none of the three without asking.
 
-   | | this branch (`ue-replay-01-foundation`) | `main` (via PR #5) |
-   | --- | --- | --- |
-   | Adds | a game (`game/`), `sim/music.ts`, the bracket turn, `game/rink.ts` (rink **boundary walls**) | `rinkRelief` — ice **surface curvature**, crown/bowl (`sim/blade.ts`) — a same-named, different-meaning "rink"; the jump wind-up (`SkatingInput.windup`, key **U**); `validate.mjs`, a fidelity-gate harness |
-   | Both touched | `app/pad.ts`, `app/schemes.ts`, `sim/params.ts`, `sim/replay.ts`, `sim/solver.ts`, `sim/types.ts`, `test/fixtures/replay-v1.json`, and — coincidentally — both independently wrote a file named **`test/rink.test.ts`** for their own unrelated "rink" | |
-   | `REPLAY_SOLVER` | reached **`ice-lab-f64/8`** here (music at `/7`, the bracket at `/8`) | reached **`ice-lab-f64/8`** there too (rink relief at `/7`, wind-up at `/8`) — the same number, two different physics changes |
-   | Tests | 280 | 272 |
+### The queue, next
 
-   Reconciling this needs a real session, not a quick rebase: decide a merge order, renumber whichever
-   side's `/7`–`/8` lands second, regenerate `test/fixtures/replay-v1.json` once for the union, and
-   rename one side's `game/rink.ts` / `test/rink.test.ts` (or namespace both) before either can build.
-   `game/main.ts`'s own keyboard **U** (get low / cantilever) will also want a look against the other
-   branch's **U** (jump wind-up) once they share a build. Read `main`'s own `tools/ice-lab/README.md`
-   and `docs/open-decisions.md`'s new **D7** (tools/ licensing, resolved Apache-2.0) before starting.
-2. **The carve-as-a-feature question is still open — the third session running.** See below. It keeps
-   getting redirected to something else on the operator's own initiative, which is a legitimate call
-   each time, but if a session opens with no stated goal, put this question first rather than assuming
-   the redirect will happen again.
-3. **Don't re-attempt a foot-changing "choctaw."** It was built and rejected this session — see
-   `sim/types.ts`'s `TURN_KIND` comment for the physics reason before spending time on it again.
+None of this is in the operator's own stated order the way the tenth session's was — these are what
+this session's own work surfaced as the next honest layer, in roughly the order that unlocks the most:
 
-**Untracked on purpose, at the repo root:** `E_W_replays_sessions_eng_bld/` (the operator's play data:
-cards, clips, params exports, event logs) and `Ice Lab — KoLd__FEEt edgework.html` (a browser "save
-page", not a source file). Use only the play data that is there; commit or delete neither without asking.
+1. **A designed curve for a real course.** The carve question resolved *how* a course would be scored
+   (a hand-authored curve, not a replay ghost) but no course besides the Figure Eight (`app/figure8.ts`)
+   has one yet, and `app/draw.ts` still keeps only each foot's last ~30 s of trace rather than the whole
+   run the ice grid could now back. This is the oldest unfinished thread in the file — three sessions
+   old as of this one — and still needs a course designed, not just an engine capability.
+2. **Direction reversal and/or a real combination spin** (item 2 above) — the two mechanics that would
+   raise `spinLevel`'s honest ceiling from 2 toward 4, and the same physics `both_directions` needs
+   ("the sign of L flips") is genuinely close, per that file's own note — it is the *input* to reverse
+   it that is missing, not the physics.
+3. **Step sequences** (`docs/level-features.md`'s other half, `data/step-features.json`). No mechanic
+   for one exists at all yet — this is a bigger lift than the spin level work, closer in size to the
+   moves system than to a scoring layer.
+4. **PCS** (Program Component Score) — only TES pieces exist (jump base value + GOE, and now a spin's
+   level). Skating Skills, Composition, and the rest of `docs/design-bible.md` §2.7 are unbuilt.
+5. **Flow's own three unmodelled bullets** ("alternating lobes", "repeated lobes in the same
+   direction", "dead air between elements" — `sim/solver.ts`'s flow section names them) — smaller than
+   the above, no clean per-tick signal identified for any of the three yet.
 
-### What happened on 2026-09-14 — three commits, one branch
-
-**`23e675b` — finished another session's in-progress game.** The operator's message was "there should
-another session in the middle of building a game, go ahead and take over": `game/` (Free Skate, a
-guided Rookie course, a 90-second gold-light time attack, all on the existing solver) existed but threw
-on load — `index.html` was missing six DOM ids `main.ts` reads at every frame, so the page came up
-blank. Added the markup, rebuilt, drove all three modes and both difficulties through headless
-Chromium with no console errors, cleaned up a README that had two overlapping half-written drafts.
-262 tests.
-
-**`3b93279` — the rhythm layer, and real music.** Asked to "begin the musical engine before the
-career" plus "any enhancing play features": `sim/music.ts` (`musicMode`, off in every preset) gives
-every crossover push a beat window — full strength on tempo, `musicMissedPushScale` (0.45) and an
-audible chop off it, per the design bible's own guardrail that this must be a modifier, never a gate —
-and phrase-weighted musical credit for a turn or a jump landing within `musicAccentWindow` (80 ms) of
-an accent (this rig's downbeats, until real authored beat grids exist). Replay `/7`. Then the operator
-volunteered five of their own tracks, in `~/KoLd__FEEt.fidelity/` (a sibling worktree, not this repo) —
-`Moonlit Alibi`, `摩擦の水面`, `Borrowed Eyes`, `Tongues That Flee`, `Moon Ray Glide` — now copied into
-`game/audio/` and playing for real through a plain `<audio>` element, picked in the Controls window.
-`aubiotrack` estimated each track's tempo; the raw numbers were roughly double what the tracks actually
-feel like (a common octave error on syncopated material), so the stored `bpm` is **half** the raw
-detection — an estimate, not ground truth; `game/audio/README.md` says so. Mid-session the operator
-laid out where this is going, verbatim because it is the design brief for whenever stamina lands:
-*"the stamina, strength, flow state and hype from succesive trick landing has to be the bridge between
-the musical and carreer parts of the game... all those should sequentually stack engaging more and
-more assist engines with performance increases."* Nothing of that economy is built — `s.musicCredit`
-is deliberately a plain, tick-stamped, replay-safe number so it is easy to feed into it once stamina
-pools (queue item 4, still not started) exist. 271 tests.
-
-**`667b3a9` — a new turn, a redesigned skater, and boards.** Asked for "more figure skating moves,"
-"a more feminine representation," and "rink boundaries and walls to bounce off of and crash into":
-
-- **The bracket** (`sim/moves.ts`, replay `/8`): a three-turn's mirror — same foot, same edge change,
-  but entered rotating *against* the curve instead of into it (key **N**, pad **R3**), costing more
-  speed (`againstTurnScrub`, authored — bible §2.3 ranks it ★★★ against a three-turn's ★, but no
-  `motion-primitives.json` entry exists for either bracket or counter/rocker to measure against).
-  **A "choctaw" was built alongside it and taken back out**: entering against the curve with a foot
-  change lands on the same edge a mohawk preserves, not the changed edge a real choctaw has, because
-  `flipFrame`'s tilt negation — which is what makes three-turn/mohawk's edge outcomes correct at all —
-  never depended on rotation direction to begin with. `TURN_KIND` no longer has a `Choctaw` value, and
-  a test asserts weight at a bracket's cusp does nothing. `SkatingInput`'s own `leanSplit` field
-  comment names a *different*, two-footed mechanism for a real choctaw, not yet built.
-- **A skirt and a ponytail** on the skater (`game/scene.ts`), purely cosmetic. The skirt is drawn as a
-  screen-space ellipse rather than a world-space flat shape, on purpose: a flat billboard aligned to
-  one direction goes edge-on and disappears whenever the body's facing rotates through it, which a
-  spin does continuously — caught by an actual screenshot, not assumed.
-- **The boards** (`game/rink.ts`): a rounded-rectangle boundary matching the shape `scene.ts` already
-  drew. A soft hit bounces the skater back onto the ice; past `CRASH_SPEED` (3.5 m/s of perpendicular
-  impact) it is a fall, `FALL.Collision` named as the reason, with its own crash sound. Deliberately
-  presentation-layer — applied to the state a frame renders, never inside `sim/`'s own `step()` — so a
-  replay's recorded digest stays pure regardless of which wall a run touched, the same precedent as
-  the cantilever pose overlay and the choice of music track (both also not recorded). **This is a
-  different "rink" from `main`'s `rinkRelief`** — see item 1 above.
-
-280 tests, tsc 7.0.2 clean throughout the session. All three commits verified interactively in headless
-Chromium, the third with an actual screenshot read back to check the skirt rendered correctly.
-
-### The open question — ask it first
-
-**The carve as a feature** is still next in the operator's queue, in their words *"adding a ghost line to
-follow"* and *"being able to use the carved lines as a performance tool."* The recommendation, made
-across two sessions now: one layer, `sim/ice.ts` — the tracing as data, a ~12 cm grid over the ice that
-every blade pass writes (bible §3.2: `damage` and `snow`), read by the solver (chewed ice glides slower,
-μ 0.006 → 0.015, and bites less; 0 in `spec`, on in the presets) and by the game (the ghost carves its
-own ice as it re-simulates, so its whole line lies on the ice ahead of you, with a live "off the line"
-number against it — bible §09B v2's distance-transform scoring, against any run). Also: the whole run's
-tracing would stay on the ice, where today `app/draw.ts` keeps only each foot's last ~30 seconds. One
-trap to fix rather than copy: `SkateSolver.cpp` reads friction right where it just wrote the tracing, so
-a blade would slow on its own wake — cells need the tick they were cut.
-
-**The question:** is the line you follow **a replay's tracing** (recommended: any run — your best, your
-last, a replay file — on every course, the Figure Eight keeping its drawn circles for its §6 score) or
-**a designed curve** (hand-built lines like the Figure Eight's, exact but only where someone designs one)?
-
-### The queue, in the operator's order
-
-1. **The carve as a feature** — after the question.
-2. **A career module** holding training and the practice mini-games: a `CareerState` that earns XP from
-   the courses and calls `train` (`sim/profile.ts`). Keep it in `sim/` or a `career/` that imports only
-   `sim/`, so a career replays like a run.
-3. **Stat balance tied to the competitive scoring** — `overall` and the tier floors are the attachment
-   points. Not before (1) and (2).
-4. **Stamina pools in the solver** (bible §2.8, `SkateSolver.cpp` `UpdateStamina`/`StaminaGain`) — the
-   stamina stat means nothing until they exist, and neither does the operator's stamina/flow/hype
-   bridge above: build the pools first, then read this session's music-engine credit as one of its
-   inputs, not the other way round.
-
-**The native track, in its report's order** (unchanged, not touched this session): a strict native
-JSON importer from `native/reference/wire-manifest.json`; transcribe `createState`, the blade and
+**The native track, in its report's order** (unchanged, still not touched): a strict native JSON
+importer from `native/reference/wire-manifest.json`; transcribe `createState`, the blade and
 classification, and the ground solver from the pinned `/5` source; a runner with oracle comparison and
 first-difference diagnostics; only then an Unreal module and commandlet on a pinned UE installation.
 
-**Loose ends of the moves**, none started: scheme B cannot steer backward (it chases the heading, which
-a turn reverses); spin levels (`SpinResolver.cpp` — the state already records positions held two
-revolutions); turns and twizzles in step-sequence levels (`step-features.json`); rockers, counters and
-a genuine choctaw (all three need a same-edge or two-footed mechanism this rig does not have — see
-above); the jump challenge still starts attempts at 5 m/s. **Noticed but not built**: `data/spin-positions.json`
-already has real `inertia_scale` numbers for layback and crossfoot spin positions (0 and 2 more
-flexibility-gated ones besides) — the cheapest possible "more moves" for a future session, since it
-reuses 100% of the existing spin architecture and needs no new physics, only a control mapping.
+### Working with this operator — what held up on 2026-09-17
 
-### Working with this operator — what held up on 2026-09-14
+- **"Continue building" / "the next thing" / "keep cooking" recurred as the whole instruction, four
+  separate times.** Each time the honest response was to ask which of several genuinely different-
+  shaped candidates was wanted — the carve question, career direction, wiring-in, spin level scope —
+  and each time the operator answered in one line and the session moved fast from there. None of the
+  four questions was wasted, but a stated priority order up front (even a rough one: "wire it in, then
+  whatever's cheapest after that") would have saved four round trips of framing options.
+- **Commit was authorized once explicitly ("commit then continue building") and then treated as
+  standing for the rest of the session** — reasonable, and the operator never corrected it, but push
+  and merge were asked for separately, as their own sentence, every single time (four times). If the
+  operator wants push+merge on the same standing authorization commit already has, saying so once
+  would remove three of those four asks.
+- **"lets dp the hype flow scoring and spin level next" bundled two substantially different-sized
+  pieces with no relative depth stated.** The session had to decide for itself how far to take spin
+  level scoring (how many of the 10 ISU features to attempt) with no signal for whether "as complete
+  as the physics allows" or "whatever's cheap" was wanted. It landed on the honest-but-partial answer
+  (2 of 10, documented) by its own judgement; a stated ceiling ("just the easy ones" or "go as deep as
+  you can") would have removed that guesswork, in either direction.
+- **Verify against the actual running app, every time it changed player-facing behaviour, kept paying
+  off** — this session's two real bugs (music credit never reaching a landing; `ReplayPlayer` never
+  owning an ice grid) were both found by *building the next thing on top* and having a test or a
+  headless-browser check fail, not by review. Keep doing exactly this.
+- **A tool discovery worth naming for next time:** this machine has no `puppeteer`/`playwright`
+  installed as a project dependency anywhere in this repo, but a *sibling* project
+  (`/home/kill/astro-aae/frontend`) has Playwright with its Chromium binary already downloaded. Driving
+  the actual game in a real browser (clicks, keyboard holds, screenshots, console-error capture) via
+  `import { chromium } from ".../astro-aae/frontend/node_modules/playwright/index.mjs"` from a scratch
+  script is far less brittle than the tenth session's raw CDP-over-WebSocket approach (still noted
+  below for a machine where this happens not to be available). Nothing was installed into this repo;
+  it was read-only borrowed, once per verification, and none of it is a dependency here.
 
-- **A message that bundles several asks ("more moves, a different look, and walls") has no
-  prioritization or scope in it by default.** Each one turned into real research (which turn is
-  physically tractable, why a flat skirt fails, what "crash" should mean) that a single follow-up
-  line could have shortened. Not wrong to send it that way — the operator's calls on scope were all
-  reasonable — just slower than naming the one thing that matters most first.
-- **Mid-flight design direction ("the stamina/flow/hype bridge") arrived as a message while a
-  different, concrete task was already underway.** It was worth having and is written into the queue
-  above, but landing it after the concrete task closes (or as its own opening message) means it does
-  not compete with something already in progress for attention.
-- **A vague asset pointer costs round trips.** "I have a few files, they should be in the rep" sent
-  the session through `~/Downloads` and a 5,841-file `~/Music/Suno_Songs` before the operator named
-  the actual folder (`~/KoLd__FEEt.fidelity/`, nine files). A path, even an approximate one, upfront
-  saves the search.
-- **Verify before shipping, every time, paid off again.** Three separate guesses this session — a
-  choctaw built from rotation direction, a skirt as a flat world-space trapezoid, a wall-bounce
-  sign — were each wrong on the first attempt and each caught before the operator ever saw them: by a
-  test in two cases, by an actual screenshot in the third. None of this required the operator's time;
-  name it so the pattern keeps being trusted rather than second-guessed.
-- **The operator plays scheme A on an Xbox pad, in Firefox.** Every lean in their replays is analog.
-  Keyboard A / D is a full 65° lean — never use it to measure anything.
-- **At the close** they ask for a two-sided efficiency review, prompting vocabulary, and this file.
-
-**Toolchain reminders:** `npm run typecheck` still fails (no tsc on the box); scratch-install
-`typescript @types/node` and run `tsc --noEmit -p . --typeRoots <scratch>/node_modules/@types` from
-`tools/ice-lab/` — TypeScript 7.0.2 was clean at every commit. **Headless Chromium** (`/usr/bin/chromium`)
-drives the real page over the DevTools protocol with nothing installed: `node app/serve.mjs`, launch
-`--headless=new --remote-debugging-port=…`, connect with Node's global `WebSocket`, and inject a fake
-analog pad with `Page.addScriptToEvaluateOnNewDocument` overriding `navigator.getGamepads` — the
-keyboard's A / D is a full 65° lean and puts the skater down at once. **A screenshot is
-`Page.captureScreenshot`'s result nested one level deeper than other CDP calls** — `msg.result.result.data`,
-not `msg.result.data`; it cost one failed attempt this session. `aubiotrack` (already on the box) gives
-onset-based tempo for a real audio file; sanity-check its raw bpm against how the track actually feels
-before trusting it — see the music-engine entry above. The native build commands are in
-`tools/ice-lab/native/README.md`. The README's test count is 280.
+**Toolchain reminders, updated:** `npm run typecheck` still fails (no `tsc` on the box); scratch-install
+`typescript`+`@types/node` and run `tsc --noEmit -p . --typeRoots <scratch>/node_modules/@types` from
+`tools/ice-lab/` — clean at every commit this session too, under whatever `tsc` a sibling project
+(`/.pnpm/typescript@5.9.2/...`) happens to have. **For a real browser check, prefer Playwright** from a
+sibling project's `node_modules` (see above) over raw CDP scripting. If Playwright is not available on
+a future machine, the tenth session's own notes on driving headless Chromium directly over the DevTools
+protocol (`node app/serve.mjs`, `--headless=new --remote-debugging-port=…`, a fake analog pad via
+`Page.addScriptToEvaluateOnNewDocument` overriding `navigator.getGamepads`, and the `Page.
+captureScreenshot` result being nested one level deeper than other CDP calls) are still accurate. The
+native build commands are in `tools/ice-lab/native/README.md`. The README's test count is 374.
 
 ---
 
@@ -828,6 +844,10 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-17 (twelfth, part four) | The same gap, found and closed twice more: hype/flow reached career XP (averaged over a routine, same anti-farming gate as the medal), then a career routine's real jump TES and real spin level did too (15 XP/point, 40 XP/level). `c0ce9e8`, `fbb7eee`. |
+| 2026-09-17 (twelfth, part three) | A spin's ISU level, for the first time (`sim/spinLevel.ts`) — 2 of the design bible's 10 features, the other 8 named individually as out of reach (pose data; a combination-spin or direction-reversal mechanic this rig does not have). Scored from `data/spin-features.json`, never hardcoded; wired into `game/main.ts`'s HUD. Verified live: a real held spin scored level 2. |
+| 2026-09-17 (twelfth, part two) | Wired the ice grid, stamina, hype and flow into the actual game — `GAME_PARAMS` had never turned any of the four on. Found the same replay-determinism bug twice: `ReplayPlayer` and the Godot bridge's `engine.mjs` both never owned an ice grid, so a live-recorded session would have silently diverged on playback. New HUD: Wind/Legs, Hype, and an EDGE bar (not "flow" — a pre-existing, unrelated FLOW meter already existed). Verified live in headless Chromium via a borrowed Playwright install. `a9ecac4`. |
+| 2026-09-17 (twelfth, part one) | Closed the entire tenth-session queue: the carve question (designed curve, chosen over a replay ghost — `sim/ice.ts`, replay `/10`), the career module's stat-balance link (`medalCap`/`statCap`), and stamina pools (Wind/Legs, replay `/11`), hype (replay `/12`, and a found-and-fixed bug: landings never reached music credit), and flow (bible §2.6, replay `/13`). `0bb3a53`, `68f6088`, `8686590`, `4635e92`. |
 | 2026-09-15 (merge completion) | Found another session's `origin/main` → `ue-replay-01-foundation` merge mid-flight: all 13 conflicts hand-resolved in the working tree, nothing staged or committed. Verified the resolution rather than trusting it — the `test/rink.test.ts` rename, the `/9` replay renumbering, and the **U**-key split were all done correctly — fixed one real `tsc` bug it hadn't caught (a `strictEqual` "asserts" narrowing pinning `IceEffects.landing` to `null` across a later method call in `test/game-effects.test.ts`), regenerated `docs/fidelity-report.md` against the merged solver, and confirmed 322 + 8 tests, build, replay verify and the fidelity validator all clean before committing and pushing. `32f6d3c`. |
 | 2026-09-15 (career/Godot resume) | Recovered another interrupted session's in-progress work on the operator's ask to continue and commit/push: a browser career mode (`game/career.ts` — events, choreography, medals, unlocks, XP, local saves) and `games/ice-run-godot/`, a playable Godot project whose Node pipe host runs the unchanged Ice Lab simulation, not yet a native physics port. 296 + 8 tests pass; both the editor and a Linux export completed a full career routine. Did not touch `main`. |
 | 2026-09-14 (tenth) | The bracket, a redesigned skater, and rink walls: `sim/moves.ts` gained a same-foot, against-the-curve turn (replay `/8`); `game/scene.ts` gained a skirt and a ponytail; `game/rink.ts` gave the game a rounded-rectangle boundary to bounce off of or crash into, deliberately outside what a replay verifies. A "choctaw" was built and removed the same session when a test showed it wasn't one. 280 tests. `667b3a9`. |
@@ -934,3 +954,110 @@ walls") turns into real research time on each before any of them can be scoped d
 buildable, and a design idea (the stamina/flow/hype bridge) landing mid-task competes with whatever is
 already in progress rather than opening its own turn. Read on for the review and the vocabulary that
 follow from it.
+
+*(That review and vocabulary were never written down — the tenth session's own hand-off stops here.
+Rather than reconstruct someone else's unrecorded thinking, the twelfth session's own version follows
+below, complete.)*
+
+The twelfth session's shape (2026-09-17): **when the stated queue runs out, ask what "closed" actually
+unlocked, and keep pulling that thread.** The tenth session's four-item queue was fully closed by the
+session's own third commit; everything after that — wiring the four new systems into a live player,
+finding they were computed but never scored in career mode, finding the same gap a third time in jump
+and spin scoring — came from the same one-line question asked four separate times: "what's built but
+disconnected?" That question found two real, silent bugs (music credit never reaching a landing;
+`ReplayPlayer` never owning a grid) that no amount of staring at either feature in isolation would have
+surfaced, because both were about the *seam* between two systems, not either system on its own.
+
+**Key decisions made this session**, for whoever reads this next:
+
+- **Designed curve over replay ghost**, for the carve/ghost-line question — the operator's own call,
+  against the standing recommendation, on the strength of the Figure Eight's existing pattern.
+- **Every new subsystem (`iceGridMode`, `staminaMode`, `hypeMode`, `flowMode`) follows the exact
+  `movesMode`/`jumpMode`/`musicMode` convention**: 0 in every preset, an explicit argument or Params
+  flag rather than a hidden global, and a replay-contract bump with the fixture re-recorded from its
+  own inputs. Not asked for explicitly each time — inferred from the codebase's own established shape,
+  and worth stating as a decision because it is what let four large features ship without touching a
+  single existing test's assertions.
+- **Flow models only the physics-observable half of bible §2.6's table**, and `sim/spinLevel.ts`
+  scores only 2 of 10 ISU features — both scope cuts made unilaterally, then documented in the code's
+  own header rather than raised as a question, on the judgement that the missing halves need new
+  mechanics (pose data; direction reversal; combination spins) that are their own sessions, not a
+  clarification that would have changed this session's own scope.
+- **`SpinLevelTracker` rebuilds a segment history outside `sim/moves.ts`'s own `SpinState`** rather
+  than extending that state's fields, to avoid touching a well-tested, load-bearing struct for a
+  read-only analysis need — a deliberate choice to keep the blast radius of a scoring feature at zero
+  for the physics it reads.
+
+**Unresolved assumptions** — things treated as settled that were not actually confirmed with the
+operator:
+
+- Every new numeric constant's magnitude (drain rates, XP bonus sizes, the hype/flow/spin bonus
+  scaling against the existing 150 XP/medal) is a guess calibrated only against this session's own
+  tests, never against a played session. Reasonable-looking is not measured.
+- `BEGINNER_PARAMS` inheriting the full fatigue/hype/flow stack via spreading `GAME_PARAMS` was never
+  actually decided — it happened because that is how the existing code already composed presets, not
+  because anyone asked whether a first-time player should feel balance noise on their first jump.
+- The two scope cuts above (flow's partial model, spin level's partial model) were treated as obviously
+  correct given the missing infrastructure, but were never put to the operator as a choice the way the
+  carve question was — a session that disagreed about priority (build the pose layer first, say) would
+  have had a real case.
+- Hype's specific mechanism for "read the music engine's credit as an input" (a flat additive bonus on
+  a clean landing that also hit a beat, rather than a multiplier, a streak extension, or something
+  else) was one plausible reading of a one-sentence brief, chosen and built without checking whether it
+  was the reading the operator had in mind.
+
+**Three places this session could have been more efficient:**
+
+1. Building the jump-TES career test, the first attempt used invented entry parameters (a plain
+   forward glide) that produced an unidentified hop, not a scoreable jump — three iterations of
+   debugging a `null` score before switching to `test/jump.test.ts`'s own known-good "clean triple toe
+   loop" recipe verbatim. The lesson generalises: when a test needs a *specific* physics outcome this
+   codebase already has a passing test for, copy that test's exact recipe first, and only invent new
+   parameters once the borrowed one is confirmed working.
+2. Both real bugs this session found (music credit, the ice grid's replay determinism) came from
+   `step()`'s documented-but-easy-to-forget early-return path for an airborne skater. The first time
+   cost real investigation to locate; by the second time the pattern should have been checked
+   proactively for every new event-driven feature *before* writing it, not discovered by a failing
+   test afterward. It was faster the second time only because the first one had already been paid for.
+3. Scoping `sim/spinLevel.ts` took many small, sequential reads (the data file, `moves.ts`'s segment
+   logic, checking whether `Sp.dir` is ever reassigned, checking `SPIN_POSITION`'s actual enum size) to
+   arrive at "only 2 of 10 features are honest." Each read was necessary, but reading `sim/moves.ts`'s
+   full spin implementation once, in one pass, at the very start of that investigation would have
+   answered several of those questions at once instead of across separate round trips.
+
+**Three places the operator's own prompting could have moved faster** (see the "working with this
+operator" section above for the fourth-time-in-a-row pattern this generalises from):
+
+1. Four separate "continue building" / "the next thing" / "keep cooking" messages each triggered a
+   full clarifying-question round trip, because the explicit backlog had run out and several
+   genuinely different-shaped candidates existed each time. A standing rough priority order stated once
+   ("wire it in first, then whatever's cheapest, then ask again if you run out") would have let at
+   least two or three of those rounds proceed straight to building.
+2. Push and merge were requested as their own separate sentence four times, even though commit itself
+   was authorized once and then treated as standing for the rest of the session. If the same standing
+   authorization was intended to cover push+merge too, saying so once removes three repeated asks.
+3. "lets dp the hype flow scoring and spin level next" bundled two substantially different-sized asks
+   with no signal for how deep to go on either — the session had to invent its own scope ceiling for
+   spin level (2 of 10 features) with no way to check whether that matched what was wanted until this
+   very review. A stated depth ("just the easy wins" vs. "as complete as the physics allows") removes
+   that guesswork in either direction.
+
+**How to help me use these abilities better, concretely:** name a priority order when a message bundles
+more than one ask; state a depth/scope ceiling when the ask is open-ended against a real spec (like
+"score a spin" against a 10-feature document); and decide once, up front, whether routine actions
+(commit, push, merge) should repeat automatically for the rest of a session or be asked for each time —
+either is fine, but naming it once saves the asking.
+
+**Vocabulary for the operator to study** (both used precisely, in a technical sense, more than once in
+today's own work — knowing them back will make a future brief faster to write and faster for me to
+read):
+
+- **orthogonal** — two things that vary independently and do not interfere with each other. Today's
+  four new systems (`iceGridMode`, `staminaMode`, `hypeMode`, `flowMode`) are deliberately orthogonal to
+  each other and to every existing preset: each can be on or off without changing what the others do,
+  which is what let four large features ship in one session without breaking a single existing test.
+- **degenerate** (the mathematical/logical sense, not the colloquial one) — a case that collapses into
+  another case instead of staying genuinely distinct. `spin.change_of_edge` is degenerate with
+  `spin.both_directions` in this physics model specifically because a spin's blade tilt is defined as
+  `-Sp.dir * SPIN_EDGE` — edge sign *is* rotation direction here, so "change the edge without changing
+  direction" is not a state the model can ever actually be in.
