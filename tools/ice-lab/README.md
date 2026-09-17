@@ -1053,6 +1053,46 @@ Replayed through `/10` and `/11` with `staminaMode` 0, the fixture and three ope
 on every `/10` state field and event on every tick; the fixture was re-recorded from its own inputs only
 to carry the new keys.
 
+## Hype — the bridge between the music and the career
+
+Added 2026-09-17, directly on the operator's own words: *"the stamina, strength, flow state and hype
+from successive trick landing has to be the bridge between the musical and career parts of the
+game... all those should sequentially stack engaging more and more assist engines with performance
+increases."* Not in the design bible under this name — authored from that brief, L3 throughout — and
+deliberately does not wait for the flow scalar (bible §2.6), a separate, still-unbuilt system. Off in
+every preset (`hypeMode`), the same convention as everything else on this page.
+
+**Hype builds from a clean landing** (no fall, step-out or two-foot), scaled by its own
+`landingQuality`, with a bonus that compounds the longer the streak already is, plus a flat bonus when
+the same landing also earned a `musicMode` accent (sim/music.ts) — the literal "read the music engine's
+credit as an input" the operator asked for. **It costs**: a proportional share on a fall
+(`hypeFallLoss`, 50% of whatever was banked), a reset of the streak on any landing that is not clean,
+and a slow continuous decay so a banked meter is not a permanent buff. Measured, three otherwise
+identical landings differing only in the streak already in hand: 0.0411 → 0.0473 → 0.0535 hype, each
+one bigger than the last.
+
+**What it feeds back**, blended into `pEff` — a `Params` built from `pFatigue` (stamina's own blend)
+plus hype's own layer on top, so a performance streak can buy back part of what fatigue just cost,
+which is the entire point of a bridge between the two: `controlLatency` shrinks toward
+`hypeControlLatencyMin` (0.7×), `internalMax` grows toward `hypeInternalMaxGain` (1.3×), and
+`angulationLimit` toward `hypeAngulationGain` (1.15×). Measured, a 0.5 rad lean command held for 10
+ticks from `responsive`: `tiltCmd` reaches −0.359 rad at hype 0, −0.521 at hype 1 — the same command,
+answered faster and deeper the more hype is banked.
+
+**What it found.** Wiring hype's landing-credit bonus to `musicMode`'s own accent surfaced a real,
+pre-existing bug: a landing resolves *inside* `jumpAir`, on `step()`'s §0b early-return path — the
+only path there is, every landing takes it — which returns immediately afterward. Section 11's music
+credit lived AFTER that return, so a jump's landing could turn a jump but could never actually credit
+music; only a turn's cusp ever could. Silent, because no existing test drove a jump with `musicMode`
+on and checked `musicCredit` itself. Fixed by factoring the event scan into a shared
+`landingAndTurnCredit` function, called from both the early-return path and the normal end of a tick.
+`musicMode` is 0 in every preset, so no recorded measurement moved — verified by replaying the fixture
+and three operator clips through the old and new contract and finding every field and event identical.
+
+Replay contract `/12` added `hypeMode` and its eight levers to `Params`, and `hype`/`hypeStreak` to
+`SkaterState`, alongside the landing-credit fix above. Neither is part of the replay format's grid or
+pool exceptions — they are ordinary `SkaterState` fields, replayed the way every other one is.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in

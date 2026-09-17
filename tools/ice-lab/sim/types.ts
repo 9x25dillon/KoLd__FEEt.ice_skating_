@@ -448,6 +448,20 @@ export interface SkaterState {
    */
   wind: number;
   legs: number;
+  /**
+   * The operator's own bridge between the musical and career layers:
+   * "the stamina, strength, flow state and hype from successive trick
+   * landing... engaging more and more assist engines with performance
+   * increases." 0..1, built from clean landings — more if one also lands
+   * within `musicAccentWindow` of an accent (sim/music.ts) — and spent down
+   * by time and by a fall. Feeds a small, temporary loosening of control
+   * latency, recovery authority and angulation while `hypeMode` is on.
+   * Flow itself (bible §2.6) is a separate, still-unbuilt system.
+   */
+  hype: number;
+  /** Consecutive clean landings (no fall, step-out or two-foot). Resets on
+   *  any landing that is not, and on a fall. */
+  hypeStreak: number;
   fallReason: Fall;
   fallen: boolean;
   tick: number;

@@ -108,7 +108,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     jump: newJump(p), landed: noResult(),
     move: MOVE.None, turn: newTurn(), spin: newSpin(), inaBauer: newInaBauer(), moveDone: noMove(),
     movesHeld: 0, flips: 0, spinCarry: 0, musicCredit: 0,
-    wind: 1, legs: 1,
+    wind: 1, legs: 1, hype: 0, hypeStreak: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -143,6 +143,19 @@ export function step(
     maxTilt: Math.max(0, p.maxTilt - lerp(p.staminaMaxLeanLoss, 0, legsMul)),
   } : p;
 
+  // Hype: the operator's own bridge, layered ON TOP of pFatigue rather than
+  // replacing it — a performance streak can buy back part of what fatigue
+  // just cost, which is the entire point of a bridge between the two.
+  // `hypeMode` 0 makes pEff identical to pFatigue, field for field.
+  const hypeOn = p.hypeMode >= 1;
+  const hype = hypeOn ? clamp(s.hype, 0, 1) : 0;
+  const pEff: Params = hypeOn ? {
+    ...pFatigue,
+    controlLatency: lerp(pFatigue.controlLatency, pFatigue.controlLatency * p.hypeControlLatencyMin, hype),
+    internalMax: lerp(pFatigue.internalMax, pFatigue.internalMax * p.hypeInternalMaxGain, hype),
+    angulationLimit: lerp(pFatigue.angulationLimit, pFatigue.angulationLimit * p.hypeAngulationGain, hype),
+  } : pFatigue;
+
   // ── 0. getting up ─────────────────────────────────────────────────────────
   // The bible's §3.4 machine goes Fall -> grounded -> GetUp -> locomotion. The
   // rig's GetUp is a FRESH press of the push button: the skater stands where
@@ -169,8 +182,9 @@ export function step(
   if (s.fallen && freshPush) {
     // The last landing is kept: it is the record of why they are down. So is
     // the frame count, since the heading is kept and a scheme reads it.
-    const { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit, wind, legs } = s;
-    Object.assign(s, createState(p), { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit, wind, legs, pushHeld: true });
+    const { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit, wind, legs, hype, hypeStreak } = s;
+    Object.assign(s, createState(p), { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit,
+      wind, legs, hype, hypeStreak, pushHeld: true });
     for (const b of s.blade) {
       b.tangent = v2(heading.x, heading.y);
       b.contact = v2(pos.x, pos.y);
@@ -188,6 +202,10 @@ export function step(
   // body and lands it. Unreachable while jumpMode is 0.
   if (s.jump.phase === JUMP_PHASE.Air) {
     jumpAir(s, input, pFatigue, dt, events);
+    // A landing resolves INSIDE jumpAir, on this early-return path — the only
+    // one there is, every landing goes through it — so this is the one place
+    // music credit and hype can ever see EVENT.Landing.
+    landingAndTurnCredit(s, p, events, eventsAtStart, hypeOn, dt);
     return;
   }
 
@@ -331,9 +349,9 @@ export function step(
     let tiltTarget = asinClamped(kappa * rhoSupport);
     // Angulation: the blade may run deeper than the body leans, but only so
     // far. This gap is most of what "edge quality" means to a judge.
-    tiltTarget = clamp(tiltTarget, s.lean - p.angulationLimit, s.lean + p.angulationLimit);
-    tiltTarget = clamp(tiltTarget, -pFatigue.maxTilt, pFatigue.maxTilt);
-    const alpha = p.controlLatency > 1e-4 ? Math.min(1, dt / p.controlLatency) : 1;
+    tiltTarget = clamp(tiltTarget, s.lean - pEff.angulationLimit, s.lean + pEff.angulationLimit);
+    tiltTarget = clamp(tiltTarget, -pEff.maxTilt, pEff.maxTilt);
+    const alpha = pEff.controlLatency > 1e-4 ? Math.min(1, dt / pEff.controlLatency) : 1;
     s.tiltCmd += (tiltTarget - s.tiltCmd) * alpha;
   } else if (!turning) {
     s.tiltCmd += (0 - s.tiltCmd) * Math.min(1, dt / 0.3);
@@ -653,7 +671,7 @@ export function step(
     // derivative of the error, so that a moving equilibrium (which is most of
     // skating) does not kick it.
     aInt = clamp(p.internalGain * s.balanceError + p.internalRateGain * s.leanRate,
-      -p.internalMax, p.internalMax);
+      -pEff.internalMax, pEff.internalMax);
 
     // WASHOUT. Arms have finite travel: what is held drains away, what changes
     // gets through. Without it the arms hold a lean the edge is not carrying,
@@ -661,7 +679,7 @@ export function step(
     // it — which reads on screen as a controller that ignores you.
     if (p.internalWashout > 1e-4) {
       s.intHeld += (aInt - s.intHeld) * Math.min(1, dt / p.internalWashout);
-      aInt = clamp(aInt - s.intHeld, -p.internalMax, p.internalMax);
+      aInt = clamp(aInt - s.intHeld, -pEff.internalMax, pEff.internalMax);
     } else {
       s.intHeld = 0;
     }
@@ -806,24 +824,15 @@ export function step(
   if (staminaOn && wasGrounded && s.jump.phase === JUMP_PHASE.Air)
     s.legs = clamp(s.legs - p.staminaLegsPerJump, 0, 1);
 
-  // ── 11. musical credit: a turn's cusp or a jump's landing, on the beat ─────
-  // sim/music.ts, bible §2.1, §2.6. Scoped to events THIS tick pushed — the
-  // array is the caller's and accumulates across a whole session.
-  if (p.musicMode >= 1) {
-    const eventsEnd = events.length;
-    for (let i = eventsAtStart; i < eventsEnd; i++) {
-      const e = events[i];
-      if (e.type !== EVENT.Turn && e.type !== EVENT.Landing) continue;
-      const credit = accentCredit(p, s.tick);
-      if (credit > 0) {
-        s.musicCredit += credit;
-        events.push({
-          tick: s.tick, type: EVENT.MusicAccent, foot: e.foot,
-          prevCode: e.newCode, newCode: e.newCode, prevDwell: 0, value: credit,
-        });
-      }
-    }
-  }
+  // ── 11 & 13. musical credit and hype ───────────────────────────────────────
+  // Both react to events THIS tick pushed, wherever in the function that
+  // happened — including the 0b early return, which is why this is a call
+  // rather than inline code: a landing is resolved inside jumpAir, on the
+  // early-return path, and section 12's stamina drain used to be the only
+  // thing after it. Without this call landings could turn a jump but never
+  // credit music or hype, found while wiring hype through the exact same
+  // "scan this tick's events" pattern music already used.
+  landingAndTurnCredit(s, p, events, eventsAtStart, hypeOn, dt);
 
   // ── 12. stamina: the two pools drain and recover ──────────────────────────
   // Continuous terms only; the event-driven ones (a push, a jump, a sit
@@ -841,6 +850,61 @@ export function step(
     // boundary classify.ts already draws — so cruising a shallow curve is free.
     const deepBy = Math.max(0, Math.abs(s.tiltCmd) - p.depthShallow);
     s.legs = clamp(s.legs - p.staminaLegsPerDeepEdge * deepBy * dt + legsRecover, 0, 1);
+  }
+}
+
+/**
+ * Sections 11 & 13: musical credit (sim/music.ts, bible §2.1, §2.6) for a
+ * turn's cusp or a jump's landing, and hype's own read of the same events —
+ * a landing that also earned an accent this tick. A function, not inline
+ * code, because a landing resolves inside jumpAir on step()'s early-return
+ * path (0b), before either system's usual place in the tick, so both call
+ * sites need the identical scan.
+ */
+function landingAndTurnCredit(
+  s: SkaterState, p: Params, events: EdgeEvent[], eventsAtStart: number, hypeOn: boolean, dt: number,
+): void {
+  if (p.musicMode >= 1) {
+    const eventsEnd = events.length;
+    for (let i = eventsAtStart; i < eventsEnd; i++) {
+      const e = events[i];
+      if (e.type !== EVENT.Turn && e.type !== EVENT.Landing) continue;
+      const credit = accentCredit(p, s.tick);
+      if (credit > 0) {
+        s.musicCredit += credit;
+        events.push({
+          tick: s.tick, type: EVENT.MusicAccent, foot: e.foot,
+          prevCode: e.newCode, newCode: e.newCode, prevDwell: 0, value: credit,
+        });
+      }
+    }
+  }
+
+  if (hypeOn) {
+    let landedThisTick = false, musicHit = false, fellThisTick = false;
+    for (let i = eventsAtStart; i < events.length; i++) {
+      const e = events[i];
+      if (e.type === EVENT.Landing) landedThisTick = true;
+      else if (e.type === EVENT.MusicAccent) musicHit = true;
+      else if (e.type === EVENT.Fall) fellThisTick = true;
+    }
+    if (fellThisTick) {
+      s.hype = clamp(s.hype * (1 - p.hypeFallLoss), 0, 1);
+      s.hypeStreak = 0;
+    } else if (landedThisTick) {
+      const clean = !s.landed.fall && !s.landed.stepOut && !s.landed.twoFoot;
+      if (clean) {
+        s.hypeStreak++;
+        const gain = p.hypeLandingGain * s.landed.landingQuality * (1 + p.hypeStreakBonus * (s.hypeStreak - 1))
+          + (musicHit ? p.hypeMusicBonus : 0);
+        s.hype = clamp(s.hype + gain, 0, 1);
+      } else {
+        s.hypeStreak = 0;
+      }
+    }
+    // Continuous, so it applies whichever path called this — grounded or
+    // the airborne early return, once per tick either way.
+    s.hype = clamp(s.hype - p.hypeDecayPerSecond * dt, 0, 1);
   }
 }
 

@@ -818,3 +818,58 @@ first-pass-calibrated against the scenarios in `test/stamina.test.ts` rather tha
     **L2** — the bible states it directly ("×1.0 → ×2.4")
   - Range: multiplier at least 1 (`validate`): fatigue cannot reduce noise
   - Source (multiplier only): design-bible.md §2.8
+
+---
+
+## 14 · Hype
+
+`sim/solver.ts`'s `hypeMode`. Not in the design bible under this name — the operator's own bridge
+between the musical and career layers, quoted in full in `README.md`'s own section. All nine are L3,
+first-pass-calibrated against `test/hype.test.ts` rather than measured or bible-sourced; inert at
+`hypeMode` 0, every preset.
+
+- **`hypeLandingGain`** — hype added per clean landing, scaled by `landingQuality`
+  - Value: `0.12`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+
+- **`hypeStreakBonus`** — extra share of that gain per consecutive clean landing already in the streak
+  - Value: `0.15`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+
+- **`hypeMusicBonus`** — flat bonus when the same landing also earned a `musicMode` accent
+  - Value: `0.05`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+  - Fixed by: nothing yet ties this specific number to anything measurable; it is a design choice about
+    how much reading the music engine's credit should matter next to the landing itself.
+
+- **`hypeDecayPerSecond`** — hype lost per second, always, so a banked meter is not permanent
+  - Value: `0.03` /s
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `>= 0` (`validate`)
+
+- **`hypeFallLoss`** — share of banked hype a fall costs, proportional, on top of resetting the streak
+  - Value: `0.5`
+  - Used: `solver.ts`'s `landingAndTurnCredit`
+  - Range: `[0, 1]` (`validate`)
+
+- **`hypeControlLatencyMin`** — `controlLatency` multiplier at hype 1
+  - Value: `0.7`
+  - Used: `solver.ts`'s `pEff`, layered on `pFatigue`
+  - Range: `(0, 1]` (`validate`): cannot lengthen the lag
+
+- **`hypeInternalMaxGain`** — `internalMax` multiplier at hype 1
+  - Value: `1.3`
+  - Used: `solver.ts`'s `pEff`
+  - Range: `>= 1` (`validate`): cannot reduce recovery authority below its own base
+
+- **`hypeAngulationGain`** — `angulationLimit` multiplier at hype 1
+  - Value: `1.15`
+  - Used: `solver.ts`'s `pEff`
+  - Range: `>= 1` (`validate`): cannot reduce angulation below its own base
+
+Fixed by, for the whole group: nothing yet. This is a fresh mechanic with no reference implementation
+and no motion-capture or footage case to anchor it — the numbers above are chosen to be perceptible in
+`test/hype.test.ts`'s own scenarios, not measured against anything external.

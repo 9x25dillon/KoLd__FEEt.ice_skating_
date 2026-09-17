@@ -4,7 +4,7 @@
 > from the cases in [`data/validation/cases/`](../data/validation/cases/), against the specification in
 > [`fidelity-gate.md`](fidelity-gate.md). CI regenerates it on every push and fails if it differs.
 
-Preset under test **`responsive`** (the public build's boot preset); reference **`spec`**, reported, not gated. Solver `ice-lab-f64/11`.
+Preset under test **`responsive`** (the public build's boot preset); reference **`spec`**, reported, not gated. Solver `ice-lab-f64/12`.
 
 ## Gate
 

@@ -106,7 +106,23 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       wiring the two pools through the same get-up path every other
 //       per-session field already takes. /10 clips no longer load; verify
 //       one against a checkout of 0bb3a53.
-export const REPLAY_SOLVER = "ice-lab-f64/11";
+//   /12 Hype (the operator's own bridge, `hypeMode`): Params gained it and
+//       eight levers, and SkaterState gained `hype` and `hypeStreak`.
+//       `hypeMode` is 0 in every preset and step()'s own `pEff` blend is
+//       identical to `pFatigue` whenever it is, so a clip recorded before
+//       this contract reads and writes nothing new when replayed under it.
+//       Found on the way: a landing resolves inside jumpAir, on step()'s
+//       0b early-return path, which had always skipped music credit for a
+//       landing (only a turn's cusp ever reached it) — real, silent, and
+//       pre-existing. Fixed by factoring the event scan into
+//       `landingAndTurnCredit` and calling it from both places; musicMode
+//       is 0 in every preset, so no recorded measurement moved. Replayed
+//       through /11 and /12 with hypeMode 0, the fixture and three
+//       operator play clips matched on every /11 state field and event on
+//       every tick; the fixture was re-recorded from its own inputs only
+//       to carry the new keys. /11 clips no longer load; verify one
+//       against a checkout of 68f6088.
+export const REPLAY_SOLVER = "ice-lab-f64/12";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

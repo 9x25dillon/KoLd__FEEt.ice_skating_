@@ -454,6 +454,36 @@ export interface Params {
   musicAccentWindow: number;
   /** A crossover push that misses its beat window, as a fraction of a hit. Bible: 45%. */
   musicMissedPushScale: number;
+
+  // ── hype ──────────────────────────────────────────────────────────────────
+  // The operator's own bridge (2026-09-1x): "the stamina, strength, flow
+  // state and hype from successive trick landing has to be the bridge
+  // between the musical and career parts of the game... engaging more and
+  // more assist engines with performance increases." Not in the design
+  // bible under this name — authored from that brief, L3 throughout — and
+  // deliberately does not wait for flow (bible §2.6), a separate,
+  // still-unbuilt system. 0 in every preset, the same convention as
+  // everything else here; reads `musicMode`'s own accent events when both
+  // are on, but needs neither music nor stamina to function on its own.
+  /** 0 off, 1 successive clean landings build hype and it feeds a small assist. */
+  hypeMode: number;
+  /** Hype added per clean landing (no fall, step-out or two-foot), scaled by landingQuality. */
+  hypeLandingGain: number;
+  /** Extra share of that gain per consecutive clean landing already in the streak. */
+  hypeStreakBonus: number;
+  /** Flat bonus when the same landing also earned a musicMode accent (sim/music.ts). */
+  hypeMusicBonus: number;
+  /** 1/s: hype fades on its own, so a bare meter is not a permanent buff. */
+  hypeDecayPerSecond: number;
+  /** Share of banked hype a fall costs, on top of resetting the streak. */
+  hypeFallLoss: number;
+  /** controlLatency multiplier at hype 1: the neuromuscular lag shrinks. */
+  hypeControlLatencyMin: number;
+  /** internalMax multiplier at hype 1: more recovery authority to spend. */
+  hypeInternalMaxGain: number;
+  /** angulationLimit multiplier at hype 1: the blade may run a little deeper than the body leans. */
+  hypeAngulationGain: number;
+
   // ── rink ──────────────────────────────────────────────────────────────────
   /**
    * m: the ice at centre ice minus the ice at the side and end boards. Positive
@@ -636,6 +666,17 @@ export const DEFAULT_PARAMS: Params = {
   musicBeatWindow: 0.10,
   musicAccentWindow: 0.08,      // bible §2.1, §2.6
   musicMissedPushScale: 0.45,   // bible §2.6
+
+  hypeMode: 0,
+  hypeLandingGain: 0.12,
+  hypeStreakBonus: 0.15,
+  hypeMusicBonus: 0.05,
+  hypeDecayPerSecond: 0.03,
+  hypeFallLoss: 0.5,
+  hypeControlLatencyMin: 0.7,
+  hypeInternalMaxGain: 1.3,
+  hypeAngulationGain: 1.15,
+
   rinkRelief: 0,
   rinkHalfLength: 30,        // a 60 x 30 m sheet
   rinkHalfWidth: 15,
@@ -746,6 +787,16 @@ export function validate(p: Params): string[] {
     errs.push("musicAccentWindow must be positive and below half a bar, or every landing is an accent");
   if (p.musicMissedPushScale <= 0 || p.musicMissedPushScale >= 1)
     errs.push("musicMissedPushScale is a fraction of a hit, in (0, 1)");
+  if (![0, 1].includes(p.hypeMode)) errs.push("hypeMode is 0 (off) or 1 (hype builds and assists)");
+  if (p.hypeLandingGain < 0) errs.push("hypeLandingGain cannot be negative");
+  if (p.hypeStreakBonus < 0) errs.push("hypeStreakBonus cannot be negative");
+  if (p.hypeMusicBonus < 0) errs.push("hypeMusicBonus cannot be negative");
+  if (p.hypeDecayPerSecond < 0) errs.push("hypeDecayPerSecond cannot be negative");
+  if (p.hypeFallLoss < 0 || p.hypeFallLoss > 1) errs.push("hypeFallLoss is a share of banked hype, 0..1");
+  if (p.hypeControlLatencyMin <= 0 || p.hypeControlLatencyMin > 1)
+    errs.push("hypeControlLatencyMin is a multiplier that shrinks the lag, in (0, 1]");
+  if (p.hypeInternalMaxGain < 1) errs.push("hypeInternalMaxGain cannot reduce recovery authority below its own base");
+  if (p.hypeAngulationGain < 1) errs.push("hypeAngulationGain cannot reduce angulation below its own base");
   if (![0, 1].includes(p.staminaMode)) errs.push("staminaMode is 0 (off) or 1 (the pools drain)");
   if (p.staminaWindTimeDrain < 0) errs.push("staminaWindTimeDrain cannot be negative");
   if (p.staminaWindSpeedDrain < 0) errs.push("staminaWindSpeedDrain cannot be negative");
