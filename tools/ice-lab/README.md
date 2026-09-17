@@ -1178,6 +1178,22 @@ fall drags the mean down rather than being ignored — and `CareerState.award` a
 the same anti-farming gate the medal XP already had: it pays only alongside a genuine medal
 improvement, so replaying an already-earned gold for the bonus alone earns nothing, at any hype or flow.
 
+### Real jump TES and a real spin level reach career scoring too
+
+The same gap, twice more: a career routine's "jump" element was a bare pass/fail
+(`!fall && !stepOut && height > 0.05`), and its "spin" element only asked for one full revolution —
+both ignoring the actual judged numbers sitting right next to them in the free-skate HUD. `Choreography`
+now also takes optional `tables` (`sim/score.ts`) and `spinThresholds` (`sim/spinLevel.ts`) at
+construction, and accumulates `technicalScore` (every jump's real TES landed anywhere in the routine,
+summed — not only one matching the checklist slot) and `bestSpinLevel` (the best ISU level any spin
+performed actually reached) alongside the existing pass/fail checklist, which still gates the element
+order on its own. `CareerState.award` adds `TECHNICAL_XP_PER_POINT` (15) XP per TES point and
+`SPIN_LEVEL_XP` (40) XP per spin level, under the same medal-improvement gate as the hype and flow
+bonus. `game/main.ts` and the Godot bridge's `engine.mjs` both now pass their already-loaded scoring
+tables into every `Choreography` they construct; with neither supplied (data still loading, or a test
+that does not care), both stay 0 — the same graceful degradation the free-skate HUD's own jump scoring
+already has.
+
 ## A spin's level — two features out of ten
 
 `docs/level-features.md` specifies how a spin or step sequence earns its ISU level, 1 to 4 (or B),

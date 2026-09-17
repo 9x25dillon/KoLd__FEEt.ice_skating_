@@ -1,12 +1,25 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX } from "../game/career.ts";
+import { readFileSync } from "node:fs";
+import {
+  CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX, TECHNICAL_XP_PER_POINT, SPIN_LEVEL_XP,
+} from "../game/career.ts";
 import type { CareerEvent, ElementId } from "../game/career.ts";
-import { createState } from "../sim/solver.ts";
+import { createState, step } from "../sim/solver.ts";
 import { GAME_PARAMS } from "../game/controls.ts";
-import { MOVE } from "../sim/types.ts";
+import { MOVE, NEUTRAL_INPUT } from "../sim/types.ts";
+import type { SkatingInput } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
+import { SIM_DT } from "../sim/params.ts";
 import { applyProfile, overall, TIERS } from "../sim/profile.ts";
+import { loadTables } from "../sim/score.ts";
+import { loadSpinFeatureThresholds } from "../sim/spinLevel.ts";
+
+const tables = loadTables(
+  readFileSync(new URL("../../../data/scale-of-values.csv", import.meta.url), "utf8"),
+  readFileSync(new URL("../../../data/calls-and-deductions.csv", import.meta.url), "utf8"));
+const spinThresholds = loadSpinFeatureThresholds(
+  readFileSync(new URL("../../../data/spin-features.json", import.meta.url), "utf8"));
 
 const state = () => createState(GAME_PARAMS, 4.5);
 const program = (...routine: ElementId[]) => new Choreography({ id: "test", title: "Test", venue: "Test", seconds: 30, routine });
@@ -111,6 +124,68 @@ test("hype and flow, averaged over a real routine, bonus career XP only alongsid
   flat.sample(s, false, 3); s.lean = 0.2; flat.sample(s, false, 2); flat.sample(s, true, 2);
   assert.equal(flat.hypeMean, 0); assert.equal(flat.flowMean, 0);
   assert.equal(fresh.award(flat), 3 * 150);
+});
+
+test("real jump TES and spin level bonus career XP, the same anti-farming gate as hype and flow", () => {
+  const c = new Choreography(CAREER_EVENTS[0], tables, spinThresholds);
+  c.technicalScore = 5.5; c.bestSpinLevel = 2;
+  c.index = CAREER_EVENTS[0].routine.length; // finish() 's own shortcut, for the award math alone
+  assert.equal(c.medal, 3);
+
+  const cs = new CareerState();
+  const earned = cs.award(c);
+  assert.equal(earned, 3 * 150 + Math.round(TECHNICAL_XP_PER_POINT * 5.5) + SPIN_LEVEL_XP * 2);
+
+  // No medal improvement the second time: no technical or spin bonus either,
+  // even though both are still sitting at their full values.
+  const c2 = new Choreography(CAREER_EVENTS[0], tables, spinThresholds);
+  c2.technicalScore = 5.5; c2.bestSpinLevel = 2; c2.index = CAREER_EVENTS[0].routine.length;
+  assert.equal(cs.award(c2), 0);
+});
+
+test("technicalScore and bestSpinLevel accumulate from real physics, not just the checklist", () => {
+  // CAREER_EVENTS[3] ("regional"): glide, edge, jump, spin, pose. Only the
+  // jump and spin matter here; sample() is driven directly rather than
+  // through a full clean run of every element.
+  const c = new Choreography(CAREER_EVENTS[3], tables, spinThresholds);
+  const s = createState(GAME_PARAMS, -5);
+
+  // A real, identified toe loop — test/jump.test.ts's own "a perfect toe
+  // loop with a full whip and a tuck is a clean triple" recipe (backward
+  // entry, lean -0.25, toe pick, full whip), so `kind` is a real jump and
+  // score.ts's jumpValue does not return null for it.
+  for (let i = 0; i < 600 && s.jump.phase !== JUMP_PHASE.Air; i++) {
+    const loading = i >= 180 && i < 216;
+    const input: SkatingInput = { ...NEUTRAL_INPUT, lean: -0.25, weight: 1,
+      knee: loading ? 0.95 : i >= 216 && i < 219 ? 0 : i >= 216 ? 0.8 : 0.35,
+      carriage: loading || i === 216 ? 1 : 0, toe: i === 214 };
+    step(s, input, GAME_PARAMS, SIM_DT, []);
+    c.sample(s, false, SIM_DT);
+  }
+  for (let i = 0; i < 200 && s.jump.phase === JUMP_PHASE.Air; i++) {
+    step(s, { ...NEUTRAL_INPUT, lean: 0, weight: 1, knee: 0.8, carriage: 0 }, GAME_PARAMS, SIM_DT, []);
+    c.sample(s, false, SIM_DT);
+  }
+  assert.ok(s.landed.tick >= 0, "must actually have landed");
+  assert.ok(c.technicalScore > 0, `a real landing must score real TES, got ${c.technicalScore}`);
+
+  // A fresh skater for the spin: Choreography's own bookkeeping (falls,
+  // landings, spin tracking) lives on `c`, not on any one SkaterState, so a
+  // second skater mid-routine is exactly as legitimate as the first —
+  // without untangling whatever the jump's own fall left in `s.legs`,
+  // `s.wind` and `pEff`, which is not what this test is about.
+  const spinner = createState(GAME_PARAMS, 4.5);
+  for (let i = 0; i < 240; i++) {
+    step(spinner, { ...NEUTRAL_INPUT, weight: 0, lean: 0.3, knee: 0.45 }, GAME_PARAMS, SIM_DT, []);
+    c.sample(spinner, false, SIM_DT);
+  }
+  for (let i = 0; i < 300; i++) {
+    step(spinner, { ...NEUTRAL_INPUT, weight: 0, knee: 0.45, carriage: i < 150 ? 1 : 0, spin: true }, GAME_PARAMS, SIM_DT, []);
+    c.sample(spinner, false, SIM_DT);
+  }
+  step(spinner, { ...NEUTRAL_INPUT, weight: 0, knee: 0.45, spin: false }, GAME_PARAMS, SIM_DT, []); // release
+  c.sample(spinner, false, SIM_DT);
+  assert.ok(c.bestSpinLevel > 0, `a real spin must reach a real level, got ${c.bestSpinLevel}`);
 });
 
 test("stats gate progression independent of medals: a neutral profile holds at regionals", () => {

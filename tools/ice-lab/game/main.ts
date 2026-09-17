@@ -119,7 +119,7 @@ el("record").textContent = `Personal best · ${best.toLocaleString()} pts`;
 function start() {
   params = applyProfile(beginner ? BEGINNER_PARAMS : GAME_PARAMS, careerMode ? career.profile : SAMPLE_PROFILES[profileIndex]);
   applyTrack(params);
-  choreography = careerMode ? new Choreography(CAREER_EVENTS[careerEvent]) : null;
+  choreography = careerMode ? new Choreography(CAREER_EVENTS[careerEvent], tables ?? undefined, spinThresholds ?? undefined) : null;
   document.body.dataset.career = String(careerMode);
   el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : "ON THE ICE / PRACTICE";
   renderRoutine();

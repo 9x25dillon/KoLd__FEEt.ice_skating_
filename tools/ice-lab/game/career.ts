@@ -3,6 +3,10 @@ import type { SkaterState } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import { makeProfile, train, xpToRaise, STAT_NAMES, overall, TIERS } from "../sim/profile.ts";
 import type { SkaterProfile, StatName } from "../sim/profile.ts";
+import { scoreJump } from "../sim/score.ts";
+import type { ScoreTables } from "../sim/score.ts";
+import { SpinLevelTracker, scoreSpinLevel } from "../sim/spinLevel.ts";
+import type { SpinFeatureThresholds } from "../sim/spinLevel.ts";
 
 export const ELEMENTS = {
   glide: { title: "Opening glide", hint: "Hold Space / A to push. Glide upright above 3 m/s for 3 seconds.", duration: 3 },
@@ -25,6 +29,12 @@ export const MEDALS = ["Unplayed", "Bronze", "Silver", "Gold"] as const;
 /** XP each of hypeMean and flowMean can add at 1.0, on top of a medal's own 150 — the operator's
  *  bridge, made a number: a routine skated with sustained hype and flow can be worth as much again. */
 export const HYPE_FLOW_BONUS_MAX = 75;
+/** XP per point of real jump TES (sim/score.ts) landed anywhere in the routine — not just a
+ *  pass/fail check on the "jump" element, the judged score itself. */
+export const TECHNICAL_XP_PER_POINT = 15;
+/** XP per ISU level (sim/spinLevel.ts) the best spin performed in the routine actually reached.
+ *  That scorer's own honest ceiling is 2, so this XP tops out at SPIN_LEVEL_XP * 2. */
+export const SPIN_LEVEL_XP = 40;
 
 /** Ordered choreography reads live solver results; no input press earns a move. */
 export class Choreography {
@@ -48,7 +58,24 @@ export class Choreography {
   private hypeSum = 0;
   private flowSum = 0;
   private samples = 0;
-  constructor(event: CareerEvent) { this.event = event; }
+  private tables?: ScoreTables;
+  private spinThresholds?: SpinFeatureThresholds;
+  private spinTracker = new SpinLevelTracker();
+  private wasSpinning = false;
+  /**
+   * The real judged numbers, not the pass/fail checklist below: every jump's
+   * actual TES (sim/score.ts) landed anywhere in the routine, summed, and
+   * the best ISU level (sim/spinLevel.ts) any spin performed actually
+   * reached. Both are 0 if `tables`/`spinThresholds` were never supplied —
+   * the same graceful-degradation the free-skate HUD already has when the
+   * scoring data fails to load — and CareerState.award reads both for a
+   * bonus on top of the medal; they do nothing on their own.
+   */
+  technicalScore = 0;
+  bestSpinLevel = 0;
+  constructor(event: CareerEvent, tables?: ScoreTables, spinThresholds?: SpinFeatureThresholds) {
+    this.event = event; this.tables = tables; this.spinThresholds = spinThresholds;
+  }
   get complete() { return this.index === this.event.routine.length; }
   get done() { return this.complete || this.elapsed >= this.event.seconds; }
   get seconds() { return Math.max(0, this.event.seconds - this.elapsed); }
@@ -62,9 +89,23 @@ export class Choreography {
     this.hypeSum += s.hype; this.flowSum += s.flow; this.samples++;
     const freshLanding = s.landed.tick >= 0 && s.landed.tick !== this.lastLanding;
     this.lastLanding = s.landed.tick;
+    if (freshLanding && this.tables) this.technicalScore += scoreJump(this.tables, s.landed)?.score ?? 0;
     if (s.fallen && !this.wasFallen) this.falls++;
     this.wasFallen = s.fallen;
-    const swept = s.move === MOVE.Spin ? s.spin.swept : 0;
+    // Every spin in the routine, not only one in the "spin" slot — a program
+    // is judged on what was actually skated, and spinProgress below still
+    // gates the element checklist on its own.
+    const spinningNow = s.move === MOVE.Spin;
+    if (spinningNow) this.spinTracker.sample(s.spin);
+    else if (this.wasSpinning) {
+      const segments = this.spinTracker.finish();
+      if (this.spinThresholds) {
+        this.bestSpinLevel = Math.max(this.bestSpinLevel, scoreSpinLevel(segments, this.spinThresholds).level);
+      }
+      this.spinTracker.reset();
+    }
+    this.wasSpinning = spinningNow;
+    const swept = spinningNow ? s.spin.swept : 0;
     const spinDelta = Math.max(0, swept - this.lastSpin);
     this.lastSpin = swept;
     if (this.done || s.fallen) { this.held = 0; this.spinProgress = 0; return; }
@@ -120,11 +161,12 @@ export class CareerState {
     const i = CAREER_EVENTS.indexOf(routine.event);
     if (i < 0 || i > this.unlocked || !routine.done) return 0;
     const improved = Math.max(0, routine.medal - this.medals[i]);
-    // Hype and flow only pay out alongside a genuine medal improvement — the
+    // Every bonus only pays out alongside a genuine medal improvement — the
     // same anti-farming gate the medal XP itself already has, so a repeat of
     // an already-earned medal cannot be replayed purely for the bonus.
     const bonus = improved > 0
       ? Math.round(HYPE_FLOW_BONUS_MAX * routine.hypeMean) + Math.round(HYPE_FLOW_BONUS_MAX * routine.flowMean)
+        + Math.round(TECHNICAL_XP_PER_POINT * routine.technicalScore) + SPIN_LEVEL_XP * routine.bestSpinLevel
       : 0;
     const earned = improved * 150 + bonus;
     this.medals[i] = Math.max(this.medals[i], routine.medal);
