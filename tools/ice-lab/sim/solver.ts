@@ -324,7 +324,8 @@ export function step(
   if (turning) {
     pivot = s.move === MOVE.Turn ? turnPivot(s, p, dt, weightR)
       : s.move === MOVE.Twizzle ? twizzleTick(s, p, dt, leanCmd, axis(input.carriage, 0), input.twizzle === true)
-        : spinTick(s, pFatigue, dt, knee, axis(input.pitch, 0), axis(input.carriage, 0), input.spin === true);
+        : spinTick(s, pFatigue, dt, knee, axis(input.pitch, 0), axis(input.carriage, 0), input.spin === true,
+            axis(input.lean, 0));
     latForceTotal = pivot.lat * p.mass;
     // A sit position, held: bible §2.8's "low spin positions" drain Legs.
     if (staminaOn && s.move === MOVE.Spin && knee >= p.spinSitKnee)

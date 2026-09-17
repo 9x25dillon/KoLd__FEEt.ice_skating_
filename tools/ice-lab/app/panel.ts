@@ -107,6 +107,11 @@ const GROUPS: Array<{ title: string; note: string; sliders: Slider[] }> = [
       { key: "movesMode", label: "0 carve only · 1 moves", min: 0, max: 1, step: 1 },
       { key: "crossoverLean", label: "crossover above lean", min: 0.07, max: 0.6, step: 0.005, deg: true },
       { key: "backPushScale", label: "backward push ×", min: 0.5, max: 1, step: 0.01 },
+      { key: "spinReverseStick", label: "spin reversal · stick threshold", min: 0.1, max: 1, step: 0.01,
+        note: "Held opposite the spin's own direction, past this, checks it — data/spin-features.json's both_directions." },
+      { key: "spinReverseRate", label: "spin reversal · check rate", min: 0.1, max: 6, step: 0.05 },
+      { key: "spinReverseFloor", label: "spin reversal · flips near", min: 0.1, max: 5, step: 0.05 },
+      { key: "spinReverseRegen", label: "spin reversal · regenerates to", min: 5, max: 45, step: 0.5 },
     ],
   },
   {

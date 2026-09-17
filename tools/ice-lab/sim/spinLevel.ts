@@ -1,5 +1,5 @@
-// tools/ice-lab/sim/spinLevel.ts — a spin's ISU level, from the two features
-// this reduced-order model can actually observe.
+// tools/ice-lab/sim/spinLevel.ts — a spin's ISU level, from the three
+// features this reduced-order model can actually observe.
 //
 // docs/level-features.md specifies ten features across two kinds: DECLARED
 // (an authored asset says a position, entry or exit is difficult; the
@@ -14,63 +14,81 @@
 // (SPIN_POSITION: upright, sit, camel) — not a catalogue of named variations
 // with a reference pose to check a skater's own joints against.
 //
-// Of the seven OBSERVED features, five need a mechanic this rig does not
-// have either:
+// Of the seven OBSERVED features, four still need a mechanic this rig does
+// not have:
 //   - change_foot_by_jump, difficult_change_of_foot, all_three_positions_
 //     second_foot need a combination spin with a foot change mid-element.
 //     spinStart sets `Sp.foot` once; spinTick never reassigns it. There is
 //     no second foot to change to.
 //   - jump_within_spin needs a small jump mid-spin that resumes spinning.
 //     The jump and spin systems do not compose that way.
-//   - both_directions needs reversing rotation direction mid-spin. `Sp.dir`
-//     is set once at entry (sim/moves.ts `spinStart`) and never reassigned;
-//     there is no input that flips it.
 // change_of_edge is not merely unbuilt: in this model a spin's blade tilt is
 // `-Sp.dir * SPIN_EDGE` (sim/moves.ts `spinTick`), so edge sign IS rotation
 // direction here, not an independent quantity. "Change of edge without
 // changing direction" is not a state this model can ever be in; scoring it
 // separately from both_directions would double-count the same event.
 //
-// That leaves exactly two: `increase_of_speed` and
-// `eight_revolutions_no_change`. Both read state sim/moves.ts's spinTick
-// already keeps (segRevs, segOmegaMin/Max, position) — but only for the
-// CURRENT segment, overwritten the moment position changes. SpinLevelTracker
-// rebuilds the doc's own "list of segments" (§2) as a small history, sampled
-// once per tick, so earlier segments survive long enough to be scored.
+// both_directions is no longer on that list. sim/moves.ts's spinTick reverses
+// Sp.dir on a held, opposing stick, exactly the way the data's own note says
+// a real one works: "killing all angular momentum and regenerating it in the
+// opposite sense... the simulation gets this almost for free: the sign of L
+// flips." SpinLevelTracker below now splits a segment on a direction change
+// too, not only a position change, so the two post-flip segments — each
+// needing `min_revolutions_each_direction`, both in sit or camel — are there
+// to find.
 //
-// A level built from two of ten features tops out at 2, never 4 — an honest
-// ceiling, not a bug. Levels 3 and 4 need the combination-spin and
-// direction-reversal mechanics above; this file is not a substitute for
-// building those, and does not pretend otherwise.
+// That leaves three: `increase_of_speed`, `eight_revolutions_no_change`, and
+// `both_directions`. All three read state sim/moves.ts's spinTick already
+// keeps (segRevs, segOmegaMin/Max, position, dir) — but only for the CURRENT
+// segment, overwritten the moment it ends. SpinLevelTracker rebuilds the
+// doc's own "list of segments" (§2) as a small history, sampled once per
+// tick, so earlier segments survive long enough to be scored.
+//
+// A level built from three of ten features tops out at 3, not 4 — an honest
+// ceiling, not a bug. Level 4 needs the combination-spin mechanic above;
+// this file is not a substitute for building it, and does not pretend
+// otherwise.
 
+import { SPIN_POSITION } from "./types.ts";
 import type { SpinState } from "./types.ts";
 
 export interface SpinSegment {
   /** SPIN_POSITION: 0 upright, 1 sit, 2 camel. */
   position: number;
+  /** +1 anticlockwise, -1 clockwise (SpinState.dir) — the segment's own direction throughout. */
+  dir: number;
   revolutions: number;
   omegaMin: number;
   omegaMax: number;
 }
 
-/** Rebuilds the segment list spinTick's own fields overwrite as they go. */
+/**
+ * Rebuilds the segment list spinTick's own fields overwrite as they go. A
+ * segment boundary is a position change or a direction reversal — the same
+ * two conditions spinTick itself resets segRevs/segOmegaMin/Max on, so this
+ * tracker's split stays in lockstep with what those fields actually mean
+ * tick to tick.
+ */
 export class SpinLevelTracker {
   readonly segments: SpinSegment[] = [];
   private cur: SpinSegment | null = null;
   private lastPosition = -1;
+  private lastDir = 0;
 
   reset(): void {
     this.segments.length = 0;
     this.cur = null;
     this.lastPosition = -1;
+    this.lastDir = 0;
   }
 
   /** Once per tick, only while `s.move === MOVE.Spin`. */
   sample(spin: SpinState): void {
-    if (spin.position !== this.lastPosition) {
+    if (spin.position !== this.lastPosition || spin.dir !== this.lastDir) {
       if (this.cur) this.segments.push(this.cur);
-      this.cur = { position: spin.position, revolutions: 0, omegaMin: spin.omega, omegaMax: spin.omega };
+      this.cur = { position: spin.position, dir: spin.dir, revolutions: 0, omegaMin: spin.omega, omegaMax: spin.omega };
       this.lastPosition = spin.position;
+      this.lastDir = spin.dir;
     }
     const seg = this.cur as SpinSegment;
     seg.revolutions = spin.segRevs;
@@ -93,10 +111,12 @@ export interface SpinFeatureThresholds {
   maxSpeedFeatures: number;
   /** spin.eight_revolutions_no_change: min_revolutions. */
   longSegmentMinRevolutions: number;
+  /** spin.both_directions: min_revolutions_each_direction. */
+  reverseMinRevolutions: number;
 }
 
 /**
- * Reads only the two features this file can score out of `spin-features.json`
+ * Reads only the three features this file can score out of `spin-features.json`
  * (Convention 3.2, sim/score.ts: scoring is data, never code). Every other
  * feature in that file is real and deliberately left unparsed — see the
  * header above for why each one is out of reach.
@@ -109,7 +129,8 @@ export function loadSpinFeatureThresholds(json: string): SpinFeatureThresholds {
   const find = (id: string) => data.features!.find((f) => f.id === id);
   const speed = find("spin.increase_of_speed");
   const long = find("spin.eight_revolutions_no_change");
-  if (!speed || !long) throw new Error("spin-features.json: missing a feature this scorer reads");
+  const reverse = find("spin.both_directions");
+  if (!speed || !long || !reverse) throw new Error("spin-features.json: missing a feature this scorer reads");
   const num = (v: unknown, what: string): number => {
     if (typeof v !== "number" || !Number.isFinite(v)) throw new Error(`${what}: not a finite number`);
     return v;
@@ -119,15 +140,39 @@ export function loadSpinFeatureThresholds(json: string): SpinFeatureThresholds {
     speedMinRevolutions: num(speed.requires?.sustained_revolutions, "spin.increase_of_speed.requires.sustained_revolutions"),
     maxSpeedFeatures: num(speed.max_per_element, "spin.increase_of_speed.max_per_element"),
     longSegmentMinRevolutions: num(long.requires?.min_revolutions, "spin.eight_revolutions_no_change.requires.min_revolutions"),
+    reverseMinRevolutions: num(reverse.requires?.min_revolutions_each_direction, "spin.both_directions.requires.min_revolutions_each_direction"),
   };
 }
 
 export interface SpinLevelResult {
-  /** 0 is level B. Capped at 4 by definition, though this scorer alone never exceeds 2. */
+  /** 0 is level B. Capped at 4 by definition, though this scorer alone never exceeds 3. */
   level: number;
   /** Distinct basic positions that earned the speed feature, in the order reached, up to maxSpeedFeatures. */
   speedPositions: number[];
   eightRevolutions: boolean;
+  /** spin.both_directions: a reversal with reverseMinRevolutions on each side, both in sit or camel. */
+  bothDirections: boolean;
+}
+
+const SIT_OR_CAMEL = new Set<number>([SPIN_POSITION.Sit, SPIN_POSITION.Camel]);
+
+/**
+ * A direction change is always a segment boundary (SpinLevelTracker), so any
+ * pair of ADJACENT segments with opposite `dir` is the whole reversal — there
+ * is no same-direction segment that could sit between them. `max_gap_s` from
+ * the data is not checked: this model's reversal never leaves MOVE.Spin, so
+ * two segments from one tracker are, by construction, "immediately
+ * following" — the gap the data is guarding against cannot arise here.
+ */
+function hasReversal(segments: readonly SpinSegment[], minRevEach: number): boolean {
+  for (let i = 1; i < segments.length; i++) {
+    const a = segments[i - 1], b = segments[i];
+    if (a.dir === b.dir) continue;
+    if (a.revolutions < minRevEach || b.revolutions < minRevEach) continue;
+    if (!SIT_OR_CAMEL.has(a.position) || !SIT_OR_CAMEL.has(b.position)) continue;
+    return true;
+  }
+  return false;
 }
 
 /** Pure: the same segment list always scores the same result. */
@@ -141,6 +186,7 @@ export function scoreSpinLevel(segments: readonly SpinSegment[], t: SpinFeatureT
     if (seg.omegaMax / seg.omegaMin >= t.speedRatioMin) { speedPositions.push(seg.position); seen.add(seg.position); }
   }
   const eightRevolutions = segments.some((s) => s.revolutions >= t.longSegmentMinRevolutions);
-  const level = Math.min(speedPositions.length + (eightRevolutions ? 1 : 0), 4);
-  return { level, speedPositions, eightRevolutions };
+  const bothDirections = hasReversal(segments, t.reverseMinRevolutions);
+  const level = Math.min(speedPositions.length + (eightRevolutions ? 1 : 0) + (bothDirections ? 1 : 0), 4);
+  return { level, speedPositions, eightRevolutions, bothDirections };
 }

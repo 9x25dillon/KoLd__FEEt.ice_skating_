@@ -135,7 +135,21 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       field and event on every tick; the fixture was re-recorded from
 //       its own inputs only to carry the new keys. /12 clips no longer
 //       load; verify one against a checkout of 8686590.
-export const REPLAY_SOLVER = "ice-lab-f64/13";
+//   /14 Mid-spin direction reversal (data/spin-features.json's
+//       both_directions, `sim/moves.ts` spinTick): Params gained four
+//       levers, no SkaterState change. Unlike every bump above, this is not
+//       guarded by a brand-new Mode flag at 0 — it lives under the existing
+//       `movesMode`, which some clips (any live game session) already carry
+//       at 1. A clip is only affected if it also drives an actual spin with
+//       `input.lean` held opposite `Sp.dir` past `spinReverseStick`
+//       (0.6) for long enough to check it — verified false for the
+//       committed fixture directly (movesMode 0, and no frame ever presses
+//       `spin` at all), so its 240 digests are byte-identical before and
+//       after this bump; only `initial.params` grew the four new keys. A
+//       clip that DOES do this will diverge under /14 and must be
+//       re-recorded; there is no way to detect that case generically, the
+//       same as every other kinematic change a version bump ever covers.
+export const REPLAY_SOLVER = "ice-lab-f64/14";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

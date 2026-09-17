@@ -622,6 +622,18 @@ project design data**, so every level is L2 at best.
   - Fixed by: `SPIN_EDGE` from close footage of the spinning blade. The other two feed the classifier
     and the settle, and have no observable.
 
+- **`spinReverseStick`**, **`spinReverseRate`**, **`spinReverseFloor`**, **`spinReverseRegen`** —
+  data/spin-features.json's `both_directions`: a held, opposing stick checks the spin, then flips
+  and regenerates it
+  - Value: `0.6` (stick, 0..1), `1.5` /s, `0.5` kg·m²/s, `25.0` kg·m²/s
+  - Used: `moves.ts` `spinTick`
+  - Level: L3 — chosen to be reachable and to feel deliberate in this rig's own test
+    (`test/spin.test.ts`: a held check takes about 2.3 s against a typical entry), not measured
+    against footage of a real reversal
+  - Range: none recorded
+  - Fixed by: no observable class fits a mid-element direction reversal at all; §11's own list of
+    physically-derived constants does not cover this either. Left open rather than claimed L2.
+
 ### Ina Bauer
 
 - **`inaBauerScrub`**, **`inaBauerDrag`**, **`inaBauerMinSpeed`**

@@ -1230,7 +1230,7 @@ tables into every `Choreography` they construct; with neither supplied (data sti
 that does not care), both stay 0 — the same graceful degradation the free-skate HUD's own jump scoring
 already has.
 
-## A spin's level — two features out of ten
+## A spin's level — three features out of ten
 
 `docs/level-features.md` specifies how a spin or step sequence earns its ISU level, 1 to 4 (or B),
 from **declared** features (an authored asset says a position, entry or exit is difficult; the
@@ -1243,40 +1243,69 @@ representation — design-bible.md §3.1 is explicit that the sim is a reduced-o
 reads it — and a spin's position is exactly three values (`SPIN_POSITION`: upright, sit, camel), not a
 catalogue of named variations with a reference pose to check a skater's own joints against.
 
-**Five of the seven observed features need a mechanic this rig does not have either.**
+**Four of the seven observed features still need a mechanic this rig does not have.**
 `change_foot_by_jump`, `difficult_change_of_foot` and `all_three_positions_second_foot` all need a
 combination spin with a foot change mid-element — `spinStart` sets the spinning foot once and
 `spinTick` never reassigns it. `jump_within_spin` needs a small jump mid-spin that resumes spinning,
-which the jump and spin systems do not compose into. `both_directions` needs reversing rotation
-direction mid-spin; `Sp.dir` is set once at entry and never reassigned — there is no input that flips
-it. `change_of_edge` is not merely unbuilt: in this model a spin's blade tilt is `-Sp.dir * SPIN_EDGE`,
-so edge sign **is** rotation direction here, not an independent quantity — scoring it apart from
-`both_directions` would double-count the same event.
+which the jump and spin systems do not compose into. `change_of_edge` is not merely unbuilt: in this
+model a spin's blade tilt is `-Sp.dir * SPIN_EDGE`, so edge sign **is** rotation direction here, not an
+independent quantity — scoring it apart from `both_directions` (below) would double-count the same
+event.
 
-**That leaves two:** `increase_of_speed` (the ratio of peak to trough angular velocity within one
+**That leaves three:** `increase_of_speed` (the ratio of peak to trough angular velocity within one
 held position, at least 1.30× over at least 2 revolutions — "emerges naturally from the player pulling
 in: ω = L / I", the doc's own words, and the same physics `test/spin.test.ts`'s "a camel is slow and
-an upright fast" case already measures) and `eight_revolutions_no_change` (a single unbroken segment
-of 8 or more revolutions). Both are real ISU features, read straight from `data/spin-features.json`
-(never hardcoded — the same "scoring is data" convention `sim/score.ts` already follows) rather than
-authored numbers, so a rules update to that file moves the thresholds without a code change.
+an upright fast" case already measures), `eight_revolutions_no_change` (a single unbroken segment of 8
+or more revolutions), and — added 2026-09-17 — `both_directions`, described below. All three are real
+ISU features, read straight from `data/spin-features.json` (never hardcoded — the same "scoring is
+data" convention `sim/score.ts` already follows) rather than authored numbers, so a rules update to
+that file moves the thresholds without a code change.
 
 `sim/moves.ts`'s own `SpinState` only keeps the **current** segment's stats, overwritten the moment
-position changes — enough for its own purposes, not enough to score a whole spin afterward.
-`SpinLevelTracker` rebuilds the doc's own "list of segments" (§2) as a small external history, sampled
-once per tick by the caller; `scoreSpinLevel` is then pure, the same segment list always scoring the
-same result. Wired into `game/main.ts`: every tick of a live spin is sampled, and the moment it ends —
-released or fallen, either way `s.move` leaves `MOVE.Spin` — the level is scored and shown
-(`Last spin: level N`). Verified in the actual game via headless Chromium: a real held spin, entered
-with the arms out and pulled in mid-hold, scored **level 2** — both features, for real, from physics
-alone.
+position (or, now, direction) changes — enough for its own purposes, not enough to score a whole spin
+afterward. `SpinLevelTracker` rebuilds the doc's own "list of segments" (§2) as a small external
+history, sampled once per tick by the caller; `scoreSpinLevel` is then pure, the same segment list
+always scoring the same result. Wired into `game/main.ts`: every tick of a live spin is sampled, and
+the moment it ends — released or fallen, either way `s.move` leaves `MOVE.Spin` — the level is scored
+and shown (`Last spin: level N`). `games/ice-run-godot/bridge/engine.mjs` tracks the same thing live
+(`spinLevel` in its snapshot, added the same session as the Godot HUD label that reads it) — both paths
+share `sim/spinLevel.ts`, so a rules change or a new feature reaches both at once.
 
-**A level built from two of ten features tops out at 2, never 4 — an honest ceiling, not a bug.**
-Levels 3 and 4 need the combination-spin and direction-reversal mechanics above; `sim/spinLevel.ts` is
-not a substitute for building those, and its own header says so. Not wired into
-`games/ice-run-godot/bridge/engine.mjs`: unlike the ice grid, this is a pure read-only analysis over
-already-recorded state — it never touches `SkaterState` or `Params` — so there is no replay-determinism
-risk in leaving it browser-only for now.
+### `both_directions`, and the reversal mechanic that makes it reachable
+
+data/spin-features.json's own note on this feature: *"Rare and spectacular. Physically this requires
+killing all angular momentum and regenerating it in the opposite sense, so the simulation gets this
+almost for free: the sign of L flips."* `sim/moves.ts`'s `spinTick` does close to exactly that. Held
+lean opposite `Sp.dir`, past `spinReverseStick` (a raw stick threshold, not a body-lean angle), checks
+the spin: extra angular-momentum decay (`spinReverseRate`) on top of the ordinary kind, gated so a
+stick that is merely imprecise or off-centre costs nothing at all. Checked down to near zero
+(`spinReverseFloor`), the direction flips and regenerates (`spinReverseRegen`, scaled by how hard the
+check was held) — a fresh segment starts right there, the same as a position change already does, so
+the pre-flip revolutions cannot bleed into the new direction's count.
+
+**The one real wrinkle:** the spin's ordinary "too slow, check out by itself" exit
+(`Sp.omega < spinMinOmega`) would otherwise fire during the deliberate near-zero dip a check *is* —
+the whole move would just end instead of reversing. Held off for exactly as long as an active check is
+in progress (`against >= spinReverseStick`), and for no other reason, so a released or failed check
+still ends the spin normally, exactly as it always did.
+
+**Verified three ways.** `test/spin.test.ts`: a held check flips `Sp.dir`, a released one does not, and
+a light push under the threshold changes nothing measurable — bounds-checked with a real driven spin,
+not hand-fed state. `test/spinLevel.test.ts`: `scoreSpinLevel` finds a reversal only across adjacent
+segments (a direction change is always a segment boundary, so there is no other kind of pair to check),
+only with `min_revolutions_each_direction` on both sides, only in sit or camel — and a full physics run,
+driven the way a player would drive it, reaches **level 3** end to end. Verified live in the browser
+too, with Playwright: carve into a spin, watch the HUD's direction arrow (↺/↻), hold the opposite stick
+for about two seconds, watch it flip mid-spin, let the new direction run out — `LAST RFO spin 18.8 rev,
+best 12.7 in one position` on check-out, no console errors either side of the flip.
+
+**A level built from three of ten features tops out at 3, not 4 — an honest ceiling, not a bug.** Level
+4 needs the combination-spin mechanic above; `sim/spinLevel.ts` is not a substitute for building it, and
+its own header still says so. Replay contract `/14` (`sim/replay.ts`): Params gained the four levers
+above, `SkaterState` unchanged. Unlike every bump before it this is not guarded by a brand-new Mode flag
+at 0 — it lives under the existing `movesMode`, which live game sessions already carry at 1 — so a clip
+is only affected if it also drives a real reversal; the committed fixture never enables moves at all,
+confirmed directly rather than assumed, so its 240 digests are untouched and only `initial.params` grew.
 
 ## What a session measures
 

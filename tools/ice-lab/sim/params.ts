@@ -355,6 +355,21 @@ export interface Params {
   /** Knee at or above which a spin is a sit, and stick forward at or above which a camel. */
   spinSitKnee: number;
   spinCamelPitch: number;
+  // ── mid-spin direction reversal ──────────────────────────────────────────
+  // data/spin-features.json's spin.both_directions, "rare and spectacular...
+  // physically this requires killing all angular momentum and regenerating it
+  // in the opposite sense, so the simulation gets this almost for free: the
+  // sign of L flips." Held lean opposite Sp.dir, past spinReverseStick, drains
+  // angMomentum on top of the ordinary decay; once it is checked to near zero
+  // the direction flips and regenerates, scaled by how hard the stick is held.
+  /** 0..1, the held-stick threshold (raw axis, not radians) that starts a check. */
+  spinReverseStick: number;
+  /** Extra 1/s of angMomentum decay at full opposition (spinReverseStick's own scale, 0..1). */
+  spinReverseRate: number;
+  /** angMomentum at or below which a sustained check flips Sp.dir. Near zero: spinMinOmega's own too-slow exit is held off while against is past spinReverseStick, so this does not have to compete with it. */
+  spinReverseFloor: number;
+  /** angMomentum the flip regenerates, at full opposition — comparable to a fresh entry's own. */
+  spinReverseRegen: number;
   /** m/s an Ina Bauer needs: it is a glide, and a slow one falls over. */
   inaBauerMinSpeed: number;
   /**
@@ -662,6 +677,10 @@ export const DEFAULT_PARAMS: Params = {
   spinExitSpeed: 2.0,
   spinSitKnee: 0.6,
   spinCamelPitch: 0.5,
+  spinReverseStick: 0.6,
+  spinReverseRate: 1.5,      // measured: kills a typical entry L in under 2 s of held opposition
+  spinReverseFloor: 0.5,     // near-zero: the too-slow exit is held off while a check is in progress
+  spinReverseRegen: 25.0,    // a fresh spin's own entry L is roughly 17-40 across spinMinSpeed..5 m/s
   inaBauerMinSpeed: 2.0,
   inaBauerDrag: 2.0,
   inaBauerScrub: 0.13,
@@ -799,6 +818,10 @@ export function validate(p: Params): string[] {
   if (p.spinTravelKeep > 1) errs.push("spinTravelKeep is a share of the entry velocity, 0..1");
   if (p.spinTravelTime <= 0) errs.push("spinTravelTime must be positive");
   if (p.spinMinSpeed <= 0) errs.push("spinMinSpeed must be positive: a spin from a standstill has no angular momentum");
+  if (p.spinReverseStick <= 0 || p.spinReverseStick > 1) errs.push("spinReverseStick is a stick threshold, in (0, 1]");
+  if (p.spinReverseRate <= 0) errs.push("spinReverseRate must be positive: a reversal has to actually check the spin");
+  if (p.spinReverseFloor <= 0) errs.push("spinReverseFloor must be positive: angMomentum decays toward it, never past zero");
+  if (p.spinReverseRegen <= 0) errs.push("spinReverseRegen must be positive: the flip has to regenerate real momentum");
   if (p.inaBauerDrag < 1) errs.push("inaBauerDrag multiplies the upright drag area: a side-on body has more, not less");
   if (p.jumpSpeedShare > 1) errs.push("jumpSpeedShare is a share of the lift, 0..1");
   if (p.backPushScale <= 0 || p.backPushScale > 1)

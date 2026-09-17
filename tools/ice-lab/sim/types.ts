@@ -189,7 +189,7 @@ export interface SpinState {
   t: number;
   /** +1 anticlockwise, -1 clockwise. */
   dir: number;
-  /** kg m^2 / s, a magnitude; only friction and travel take it away. */
+  /** kg m^2 / s, a magnitude; friction and travel take it away, a held reversal checks and regenerates it. */
   angMomentum: number;
   /** kg m^2 about the vertical now: the position's scale on the arms' reach. */
   inertia: number;
