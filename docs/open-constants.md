@@ -710,7 +710,8 @@ their absence above is deliberate.
 - **Skater stats**, `profile.ts` `STAT_EFFECTS`. Cases hold every stat at the neutral 50, which bakes
   to the preset bit for bit. Spans at 0 and 100: `strokePower` 0.70–1.30, `jumpImpulse` 0.82–1.18,
   `inertiaPullRate` 0.80–1.20, `angulationLimit` 0.75–1.35, `controlLatency` 1.40–0.60, `balanceKd`
-  0.80–1.30, `internalGain` 0.80–1.25. Also the curve shape (t<sup>0.75</sup> above 50).
+  0.80–1.30, `internalGain` 0.80–1.25, `staminaWindTimeDrain` 1.5–0.5, `staminaLegsPerPush` 1.5–0.5.
+  Also the curve shape (t<sup>0.75</sup> above 50).
 - **Blade wear**, `profile.ts`: `SHARPNESS_FRESH` 1.05, `SHARPNESS_DULL` 0.80, `BLADE_LIFE_HOURS` 20.
   The reference wear bakes to `sharpness` 1.0.
 - **Career**, `profile.ts`: `XP_BASE` 10, `XP_QUAD` 0.04, `XP_PER_LEVEL` 25, level weights, tier floors
@@ -722,3 +723,98 @@ their absence above is deliberate.
 
 If any of these starts affecting a case — for example, if the gate begins testing a non-reference
 skater — it moves up into the sections above.
+
+---
+
+## 13 · Stamina
+
+`sim/solver.ts`'s `staminaMode`, design-bible.md §2.8. All fourteen are inert at `staminaMode` 0 (every
+preset), the way section 8's moves levers are at `movesMode` 0. Only one is sourced; the rest are L2/L3,
+first-pass-calibrated against the scenarios in `test/stamina.test.ts` rather than measured.
+
+- **`staminaLegsPerPush`** — Legs lost per push, scaled by knee depth
+  - Value: `0.011`
+  - Used: `solver.ts` §1b, once per push
+  - Level: **L1** — taken directly, not authored
+  - Range: none recorded
+  - Source: `src/reference/SkateSolver.cpp`, `S.LegPool -= 0.011f * Knee` — the only one of the two
+    referenced stamina functions (`UpdateStamina`, `StaminaGain`) that survives as an actual number;
+    neither function is itself defined in that file
+
+- **`staminaWindTimeDrain`**, **`staminaWindSpeedDrain`** — Wind's continuous drain, flat and per (m/s)²
+  - Value: `0.0002` /s, `0.00004` /s per (m/s)²
+  - Used: `solver.ts` §12
+  - Level: L3
+  - Range: none recorded
+  - Fixed by: a measured Wind decay curve over a real timed program, at a known pace
+
+- **`staminaWindRecover`** — Wind recovered per second, genuinely low-effort only
+  - Value: `0.0006` /s
+  - Used: `solver.ts` §12
+  - Level: L3. Deliberately several times the time-drain above it (`validate`: it must exceed
+    `staminaWindTimeDrain`), so recovery reads as "slow", not as a pause button.
+  - Range: must exceed `staminaWindTimeDrain` (`validate`)
+
+- **`staminaLowEffortTilt`** — |tiltCmd| at or below which the skater counts as low-effort
+  - Value: `0.10` rad
+  - Used: `solver.ts` §12, gating both pools' recovery
+  - Level: L3
+  - Range: none recorded
+
+- **`staminaLegsPerDeepEdge`** — Legs drain per radian |tiltCmd| runs past `depthShallow`
+  - Value: `0.015` /s per rad
+  - Used: `solver.ts` §12
+  - Level: L3. Ordinary cruising (at or under `depthShallow`) is free; only the genuinely deep part of
+    an edge costs anything.
+  - Range: none recorded
+
+- **`staminaLegsPerJump`** — Legs lost on one takeoff, flat
+  - Value: `0.05`
+  - Used: `solver.ts` §10, on the ground-to-air transition
+  - Level: L3
+  - Range: none recorded
+
+- **`staminaLegsPerSitSpin`** — Legs drain per second, spinning with the knee past `spinSitKnee`
+  - Value: `0.03` /s
+  - Used: `solver.ts` §1c
+  - Level: L3
+  - Range: none recorded
+
+- **`staminaLegsRecover`**, **`staminaLegsRecoverWindFloor`** — Legs recovered per second while
+  low-effort, and the Wind share required before any of it applies at all
+  - Value: `0.0008` /s, `0.3`
+  - Used: `solver.ts` §12
+  - Level: L3. The floor is the bible's own "gated by Wind — once Wind is low, Legs stop coming back",
+    made a number.
+  - Range: floor is `[0, 1]` (`validate`)
+
+- **`staminaJumpImpulseMin`** — `jumpImpulse` multiplier at Legs 0
+  - Value: `0.82`
+  - Used: `solver.ts`'s `pFatigue`, read by `jump.ts`
+  - Level: **L2** — the bible states the span directly ("1.00 → 0.82")
+  - Range: `(0, 1]` (`validate`)
+  - Source: design-bible.md §2.8
+
+- **`staminaInertiaFloorMax`** — the loosest `inertiaTucked` can be forced to by Legs 0
+  - Value: `1.55` kg·m²
+  - Used: `solver.ts`'s `pFatigue`, read by `jump.ts` and `moves.ts`'s spin
+  - Level: **L2** — the bible states the span directly ("0.95 → 1.55")
+  - Range: at least `inertiaTucked` itself (`validate`)
+  - Source: design-bible.md §2.8
+
+- **`staminaMaxLeanLoss`** — radians subtracted from `maxLean` and `maxTilt` at Legs 0
+  - Value: `0.1396` rad (8°)
+  - Used: `solver.ts`'s `pFatigue`
+  - Level: **L2** — the bible states it directly ("maximum sustainable lean −8°")
+  - Range: `[0, maxLean]` (`validate`)
+  - Source: design-bible.md §2.8
+
+- **`staminaBalanceNoiseBase`**, **`staminaBalanceNoiseMax`** — baseline balance-loop noise amplitude,
+  and its multiplier at Legs 0
+  - Value: `0.15` m/s², `2.4`×
+  - Used: `solver.ts` §2, added to `aCmd`, seeded from `s.tick` alone (`rng`) so a replay reproduces the
+    same wobble on the same tick
+  - Level: base is L3 (chosen to be perceptible without dominating the command); the multiplier is
+    **L2** — the bible states it directly ("×1.0 → ×2.4")
+  - Range: multiplier at least 1 (`validate`): fatigue cannot reduce noise
+  - Source (multiplier only): design-bible.md §2.8

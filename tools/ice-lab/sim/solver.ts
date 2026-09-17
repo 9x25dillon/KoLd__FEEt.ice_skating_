@@ -49,7 +49,7 @@
 // residual slip velocity, which is the same idea one derivative apart, but the
 // bible's version is the project's own and reads more directly on screen.
 
-import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos } from "./math.ts";
+import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos, lerp, rng } from "./math.ts";
 import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT, MOVE, HELD } from "./types.ts";
 import type {
   SkaterState, BladeState, SkatingInput, EdgeEvent, Foot, Fall,
@@ -108,6 +108,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     jump: newJump(p), landed: noResult(),
     move: MOVE.None, turn: newTurn(), spin: newSpin(), inaBauer: newInaBauer(), moveDone: noMove(),
     movesHeld: 0, flips: 0, spinCarry: 0, musicCredit: 0,
+    wind: 1, legs: 1,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -127,6 +128,20 @@ export function step(
   // reads exactly what it did before this file existed.
   const iceOn = !!ice && p.iceGridMode >= 1;
   const condAt = (pos: Vec2): number => (iceOn ? ice!.condition(pos) : 0);
+
+  // Stamina (design-bible.md §2.8): the four fields fatigue touches, blended
+  // by the CURRENT pool state into a fresh object rather than mutating the
+  // caller's own p. `staminaMode` 0 makes pFatigue identical to p, field for
+  // field, the same inertness guarantee iceOn/condAt give the ice grid.
+  const staminaOn = p.staminaMode >= 1;
+  const legsMul = staminaOn ? clamp(s.legs, 0, 1) : 1;
+  const pFatigue: Params = staminaOn ? {
+    ...p,
+    jumpImpulse: lerp(p.jumpImpulse * p.staminaJumpImpulseMin, p.jumpImpulse, legsMul),
+    inertiaTucked: lerp(p.staminaInertiaFloorMax, p.inertiaTucked, legsMul),
+    maxLean: Math.max(0, p.maxLean - lerp(p.staminaMaxLeanLoss, 0, legsMul)),
+    maxTilt: Math.max(0, p.maxTilt - lerp(p.staminaMaxLeanLoss, 0, legsMul)),
+  } : p;
 
   // ── 0. getting up ─────────────────────────────────────────────────────────
   // The bible's §3.4 machine goes Fall -> grounded -> GetUp -> locomotion. The
@@ -154,8 +169,8 @@ export function step(
   if (s.fallen && freshPush) {
     // The last landing is kept: it is the record of why they are down. So is
     // the frame count, since the heading is kept and a scheme reads it.
-    const { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit } = s;
-    Object.assign(s, createState(p), { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit, pushHeld: true });
+    const { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit, wind, legs } = s;
+    Object.assign(s, createState(p), { pos, heading, tick, landed, moveDone, flips, movesHeld, musicCredit, wind, legs, pushHeld: true });
     for (const b of s.blade) {
       b.tangent = v2(heading.x, heading.y);
       b.contact = v2(pos.x, pos.y);
@@ -172,12 +187,12 @@ export function step(
   // bite, no stroke, no balance loop to fall out of. sim/jump.ts flies the
   // body and lands it. Unreachable while jumpMode is 0.
   if (s.jump.phase === JUMP_PHASE.Air) {
-    jumpAir(s, input, p, dt, events);
+    jumpAir(s, input, pFatigue, dt, events);
     return;
   }
 
   const alive = !s.fallen;
-  const leanCmd = clamp(axis(input.lean, 0), -1, 1) * p.maxLean;
+  const leanCmd = clamp(axis(input.lean, 0), -1, 1) * pFatigue.maxLean;
   // Rate-limited: a leg takes time to bend, and a step command would unload
   // the blades entirely for a tick and read as a jump.
   //
@@ -210,7 +225,7 @@ export function step(
   if (freshMoves & HELD.Turn) turnStart(s, p, false);
   else if (freshMoves & HELD.Bracket) turnStart(s, p, true);
   else if (freshMoves & HELD.Twizzle) twizzleStart(s, p);
-  else if (freshMoves & HELD.Spin) spinStart(s, p, axis(input.carriage, 0), knee, axis(input.pitch, 0));
+  else if (freshMoves & HELD.Spin) spinStart(s, pFatigue, axis(input.carriage, 0), knee, axis(input.pitch, 0));
   else if (freshMoves & HELD.InaBauer) inaBauerStart(s, p, axis(input.lean, 0));
   const turning = replacesCarve(s);
   const ina = s.move === MOVE.InaBauer;
@@ -250,6 +265,9 @@ export function step(
   if (alive && input.push && s.strokeTime <= 0 && !turning && !ina) {
     s.strokeTime = p.strokeDuration;
     s.strokeFoot = (1 - s.strokeFoot) as Foot;   // two-beat alternation
+    // Legs, once per push rather than per tick: SkateSolver.cpp's own
+    // S.LegPool -= 0.011f * Knee, at the moment the push begins.
+    if (staminaOn) s.legs = clamp(s.legs - p.staminaLegsPerPush * knee, 0, 1);
     // "A straight stroke on a flat, a crossover on a curve" (bible §2.1). Read
     // off the BODY's lean, not the blade's: at speed a wide arc needs little
     // blade and a lot of lean — 7 m/s round 13 m is 9 degrees of blade and 21
@@ -282,8 +300,11 @@ export function step(
   if (turning) {
     pivot = s.move === MOVE.Turn ? turnPivot(s, p, dt, weightR)
       : s.move === MOVE.Twizzle ? twizzleTick(s, p, dt, leanCmd, axis(input.carriage, 0), input.twizzle === true)
-        : spinTick(s, p, dt, knee, axis(input.pitch, 0), axis(input.carriage, 0), input.spin === true);
+        : spinTick(s, pFatigue, dt, knee, axis(input.pitch, 0), axis(input.carriage, 0), input.spin === true);
     latForceTotal = pivot.lat * p.mass;
+    // A sit position, held: bible §2.8's "low spin positions" drain Legs.
+    if (staminaOn && s.move === MOVE.Spin && knee >= p.spinSitKnee)
+      s.legs = clamp(s.legs - p.staminaLegsPerSitSpin * dt, 0, 1);
   }
 
   // ── 2. balance controller: where the lean should put the blade ────────────
@@ -293,16 +314,25 @@ export function step(
   const rhoSupport = effectiveRocker(s.blade[s.supportFoot].contactS, p);
   if (alive && !turning) {
     const v2sq = Math.max(dot(s.vel, s.vel), p.minSpeedForCurv * p.minSpeedForCurv);
+    // Fatigue noise (bible §2.8: "balance noise grows... x1.0 -> x2.4"),
+    // reseeded from the tick count alone so a replay reproduces the same
+    // wobble on the same tick rather than drawing from a live stream. 0
+    // whenever staminaMode is off, so the balance loop stays exactly the
+    // deterministic one every existing measurement was taken against.
+    const noise = staminaOn
+      ? p.staminaBalanceNoiseBase * lerp(1, p.staminaBalanceNoiseMax, 1 - legsMul) * (2 * rng(s.tick)() - 1)
+      : 0;
     const aCmd = g * tan(leanCmd)
       + p.balanceKp * (s.lean - leanCmd)
-      + p.balanceKd * s.leanRate;
-    const kappaMax = sin(p.maxTilt) / rhoSupport;
+      + p.balanceKd * s.leanRate
+      + noise;
+    const kappaMax = sin(pFatigue.maxTilt) / rhoSupport;
     const kappa = clamp(aCmd / v2sq, -kappaMax, kappaMax);
     let tiltTarget = asinClamped(kappa * rhoSupport);
     // Angulation: the blade may run deeper than the body leans, but only so
     // far. This gap is most of what "edge quality" means to a judge.
     tiltTarget = clamp(tiltTarget, s.lean - p.angulationLimit, s.lean + p.angulationLimit);
-    tiltTarget = clamp(tiltTarget, -p.maxTilt, p.maxTilt);
+    tiltTarget = clamp(tiltTarget, -pFatigue.maxTilt, pFatigue.maxTilt);
     const alpha = p.controlLatency > 1e-4 ? Math.min(1, dt / p.controlLatency) : 1;
     s.tiltCmd += (tiltTarget - s.tiltCmd) * alpha;
   } else if (!turning) {
@@ -378,7 +408,8 @@ export function step(
     const reversed = ina && i !== s.inaBauer.lead;
     b.tilt = pushing
       ? (s.crossover ? s.crossSide * p.strokeEdge : (i === FOOT.Left ? -p.strokeEdge : p.strokeEdge))
-      : reversed ? -clamp(s.tiltCmd, -p.maxTilt, p.maxTilt) : clamp(s.tiltCmd + apart, -p.maxTilt, p.maxTilt);
+      : reversed ? -clamp(s.tiltCmd, -pFatigue.maxTilt, pFatigue.maxTilt)
+        : clamp(s.tiltCmd + apart, -pFatigue.maxTilt, pFatigue.maxTilt);
 
     if (!b.inContact) {
       b.regime = REGIME.Unloaded;
@@ -655,7 +686,7 @@ export function step(
       const copMax = g * p.stanceHalfWidth / L;
       let copError = s.balanceError;
       if (p.copCommandShare > 0) {
-        const edgeCan = dot(s.vel, s.vel) * sin(p.maxTilt) / effectiveRocker(s.blade[s.supportFoot].contactS, p);
+        const edgeCan = dot(s.vel, s.vel) * sin(pFatigue.maxTilt) / effectiveRocker(s.blade[s.supportFoot].contactS, p);
         const aim = clamp(edgeCan / copMax, 0, 1) * p.copCommandShare;
         copError = s.lean - (s.leanEq + (leanCmd - s.leanEq) * aim);
       }
@@ -770,7 +801,10 @@ export function step(
 
   // ── 10. is the knee loading a jump, or releasing one? ─────────────────────
   if (!turning) carryDecay(s, p, dt);
-  jumpGround(s, input, p, dt, events);
+  const wasGrounded = s.jump.phase !== JUMP_PHASE.Air;
+  jumpGround(s, input, pFatigue, dt, events);
+  if (staminaOn && wasGrounded && s.jump.phase === JUMP_PHASE.Air)
+    s.legs = clamp(s.legs - p.staminaLegsPerJump, 0, 1);
 
   // ── 11. musical credit: a turn's cusp or a jump's landing, on the beat ─────
   // sim/music.ts, bible §2.1, §2.6. Scoped to events THIS tick pushed — the
@@ -789,6 +823,24 @@ export function step(
         });
       }
     }
+  }
+
+  // ── 12. stamina: the two pools drain and recover ──────────────────────────
+  // Continuous terms only; the event-driven ones (a push, a jump, a sit
+  // spin) already applied above, at the moment they happened. Skipped while
+  // fallen — nothing here describes lying on the ice.
+  if (staminaOn && alive) {
+    const speed = len(s.vel);
+    const lowEffort = !stroking && !turning && Math.abs(s.tiltCmd) <= p.staminaLowEffortTilt;
+    s.wind = clamp(s.wind
+      - (p.staminaWindTimeDrain + p.staminaWindSpeedDrain * speed * speed) * dt
+      + (lowEffort ? p.staminaWindRecover * dt : 0), 0, 1);
+    // Legs, gated by Wind: "once Wind is low, Legs stop coming back."
+    const legsRecover = lowEffort && s.wind >= p.staminaLegsRecoverWindFloor ? p.staminaLegsRecover * dt : 0;
+    // Only the DEEP part of an edge costs Legs — past depthShallow, the same
+    // boundary classify.ts already draws — so cruising a shallow curve is free.
+    const deepBy = Math.max(0, Math.abs(s.tiltCmd) - p.depthShallow);
+    s.legs = clamp(s.legs - p.staminaLegsPerDeepEdge * deepBy * dt + legsRecover, 0, 1);
   }
 }
 

@@ -98,10 +98,14 @@ export interface StatEffect {
  *   edgeControl  ankle, knee and hip: angulation, and how quickly the tilt
  *                command is answered. The assist tier buys latency the same way.
  *   balance      lean damping and the arms' proportional authority.
- *   stamina      NOTHING YET. The rig has no Wind or Legs pool (bible §2.8);
- *                the solver's stroke has no stamina term. When the pools land
- *                this row binds their capacities. It is listed so the balance
- *                table is complete and its emptiness is a recorded fact.
+ *   stamina      conditioning: one representative drain rate per pool (bible
+ *                §2.8's Wind and Legs, `sim/solver.ts`'s `staminaMode`) — a
+ *                stat-100 skater's baseline Wind drain and per-push Legs cost
+ *                both run at half a neutral skater's, a stat-0 skater's at
+ *                one and a half. Inert while `staminaMode` is 0, the same way
+ *                every other row here is inert until its own system is live;
+ *                the pools' *recovery* rates are deliberately left alone, so
+ *                training buys a longer program, not a faster bounce-back.
  */
 export const STAT_EFFECTS: Readonly<Record<StatName, readonly StatEffect[]>> = {
   strength: [
@@ -119,7 +123,10 @@ export const STAT_EFFECTS: Readonly<Record<StatName, readonly StatEffect[]>> = {
     { key: "balanceKd", atMin: 0.80, atMax: 1.30 },
     { key: "internalGain", atMin: 0.80, atMax: 1.25 },
   ],
-  stamina: [],
+  stamina: [
+    { key: "staminaWindTimeDrain", atMin: 1.5, atMax: 0.5 },
+    { key: "staminaLegsPerPush", atMin: 1.5, atMax: 0.5 },
+  ],
 };
 
 /** The multiplier one effect applies at a given stat. Exactly 1 at 50. */

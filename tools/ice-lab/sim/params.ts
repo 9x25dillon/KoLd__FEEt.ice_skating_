@@ -380,6 +380,51 @@ export interface Params {
    */
   jumpSpeedShare: number;
 
+  // ── stamina ───────────────────────────────────────────────────────────────
+  // design-bible.md §2.8: two pools, Wind (aerobic) and Legs (anaerobic),
+  // draining and recovering at different rates and feeding back into jump
+  // height, how tight a spin or jump air position can pull in, how deep an
+  // edge still holds, and balance noise. src/reference/SkateSolver.cpp calls
+  // UpdateStamina/StaminaGain but never defines either — only one number
+  // survives from it (`staminaLegsPerPush`, its own S.LegPool -= 0.011f *
+  // Knee) — so the rest is authored from the bible's own table, L2/L3, and 0
+  // in every preset the way jumps, moves, music and the ice grid are.
+  /** 0 the pools never move and every effect below is inert; 1 they drain and feed back. */
+  staminaMode: number;
+  /** 1/s: Wind's floor drain just from being on the ice. Bible: "elapsed time... continuously". */
+  staminaWindTimeDrain: number;
+  /** 1/s per (m/s)^2 of speed: the bulk of Wind's drain at pace. */
+  staminaWindSpeedDrain: number;
+  /** 1/s recovered while genuinely low-effort. Competes with the drain above; net positive only
+   *  once speed and tilt are both low, which is the point. */
+  staminaWindRecover: number;
+  /** |tiltCmd| at or below which the skater counts as "low-effort", for both pools' recovery. */
+  staminaLowEffortTilt: number;
+  /** Legs lost per push, scaled by knee depth. Source: SkateSolver.cpp, S.LegPool -= 0.011f * Knee. */
+  staminaLegsPerPush: number;
+  /** 1/s per radian |tiltCmd| runs past depthShallow: Legs drain from holding
+   *  a genuinely DEEP edge, not from ordinary cruising. */
+  staminaLegsPerDeepEdge: number;
+  /** Legs lost on one jump takeoff, flat, regardless of the jump's size. */
+  staminaLegsPerJump: number;
+  /** 1/s while spinning with the knee at or past a sit position (`spinSitKnee`). */
+  staminaLegsPerSitSpin: number;
+  /** 1/s recovered while low-effort — but only when Wind clears the floor below. */
+  staminaLegsRecover: number;
+  /** Wind must be at least this high for Legs to recover at all: "gated by Wind". */
+  staminaLegsRecoverWindFloor: number;
+  /** jumpImpulse multiplier at Legs 0. Bible: "Jump height falls... 1.00 -> 0.82". */
+  staminaJumpImpulseMin: number;
+  /** kg m^2: the tightest inertiaTucked can reach at Legs 0. Bible: "0.95 -> 1.55". */
+  staminaInertiaFloorMax: number;
+  /** rad subtracted from maxLean and maxTilt at Legs 0. Bible: "maximum sustainable lean -8 deg". */
+  staminaMaxLeanLoss: number;
+  /** m/s^2: baseline balance-loop noise amplitude, present only while staminaMode is on — 0 in
+   *  every preset means the balance loop has no noise at all until this system is turned on. */
+  staminaBalanceNoiseBase: number;
+  /** Multiplier on that noise at Legs 0. Bible: "Balance noise grows... x1.0 -> x2.4". */
+  staminaBalanceNoiseMax: number;
+
   // ── music ─────────────────────────────────────────────────────────────────
   // sim/music.ts, design-bible.md §2.1, §2.6, §5.2. Off in every preset the
   // way jumps and moves were: 0 here leaves every lever below inert, so
@@ -566,6 +611,23 @@ export const DEFAULT_PARAMS: Params = {
   inaBauerScrub: 0.13,
   jumpSpeedShare: 0.2,
 
+  staminaMode: 0,
+  staminaWindTimeDrain: 0.0002,
+  staminaWindSpeedDrain: 0.00004,
+  staminaWindRecover: 0.0006,
+  staminaLowEffortTilt: 0.10,
+  staminaLegsPerPush: 0.011,      // SkateSolver.cpp, taken directly
+  staminaLegsPerDeepEdge: 0.015,
+  staminaLegsPerJump: 0.05,
+  staminaLegsPerSitSpin: 0.03,
+  staminaLegsRecover: 0.0008,
+  staminaLegsRecoverWindFloor: 0.3,
+  staminaJumpImpulseMin: 0.82,     // bible §2.8
+  staminaInertiaFloorMax: 1.55,    // bible §2.8
+  staminaMaxLeanLoss: 0.1396,      // 8 deg, bible §2.8
+  staminaBalanceNoiseBase: 0.15,
+  staminaBalanceNoiseMax: 2.4,     // bible §2.8
+
   musicMode: 0,
   musicBpm: 128,
   musicOffset: 0,
@@ -684,6 +746,27 @@ export function validate(p: Params): string[] {
     errs.push("musicAccentWindow must be positive and below half a bar, or every landing is an accent");
   if (p.musicMissedPushScale <= 0 || p.musicMissedPushScale >= 1)
     errs.push("musicMissedPushScale is a fraction of a hit, in (0, 1)");
+  if (![0, 1].includes(p.staminaMode)) errs.push("staminaMode is 0 (off) or 1 (the pools drain)");
+  if (p.staminaWindTimeDrain < 0) errs.push("staminaWindTimeDrain cannot be negative");
+  if (p.staminaWindSpeedDrain < 0) errs.push("staminaWindSpeedDrain cannot be negative");
+  if (p.staminaWindRecover <= p.staminaWindTimeDrain)
+    errs.push("staminaWindRecover must exceed staminaWindTimeDrain, or low-effort gliding never nets a recovery");
+  if (p.staminaLowEffortTilt < 0) errs.push("staminaLowEffortTilt cannot be negative");
+  if (p.staminaLegsPerPush < 0) errs.push("staminaLegsPerPush cannot be negative");
+  if (p.staminaLegsPerDeepEdge < 0) errs.push("staminaLegsPerDeepEdge cannot be negative");
+  if (p.staminaLegsPerJump < 0) errs.push("staminaLegsPerJump cannot be negative");
+  if (p.staminaLegsPerSitSpin < 0) errs.push("staminaLegsPerSitSpin cannot be negative");
+  if (p.staminaLegsRecover < 0) errs.push("staminaLegsRecover cannot be negative");
+  if (p.staminaLegsRecoverWindFloor < 0 || p.staminaLegsRecoverWindFloor > 1)
+    errs.push("staminaLegsRecoverWindFloor is a share of Wind, 0..1");
+  if (p.staminaJumpImpulseMin <= 0 || p.staminaJumpImpulseMin > 1)
+    errs.push("staminaJumpImpulseMin is a multiplier on jumpImpulse, in (0, 1]");
+  if (p.staminaInertiaFloorMax < p.inertiaTucked)
+    errs.push("staminaInertiaFloorMax must be at least inertiaTucked: fatigue cannot pull in tighter than fresh");
+  if (p.staminaMaxLeanLoss < 0) errs.push("staminaMaxLeanLoss cannot be negative");
+  if (p.staminaMaxLeanLoss > p.maxLean) errs.push("staminaMaxLeanLoss cannot exceed maxLean itself");
+  if (p.staminaBalanceNoiseBase < 0) errs.push("staminaBalanceNoiseBase cannot be negative");
+  if (p.staminaBalanceNoiseMax < 1) errs.push("staminaBalanceNoiseMax is a multiplier at Legs 0, and fatigue cannot reduce noise");
   if (![0, 1].includes(p.iceGridMode)) errs.push("iceGridMode is 0 (off) or 1 (the sheet wears)");
   if (p.iceDamagePerPass <= 0 || p.iceDamagePerPass > 1)
     errs.push("iceDamagePerPass is a per-pass saturating share, in (0, 1]");

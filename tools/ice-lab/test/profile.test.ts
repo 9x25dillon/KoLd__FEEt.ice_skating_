@@ -51,15 +51,14 @@ test("the balance curve is 0 at 50, linear below, concave above, and bounded", (
   }
 });
 
-test("every stat but stamina moves a parameter, and stamina's emptiness is recorded", () => {
-  // Stamina binds to the Wind / Legs pools (bible §2.8) when the solver has
-  // them. Until then this test is the reminder; delete the second half when
-  // the row is filled.
+test("every stat moves exactly the parameters STAT_EFFECTS says it does", () => {
+  // Stamina bound to the Wind / Legs pools (bible §2.8) once sim/solver.ts
+  // had them (staminaMode) — this used to special-case stamina as empty;
+  // that reminder is gone now that the row is filled.
   for (const n of STAT_NAMES) {
     const p = applyProfile(DEFAULT_PARAMS, makeProfile("one", { stats: { [n]: 100 } }));
     const moved = (Object.keys(p) as Array<keyof Params>).filter((k) => p[k] !== DEFAULT_PARAMS[k]);
-    if (n === "stamina") assert.deepEqual(moved, [], "stamina has no physics yet");
-    else assert.deepEqual(moved.sort(), STAT_EFFECTS[n].map((e) => e.key).sort(), n);
+    assert.deepEqual(moved.sort(), STAT_EFFECTS[n].map((e) => e.key).sort(), n);
   }
 });
 

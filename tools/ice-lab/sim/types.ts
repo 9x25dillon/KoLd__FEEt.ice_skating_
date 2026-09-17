@@ -434,6 +434,20 @@ export interface SkaterState {
    * Tracked and replay-safe; not yet spent by sim/score.ts.
    */
   musicCredit: number;
+  /**
+   * Two stamina pools (design-bible.md §2.8), 1 fresh .. 0 spent. Both start
+   * at 1 and stay there while `staminaMode` is 0 — every preset.
+   *
+   *   wind   aerobic: drains from elapsed time and speed^2, continuously;
+   *          recovers only while genuinely low-effort, and slowly.
+   *   legs   anaerobic: drains from pushes, deep edges, jumps and sit spins;
+   *          recovers the same way wind does, but gated BY wind — once wind
+   *          is low, legs stop coming back. Feeds jump height, how tight a
+   *          spin or jump air position can pull in, how deep an edge the
+   *          skater can still hold, and balance noise.
+   */
+  wind: number;
+  legs: number;
   fallReason: Fall;
   fallen: boolean;
   tick: number;

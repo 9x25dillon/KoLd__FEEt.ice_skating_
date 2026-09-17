@@ -93,7 +93,20 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       every tick, and the fixture was re-recorded from its own inputs
 //       only to carry the four new keys. /9 clips no longer load; verify one
 //       against a checkout of 87bac5f.
-export const REPLAY_SOLVER = "ice-lab-f64/10";
+//   /11 Stamina (design-bible.md §2.8, `staminaMode`): Params gained it and
+//       fourteen levers, and SkaterState gained the two pools, `wind` and
+//       `legs`. `staminaMode` is 0 in every preset and step()'s own fatigue
+//       blend (`pFatigue`) is identical to `p` whenever it is, so a clip
+//       recorded before this contract reads and writes nothing new when
+//       replayed under it. Replayed through /10 and /11 with staminaMode 0,
+//       the fixture and three operator play clips matched on every /10
+//       state field and event on every tick; the fixture was re-recorded
+//       from its own inputs only to carry the new keys. A fall now
+//       preserves `wind`/`legs` rather than resetting them, found while
+//       wiring the two pools through the same get-up path every other
+//       per-session field already takes. /10 clips no longer load; verify
+//       one against a checkout of 0bb3a53.
+export const REPLAY_SOLVER = "ice-lab-f64/11";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

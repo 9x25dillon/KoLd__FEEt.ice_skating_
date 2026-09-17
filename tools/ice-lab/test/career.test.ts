@@ -6,7 +6,7 @@ import { createState } from "../sim/solver.ts";
 import { GAME_PARAMS } from "../game/controls.ts";
 import { MOVE } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
-import { applyProfile } from "../sim/profile.ts";
+import { applyProfile, overall, TIERS } from "../sim/profile.ts";
 
 const state = () => createState(GAME_PARAMS, 4.5);
 const program = (...routine: ElementId[]) => new Choreography({ id: "test", title: "Test", venue: "Test", seconds: 30, routine });
@@ -65,13 +65,40 @@ test("career unlocks sequentially and pays only improved medals, once", () => {
   const c = new CareerState();
   assert.equal(c.award(finish(CAREER_EVENTS[1])), 0);
   assert.equal(c.award(new Choreography(CAREER_EVENTS[0])), 0);
-  assert.equal(c.award(finish(CAREER_EVENTS[0], 3)), 150); assert.equal(c.unlocked, 1);
+  assert.equal(c.award(finish(CAREER_EVENTS[0], 3)), 150); assert.equal(c.medalCap, 1);
   assert.equal(c.award(finish(CAREER_EVENTS[0], 1)), 150);
   assert.equal(c.award(finish(CAREER_EVENTS[0])), 150);
   assert.equal(c.award(finish(CAREER_EVENTS[0])), 0);
   assert.equal(c.award(finish(CAREER_EVENTS[0], 3)), 0); assert.equal(c.medals[0], 3);
+  // Untrained (overall 50) holds the stat gate at regionals (statCap 1), so of
+  // the remaining four events only the one within reach — index 1 — can
+  // actually award; the rest are blocked by stats, not sequence.
   for (const event of CAREER_EVENTS.slice(1)) c.award(finish(event));
-  assert.equal(c.unlocked, 4); assert.equal(c.profile.xp, 2250);
+  assert.deepEqual(c.medals, [3, 3, 0, 0, 0]);
+  assert.equal(c.statCap, 1); assert.equal(c.unlocked, 1);
+  assert.equal(c.profile.xp, 900, "450 for event 0's climb to gold, 450 for the one event 1 the stat gate allowed");
+});
+
+test("stats gate progression independent of medals: a neutral profile holds at regionals", () => {
+  const c = new CareerState();
+  assert.equal(overall(c.profile), 50, "every stat starts neutral");
+  assert.equal(c.statCap, 1, "overall 50 clears club (0) and regionals (40), not nationals (55)");
+  c.medals = CAREER_EVENTS.map(() => 3);         // every medal already earned, by fiat
+  assert.equal(c.medalCap, CAREER_EVENTS.length - 1);
+  assert.equal(c.unlocked, 1, "medals in hand cannot outrun the stats behind them");
+});
+
+test("training raises overall past a tier floor and lifts the stat gate", () => {
+  const c = new CareerState();
+  c.profile = { ...c.profile, xp: 100000 };
+  // CareerState.train spends exactly one point's price per call (the UI's one
+  // click, one point), so reaching 100 from neutral 50 takes fifty calls.
+  for (let i = 0; i < 50; i++) c.train("edgeControl");   // overall 50 -> 64
+  assert.equal(c.profile.stats.edgeControl, 100);
+  assert.ok(overall(c.profile) >= TIERS[2].floor && overall(c.profile) < TIERS[3].floor,
+    `overall ${overall(c.profile)} should clear nationals (${TIERS[2].floor}) but not grand prix (${TIERS[3].floor})`);
+  assert.equal(c.statCap, 2);
+  assert.equal(CAREER_EVENTS.length, TIERS.length, "the five events and the five tiers are the same ladder");
 });
 
 test("XP training persists, spends one point and changes the next career parameter bake", () => {

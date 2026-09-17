@@ -600,9 +600,9 @@ handicap linearly; the top half buys a bonus with diminishing returns, so the
 quadratically, so the same curve is paid for on the way up. Strength moves
 `strokePower`; spring the jump impulse and the pull-in rate; edge control the
 angulation limit and the control latency; balance the lean damping and the
-arms' authority. **Stamina moves nothing yet** — the rig has no Wind or Legs
-pool (design bible §2.8) — and `test/profile.test.ts` records that emptiness
-rather than hiding it. Mass goes straight in and does less than a player will
+arms' authority; **stamina** conditioning: a stat-100 skater's baseline Wind
+drain and per-push Legs cost both run at half a neutral skater's (§2.8, below).
+Mass goes straight in and does less than a player will
 expect, because stroke, bite and lean all scale with the normal load: what it
 moves is drag per kilogram and the jump, where the same leg drive lifts more
 kilograms less high.
@@ -619,6 +619,48 @@ both 27° — the top half of edge control and balance buys settling, not depth,
 because entry depth at that speed is bounded by the lean loop and not by the
 stats (§4 above). Six seconds of stroking from 1 m/s reaches 3.0 / 3.9 / 4.9
 m/s at strength 0 / 50 / 100.
+
+## The career — events, medals, training, and the stat gate
+
+`game/career.ts` is the game half of the profile layer above: `CareerState` holds five events
+(`CAREER_EVENTS`, "first ice" through a championship program), a medal per event, and the
+`SkaterProfile` those medals train. `Choreography` samples the live solver each tick against one
+event's ordered routine — glide, edge, crossover, jump, spin, pose — and awards nothing for a button
+press, only for the state the solver actually produced: a spin needs a full new revolution while
+`s.move === MOVE.Spin`, a jump needs a landing tick that has not already been used, a pose needs the
+skater grounded and moving. Falls count and downgrade the medal without blocking the routine, so a
+program is always finishable. Only an *improved* medal pays XP (`award`), so retries cannot farm it,
+and `train` spends it on one of the five stats through `sim/profile.ts`'s quadratic price curve. A save
+is one versioned JSON blob (`serialize`/`restore`) that rejects a corrupt or incompatible one, or a
+broken unlock chain, rather than trusting it.
+
+**Every import here is `sim/`** — `types`, `jump`, `profile` — so `CareerState` and `Choreography` are
+as pure and replayable as a run, even though the file lives in `game/` rather than a dedicated
+`career/`: nothing about them needs the DOM.
+
+**The stat gate (2026-09-17).** Added on the operator's own call: the queued "stat balance tied to the
+competitive scoring", with `overall()` and the tier floors as the literal attachment points. Before
+this, `unlocked` was medals alone — a skater who never opened the training menu could still walk the
+whole ladder on a clean program. Now `CareerState` tracks two caps and takes the lower:
+
+- **`medalCap`** — what medals alone would unlock: the old `unlocked`, unchanged, the first
+  not-yet-earned event.
+- **`statCap`** — what the skater's own stats permit: the highest of `sim/profile.ts`'s five `TIERS`
+  (club, regionals, nationals, grand prix, worlds) whose floor `overall(profile)` clears. `CAREER_EVENTS`
+  and `TIERS` are the same five rungs, index for index — `test/career.test.ts` asserts the lengths match
+  so the two lists cannot drift apart unnoticed.
+
+`unlocked` is `Math.min(medalCap, statCap)`. A neutral, untrained profile (`overall` 50) already clears
+club (0) and regionals (40), so a new career is never stat-locked out of its first two events; nationals
+(55) is where training stops being optional — a program cleaned to gold at event 1 cannot open event 2
+until the skater is actually trained for it. The career board's own button now says which cap is
+binding: *"Complete the previous event to unlock"* for the medal cap, *"Train to nationals overall (55)
+to unlock"* for the stat cap, so a blocked player is told which menu to open.
+
+**Checked against the profile layer's own sample skaters** (`SAMPLE_PROFILES`, `sim/profile.ts`), and
+the names line up with no tuning: club novice's `overall` 20.85 caps at **club**, the reference skater's
+50 at **regionals**, nationals senior's 61.12 at **nationals**, worlds medallist's 90.37 at **worlds** —
+the same ladder both systems were already named after, now actually connected.
 
 ## Jumps, scoring, the Edge Ribbon and the edge tone
 
@@ -941,6 +983,75 @@ call, asked directly rather than assumed from an old note: the line a course sco
 **designed curve** — hand-authored per course, the way the Figure Eight's two circles already are
 (`app/figure8.ts`, `deviation()`) — not a replay re-simulating as a ghost. That pattern is proven and
 reusable the moment a course wants one; none has asked for a second yet.
+
+## Stamina — Wind and Legs
+
+Added 2026-09-17, the last item on the operator's own queue: design-bible.md §2.8's two pools. Off in
+every preset (`staminaMode`), the way jumps, moves, music and the ice grid are — with it at 0, or with
+neither pool ever moved from its starting 1, every effect below is inert and `sim/solver.ts` reads
+exactly what it did before this file existed.
+
+`src/reference/SkateSolver.cpp` **calls** `UpdateStamina`/`StaminaGain` but never defines either — only
+one number survives from it, `S.LegPool -= 0.011f * Knee`, taken directly as `staminaLegsPerPush`. Every
+other lever here is authored from the bible's own table, L2/L3, first-pass-calibrated rather than
+measured.
+
+**Wind** (aerobic) drains continuously from elapsed time and speed² and recovers only while genuinely
+low-effort — not stroking, not turning, `|tiltCmd|` shallow (`staminaLowEffortTilt`) — and recovery is
+deliberately much slower than the drain it undoes, so a brief breather is not a reset button. **Legs**
+(anaerobic) drains from four distinct events — a push (knee-scaled, the sourced number above), a jump
+takeoff (flat), a held sit spin, and holding an edge **past** `depthShallow` (ordinary cruising is free;
+only the genuinely deep part of an edge costs anything) — and recovers the same way Wind does, but
+**gated by Wind**: below `staminaLegsRecoverWindFloor`, Legs do not come back at all, however long the
+rest.
+
+**What Legs feeds back** (all computed once per tick into `pFatigue`, a `Params` blended by the current
+pool value and never mutated back into the caller's own object — the same pattern `iceOn`/`condAt` use
+for the ice grid):
+
+- **Jump height.** `jumpImpulse` scales `staminaJumpImpulseMin` (0.82, the bible's own number) at Legs 0.
+  Measured, a clean takeoff from `responsive` at 6 m/s: takeoff v<sub>z</sub> 2.940 → 2.411 m/s fresh to
+  spent, height 0.441 → 0.296 m.
+- **Pull-in.** `inertiaTucked` rises toward `staminaInertiaFloorMax` (1.55 kg·m², the bible's own ceiling)
+  as Legs empty — the same lever a jump's air phase and a spin's sit position both already read, so one
+  change reaches both without touching `jump.ts` or `moves.ts`.
+- **Edge depth.** `maxLean` and `maxTilt` both shrink by up to `staminaMaxLeanLoss` (8°). Measured,
+  holding a 0.3 rad command from `responsive` at 5 m/s for 200 ticks: fresh reaches 0.3308 rad of blade
+  tilt, spent only 0.2886 — an exhausted skater visibly cannot commit as deep an edge on the same command.
+- **Balance noise.** A deterministic perturbation (`rng(s.tick)`, reseeded every tick — never a live
+  random stream, so a replay reproduces the same wobble on the same tick) added to the balance loop's
+  lateral command, amplitude `staminaBalanceNoiseBase` at Legs 1 rising to ×`staminaBalanceNoiseMax`
+  (2.4, the bible's own multiplier) at Legs 0. The one genuinely new mechanic here: the balance loop had
+  no noise term of any kind before this.
+
+**What it found.** Wiring `wind`/`legs` through the existing "get up after a fall" reset
+(`Object.assign(s, createState(p), {...preserved fields})`) surfaced a real bug in the making: neither
+field was in the preserved set, so every fall would have handed a fatigued skater back their full pools
+for free. Fixed by adding both to the preserved destructure — a fall now costs what it always cost
+physically, nothing more, nothing less.
+
+**Not built here, on purpose** (bible §2.8's own "management is where the strategy lives" is a whole
+program-design layer, not an engine primitive): front/back-loading jumps for the back-half bonus,
+building a spiral in as a breathing bar, and — the operator's own bridge, quoted in an earlier
+hand-off — stamina/flow/hype stacking into more assist as a program goes well. That reads FROM these
+pools once they exist; building it before they existed would have been reading from nothing. The flow
+scalar itself (bible §2.6) is a separate, still-unbuilt system this file deliberately does not touch,
+though the bible names it as a future modifier on Wind's own drain rate.
+
+`sim/profile.ts`'s **stamina** stat, previously the one row in `STAT_EFFECTS` doing nothing ("the rig
+has no Wind or Legs pool... when the pools land this row binds their capacities" — its own comment, now
+out of date on purpose), binds to two representative levers, one per pool: a stat-100 skater's baseline
+Wind drain and per-push Legs cost both run at half a neutral skater's, a stat-0 skater's at one and a
+half. Recovery rates are deliberately left untouched by training, so conditioning buys a longer program
+before fatigue bites, not a faster bounce-back mid-program. `test/profile.test.ts`'s reminder test —
+"stamina has no physics yet" — is retired along with the gap it recorded.
+
+Replay contract `/11` added `staminaMode` and its fourteen levers to `Params`, and `wind`/`legs` to
+`SkaterState`. The pools themselves are never part of the replay format, for the same reason the ice
+grid is not: they are fully determined by the same recorded inputs that determine everything else.
+Replayed through `/10` and `/11` with `staminaMode` 0, the fixture and three operator play clips matched
+on every `/10` state field and event on every tick; the fixture was re-recorded from its own inputs only
+to carry the new keys.
 
 ## What a session measures
 
