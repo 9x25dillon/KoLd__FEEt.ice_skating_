@@ -3,5 +3,7 @@ runtime/
 assets/generated/*
 !assets/generated/skater.glb
 !assets/generated/skater.glb.import
+!assets/generated/skater-berserker.glb
+!assets/generated/skater-berserker.glb.import
 exports/
 *.tmp

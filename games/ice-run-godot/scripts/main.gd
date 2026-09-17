@@ -3,6 +3,13 @@ const EngineLink = preload("res://scripts/engine_link.gd")
 const Arena = preload("res://scripts/arena.gd")
 const Skater = preload("res://scripts/skater.gd")
 const Ribbon = preload("res://scripts/ribbon.gd")
+# Purely a local presentation choice: skater.gd poses whichever glb this
+# points at by bone name, so any entry here just needs to answer to the same
+# eleven bones (see tools/build_skater.py and tools/build_berserker.py).
+const CHARACTERS: Array[Dictionary] = [
+	{"name": "Violet", "path": "res://assets/generated/skater.glb"},
+	{"name": "Black Berserker", "path": "res://assets/generated/skater-berserker.glb"},
+]
 var link: Node
 var arena: Node3D
 var skater: Node3D
@@ -38,6 +45,7 @@ var beginner := true
 var scheme := 1
 var track := 0
 var profile := 0
+var character := 0
 var cruise := true
 var push_pending := false
 var toe_pending := false
@@ -62,6 +70,7 @@ func _ready() -> void:
 	arena = Arena.new()
 	add_child(arena)
 	skater = Skater.new()
+	skater.model_path = CHARACTERS[character].path
 	add_child(skater)
 	camera = Camera3D.new()
 	camera.fov = 43
@@ -322,6 +331,13 @@ func show_page(page: String) -> void:
 		menu.add_child(button("Control: "+["Lean & load","Assisted steering","Two-foot control"][scheme],func():scheme=(scheme+1)%3;show_page("settings")))
 		menu.add_child(button("Cruise: "+("On" if cruise else "Off"),func():cruise=not cruise;show_page("settings")))
 		menu.add_child(button("Music: "+("On" if music_enabled else "Off"),func():music_enabled=not music_enabled;show_page("settings")))
+		menu.add_child(label("Skater",16))
+		var character_picker := OptionButton.new()
+		for entry in CHARACTERS:
+			character_picker.add_item(str(entry.name))
+		character_picker.selected = character
+		character_picker.item_selected.connect(func(index: int):character=index)
+		menu.add_child(character_picker)
 		if not catalog.is_empty():
 			menu.add_child(label("Soundtrack",16))
 			var track_picker := OptionButton.new()
@@ -365,6 +381,7 @@ func start_game(mode: String, index: int = 0) -> void:
 	active_mode = mode
 	event_index = index
 	playing = false
+	skater.load_model(CHARACTERS[character].path)
 	link.send("configure",{"options":{"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile}})
 	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null}})
 
@@ -640,6 +657,7 @@ func load_preferences() -> void:
 	scheme = clampi(int(saved.get("scheme",1)),0,2)
 	track = clampi(int(saved.get("track",0)),0,4)
 	profile = clampi(int(saved.get("profile",0)),0,3)
+	character = clampi(int(saved.get("character",0)),0,CHARACTERS.size()-1)
 	cruise = bool(saved.get("cruise",true))
 	music_enabled = bool(saved.get("music",true))
 	var ids = saved.get("sequence",[])
@@ -655,6 +673,6 @@ func save_preferences() -> void:
 		return
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"beginner":beginner,"scheme":scheme,"track":track,"profile":profile,"cruise":cruise,"music":music_enabled,"sequence":sequence}))
+		file.store_string(JSON.stringify({"beginner":beginner,"scheme":scheme,"track":track,"profile":profile,"character":character,"cruise":cruise,"music":music_enabled,"sequence":sequence}))
 	else:
 		on_error("Preferences could not be saved.")

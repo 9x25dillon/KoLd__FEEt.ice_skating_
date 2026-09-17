@@ -102,6 +102,16 @@ blender --background --python games/ice-run-godot/tools/build_skater.py
 This replaces both the source `.blend` and exported `.glb`; save manual Blender
 edits separately before regenerating.
 
+**A second, selectable skater** — the Black Berserker — is built the same way,
+from `tools/build_berserker.py`, to `assets/source/skater-berserker.blend` and
+`assets/generated/skater-berserker.glb`. Pick it from Settings → Skater; the
+choice is saved to `preferences.json` and takes effect on your next skate.
+`scripts/skater.gd` poses whichever glb is loaded purely by bone name (`Hips,
+Spine, Head, Thigh/Shin/Foot L/R, Arm/Forearm L/R`) every frame, straight from
+the physics state — a bone it does not find is simply left in its rest pose,
+never an error — so both build scripts construct the identical skeleton
+`build_skater.py` originated, and a third character only needs to do the same.
+
 ## Design direction and current limits
 
 The requested roughly 75% design-bible adherence is a direction for this rebuild,
