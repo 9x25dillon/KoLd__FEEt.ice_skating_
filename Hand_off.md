@@ -1,12 +1,12 @@
 # Hand-off
 
-## Current checkpoint — 2026-09-18, fifteenth session: flow's alternating/repeated lobes, closing its last unmodelled bullet
+## Current checkpoint — 2026-09-18, fifteenth session: flow's lobes, then HUD parity between Godot and the browser
 
-Still on **`ue-replay-01-foundation`**. One commit, tested (452 Ice Lab tests, up from 441; 10 Godot
-bridge tests; `tsc` clean) and verified live in the actual browser game before being called done. This
-session opened on the operator's own two-part ask: log a standing decision (Choctaw's own new-foot
-edge-change mechanism is wanted, eventually, not hedged as "if" anymore — §0 item 0.5 below) and then
-work the queue in order, starting from its own top item.
+Still on **`ue-replay-01-foundation`**. Two commits, each tested and verified live before the next
+began. This session opened on the operator's own two-part ask: log a standing decision (Choctaw's own
+new-foot edge-change mechanism is wanted, eventually, not hedged as "if" anymore — §0 item 0.5 below)
+and then work the queue in order, starting from its own top item — and, mid-session, "keep going,
+update the hud" continued straight into the queue's next item without a fresh round of questions.
 
 **In order:**
 
@@ -62,11 +62,52 @@ work the queue in order, starting from its own top item.
    `docs/fidelity-report.md` regenerated (solver string only; gate unchanged: 6 pass, 0 fail, 26
    unsourced, 0 unmodelled, still not met). The Godot bridge (`games/ice-run-godot/`) needed no source
    change — it imports the runtime mirror `tools/prepare.mjs` regenerates from this same tree — but was
-   still rebuilt and its own 10-test suite re-run to confirm.
+   still rebuilt and its own 10-test suite re-run to confirm. `e6edfbd`.
+2. **HUD parity between Godot and the browser** (queue item 6). Checked what the browser's own
+   free-skate HUD already showed and what the Godot bridge's `snapshot()` actually exposed, rather
+   than trusting the fourteenth session's own checkpoint note that named the gap — one of the three it
+   named turned out to already be closed:
 
-**Committed** (`e6edfbd`), not yet pushed as of this entry — push once this Hand-off note is also
-committed, matching every prior session's own practice. PR #13 (still open against `main`, from the
-fourteenth session) is the target for this commit too; nothing new to open.
+   - **Turn kind — a real gap, fixed.** The browser has always broken a held turn down by `TURN_KIND`
+     (three-turn, mohawk, bracket, loop, rocker, counter); the bridge's `snapshot().move` said the bare
+     `'Turn'` for all six, because `scripts/main.gd`'s `hud_move` reads `frame.move` as a plain string
+     generically. Fixed at the source — `engine.mjs`'s `snapshot()` now runs the same ternary the
+     browser's HUD does — so the GDScript needed no change at all, the exact "fix it where the reader
+     is already generic" pattern the thirteenth session used for `spinLevel`.
+   - **The foot change mid-spin — a real gap, fixed.** `SpinState.changeCompletedTick` had never been
+     read by any UI code in either engine. Both now flash a toast ("Foot change!" / `footChange` in the
+     snapshot) the tick it advances, the same decaying-flash idiom each engine's own toast already uses
+     (`flash` in `game/main.ts`, the new `footChangeFlash` mirroring it in `engine.mjs`).
+   - **PCS's score — a real gap, fixed.** Wired into `game/career.ts` since the fourteenth session but
+     never displayed anywhere. Both engines now show the total (the browser also breaks out all three
+     components) when a routine finishes, silently absent rather than a misleading "0.00" whenever
+     `finalizePcs` left it null.
+   - **The Spiral — NOT a real gap, the fourteenth session's own checkpoint note was already stale by
+     the time it was written.** Both `game/main.ts` and `engine.mjs` already label `MOVE.Spiral` —
+     added in the very same commit that built the Spiral itself (`1374333`), confirmed by `git log -S`
+     before touching anything. Worth remembering: a hand-off's own claims are a snapshot, not a
+     standing fact, and are worth checking against the actual code before building on them — the same
+     lesson the fourteenth session's own rocker/counter re-examination already drew, now cutting the
+     other way (finding a claimed gap was already closed, not that a claimed wall was not one).
+
+   **Two more stale README passages fixed on the way**, found the same way: the spin-level section
+   still listed the foot-change features as needing "a mechanic this rig does not have" (built two
+   sessions ago) and the PCS section still said "not yet wired into `game/career.ts`" (also already
+   done). Neither was touched by this session's own code changes — both were just never updated when
+   the work that made them stale actually shipped.
+
+   **Verified live, not only in tests**: three new `games/ice-run-godot/tests/engine.test.mjs` cases
+   (12 Godot bridge tests, up from 10) — turn-kind labels checked by direct state (isolating the label
+   map from turn-entry physics `tools/ice-lab/test/turn.test.ts` already covers), a real driven foot
+   change reaching `snapshot().footChange` as a flash that decays, and a finished career routine's
+   `snapshot().routine.pcsScore`/`result.detail` both carrying a real total. The browser side verified
+   in the actual running game: built and served it, drove it headlessly with Playwright (hold `d` to
+   carve, `q`+`y` to spin at zero weight, hold `f` mid-spin for the change — the exact recipe
+   `test/spin.test.ts`'s own `change_foot_by_jump` case uses), and watched `#hint` read "Foot change!"
+   then decay to the next toast, zero console errors both times. `5c6cc5d`.
+
+**Both commits pushed** (`e6edfbd`, `5c6cc5d`) to `ue-replay-01-foundation`, reaching the still-open
+PR #13 automatically — nothing new to open, matching item 1's own note above.
 
 ---
 
@@ -525,12 +566,11 @@ own; item 5 is the fifteenth's:
    four bible-named ones — **not** `stepLevel.ts`, on reflection: that ceiling scores discrete turn/
    footwork *types*, and ordinary curvature variety between them has no natural hook there the way it
    does in Composition. `e6edfbd`.
-6. **Update the HUD** — the operator's own next item after lobes. Concretely, at minimum: Godot's own
-   HUD (`scripts/main.gd`/`bridge/engine.mjs`) shows none of this session's own PCS score, foot-change
-   completion, Spiral, or the three new turn kinds — only the browser's own free-skate HUD
-   (`game/main.ts`) reads `TURN_NAME[T.kind]` generically and so already shows Loop/Rocker/Counter
-   without further work; PCS and the Spiral got no HUD surface in either place. Match the pattern the
-   thirteenth session already used for spin level and jump TES reaching Godot.
+6. ~~**Update the HUD.**~~ **Done**, fifteenth session: turn kind and the foot change were real gaps
+   in Godot, fixed; PCS was a real gap in both engines, fixed in both; the Spiral turned out to already
+   be covered in both (the checkpoint note above was already stale when it named it as a gap — checked
+   with `git log -S` before touching anything, see the fifteenth session's own checkpoint entry).
+   `5c6cc5d`.
 7. **Costume design** — explicitly put at the bottom of the list by the operator this session; not
    started, and `data/calls-and-deductions.csv`'s own "Costume or prop" deduction (-1.00) is the only
    real data behind it so far, a scoring category, not a wardrobe/customization system.
