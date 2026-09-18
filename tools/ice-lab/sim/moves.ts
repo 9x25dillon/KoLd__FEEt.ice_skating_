@@ -87,7 +87,7 @@
 
 import { rotate, normalizeOr, len, mul, dot, sin, tan, atan2, sign, clamp, lerp, moveToward } from "./math.ts";
 import { MOVE, TURN_KIND, FOOT, EVENT, EDGE_CODE_NONE, REGIME, SPIN_POSITION, DIR, EDGE, makeCode } from "./types.ts";
-import type { SkaterState, TurnState, SpinState, InaBauerState, MoveResult, EdgeEvent, Foot } from "./types.ts";
+import type { SkaterState, TurnState, SpinState, InaBauerState, SpiralState, MoveResult, EdgeEvent, Foot } from "./types.ts";
 import type { Params } from "./params.ts";
 import { effectiveRocker } from "./blade.ts";
 import { JUMP_PHASE } from "./jump.ts";
@@ -101,7 +101,7 @@ export function newTurn(): TurnState {
   return {
     t: 0, swept: 0, dir: 0, rate: 0, pathRate: 0, entryDir: 1,
     foot: FOOT.Right, exitFoot: FOOT.Right, cusps: 0, release: false, kind: TURN_KIND.ThreeTurn,
-    against: false, fromCode: EDGE_CODE_NONE, entrySpeed: 0,
+    against: false, fromCode: EDGE_CODE_NONE, entrySpeed: 0, reverseHeld: 0,
   };
 }
 
@@ -155,6 +155,47 @@ export function inaBauerEnd(s: SkaterState, events: EdgeEvent[]): void {
   });
 }
 
+export function newSpiral(): SpiralState {
+  return { foot: FOOT.Right, t: 0, fromCode: EDGE_CODE_NONE, entrySpeed: 0 };
+}
+
+/**
+ * Start a Spiral: one blade down, moving, any direction — data/motion-
+ * primitives.json's own "spiral", `pre.forward: "any"` unlike the Ina
+ * Bauer's forward-only. The free foot's load is already at or near zero
+ * (solver.ts's ordinary `[1 - weightR, weightR]` split) the moment the
+ * skater is standing on one blade; this only marks holding that on purpose.
+ */
+export function spiralStart(s: SkaterState, p: Params): boolean {
+  if (p.movesMode < 1 || s.fallen || s.move !== MOVE.None || s.jump.phase === JUMP_PHASE.Air) return false;
+  const speed = len(s.vel);
+  if (speed < p.spiralMinSpeed) return false;
+  const Sp = s.spiral;
+  Sp.foot = s.supportFoot;
+  Sp.t = 0;
+  Sp.fromCode = s.blade[s.supportFoot].code;
+  Sp.entrySpeed = speed;
+  s.move = MOVE.Spiral;
+  s.strokeTime = 0;
+  s.crossover = false;
+  return true;
+}
+
+/** Letting go, falling, or slowing too far ends it — the free leg comes back down. */
+export function spiralEnd(s: SkaterState, events: EdgeEvent[]): void {
+  const Sp = s.spiral;
+  const b = s.blade[Sp.foot];
+  const r = s.moveDone;
+  r.tick = s.tick; r.kind = MOVE.Spiral; r.detail = Sp.foot; r.revolutions = 0;
+  r.fromCode = Sp.fromCode; r.toCode = b.code; r.speedLost = Sp.entrySpeed - len(s.vel); r.seconds = Sp.t;
+  r.positions = 0; r.bestSegRevs = 0; r.travel = 0;
+  s.move = MOVE.None;
+  events.push({
+    tick: s.tick, type: EVENT.Spiral, foot: Sp.foot,
+    prevCode: Sp.fromCode, newCode: b.code, prevDwell: Sp.t, value: Sp.t,
+  });
+}
+
 /**
  * data/spin-positions.json's inertia_scale for the three basic positions, on
  * its 4.0 kg m^2 open baseline — transcribed, because sim/ cannot read a file;
@@ -175,6 +216,8 @@ export function newSpin(): SpinState {
     position: SPIN_POSITION.Upright, positionsHeld: 0, segRevs: 0, bestSegRevs: 0,
     segOmegaMin: 0, segOmegaMax: 0, foot: FOOT.Right, anchor: { x: 0, y: 0 }, travel: 0,
     fromCode: EDGE_CODE_NONE, entrySpeed: 0,
+    changingFoot: false, changeAirT: 0, changeStartOmega: 0, changeStartPosition: SPIN_POSITION.Upright,
+    changeCompletedTick: -1, changeAirTimeS: 0, changeRevolutionsLost: 0, changePositionChanged: false,
   };
 }
 
@@ -204,7 +247,12 @@ export const pivoting = (s: SkaterState): boolean => s.move === MOVE.Turn || s.m
 export const replacesCarve = (s: SkaterState): boolean => pivoting(s) || s.move === MOVE.Spin;
 
 /** +1 while the travel frame points the way the pivot began, -1 after an odd number of cusps. */
-const travelSense = (T: TurnState): number => (T.cusps % 2 === 0 ? T.entryDir : -T.entryDir);
+// A rocker or counter never reverses travel — that is the whole distinction
+// from a three-turn/bracket (bible §2.3, sim/types.ts's own TURN_KIND
+// comment): the lobe (curve sense) reverses, the direction facing it does
+// not. Every other kind alternates on cusp parity, the way it always has.
+const travelSense = (T: TurnState): number =>
+  (T.kind === TURN_KIND.Rocker || T.kind === TURN_KIND.Counter || T.cusps % 2 === 0) ? T.entryDir : -T.entryDir;
 
 /** The foot a pivot in progress has its weight on. */
 export function turnLoadFoot(s: SkaterState): Foot {
@@ -250,6 +298,7 @@ function beginPivot(s: SkaterState, p: Params, minSpeed: number, needEdge: boole
   T.kind = against ? TURN_KIND.Bracket : TURN_KIND.ThreeTurn;
   T.fromCode = b.code;
   T.entrySpeed = speed;
+  T.reverseHeld = 0;
   s.strokeTime = 0;
   s.crossover = false;
   return true;
@@ -327,10 +376,19 @@ export interface PivotTick { lat: number; cusp: boolean; ended: boolean }
  * lateral acceleration the body feels, for the pendulum, whether this tick was
  * the cusp, and whether the turn finished.
  */
-export function turnPivot(s: SkaterState, p: Params, dt: number, weightR: number): PivotTick {
+export function turnPivot(
+  s: SkaterState, p: Params, dt: number, weightR: number,
+  /** Whichever button started this pivot (`input.turn`, or `input.bracket` if `against`) — read
+   *  only at the first cusp, to decide a Loop, Rocker or Counter (see TURN_KIND's own comment). */
+  entryHeld = false,
+  /** Raw stick, -1..1 — NOT solver.ts's own radian-scaled `leanCmd`; only the Rocker/Counter
+   *  reversal check reads this, the same idiom sim/moves.ts's own spinTick already uses. */
+  leanAxis = 0,
+): PivotTick {
   const T = s.turn;
   T.t += dt;
-  const stepAngle = Math.min(T.rate * dt, Math.PI - T.swept);
+  const ceiling = T.kind === TURN_KIND.Loop ? 2 * Math.PI : Math.PI;
+  const stepAngle = Math.min(T.rate * dt, ceiling - T.swept);
   T.swept += stepAngle;
   const footChanged = T.kind === TURN_KIND.Mohawk;
   // Fighting the curve scrapes harder throughout (bible §2.3: bracket and
@@ -340,6 +398,20 @@ export function turnPivot(s: SkaterState, p: Params, dt: number, weightR: number
   // same fraction for a choctaw, since nothing distinguishes the landing.
   const scrub = (T.against ? p.againstTurnScrub : 1) * (T.cusps > 0 && footChanged ? p.mohawkScrub : 1);
   let speed = pivotStep(s, p, dt, stepAngle, scrub);
+
+  // "Reversing" means against the PHYSICAL curve the skater is actually on,
+  // the same thing regardless of which button asked for this pivot — not
+  // against T.dir, which `against` (a bracket or counter) deliberately
+  // inverts from that curve already. Undoing that inversion here is what
+  // keeps "push the other way" meaning the same thing whether this pivot
+  // started from `turn` or `bracket`.
+  const curveSense = T.against ? -T.dir : T.dir;
+  // Tracked every tick, not read only at the cusp: a real stick (and a
+  // digital one, scaled down for its own "manageable shallow edge" reason,
+  // game/controls.ts) will not reliably be at its own peak push on the
+  // exact tick the cusp happens to land on. A running max survives that the
+  // same way a held check already has to.
+  if (T.cusps === 0) T.reverseHeld = Math.max(T.reverseHeld, Math.max(0, -curveSense * leanAxis));
 
   // The cusp: blade square to the path. The frame reverses, and — entered
   // into the curve — the weight decides which turn this was: still on the
@@ -356,6 +428,11 @@ export function turnPivot(s: SkaterState, p: Params, dt: number, weightR: number
     flipFrame(s);
     const other = (1 - T.foot) as Foot;
     const toOther = !T.against && (other === FOOT.Right ? weightR > 0.75 : weightR < 0.25);
+    // Held through the cusp, stick pushed past p.rockerCounterStick against
+    // this pivot's own rotational sense: a request to reverse the lobe
+    // instead of continuing it — TURN_KIND's own comment on why travelSense
+    // has to special-case these two.
+    const reversing = entryHeld && Math.max(T.reverseHeld, Math.max(0, -curveSense * leanAxis)) >= p.rockerCounterStick;
     if (toOther) {
       T.kind = TURN_KIND.Mohawk;
       T.exitFoot = other;
@@ -363,9 +440,24 @@ export function turnPivot(s: SkaterState, p: Params, dt: number, weightR: number
       to.normalLoad = from.normalLoad; to.weight = 1; to.inContact = true;
       from.normalLoad = 0; from.weight = 0; from.inContact = false;
       s.supportFoot = other;
+    } else if (reversing) {
+      T.kind = T.against ? TURN_KIND.Counter : TURN_KIND.Rocker;
+    } else if (!T.against && entryHeld) {
+      // Still holding `turn`, weight not shifted, stick not reversed: a Loop
+      // instead of checking out here — the same pivot, run to a second cusp
+      // instead of ending at this first one.
+      T.kind = TURN_KIND.Loop;
     }
     // A jump being loaded through the turn takes its setup from the exit edge.
     if (s.jump.phase === JUMP_PHASE.Load) s.jump.setup = 0;
+  } else if (T.kind === TURN_KIND.Loop && T.cusps === 1 && T.swept >= 3 * Math.PI / 2) {
+    // The second cusp: the frame flips back, undoing the first — same foot,
+    // same edge, same direction on the far side, having swept a full circle.
+    // Not reported through `cusp` (turnEvent's own trigger): the classification
+    // — that this became a Loop at all — was already decided, and reported,
+    // at the first one; this is that same move continuing, not a new one.
+    T.cusps = 2;
+    flipFrame(s);
   }
 
   const sense = travelSense(T);
@@ -374,7 +466,7 @@ export function turnPivot(s: SkaterState, p: Params, dt: number, weightR: number
   pivotBlades(s, speed);
 
   let ended = false;
-  if (T.swept >= Math.PI) { endPivot(s, p, speed); ended = true; }
+  if (T.swept >= ceiling) { endPivot(s, p, speed); ended = true; }
   return { lat: T.pathRate * speed * sense, cusp, ended };
 }
 
@@ -479,9 +571,25 @@ export function spinTick(
   s: SkaterState, p: Params, dt: number, knee: number, pitch: number, carriage: number, held: boolean,
   /** Raw stick, -1..1 — NOT solver.ts's own radian-scaled `leanCmd`; only a reversal check reads this. */
   leanAxis = 0,
+  /**
+   * A fresh toe press this tick (solver.ts's own HELD.Toe edge, `input.toe` unused elsewhere during
+   * a spin) — starts a brief, airborne foot change if one is not already under way. The blade leaves
+   * the ice for `spinFootChangeAirTime`, angular momentum conserved but for the one-time transfer
+   * cost, and lands on the other foot: data/spin-features.json's change_foot_by_jump family.
+   */
+  footChangeTrigger = false,
 ): PivotTick {
   const Sp = s.spin;
   Sp.t += dt;
+
+  if (footChangeTrigger && !Sp.changingFoot) {
+    Sp.changingFoot = true;
+    Sp.changeAirT = 0;
+    Sp.changeStartOmega = Sp.omega;
+    Sp.changeStartPosition = Sp.position;
+    Sp.angMomentum *= 1 - p.spinFootChangeLoss;
+    Sp.omega = Sp.angMomentum / Sp.inertia;
+  }
 
   const pos = spinPosition(knee, pitch, p);
   if (pos !== Sp.position) {
@@ -500,22 +608,27 @@ export function spinTick(
   // ordinary decay; once that is checked to spinReverseFloor the direction
   // flips and regenerates, scaled by how hard the check was held. Free while
   // the stick agrees with Sp.dir or sits near neutral — `against` is 0 there.
-  const against = Math.max(0, -Sp.dir * leanAxis);
+  // No blade-ice friction and no reversal check while airborne on a foot
+  // change — angular momentum is exactly conserved there but for the one-time
+  // transfer cost already spent at the trigger.
+  const against = Sp.changingFoot ? 0 : Math.max(0, -Sp.dir * leanAxis);
   // Below the threshold this is not a check at all — a stick imperfectly
   // centred, or nudged the "wrong" way by a little, costs nothing. Only past
   // it does the extra decay (and the possibility of a flip) apply.
   const checking = against >= p.spinReverseStick;
   const drift = len(s.vel);
   s.vel = mul(s.vel, Math.max(0, 1 - dt / p.spinTravelTime));
-  Sp.angMomentum *= Math.max(0, 1 - (p.spinDecay + p.spinTravelDecay * drift + p.spinReverseRate * (checking ? against : 0)) * dt);
-  if (checking && Sp.angMomentum <= p.spinReverseFloor) {
-    Sp.dir = -Sp.dir;
-    Sp.angMomentum = p.spinReverseRegen * against;
-    // A fresh segment, the same reason a position change starts one: the
-    // pre-flip revolutions must not bleed into the new direction's count.
-    Sp.segRevs = 0;
-    Sp.segOmegaMin = Sp.angMomentum / Sp.inertia;
-    Sp.segOmegaMax = Sp.segOmegaMin;
+  if (!Sp.changingFoot) {
+    Sp.angMomentum *= Math.max(0, 1 - (p.spinDecay + p.spinTravelDecay * drift + p.spinReverseRate * (checking ? against : 0)) * dt);
+    if (checking && Sp.angMomentum <= p.spinReverseFloor) {
+      Sp.dir = -Sp.dir;
+      Sp.angMomentum = p.spinReverseRegen * against;
+      // A fresh segment, the same reason a position change starts one: the
+      // pre-flip revolutions must not bleed into the new direction's count.
+      Sp.segRevs = 0;
+      Sp.segOmegaMin = Sp.angMomentum / Sp.inertia;
+      Sp.segOmegaMax = Sp.segOmegaMin;
+    }
   }
   Sp.omega = Sp.angMomentum / Sp.inertia;
 
@@ -528,6 +641,22 @@ export function spinTick(
   const ax = s.pos.x - Sp.anchor.x, ay = s.pos.y - Sp.anchor.y;
   Sp.travel = Math.max(Sp.travel, Math.sqrt(ax * ax + ay * ay));
 
+  if (Sp.changingFoot) {
+    Sp.changeAirT += dt;
+    if (Sp.changeAirT >= p.spinFootChangeAirTime) {
+      Sp.changingFoot = false;
+      Sp.foot = (1 - Sp.foot) as Foot;
+      Sp.changeCompletedTick = s.tick;
+      Sp.changeAirTimeS = Sp.changeAirT;
+      // What "lost" means here: the revolutions NOT swept, at the pre-change
+      // rate, during the time the blade was actually off the ice — not a
+      // fabricated number, the same operational honesty spinLevel.ts's own
+      // header holds every other scored quantity to.
+      Sp.changeRevolutionsLost = (Sp.changeStartOmega * Sp.changeAirT) / (2 * Math.PI);
+      Sp.changePositionChanged = Sp.position !== Sp.changeStartPosition;
+    }
+  }
+
   s.heading = normalizeOr(rotate(s.heading, Sp.dir * dAngle), s.heading);
   s.yawRate = Sp.dir * Sp.omega;
   s.lean += (0 - s.lean) * Math.min(1, dt / SPIN_SETTLE);
@@ -537,7 +666,11 @@ export function spinTick(
     const b = s.blade[i];
     b.tangent = { x: s.heading.x, y: s.heading.y };
     b.latForce = 0; b.latSlipAccel = 0; b.demandRatio = 0; b.biteCapacity = 0; b.turnRadius = Infinity;
-    if (b.inContact) {
+    if (Sp.changingFoot) {
+      // Airborne, briefly: neither blade is on the ice mid-change.
+      b.longSpeed = 0;
+      b.regime = REGIME.Unloaded;
+    } else if (b.inContact) {
       // On the back edge that curves the way the spin turns.
       b.tilt = -Sp.dir * SPIN_EDGE;
       b.longSpeed = -SPIN_BLADE_SPEED;
@@ -551,9 +684,10 @@ export function spinTick(
   // A reversal in progress is deliberately, briefly slower than spinMinOmega
   // — that dip through near-zero is what "killing all angular momentum" IS —
   // so an active check (against past the stick threshold) is exempted from
-  // the ordinary too-slow exit for as long as it is held. Letting go without
-  // completing one still ends the spin exactly as before.
-  const ended = !held || (Sp.omega < p.spinMinOmega && !checking);
+  // the ordinary too-slow exit for as long as it is held, and so is a foot
+  // change's own brief airborne moment. Letting go without completing either
+  // still ends the spin exactly as before.
+  const ended = !held || (Sp.omega < p.spinMinOmega && !checking && !Sp.changingFoot);
   if (ended) {
     if (Sp.segRevs >= 2) Sp.positionsHeld |= 1 << Sp.position;
     const exitFoot = (Sp.dir > 0 ? FOOT.Right : FOOT.Left) as Foot;

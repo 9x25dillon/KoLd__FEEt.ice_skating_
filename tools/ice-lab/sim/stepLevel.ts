@@ -12,8 +12,15 @@
 // each, never invented — every type below is a real, distinct mechanic
 // already in sim/moves.ts or the edge classifier, not a new one built to
 // pad the count:
-//   DIFFICULT {rocker, counter, bracket, twizzle, loop}: two of five.
-//     Rocker, counter and a turn-shaped "loop" are not mechanics here.
+//   DIFFICULT {rocker, counter, bracket, twizzle, loop}: five of five, all
+//     of them, now. Rocker and Counter turned out buildable after all —
+//     TURN_KIND's own comment has the full account of what was actually
+//     wrong about "a different cusp topology this rig's pivot does not
+//     have": travelSense does not track rotation swept, only whether the
+//     exit faces with or against the skater's own CURRENT momentum, and a
+//     single-cusp pivot that pins it to "with" regardless of cusp parity is
+//     Rocker (from `turn`) or Counter (from `bracket`) — the same pivot
+//     every other turn already runs, one more special case in one function.
 //   SIMPLE {three_turn, mohawk, choctaw}: two of three. TURN_KIND's own
 //     comment is explicit that a "choctaw" built the same way as a mohawk
 //     is not actually one — no foot-changing bracket exists.
@@ -23,24 +30,32 @@
 //     nothing new to build).
 // A crossover is not in the data's taxonomy at all, but is unambiguously
 // its own piece of footwork (sim/moves.ts's own crossover push, distinct
-// from a stroke), so it is counted as a seventh, rig-specific type — see
-// STEP_TYPE_NAME. Six types total, two of them "difficult".
+// from a stroke), so it is counted as a tenth, rig-specific type — see
+// STEP_TYPE_NAME. Nine types total, five of them "difficult".
 //
-// With six types against a ladder that needs seven for grade 2 (§"Simple
-// variety"), this scorer's own honest ceiling is grade 1 ("Minimum
-// variety") — never grade 2, 3 or 4, however the six are combined. This is
-// exact, not approximate: it does not depend on which six a given routine
-// happens to show, since VARIETY_LADDER's own grade 2 needs 7 distinct
-// types full stop, and 7 is more than 6 no matter how they are counted.
+// Nine types and five difficult clears VARIETY_LADDER's own grade 3
+// ("Variety": 9 types, 4 difficult, both feet, difficult turns on both
+// feet) — the honest ceiling moves to grade 3, given a routine that
+// actually spreads its difficult turns across both feet (StepSequenceTracker
+// checks this; it is not automatic). Grade 4 needs 11 types (this rig has
+// 9), so it is out of reach on the type count alone regardless — choctaw or
+// a real STEPS-category mechanic (no data backing exists for any of the
+// seven STEPS types) would be needed. Its own `difficult_turns_in_both_
+// rotational_directions` requirement is a second, SEPARATE gap: StepGrade/
+// scoreStepLevel below do not parse or check it at all yet, so reaching 11
+// types would not be enough by itself — worth knowing before assuming
+// grade 4 is one mechanic away.
 
 import type { Foot } from "./types.ts";
 
 export const STEP_TYPE = {
-  ThreeTurn: 0, Mohawk: 1, Bracket: 2, Twizzle: 3, Crossover: 4, ChangeOfEdge: 5,
+  ThreeTurn: 0, Mohawk: 1, Bracket: 2, Twizzle: 3, Crossover: 4, ChangeOfEdge: 5, Loop: 6, Rocker: 7, Counter: 8,
 } as const;
-export const STEP_TYPE_NAME = ["three-turn", "mohawk", "bracket", "twizzle", "crossover", "change of edge"] as const;
-/** data/step-features.json's turn_taxonomy.difficult, restricted to what this rig has. */
-const DIFFICULT = new Set<number>([STEP_TYPE.Bracket, STEP_TYPE.Twizzle]);
+export const STEP_TYPE_NAME = [
+  "three-turn", "mohawk", "bracket", "twizzle", "crossover", "change of edge", "loop", "rocker", "counter",
+] as const;
+/** data/step-features.json's turn_taxonomy.difficult — all five now real. */
+const DIFFICULT = new Set<number>([STEP_TYPE.Bracket, STEP_TYPE.Twizzle, STEP_TYPE.Loop, STEP_TYPE.Rocker, STEP_TYPE.Counter]);
 
 export interface StepEvent {
   type: number;

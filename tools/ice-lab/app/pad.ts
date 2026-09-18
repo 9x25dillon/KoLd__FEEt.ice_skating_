@@ -201,6 +201,15 @@ export class Pad {
   private prevKeys = new Set<string>();
   private ltWasDown = false;
   private ltTicks = 0;
+  /**
+   * LB and RB alone each set weight fully onto one foot; held together they
+   * ALSO trigger the shared Ina-Bauer/Spiral button — so the instant both are
+   * down, the ordinary `wl`/`wr` read can no longer tell which foot (if
+   * either) was already committed. Remembered from the tick just before the
+   * combo engages, so pressing one bumper first, then adding the other,
+   * reaches a Spiral instead of collapsing back to a shared Ina Bauer.
+   */
+  private lastFootWeight = 0.5;
 
   constructor(target: HTMLElement | Window = window) {
     target.addEventListener("keydown", (e) => {
@@ -239,8 +248,10 @@ export class Pad {
       out.knee = Math.max(0, Math.min(1, gp.buttons[RT]?.value ?? 0));
       const wl = gp.buttons[LB]?.pressed ? 1 : 0;
       const wr = gp.buttons[RB]?.pressed ? 1 : 0;
-      out.weight = wl && !wr ? 0 : wr && !wl ? 1 : 0.5;
-      if (moves && wl && wr) out.inaBauer = true;
+      const comboHeld = wl && wr;
+      if (!comboHeld) this.lastFootWeight = wl ? 0 : wr ? 1 : 0.5;
+      out.weight = this.lastFootWeight;
+      if (moves && comboHeld) out.inaBauer = true;
       out.push = (gp.buttons[A]?.pressed ?? false) && !this.prevButtons.has(A);
       const ltDown = (gp.buttons[LT]?.value ?? 0) > TRIGGER;
       this.ltTicks = ltDown ? this.ltTicks + 1 : 0;

@@ -313,6 +313,13 @@ export interface Params {
   turnCarry: number;
   /** Seconds that carried rotation takes to drain away. */
   turnCarryTime: number;
+  /** 0..1, the held-stick threshold (raw axis, not radians, tracked as a running max over the whole
+   *  pre-cusp half — TurnState's own `reverseHeld`) that asks a held Loop-candidate cusp to reverse
+   *  the lobe instead — a Rocker from `turn`, a Counter from `bracket` (TURN_KIND's own comment).
+   *  Deliberately well under game/controls.ts's own 0.35 digital-lean scale-down for schemes other
+   *  than B ("a manageable shallow edge") — a threshold above what a keyboard press can even reach
+   *  there would make the move unreachable outside scheme B, not merely hard. */
+  rockerCounterStick: number;
   /**
    * rad/s a twizzle spins at with the arms in. data/motion-primitives.json's
    * twizzle is two revolutions over 4.5 m at 6 m/s: 16.8 rad/s.
@@ -370,6 +377,18 @@ export interface Params {
   spinReverseFloor: number;
   /** angMomentum the flip regenerates, at full opposition — comparable to a fresh entry's own. */
   spinReverseRegen: number;
+  // ── the foot change (a combination spin) ─────────────────────────────────
+  // data/spin-features.json's change_foot_by_jump, difficult_change_of_foot
+  // and all_three_positions_second_foot all need a real second foot to change
+  // to — sim/moves.ts's spinTick triggers this on a fresh toe press (input.toe,
+  // unused during a spin otherwise), briefly airborne on the same body, the
+  // ordinary way a change-foot spin actually works: the blade leaves the ice
+  // just long enough to land on the other one, spinning throughout.
+  /** Seconds the change stays airborne — comfortably over the data's own 0.12 s floor and under
+   *  its 0.4 s resume window, so a completed change always qualifies on both counts by construction. */
+  spinFootChangeAirTime: number;
+  /** Fraction of angMomentum the transfer costs, applied once at the moment the change triggers. */
+  spinFootChangeLoss: number;
   /** m/s an Ina Bauer needs: it is a glide, and a slow one falls over. */
   inaBauerMinSpeed: number;
   /**
@@ -383,6 +402,21 @@ export interface Params {
    * Ina Bauer: -1.1 m/s over 6 m at 6 m/s.
    */
   inaBauerScrub: number;
+  // ── the Spiral (one blade, free leg extended, any direction) ─────────────
+  // data/motion-primitives.json's "spiral": pre.forward "any", unlike the Ina
+  // Bauer's forward-only — the same button (solver.ts's HELD.InaBauer) reaches
+  // either, chosen by weightR at the press: shared near evenly is the Ina
+  // Bauer, on one foot is this.
+  /** m/s a Spiral needs: it is a glide, and a slow one falls over. */
+  spiralMinSpeed: number;
+  /** The free leg extended, body held long: its drag area as a multiple of `cdA`.
+   *  Measured: 1.6 loses about 0.9 m/s in one second at 6.4 m/s — data/motion-
+   *  primitives.json's own -0.9 m/s over 7 m, no scrub term needed (one blade,
+   *  no trailing-foot friction the way the Ina Bauer's own drag pairs with). */
+  spiralDrag: number;
+  /** Half-width of the "shared weight" zone around weightR 0.5 that still reaches an Ina Bauer
+   *  instead — outside [spiralWeightBand, 1 - spiralWeightBand], the press is a Spiral. */
+  spiralWeightBand: number;
   /**
    * The share of a jump's lift that comes from its approach speed, with the
    * moves on. A takeoff is not a leg pushing up from rest: the skater's travel
@@ -668,6 +702,7 @@ export const DEFAULT_PARAMS: Params = {
   turnMinSpeed: 1.0,
   turnCarry: 0.11,           // a three-turn entry worth about a third of a revolution at a full whip
   turnCarryTime: 0.5,
+  rockerCounterStick: 0.2,
   twizzleRate: 16.0,
   twizzleArmsOut: 0.5,
   twizzleScrub: 0.75,
@@ -687,9 +722,14 @@ export const DEFAULT_PARAMS: Params = {
   spinReverseRate: 1.5,      // measured: kills a typical entry L in under 2 s of held opposition
   spinReverseFloor: 0.5,     // near-zero: the too-slow exit is held off while a check is in progress
   spinReverseRegen: 25.0,    // a fresh spin's own entry L is roughly 17-40 across spinMinSpeed..5 m/s
+  spinFootChangeAirTime: 0.18, // over data's min_air_time_s 0.12, under its resumes_spin_within_s 0.4
+  spinFootChangeLoss: 0.15,
   inaBauerMinSpeed: 2.0,
   inaBauerDrag: 2.0,
   inaBauerScrub: 0.13,
+  spiralMinSpeed: 2.0,
+  spiralDrag: 1.6,
+  spiralWeightBand: 0.35,
   jumpSpeedShare: 0.2,
 
   staminaMode: 0,
@@ -819,6 +859,7 @@ export function validate(p: Params): string[] {
   if (p.turnCarry > 1) errs.push("turnCarry is a share of the pivot rate, 0..1");
   if (p.againstTurnScrub < 1) errs.push("againstTurnScrub is against a three-turn's cost, and fighting the curve cannot be cheaper");
   if (p.turnCarryTime <= 0) errs.push("turnCarryTime must be positive");
+  if (p.rockerCounterStick <= 0 || p.rockerCounterStick > 1) errs.push("rockerCounterStick is a stick threshold, in (0, 1]");
   if (p.twizzleRate * SIM_DT >= Math.PI / 2)
     errs.push("twizzleRate turns a quarter revolution in a tick, so a cusp could be skipped");
   if (p.twizzleArmsOut >= 1) errs.push("twizzleArmsOut is a share of the rate, below 1");
@@ -830,7 +871,13 @@ export function validate(p: Params): string[] {
   if (p.spinReverseRate <= 0) errs.push("spinReverseRate must be positive: a reversal has to actually check the spin");
   if (p.spinReverseFloor <= 0) errs.push("spinReverseFloor must be positive: angMomentum decays toward it, never past zero");
   if (p.spinReverseRegen <= 0) errs.push("spinReverseRegen must be positive: the flip has to regenerate real momentum");
+  if (p.spinFootChangeAirTime < 0.12) errs.push("spinFootChangeAirTime is under data/spin-features.json's own min_air_time_s (0.12)");
+  if (p.spinFootChangeAirTime > 0.4) errs.push("spinFootChangeAirTime exceeds data/spin-features.json's own resumes_spin_within_s (0.4)");
+  if (p.spinFootChangeLoss < 0 || p.spinFootChangeLoss >= 1) errs.push("spinFootChangeLoss is a fraction of angMomentum lost, [0, 1)");
   if (p.inaBauerDrag < 1) errs.push("inaBauerDrag multiplies the upright drag area: a side-on body has more, not less");
+  if (p.spiralMinSpeed <= 0) errs.push("spiralMinSpeed must be positive: a glide from a standstill has nothing to hold");
+  if (p.spiralDrag < 1) errs.push("spiralDrag multiplies the upright drag area: an extended free leg has more, not less");
+  if (p.spiralWeightBand <= 0 || p.spiralWeightBand >= 0.5) errs.push("spiralWeightBand is a half-width around weightR 0.5, in (0, 0.5)");
   if (p.jumpSpeedShare > 1) errs.push("jumpSpeedShare is a share of the lift, 0..1");
   if (p.backPushScale <= 0 || p.backPushScale > 1)
     errs.push("backPushScale is a fraction of the forward push, in (0, 1]");

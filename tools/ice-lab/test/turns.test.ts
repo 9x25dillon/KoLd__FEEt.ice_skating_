@@ -12,7 +12,7 @@ import { test } from "node:test";
 import { PRESETS, DEFAULT_PARAMS, SIM_DT, validate } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import { createState, step } from "../sim/solver.ts";
-import { NEUTRAL_INPUT, EVENT, MOVE, TURN_KIND, codeToString } from "../sim/types.ts";
+import { NEUTRAL_INPUT, EVENT, MOVE, TURN_KIND, TURN_NAME, codeToString } from "../sim/types.ts";
 import type { SkaterState, SkatingInput, EdgeEvent } from "../sim/types.ts";
 import { JUMP, ROTATION_CALL } from "../sim/jump.ts";
 import { ReplayRecorder, parseReplay, verifyReplay } from "../sim/replay.ts";
@@ -109,6 +109,102 @@ test("weight on the other foot at the cusp makes it a mohawk: LFI onto RBI, a li
   // Measured: 0.421 m/s. The data: 0.40.
   const lost = r.s.moveDone.speedLost;
   assert.ok(lost > 0.36 && lost < 0.46, `mohawk cost ${lost.toFixed(3)} m/s`);
+});
+
+test("holding turn through the cusp instead of releasing loops it: same foot, same edge, same direction, 2pi swept", () => {
+  const tapped = drive(moves(), 6.8, 1, -0.3); // the ordinary three-turn, for comparison
+  const r = drive(moves(), 6.8, 1, -0.3, { each: (i) => ({ turn: i >= 240 && i < 280 }) });
+  assert.equal(r.turns.length, 1);
+  const t = r.turns[0];
+  assert.equal(t.value, TURN_KIND.Loop);
+  // turnEvent fires at the FIRST cusp — classification time, not completion —
+  // so its own newCode is the mid-loop snapshot (RBI), the same thing a
+  // three-turn's single cusp would show at that exact instant. The loop's
+  // own second half is what tells RFO>RFO apart from a three-turn's
+  // RFO>RBI, and only s.moveDone (endPivot, at the true 2pi completion)
+  // has it.
+  assert.equal(codeToString(t.prevCode), "RFO");
+  assert.equal(codeToString(t.newCode), "RBI", "the classification-time snapshot, mid-loop");
+  assert.equal(codeToString(r.s.moveDone.fromCode), "RFO");
+  assert.equal(codeToString(r.s.moveDone.toCode), "RFO", "the TRUE exit, at 2pi: back to the entry edge");
+  assert.equal(r.s.moveDone.revolutions, 1, "a full circle, not a half");
+  assert.equal(r.s.flips, 2, "two flips, net unchanged — flipFrame ran twice");
+  assert.ok(dot(r.s.vel, r.s.heading) > 0, "still skating FORWARD: direction never flipped");
+  assert.equal(r.s.fallen, false);
+  assert.ok(r.s.moveDone.speedLost > tapped.s.moveDone.speedLost,
+    `a loop (${r.s.moveDone.speedLost.toFixed(3)}) must cost more than a plain three-turn (${tapped.s.moveDone.speedLost.toFixed(3)})`);
+});
+
+test("releasing turn before the cusp still ends an ordinary three-turn, not a loop", () => {
+  const r = drive(moves(), 6.8, 1, -0.3, { each: (i) => ({ turn: i >= 240 && i < 245 }) });
+  assert.equal(r.turns.length, 1);
+  assert.equal(r.turns[0].value, TURN_KIND.ThreeTurn);
+});
+
+test("a bracket has no loop either: holding bracket through its own cusp still checks out at pi", () => {
+  const r = drive(moves(), 6.8, 1, -0.3, { against: true, each: (i) => ({ bracket: i >= 240 && i < 280 }) });
+  assert.equal(r.turns.length, 1);
+  assert.equal(r.turns[0].value, TURN_KIND.Bracket);
+  assert.equal(codeToString(r.turns[0].newCode), "RBI", "checks out at pi, same as a tapped bracket");
+});
+
+test("holding turn through the cusp with the stick reversed rockers it: same foot, forward stays forward, edge flips", () => {
+  const r = drive(moves(), 6.8, 1, -0.3, { each: (i) => (i >= 240 && i < 280 ? { turn: true, lean: 0.6 } : {}) });
+  assert.equal(r.turns.length, 1);
+  assert.equal(r.turns[0].value, TURN_KIND.Rocker);
+  assert.equal(codeToString(r.s.moveDone.fromCode), "RFO");
+  assert.equal(codeToString(r.s.moveDone.toCode), "RFI", "the lobe reverses (O to I); the three-turn's own RFO>RBI never happens here");
+  assert.equal(r.s.moveDone.revolutions, 0.5, "one cusp, half a turn — the same total sweep a three-turn has, not a loop's full circle");
+  assert.ok(dot(r.s.vel, r.s.heading) > 0, "still skating FORWARD: direction never flips, unlike a three-turn's own exit");
+  assert.equal(r.s.fallen, false);
+});
+
+test("a counter is the same reversal from a bracket entry: against the curve, the same edge outcome, but costs more", () => {
+  const r = drive(moves(), 6.8, 1, -0.3, { against: true, each: (i) => (i >= 240 && i < 280 ? { bracket: true, lean: 0.6 } : {}) });
+  assert.equal(r.turns.length, 1);
+  assert.equal(r.turns[0].value, TURN_KIND.Counter);
+  assert.equal(codeToString(r.s.moveDone.fromCode), "RFO");
+  assert.equal(codeToString(r.s.moveDone.toCode), "RFI");
+  assert.ok(dot(r.s.vel, r.s.heading) > 0, "still skating forward");
+  assert.equal(r.s.fallen, false);
+  const rocker = drive(moves(), 6.8, 1, -0.3, { each: (i) => (i >= 240 && i < 280 ? { turn: true, lean: 0.6 } : {}) });
+  assert.ok(r.s.moveDone.speedLost > rocker.s.moveDone.speedLost,
+    `against the curve must cost more, same as bracket outranks three-turn: counter ${r.s.moveDone.speedLost.toFixed(3)}, rocker ${rocker.s.moveDone.speedLost.toFixed(3)}`);
+});
+
+test("releasing turn before the cusp, or holding without reversing the stick, never rockers it", () => {
+  assert.equal(drive(moves(), 6.8, 1, -0.3, { each: (i) => (i >= 240 && i < 245 ? { turn: true, lean: 0.6 } : {}) }).turns[0].value,
+    TURN_KIND.ThreeTurn, "released before the cusp: an ordinary three-turn, stick direction irrelevant");
+  assert.equal(drive(moves(), 6.8, 1, -0.3, { each: (i) => (i >= 240 && i < 280 ? { turn: true, lean: 0.1 } : {}) }).turns[0].value,
+    TURN_KIND.Loop, "held through, but under rockerCounterStick: a Loop, not a Rocker");
+});
+
+test("a brief reversal mid-hold still rockers it, even if the stick is back to neutral by the exact cusp tick", () => {
+  // reverseHeld is a running max over the whole pre-cusp half, not a
+  // single-tick read — a real stick (or a digital one, scaled down by
+  // game/controls.ts) will not reliably peak on the exact cusp tick.
+  const r = drive(moves(), 6.8, 1, -0.3, {
+    each: (i) => (i < 240 ? {} : { turn: i < 280, lean: i >= 245 && i < 250 ? 0.6 : 0 }),
+  });
+  assert.equal(r.turns[0].value, TURN_KIND.Rocker,
+    `a push past rockerCounterStick anywhere in the pre-cusp half must still register, got ${TURN_NAME[r.turns[0].value]}`);
+});
+
+test("a rocker and a counter both replay tick for tick", () => {
+  const p = moves();
+  const recR = new ReplayRecorder(p, 6.8);
+  drive(p, 6.8, 1, -0.3, { each: (i) => (i >= 240 && i < 280 ? { turn: true, lean: 0.6 } : {}) }, recR);
+  assert.equal(verifyReplay(parseReplay(recR.toJson())).divergence, null);
+  const recC = new ReplayRecorder(p, 6.8);
+  drive(p, 6.8, 1, -0.3, { against: true, each: (i) => (i >= 240 && i < 280 ? { bracket: true, lean: 0.6 } : {}) }, recC);
+  assert.equal(verifyReplay(parseReplay(recC.toJson())).divergence, null);
+});
+
+test("a held loop replays tick for tick", () => {
+  const p = moves();
+  const rec = new ReplayRecorder(p, 6.8);
+  drive(p, 6.8, 1, -0.3, { each: (i) => ({ turn: i >= 240 && i < 280 }) }, rec);
+  assert.equal(verifyReplay(parseReplay(rec.toJson())).divergence, null);
 });
 
 /** yawRate mid-pivot (tick 245: past the cusp's earliest, well before Math.PI's swept out at turnTime). */

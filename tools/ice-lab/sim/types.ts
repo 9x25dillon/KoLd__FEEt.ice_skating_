@@ -154,11 +154,11 @@ export interface JumpResult {
 // ── moves ───────────────────────────────────────────────────────────────────
 
 /** The move under way. One at a time; sim/moves.ts owns every field. */
-export const MOVE = { None: 0, Turn: 1, Twizzle: 2, Spin: 3, InaBauer: 4 } as const;
-export const MOVE_NAME = ["", "TURN", "TWIZZLE", "SPIN", "INA BAUER"] as const;
+export const MOVE = { None: 0, Turn: 1, Twizzle: 2, Spin: 3, InaBauer: 4, Spiral: 5 } as const;
+export const MOVE_NAME = ["", "TURN", "TWIZZLE", "SPIN", "INA BAUER", "SPIRAL"] as const;
 
 /** Bits of SkaterState.movesHeld: which move buttons were down last tick. */
-export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8, Bracket: 16 } as const;
+export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8, Bracket: 16, Toe: 32 } as const;
 
 /**
  * An Ina Bauer in progress: both feet down on parallel tracks, the lead foot
@@ -169,6 +169,22 @@ export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8, Bracket: 16 } a
 export interface InaBauerState {
   /** The foot skating forward; the other trails, backward. */
   lead: Foot;
+  t: number;
+  fromCode: number;
+  entrySpeed: number;
+}
+
+/**
+ * A Spiral in progress: data/motion-primitives.json's own "spiral" — one
+ * blade down, the free leg extended, any direction (unlike the Ina Bauer,
+ * which the data restricts to forward). The free foot's own weight already
+ * goes to zero through the ordinary carve's ["1 - weightR", "weightR"] load
+ * split (solver.ts) the moment the skater stands on one blade — this state
+ * only marks the moment deliberate, and times it.
+ */
+export interface SpiralState {
+  /** The one loaded foot, snapshotted at entry. */
+  foot: Foot;
   t: number;
   fromCode: number;
   entrySpeed: number;
@@ -207,13 +223,30 @@ export interface SpinState {
   /** rad/s, the slowest and fastest in the current position: "clear increase of speed". */
   segOmegaMin: number;
   segOmegaMax: number;
-  /** The spinning foot. */
+  /** The spinning foot. Toggles across a completed foot change (sim/moves.ts spinTick). */
   foot: Foot;
   /** Where the spin began, and the furthest it has travelled from there, m. */
   anchor: Vec2;
   travel: number;
   fromCode: number;
   entrySpeed: number;
+
+  // ── the foot change (data/spin-features.json's change_foot_by_jump,
+  // difficult_change_of_foot, all_three_positions_second_foot) ────────────
+  /** A brief, airborne foot change is under way — `foot` has not yet toggled. */
+  changingFoot: boolean;
+  /** Seconds into the current change, while `changingFoot`. */
+  changeAirT: number;
+  /** omega and SPIN_POSITION at the moment the change was triggered — for scoring the completed one. */
+  changeStartOmega: number;
+  changeStartPosition: number;
+  /** s.tick the most recently completed change finished on, or -1 if none yet this spin. */
+  changeCompletedTick: number;
+  changeAirTimeS: number;
+  /** Revolutions not swept during the air time, at the pre-change rate — what "lost" means here. */
+  changeRevolutionsLost: number;
+  /** Whether SPIN_POSITION also differs across the change (difficult_change_of_foot). */
+  changePositionChanged: boolean;
 }
 
 /** Which turn a pivot became, decided at the cusp by the foot the weight is on. */
@@ -234,11 +267,48 @@ export interface SpinState {
  * does, just rotated the other way — no ISU turn is that). So a bracket
  * cannot become anything at its cusp; weight is ignored while `against`.
  *
- * Rocker and counter — same foot, same edge, curve reverses — are a third,
- * different mechanic (no edge change at all) and are not built either.
+ * Loop, the fourth, is not a fifth axis: it is the SAME pivot (data/motion-
+ * primitives.json's own `post: {foot: same, edge: same, forward: same}`) run
+ * through two cusps back to back instead of one — a second flipFrame at
+ * 3π/2 undoes the first, so the exit lands back on the entry edge and foot,
+ * having swept 2π instead of π. Requested by holding `turn` THROUGH the
+ * ordinary cusp instead of letting it check out at π (sim/moves.ts's
+ * `turnPivot`); a bracket has no loop sibling, the same reason it has no
+ * mohawk one — `against` is not read again once the pivot is under way.
+ *
+ * Rocker and Counter, the fifth and sixth, were the one gap genuinely
+ * re-examined and found buildable after all — the note above ("no edge
+ * change at all") was wrong about what `travelSense` actually does. It does
+ * not track how far anything has rotated; `endPivot` builds the exit frame
+ * from `mul(s.vel, travelSense(T) / speed)` — CURRENT velocity, signed. Its
+ * only job is "does the exit blade face WITH the body's own momentum
+ * (forward) or AGAINST it (backward)". A three-turn/bracket/mohawk flips
+ * that sign once, at the one cusp they have — the exit faces backward
+ * relative to a momentum that never itself reversed (a three-turn does not
+ * stop the skater; it reverses which way the blade meets that continuing
+ * momentum). A loop flips it twice, net unchanged, over two cusps. Rocker
+ * and Counter need a THIRD case travelSense must special-case explicitly:
+ * one cusp, `flipFrame` runs exactly once (so the edge character changes,
+ * same as a three-turn's own single flip) — but travelSense stays
+ * `entryDir` regardless, because a rocker's whole point is that the exit
+ * still faces the way the momentum is already going. Requested at the same
+ * cusp as Loop, distinguished by the stick: held through with the SAME
+ * sense as the entry curve continues it (Loop); held through PUSHED AGAINST
+ * the entry curve's own sense asks to reverse the lobe instead (Rocker from
+ * `turn`, Counter from `bracket` — the same into/against split as
+ * ThreeTurn/Bracket carries over, since nothing else distinguishes them
+ * once the edge outcome no longer does). The comparison itself is against
+ * the entry curve's own sense (`T.against ? -T.dir : T.dir`, sim/moves.ts's
+ * `curveSense`), not `T.dir` directly — `against` already inverts `T.dir`
+ * from the curve once, at entry, and reading it raw would make a bracket's
+ * own UNCHANGED entry stick misread as a reversal request. `T.reverseHeld`
+ * tracks the push as a running max across the whole pre-cusp half, not a
+ * single-tick snapshot — a real stick, and a digital one scaled down by
+ * game/controls.ts's own "manageable shallow edge", will not reliably peak
+ * on the exact tick the cusp happens to land on.
  */
-export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1, Bracket: 2 } as const;
-export const TURN_NAME = ["three-turn", "mohawk"] as const;
+export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1, Bracket: 2, Loop: 3, Rocker: 4, Counter: 5 } as const;
+export const TURN_NAME = ["three-turn", "mohawk", "bracket", "loop", "rocker", "counter"] as const;
 
 /**
  * A pivot in progress — a turn or a twizzle. The blade rotates about its
@@ -277,6 +347,14 @@ export interface TurnState {
   fromCode: number;
   /** Speed when the pivot began, m/s. */
   entrySpeed: number;
+  /**
+   * Running max of the reversal push (Math.max(0, -dir * leanAxis)), sampled
+   * every tick from entry to the first cusp — not a single-tick snapshot, the
+   * same reason a real stick or a scaled-down digital one still reaches a
+   * Rocker/Counter even if it never happens to be at its own peak on the
+   * exact cusp tick. See turnPivot's own comment.
+   */
+  reverseHeld: number;
 }
 
 /** The last move that finished, for the panel and the tests. */
@@ -410,6 +488,7 @@ export interface SkaterState {
   turn: TurnState;
   spin: SpinState;
   inaBauer: InaBauerState;
+  spiral: SpiralState;
   /** The last move that finished. */
   moveDone: MoveResult;
   /** HELD bits: which move buttons were down last tick. A move starts on a fresh press. */
@@ -561,15 +640,15 @@ export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
   SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
   Takeoff: 8, Landing: 9, Turn: 10, Twizzle: 11, Spin: 12, InaBauer: 13,
-  MusicHit: 14, MusicMiss: 15, MusicAccent: 16,
+  MusicHit: 14, MusicMiss: 15, MusicAccent: 16, Spiral: 17,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
   "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
   "TAKEOFF", "LANDING", "TURN", "TWIZZLE", "SPIN", "INA BAUER",
-  "MUSIC HIT", "MUSIC MISS", "MUSIC ACCENT",
+  "MUSIC HIT", "MUSIC MISS", "MUSIC ACCENT", "SPIRAL",
 ] as const;
 
 export interface EdgeEvent {

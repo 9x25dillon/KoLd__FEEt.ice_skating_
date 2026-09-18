@@ -31,6 +31,8 @@ import { SpinLevelTracker, loadSpinFeatureThresholds, scoreSpinLevel } from "../
 import type { SpinFeatureThresholds } from "../sim/spinLevel.ts";
 import { loadStepFeatureThresholds } from "../sim/stepLevel.ts";
 import type { StepFeatureThresholds } from "../sim/stepLevel.ts";
+import { loadSegmentRules } from "../sim/pcs.ts";
+import type { SegmentRule } from "../sim/pcs.ts";
 
 const el = (id: string) => document.getElementById(id)!;
 const canvas = el("rink") as HTMLCanvasElement;
@@ -85,6 +87,9 @@ void fetch("../data/spin-features.json").then(r => r.ok ? r.text() : Promise.rej
 let stepThresholds: StepFeatureThresholds | null = null;
 void fetch("../data/step-features.json").then(r => r.ok ? r.text() : Promise.reject(r.status))
   .then(json => { stepThresholds = loadStepFeatureThresholds(json); }).catch(() => { /* Step level stays unscored. */ });
+let segmentRules: SegmentRule[] | null = null;
+void fetch("../data/segment-rules.csv").then(r => r.ok ? r.text() : Promise.reject(r.status))
+  .then(csv => { segmentRules = loadSegmentRules(csv); }).catch(() => { /* PCS stays unscored. */ });
 void Promise.all(["scale-of-values.csv", "calls-and-deductions.csv"].map(async file => {
   const response = await fetch(`../data/${file}`);
   if (!response.ok) throw new Error(`Scoring table ${response.status}`);
@@ -124,15 +129,20 @@ el("record").textContent = `Personal best · ${best.toLocaleString()} pts`;
 function start() {
   params = applyProfile(beginner ? BEGINNER_PARAMS : GAME_PARAMS, careerMode ? career.profile : SAMPLE_PROFILES[profileIndex]);
   applyTrack(params);
-  choreography = careerMode ? new Choreography(CAREER_EVENTS[careerEvent], tables ?? undefined, spinThresholds ?? undefined, stepThresholds ?? undefined) : null;
   document.body.dataset.career = String(careerMode);
   el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : "ON THE ICE / PRACTICE";
-  renderRoutine();
   coach = new BeginnerCoach(); playground = new Playground(); pendingTrick = false; rookie = courseMode ? new RookieCourse() : null;
   recorder = new ReplayRecorder(params, 4.5); playback = null; replayJson = "";
   technical = 0; scoredTick = -1; replayNotice = "Recording your skating · first five minutes";
   skater = createState(params, 4.5); steering = newSchemeState(); run = new IceRun();
   ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
+  // Choreography's own PCS scoring (sim/pcs.ts) reads `ice.coverage()` at the
+  // end of the routine — it must hold the SAME grid instance play actually
+  // uses, so it is built only after `ice` above is the fresh one for this run.
+  choreography = careerMode
+    ? new Choreography(CAREER_EVENTS[careerEvent], tables ?? undefined, spinThresholds ?? undefined, stepThresholds ?? undefined, segmentRules ?? undefined, ice)
+    : null;
+  renderRoutine();
   spinTracker.reset(); lastSpinLabel = ""; wasSpinning = false;
   trail.forEach(t => t.length = 0); accumulator = 0; flash = 0; pendingPush = false; mode = "playing";
   pendingToe = false; cantilever = false; elapsedSkate = 0;
@@ -297,9 +307,13 @@ function draw(_now: number) {
   const backward = skater.vel.x * skater.heading.x + skater.vel.y * skater.heading.y < -0.1;
   const move = skater.jump.phase === JUMP_PHASE.Air ? `AIR · ${(skater.jump.rotation / (2 * Math.PI)).toFixed(1)} rev · ${skater.jump.z.toFixed(2)} m`
     : skater.move === MOVE.Spin ? `${["UPRIGHT", "SIT", "CAMEL"][skater.spin.position]} SPIN · ${(skater.spin.swept / (2 * Math.PI)).toFixed(1)} rev`
-    : skater.move === MOVE.Turn ? (skater.turn.against ? "BRACKET"
-        : skater.turn.kind === TURN_KIND.Mohawk ? "MOHAWK" : "THREE-TURN · shift weight for a mohawk")
+    : skater.move === MOVE.Turn ? (skater.turn.against
+        ? (skater.turn.kind === TURN_KIND.Counter ? "COUNTER" : "BRACKET · hold through, stick reversed, for a counter")
+        : skater.turn.kind === TURN_KIND.Mohawk ? "MOHAWK"
+        : skater.turn.kind === TURN_KIND.Loop ? "LOOP" : skater.turn.kind === TURN_KIND.Rocker ? "ROCKER"
+        : "THREE-TURN · shift weight for a mohawk, hold through for a loop or reversed for a rocker")
     : skater.move === MOVE.Twizzle ? "TWIZZLE" : skater.move === MOVE.InaBauer ? "INA BAUER"
+    : skater.move === MOVE.Spiral ? "SPIRAL"
     : cantilever ? "CANTILEVER POSE" : skater.crossover && skater.strokeTime > 0 ? `${backward ? "BACK " : ""}CROSSOVER`
     : skater.jump.phase === JUMP_PHASE.Load ? "LOADING · release Shift / RT to jump" : backward ? "BACKWARD GLIDE" : "FORWARD GLIDE";
   el("move").textContent = skater.fallen
@@ -363,7 +377,7 @@ function frame(now: number) {
       else if (wasSpinning) {
         const segments = spinTracker.finish();
         if (spinThresholds) {
-          const result = scoreSpinLevel(segments, spinThresholds);
+          const result = scoreSpinLevel(segments, spinThresholds, spinTracker.footChanges);
           lastSpinLabel = `Last spin: level ${result.level > 0 ? result.level : "B"}`;
         }
         spinTracker.reset();

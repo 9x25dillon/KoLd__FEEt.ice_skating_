@@ -6,7 +6,7 @@
     "type": "footage",
     "citation": "",
     "primary_checked": null,
-    "notes": "Recorded so the gap is visible. The solver has no rocker turn."
+    "notes": "Historical case ID retained. The solver now models a rocker turn (sim/moves.ts's TURN_KIND.Rocker); external footage and measurements are still missing."
   },
   "requires": [
     "rocker-turn"
