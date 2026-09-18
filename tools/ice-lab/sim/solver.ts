@@ -63,7 +63,8 @@ import { onBeat, accentCredit } from "./music.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
 import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
 import {
-  newTurn, newSpin, newInaBauer, noMove, turnStart, twizzleStart, spinStart, inaBauerStart, inaBauerEnd,
+  newTurn, newSpin, newInaBauer, newSpiral, noMove, turnStart, twizzleStart, spinStart, inaBauerStart, inaBauerEnd,
+  spiralStart, spiralEnd,
   turnPivot, twizzleTick, spinTick, turnFrame, turnLoadFoot, turnEvent, twizzleEvent, spinEvent,
   carryDecay, replacesCarve,
 } from "./moves.ts";
@@ -106,7 +107,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     knee: 0, strokeTime: 0, strokeFoot: FOOT.Left, crossover: false, crossSide: 0, pushHeld: false,
     strokeMusicScale: 1,
     jump: newJump(p), landed: noResult(),
-    move: MOVE.None, turn: newTurn(), spin: newSpin(), inaBauer: newInaBauer(), moveDone: noMove(),
+    move: MOVE.None, turn: newTurn(), spin: newSpin(), inaBauer: newInaBauer(), spiral: newSpiral(), moveDone: noMove(),
     movesHeld: 0, flips: 0, spinCarry: 0, musicCredit: 0,
     wind: 1, legs: 1, hype: 0, hypeStreak: 0, flow: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
@@ -241,18 +242,31 @@ export function step(
   // ends the body is on one foot and the move stands in for sections 2-5.
   //
   // An Ina Bauer is held, not a pivot: it ends when the button is let go, or
-  // the glide runs out, and the carve skates it in between.
+  // the glide runs out, and the carve skates it in between. A Spiral is the
+  // same shape of held move, one blade instead of two.
   if (s.move === MOVE.InaBauer) {
     s.inaBauer.t += dt;
     if (!input.inaBauer || s.fallen || len(s.vel) < 0.5 * p.inaBauerMinSpeed) inaBauerEnd(s, events);
+  }
+  if (s.move === MOVE.Spiral) {
+    s.spiral.t += dt;
+    if (!input.inaBauer || s.fallen || len(s.vel) < 0.5 * p.spiralMinSpeed) spiralEnd(s, events);
   }
   if (freshMoves & HELD.Turn) turnStart(s, p, false);
   else if (freshMoves & HELD.Bracket) turnStart(s, p, true);
   else if (freshMoves & HELD.Twizzle) twizzleStart(s, p);
   else if (freshMoves & HELD.Spin) spinStart(s, pFatigue, axis(input.carriage, 0), knee, axis(input.pitch, 0));
-  else if (freshMoves & HELD.InaBauer) inaBauerStart(s, p, axis(input.lean, 0));
+  else if (freshMoves & HELD.InaBauer) {
+    // The same button reaches either, by how the skater is already standing:
+    // weight shared near evenly is the two-footed Ina Bauer (data/motion-
+    // primitives.json's own pre.forward: true); weight clearly on one foot
+    // is the one-footed Spiral instead (its own pre.forward: "any").
+    if (weightR > p.spiralWeightBand && weightR < 1 - p.spiralWeightBand) inaBauerStart(s, p, axis(input.lean, 0));
+    else spiralStart(s, p);
+  }
   const turning = replacesCarve(s);
   const ina = s.move === MOVE.InaBauer;
+  const spiral = s.move === MOVE.Spiral;
   const moveThisTick = s.move;
 
   // ── 1. legs -> normal load ────────────────────────────────────────────────
@@ -605,7 +619,7 @@ export function step(
     // Air drag. At 8 m/s this is several times blade friction, which is why
     // speed is expensive to build and cheap to keep. Side-on, arms spread, in
     // an Ina Bauer, rather more.
-    const dragArea = ina ? p.cdA * p.inaBauerDrag : p.cdA;
+    const dragArea = ina ? p.cdA * p.inaBauerDrag : spiral ? p.cdA * p.spiralDrag : p.cdA;
     dv += 0.5 * p.airDensity * dragArea * speed * speed / p.mass * dt;
 
     // Friction never reverses motion.

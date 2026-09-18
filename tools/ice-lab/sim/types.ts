@@ -154,8 +154,8 @@ export interface JumpResult {
 // ── moves ───────────────────────────────────────────────────────────────────
 
 /** The move under way. One at a time; sim/moves.ts owns every field. */
-export const MOVE = { None: 0, Turn: 1, Twizzle: 2, Spin: 3, InaBauer: 4 } as const;
-export const MOVE_NAME = ["", "TURN", "TWIZZLE", "SPIN", "INA BAUER"] as const;
+export const MOVE = { None: 0, Turn: 1, Twizzle: 2, Spin: 3, InaBauer: 4, Spiral: 5 } as const;
+export const MOVE_NAME = ["", "TURN", "TWIZZLE", "SPIN", "INA BAUER", "SPIRAL"] as const;
 
 /** Bits of SkaterState.movesHeld: which move buttons were down last tick. */
 export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8, Bracket: 16, Toe: 32 } as const;
@@ -169,6 +169,22 @@ export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8, Bracket: 16, To
 export interface InaBauerState {
   /** The foot skating forward; the other trails, backward. */
   lead: Foot;
+  t: number;
+  fromCode: number;
+  entrySpeed: number;
+}
+
+/**
+ * A Spiral in progress: data/motion-primitives.json's own "spiral" — one
+ * blade down, the free leg extended, any direction (unlike the Ina Bauer,
+ * which the data restricts to forward). The free foot's own weight already
+ * goes to zero through the ordinary carve's ["1 - weightR", "weightR"] load
+ * split (solver.ts) the moment the skater stands on one blade — this state
+ * only marks the moment deliberate, and times it.
+ */
+export interface SpiralState {
+  /** The one loaded foot, snapshotted at entry. */
+  foot: Foot;
   t: number;
   fromCode: number;
   entrySpeed: number;
@@ -427,6 +443,7 @@ export interface SkaterState {
   turn: TurnState;
   spin: SpinState;
   inaBauer: InaBauerState;
+  spiral: SpiralState;
   /** The last move that finished. */
   moveDone: MoveResult;
   /** HELD bits: which move buttons were down last tick. A move starts on a fresh press. */
@@ -578,15 +595,15 @@ export const EVENT = {
   EdgeChanged: 0, EdgeEstablished: 1, EdgeLost: 2,
   SkidBegin: 3, SkidEnd: 4, ToePickCatch: 5, Fall: 6, Recovered: 7,
   Takeoff: 8, Landing: 9, Turn: 10, Twizzle: 11, Spin: 12, InaBauer: 13,
-  MusicHit: 14, MusicMiss: 15, MusicAccent: 16,
+  MusicHit: 14, MusicMiss: 15, MusicAccent: 16, Spiral: 17,
 } as const;
-export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+export type EventType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
 
 export const EVENT_NAME = [
   "EDGE CHANGED", "EDGE ESTABLISHED", "EDGE LOST",
   "SKID BEGIN", "SKID END", "TOE PICK", "FALL", "RECOVERED",
   "TAKEOFF", "LANDING", "TURN", "TWIZZLE", "SPIN", "INA BAUER",
-  "MUSIC HIT", "MUSIC MISS", "MUSIC ACCENT",
+  "MUSIC HIT", "MUSIC MISS", "MUSIC ACCENT", "SPIRAL",
 ] as const;
 
 export interface EdgeEvent {

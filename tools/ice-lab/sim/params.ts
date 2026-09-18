@@ -395,6 +395,21 @@ export interface Params {
    * Ina Bauer: -1.1 m/s over 6 m at 6 m/s.
    */
   inaBauerScrub: number;
+  // ── the Spiral (one blade, free leg extended, any direction) ─────────────
+  // data/motion-primitives.json's "spiral": pre.forward "any", unlike the Ina
+  // Bauer's forward-only — the same button (solver.ts's HELD.InaBauer) reaches
+  // either, chosen by weightR at the press: shared near evenly is the Ina
+  // Bauer, on one foot is this.
+  /** m/s a Spiral needs: it is a glide, and a slow one falls over. */
+  spiralMinSpeed: number;
+  /** The free leg extended, body held long: its drag area as a multiple of `cdA`.
+   *  Measured: 1.6 loses about 0.9 m/s in one second at 6.4 m/s — data/motion-
+   *  primitives.json's own -0.9 m/s over 7 m, no scrub term needed (one blade,
+   *  no trailing-foot friction the way the Ina Bauer's own drag pairs with). */
+  spiralDrag: number;
+  /** Half-width of the "shared weight" zone around weightR 0.5 that still reaches an Ina Bauer
+   *  instead — outside [spiralWeightBand, 1 - spiralWeightBand], the press is a Spiral. */
+  spiralWeightBand: number;
   /**
    * The share of a jump's lift that comes from its approach speed, with the
    * moves on. A takeoff is not a leg pushing up from rest: the skater's travel
@@ -704,6 +719,9 @@ export const DEFAULT_PARAMS: Params = {
   inaBauerMinSpeed: 2.0,
   inaBauerDrag: 2.0,
   inaBauerScrub: 0.13,
+  spiralMinSpeed: 2.0,
+  spiralDrag: 1.6,
+  spiralWeightBand: 0.35,
   jumpSpeedShare: 0.2,
 
   staminaMode: 0,
@@ -848,6 +866,9 @@ export function validate(p: Params): string[] {
   if (p.spinFootChangeAirTime > 0.4) errs.push("spinFootChangeAirTime exceeds data/spin-features.json's own resumes_spin_within_s (0.4)");
   if (p.spinFootChangeLoss < 0 || p.spinFootChangeLoss >= 1) errs.push("spinFootChangeLoss is a fraction of angMomentum lost, [0, 1)");
   if (p.inaBauerDrag < 1) errs.push("inaBauerDrag multiplies the upright drag area: a side-on body has more, not less");
+  if (p.spiralMinSpeed <= 0) errs.push("spiralMinSpeed must be positive: a glide from a standstill has nothing to hold");
+  if (p.spiralDrag < 1) errs.push("spiralDrag multiplies the upright drag area: an extended free leg has more, not less");
+  if (p.spiralWeightBand <= 0 || p.spiralWeightBand >= 0.5) errs.push("spiralWeightBand is a half-width around weightR 0.5, in (0, 0.5)");
   if (p.jumpSpeedShare > 1) errs.push("jumpSpeedShare is a share of the lift, 0..1");
   if (p.backPushScale <= 0 || p.backPushScale > 1)
     errs.push("backPushScale is a fraction of the forward push, in (0, 1]");

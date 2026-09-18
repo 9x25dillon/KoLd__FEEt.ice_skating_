@@ -107,3 +107,22 @@ test("with the moves on, X twizzles, Y spins, Back resets, and both bumpers are 
   read(false);
   assert.equal(read(false, Y_).reset, true, "and Y is reset again");
 });
+
+test("holding one bumper first, then adding the other, keeps the committed foot — a Spiral, not a reset to shared", () => {
+  const LB_ = 4, RB_ = 5;
+  const read = (...buttons: number[]) => { held = buttons; return pad.read(true); };
+  read();
+  let c = read(LB_);
+  assert.equal(c.weight, 0, "LB alone: weight fully on the left foot");
+  assert.equal(c.inaBauer, false);
+  c = read(LB_, RB_);
+  assert.equal(c.weight, 0, "adding RB while LB is already down: the committed weight survives the combo");
+  assert.equal(c.inaBauer, true);
+  // Releasing back to neither, then pressing both fresh from neutral, still
+  // reaches the shared Ina Bauer exactly as before — no prior single-bumper
+  // tick to remember a committed foot from.
+  read();
+  c = read(LB_, RB_);
+  assert.equal(c.weight, 0.5, "both bumpers from neutral, with no prior single-bumper tick: still shared");
+  assert.equal(c.inaBauer, true);
+});

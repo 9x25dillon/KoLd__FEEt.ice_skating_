@@ -734,6 +734,10 @@ export class Renderer {
       const B = s.inaBauer;
       out.push([`INA BAUER  ${codeToString(s.blade[B.lead].code)} leads, ${codeToString(s.blade[1 - B.lead].code)} trails`
         + `  ${B.t.toFixed(1)} s${B.t < 1.8 ? " — the data holds one 1.8 s" : ""}`, GOLD]);
+    } else if (s.move === MOVE.Spiral) {
+      const Sp = s.spiral;
+      out.push([`SPIRAL  ${codeToString(s.blade[Sp.foot].code)}, free leg extended`
+        + `  ${Sp.t.toFixed(1)} s${Sp.t < 2.0 ? " — the data holds one 2.0 s" : ""}`, GOLD]);
     } else if (s.move === MOVE.Twizzle) {
       const T = s.turn;
       out.push([`TWIZZLE  ${(T.swept / (2 * Math.PI)).toFixed(2)} rev ${T.dir > 0 ? "↺" : "↻"}  ${(T.rate / (2 * Math.PI)).toFixed(1)} rev/s`

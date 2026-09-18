@@ -87,7 +87,7 @@
 
 import { rotate, normalizeOr, len, mul, dot, sin, tan, atan2, sign, clamp, lerp, moveToward } from "./math.ts";
 import { MOVE, TURN_KIND, FOOT, EVENT, EDGE_CODE_NONE, REGIME, SPIN_POSITION, DIR, EDGE, makeCode } from "./types.ts";
-import type { SkaterState, TurnState, SpinState, InaBauerState, MoveResult, EdgeEvent, Foot } from "./types.ts";
+import type { SkaterState, TurnState, SpinState, InaBauerState, SpiralState, MoveResult, EdgeEvent, Foot } from "./types.ts";
 import type { Params } from "./params.ts";
 import { effectiveRocker } from "./blade.ts";
 import { JUMP_PHASE } from "./jump.ts";
@@ -152,6 +152,47 @@ export function inaBauerEnd(s: SkaterState, events: EdgeEvent[]): void {
   events.push({
     tick: s.tick, type: EVENT.InaBauer, foot: B.lead,
     prevCode: B.fromCode, newCode: lead.code, prevDwell: B.t, value: B.t,
+  });
+}
+
+export function newSpiral(): SpiralState {
+  return { foot: FOOT.Right, t: 0, fromCode: EDGE_CODE_NONE, entrySpeed: 0 };
+}
+
+/**
+ * Start a Spiral: one blade down, moving, any direction — data/motion-
+ * primitives.json's own "spiral", `pre.forward: "any"` unlike the Ina
+ * Bauer's forward-only. The free foot's load is already at or near zero
+ * (solver.ts's ordinary `[1 - weightR, weightR]` split) the moment the
+ * skater is standing on one blade; this only marks holding that on purpose.
+ */
+export function spiralStart(s: SkaterState, p: Params): boolean {
+  if (p.movesMode < 1 || s.fallen || s.move !== MOVE.None || s.jump.phase === JUMP_PHASE.Air) return false;
+  const speed = len(s.vel);
+  if (speed < p.spiralMinSpeed) return false;
+  const Sp = s.spiral;
+  Sp.foot = s.supportFoot;
+  Sp.t = 0;
+  Sp.fromCode = s.blade[s.supportFoot].code;
+  Sp.entrySpeed = speed;
+  s.move = MOVE.Spiral;
+  s.strokeTime = 0;
+  s.crossover = false;
+  return true;
+}
+
+/** Letting go, falling, or slowing too far ends it — the free leg comes back down. */
+export function spiralEnd(s: SkaterState, events: EdgeEvent[]): void {
+  const Sp = s.spiral;
+  const b = s.blade[Sp.foot];
+  const r = s.moveDone;
+  r.tick = s.tick; r.kind = MOVE.Spiral; r.detail = Sp.foot; r.revolutions = 0;
+  r.fromCode = Sp.fromCode; r.toCode = b.code; r.speedLost = Sp.entrySpeed - len(s.vel); r.seconds = Sp.t;
+  r.positions = 0; r.bestSegRevs = 0; r.travel = 0;
+  s.move = MOVE.None;
+  events.push({
+    tick: s.tick, type: EVENT.Spiral, foot: Sp.foot,
+    prevCode: Sp.fromCode, newCode: b.code, prevDwell: Sp.t, value: Sp.t,
   });
 }
 

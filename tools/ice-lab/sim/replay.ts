@@ -159,7 +159,7 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       `initial.params` grew the two new keys. A clip that has flowMode 1
 //       and a completed element followed by an idle stretch will diverge
 //       under /15 and must be re-recorded.
-export const REPLAY_SOLVER = "ice-lab-f64/16";
+export const REPLAY_SOLVER = "ice-lab-f64/17";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

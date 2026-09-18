@@ -22,6 +22,7 @@ export const ELEMENTS = {
   jump: { title: "Jump accent", hint: "Build speed, then J / D-pad up in Beginner. In Simulation, load Shift / RT and release. Land without a fall or step-out.", duration: 0 },
   spin: { title: "Spin phrase", hint: "Carve at speed, then hold Y for one new full rotation. Release to exit.", duration: 0 },
   step: { title: "Step sequence", hint: "Chain different footwork: three-turns, mohawks, brackets, twizzles, crossovers, edge changes. Five distinct types, both feet, inside a rolling stretch of skating.", duration: 2 },
+  spiral: { title: "Spiral", hint: "Carve with weight fully on one foot, then hold I / LB+RB. The free leg extends; works backward too. Hold for 2 seconds.", duration: 2 },
   pose: { title: "Closing pose", hint: "Glide above 2 m/s and hold U / D-pad down for 2 seconds.", duration: 2 },
 } as const;
 /** Seconds a step sequence's own variety must show up within — a real one spans a stretch of the program, not an instant. */
@@ -213,6 +214,7 @@ export class Choreography {
       jump: freshLanding && !s.landed.fall && !s.landed.stepOut && s.landed.height > 0.05,
       spin: this.spinProgress >= Math.PI * 2,
       step: (stepWindow?.level ?? 0) >= 1,
+      spiral: s.move === MOVE.Spiral,
       pose: grounded && s.move === MOVE.None && low && speed >= 2,
     };
     this.held = active[this.current] ? this.held + dt : 0;
