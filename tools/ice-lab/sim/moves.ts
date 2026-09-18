@@ -370,10 +370,15 @@ export interface PivotTick { lat: number; cusp: boolean; ended: boolean }
  * lateral acceleration the body feels, for the pendulum, whether this tick was
  * the cusp, and whether the turn finished.
  */
-export function turnPivot(s: SkaterState, p: Params, dt: number, weightR: number): PivotTick {
+export function turnPivot(
+  s: SkaterState, p: Params, dt: number, weightR: number,
+  /** `input.turn`, this tick — read only at the first cusp, to decide a Loop (see TURN_KIND's own comment). */
+  turnHeld = false,
+): PivotTick {
   const T = s.turn;
   T.t += dt;
-  const stepAngle = Math.min(T.rate * dt, Math.PI - T.swept);
+  const ceiling = T.kind === TURN_KIND.Loop ? 2 * Math.PI : Math.PI;
+  const stepAngle = Math.min(T.rate * dt, ceiling - T.swept);
   T.swept += stepAngle;
   const footChanged = T.kind === TURN_KIND.Mohawk;
   // Fighting the curve scrapes harder throughout (bible §2.3: bracket and
@@ -406,9 +411,22 @@ export function turnPivot(s: SkaterState, p: Params, dt: number, weightR: number
       to.normalLoad = from.normalLoad; to.weight = 1; to.inContact = true;
       from.normalLoad = 0; from.weight = 0; from.inContact = false;
       s.supportFoot = other;
+    } else if (!T.against && turnHeld) {
+      // Still holding `turn`, weight not shifted: a Loop instead of checking
+      // out here (TURN_KIND's own comment) — the same pivot, run to a second
+      // cusp instead of ending at this first one.
+      T.kind = TURN_KIND.Loop;
     }
     // A jump being loaded through the turn takes its setup from the exit edge.
     if (s.jump.phase === JUMP_PHASE.Load) s.jump.setup = 0;
+  } else if (T.kind === TURN_KIND.Loop && T.cusps === 1 && T.swept >= 3 * Math.PI / 2) {
+    // The second cusp: the frame flips back, undoing the first — same foot,
+    // same edge, same direction on the far side, having swept a full circle.
+    // Not reported through `cusp` (turnEvent's own trigger): the classification
+    // — that this became a Loop at all — was already decided, and reported,
+    // at the first one; this is that same move continuing, not a new one.
+    T.cusps = 2;
+    flipFrame(s);
   }
 
   const sense = travelSense(T);
@@ -417,7 +435,7 @@ export function turnPivot(s: SkaterState, p: Params, dt: number, weightR: number
   pivotBlades(s, speed);
 
   let ended = false;
-  if (T.swept >= Math.PI) { endPivot(s, p, speed); ended = true; }
+  if (T.swept >= ceiling) { endPivot(s, p, speed); ended = true; }
   return { lat: T.pathRate * speed * sense, cusp, ended };
 }
 

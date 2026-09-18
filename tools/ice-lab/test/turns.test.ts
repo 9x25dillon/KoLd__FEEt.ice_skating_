@@ -111,6 +111,50 @@ test("weight on the other foot at the cusp makes it a mohawk: LFI onto RBI, a li
   assert.ok(lost > 0.36 && lost < 0.46, `mohawk cost ${lost.toFixed(3)} m/s`);
 });
 
+test("holding turn through the cusp instead of releasing loops it: same foot, same edge, same direction, 2pi swept", () => {
+  const tapped = drive(moves(), 6.8, 1, -0.3); // the ordinary three-turn, for comparison
+  const r = drive(moves(), 6.8, 1, -0.3, { each: (i) => ({ turn: i >= 240 && i < 280 }) });
+  assert.equal(r.turns.length, 1);
+  const t = r.turns[0];
+  assert.equal(t.value, TURN_KIND.Loop);
+  // turnEvent fires at the FIRST cusp — classification time, not completion —
+  // so its own newCode is the mid-loop snapshot (RBI), the same thing a
+  // three-turn's single cusp would show at that exact instant. The loop's
+  // own second half is what tells RFO>RFO apart from a three-turn's
+  // RFO>RBI, and only s.moveDone (endPivot, at the true 2pi completion)
+  // has it.
+  assert.equal(codeToString(t.prevCode), "RFO");
+  assert.equal(codeToString(t.newCode), "RBI", "the classification-time snapshot, mid-loop");
+  assert.equal(codeToString(r.s.moveDone.fromCode), "RFO");
+  assert.equal(codeToString(r.s.moveDone.toCode), "RFO", "the TRUE exit, at 2pi: back to the entry edge");
+  assert.equal(r.s.moveDone.revolutions, 1, "a full circle, not a half");
+  assert.equal(r.s.flips, 2, "two flips, net unchanged — flipFrame ran twice");
+  assert.ok(dot(r.s.vel, r.s.heading) > 0, "still skating FORWARD: direction never flipped");
+  assert.equal(r.s.fallen, false);
+  assert.ok(r.s.moveDone.speedLost > tapped.s.moveDone.speedLost,
+    `a loop (${r.s.moveDone.speedLost.toFixed(3)}) must cost more than a plain three-turn (${tapped.s.moveDone.speedLost.toFixed(3)})`);
+});
+
+test("releasing turn before the cusp still ends an ordinary three-turn, not a loop", () => {
+  const r = drive(moves(), 6.8, 1, -0.3, { each: (i) => ({ turn: i >= 240 && i < 245 }) });
+  assert.equal(r.turns.length, 1);
+  assert.equal(r.turns[0].value, TURN_KIND.ThreeTurn);
+});
+
+test("a bracket has no loop either: holding bracket through its own cusp still checks out at pi", () => {
+  const r = drive(moves(), 6.8, 1, -0.3, { against: true, each: (i) => ({ bracket: i >= 240 && i < 280 }) });
+  assert.equal(r.turns.length, 1);
+  assert.equal(r.turns[0].value, TURN_KIND.Bracket);
+  assert.equal(codeToString(r.turns[0].newCode), "RBI", "checks out at pi, same as a tapped bracket");
+});
+
+test("a held loop replays tick for tick", () => {
+  const p = moves();
+  const rec = new ReplayRecorder(p, 6.8);
+  drive(p, 6.8, 1, -0.3, { each: (i) => ({ turn: i >= 240 && i < 280 }) }, rec);
+  assert.equal(verifyReplay(parseReplay(rec.toJson())).divergence, null);
+});
+
 /** yawRate mid-pivot (tick 245: past the cusp's earliest, well before Math.PI's swept out at turnTime). */
 function midPivotYaw(p: Params, speed: number, weight: number, lean: number, opt: { against?: boolean } = {}): number {
   let mid = 0;

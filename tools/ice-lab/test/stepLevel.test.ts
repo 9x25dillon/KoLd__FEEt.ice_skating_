@@ -1,7 +1,7 @@
 // A step sequence's ISU level, from the variety ladder sim/stepLevel.ts can
-// actually score. See that file's own header for why six rig-observable
-// types cap this scorer at grade 1, never grade 2, 3 or 4 — this file does
-// not re-litigate that, only tests what remains.
+// actually score. See that file's own header for why seven rig-observable
+// types reach grade 2, never grade 3 or 4 — this file does not re-litigate
+// that, only tests what remains.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -29,7 +29,7 @@ test("no events: level B, nothing earned", () => {
   assert.deepEqual(scoreStepLevel([], T), { level: 0, distinctTypes: [], bothFeet: false, difficultBothFeet: false });
 });
 
-test("five distinct types, both feet: grade 1, the only grade this rig's six types can ever reach", () => {
+test("five distinct types, both feet: grade 1 — a curated five, not the full seven this rig now has", () => {
   const events = [
     ev(STEP_TYPE.ThreeTurn, FOOT.Right), ev(STEP_TYPE.Mohawk, FOOT.Left),
     ev(STEP_TYPE.Bracket, FOOT.Right), ev(STEP_TYPE.Twizzle, FOOT.Right),
@@ -52,11 +52,17 @@ test("five distinct types on one foot never clears grade 1: both_feet_used is a 
   assert.equal(scoreStepLevel(events, T).level, 0);
 });
 
-test("all six of this rig's types, both feet: still grade 1 — grade 2 needs 7, one more than exists", () => {
+test("all seven of this rig's types, both feet, three difficult: grade 2, exactly what seven types can reach", () => {
   const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left));
   const r = scoreStepLevel(events, T);
-  assert.equal(r.distinctTypes.length, 6);
-  assert.equal(r.level, 1, "six distinct types cannot reach grade 2's own requirement of seven");
+  assert.equal(r.distinctTypes.length, 7);
+  assert.equal(r.level, 2, "seven distinct types, two or more difficult, both feet: grade 2's own requirement, met");
+});
+
+test("grade 3 stays out of reach: seven types and three difficult, but grade 3 needs nine and four", () => {
+  const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left));
+  const r = scoreStepLevel(events, T);
+  assert.ok(r.level < 3, `grade 3 needs 9 distinct types and 4 difficult; this rig has ${r.distinctTypes.length} and reached level ${r.level}`);
 });
 
 test("repeating the same type does not inflate the distinct count", () => {

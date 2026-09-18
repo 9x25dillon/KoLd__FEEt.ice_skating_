@@ -336,7 +336,7 @@ export function step(
   let flatImpulse = v2(0, 0);
   let pivot: PivotTick | null = null;
   if (turning) {
-    pivot = s.move === MOVE.Turn ? turnPivot(s, p, dt, weightR)
+    pivot = s.move === MOVE.Turn ? turnPivot(s, p, dt, weightR, input.turn === true)
       : s.move === MOVE.Twizzle ? twizzleTick(s, p, dt, leanCmd, axis(input.carriage, 0), input.twizzle === true)
         : spinTick(s, pFatigue, dt, knee, axis(input.pitch, 0), axis(input.carriage, 0), input.spin === true,
             axis(input.lean, 0), (freshMoves & HELD.Toe) !== 0);

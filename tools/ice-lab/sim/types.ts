@@ -269,9 +269,18 @@ export interface SpinState {
  *
  * Rocker and counter — same foot, same edge, curve reverses — are a third,
  * different mechanic (no edge change at all) and are not built either.
+ *
+ * Loop, the fourth, is not a fifth axis: it is the SAME pivot (data/motion-
+ * primitives.json's own `post: {foot: same, edge: same, forward: same}`) run
+ * through two cusps back to back instead of one — a second flipFrame at
+ * 3π/2 undoes the first, so the exit lands back on the entry edge and foot,
+ * having swept 2π instead of π. Requested by holding `turn` THROUGH the
+ * ordinary cusp instead of letting it check out at π (sim/moves.ts's
+ * `turnPivot`); a bracket has no loop sibling, the same reason it has no
+ * mohawk one — `against` is not read again once the pivot is under way.
  */
-export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1, Bracket: 2 } as const;
-export const TURN_NAME = ["three-turn", "mohawk"] as const;
+export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1, Bracket: 2, Loop: 3 } as const;
+export const TURN_NAME = ["three-turn", "mohawk", "bracket", "loop"] as const;
 
 /**
  * A pivot in progress — a turn or a twizzle. The blade rotates about its

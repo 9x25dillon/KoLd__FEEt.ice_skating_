@@ -308,7 +308,8 @@ function draw(_now: number) {
   const move = skater.jump.phase === JUMP_PHASE.Air ? `AIR · ${(skater.jump.rotation / (2 * Math.PI)).toFixed(1)} rev · ${skater.jump.z.toFixed(2)} m`
     : skater.move === MOVE.Spin ? `${["UPRIGHT", "SIT", "CAMEL"][skater.spin.position]} SPIN · ${(skater.spin.swept / (2 * Math.PI)).toFixed(1)} rev`
     : skater.move === MOVE.Turn ? (skater.turn.against ? "BRACKET"
-        : skater.turn.kind === TURN_KIND.Mohawk ? "MOHAWK" : "THREE-TURN · shift weight for a mohawk")
+        : skater.turn.kind === TURN_KIND.Mohawk ? "MOHAWK"
+        : skater.turn.kind === TURN_KIND.Loop ? "LOOP" : "THREE-TURN · shift weight for a mohawk, hold through for a loop")
     : skater.move === MOVE.Twizzle ? "TWIZZLE" : skater.move === MOVE.InaBauer ? "INA BAUER"
     : skater.move === MOVE.Spiral ? "SPIRAL"
     : cantilever ? "CANTILEVER POSE" : skater.crossover && skater.strokeTime > 0 ? `${backward ? "BACK " : ""}CROSSOVER`
