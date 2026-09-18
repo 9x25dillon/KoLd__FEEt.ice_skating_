@@ -1,6 +1,120 @@
 # Hand-off
 
-## Current checkpoint — 2026-09-17, thirteenth session: a designed curve for the Slalom, a second Godot skater, spinLevel to 3, PCS, and step sequences
+## Current checkpoint — 2026-09-18, fourteenth session: PCS wired live, a real foot change, the Spiral, and the loop/rocker/counter turns
+
+Still on **`ue-replay-01-foundation`**, four commits, each tested and verified live before the next
+began — the browser Ice Lab, Godot, native reference, or all three, every time; see each item. This
+session opened on the operator's own explicit ordered list — PCS, then the foot-change mechanic, then
+"reverse one footed leg extended," then three more step/turn types — and closed having built every item
+on it, plus a real fix to a documented, previously-abandoned gap the operator asked to have re-attempted
+anyway.
+
+**In order:**
+
+1. **PCS wired into career play**, closing the queue's oldest item (§0, thirteenth session).
+   `game/career.ts`'s `CareerEvent` gained a `discipline`/`segment` key (`data/segment-rules.csv`'s own
+   two axes) — an authored content decision, "women" throughout (no discipline switch exists in this
+   rig) and "short" for every event but the closing `finale`, which reads as this ladder's own "free"
+   given its longer duration and fuller element count. `Choreography` runs its own `SessionMeter`/
+   `PcsMeter` across a routine and scores once at the end (`sim/pcs.ts`'s own post-hoc contract),
+   feeding a new `PCS_XP_PER_POINT` bonus alongside the existing technical/spin/step ones.
+   `app/build.mjs`'s hand-curated data-file copy list gained `segment-rules.csv` — the exact 404 class
+   the thirteenth session's own `step-features.json` bug was, caught this time by the existing
+   regression test before it ever shipped. `7f1d5ce`.
+2. **A real foot change mid-spin** (`sim/moves.ts`'s `spinTick`): a fresh toe press (`input.toe`,
+   otherwise unused during a spin) starts a brief airborne transfer to the other foot — angular
+   momentum conserved but for one transfer cost paid once, blade unloaded, `SpinState.foot` toggled on
+   landing. Unlocks the three `spinLevel.ts` features the thirteenth session's own §0 named as needing
+   "a combination spin with a foot change mid-element": `change_foot_by_jump`,
+   `difficult_change_of_foot`, `all_three_positions_second_foot`. `spinLevel`'s honest ceiling reaches
+   the ISU's own level-4 clamp (six of ten features now scored, capped at four regardless).
+   `SpinLevelTracker` splits a segment on a foot change too, not only position/direction. `7f1d5ce`.
+3. **The Spiral** (`data/motion-primitives.json`'s own "spiral" — declared since the repo's first
+   commit, never built): one blade down, the free leg extended, any direction. Reached through the
+   *same button* as the Ina Bauer (`solver.ts`'s `HELD.InaBauer`) — the free foot's own load already
+   goes to zero through the ordinary carve's `[1 - weightR, weightR]` split the moment a skater stands
+   on one blade, so weight shared near evenly still reaches the two-footed Ina Bauer and weight clearly
+   committed to one foot reaches the Spiral instead. No new input field. Answers the operator's own ask
+   for a backward/reverse spiral for free — the data never restricted direction the way the Ina Bauer's
+   own entry does. **Found and fixed a real conflict on the way**: a gamepad's LB+RB alone each commit
+   weight to one foot, but held *together* they are also the shared trigger button, so the instant both
+   are down `weightR` collapsed to 0.5 before the Spiral/Ina-Bauer branch ever read it — a controller
+   could never reach a Spiral at all. `app/pad.ts` now remembers the weight from the tick before the
+   combo engages. `1374333`.
+4. **Three more step/turn types — the operator's own explicit ask, all three built.** Loop
+   (`TURN_KIND.Loop`, `e78be47`): hold `turn` through the ordinary cusp instead of releasing — the same
+   pivot run to a second cusp instead of one, landing back on the entry edge and foot. Rocker and
+   Counter (`7075485`) are the real finding: `sim/types.ts`'s own prior comment called them "a third,
+   different mechanic... not built either," and that was wrong. `travelSense` does not track rotation
+   swept; `endPivot` builds the exit frame from current velocity, signed, so its only job is "does the
+   exit face WITH the skater's own continuing momentum or AGAINST it." A rocker/counter needed one more
+   case: `flipFrame` still runs exactly once (the edge character changes, same as a three-turn's own
+   flip), but `travelSense` stays pinned to `entryDir` regardless of cusp parity, because the whole
+   point is that the exit still faces the way the momentum was already going. One more special case in
+   one function, not a new mechanic — re-examined only because the operator asked to have it attempted
+   anyway despite the documented prior write-off; see the review below.
+   **All five ISU "difficult" turn types are now real** (bracket, twizzle, loop, rocker, counter).
+   `sim/stepLevel.ts`'s honest ceiling moves from grade 1 to **grade 3** — nine distinct types, five
+   difficult, clears `VARIETY_LADDER`'s own grade-3 bar exactly, given a routine that actually spreads
+   its difficult turns across both feet.
+
+**Two real bugs found only by testing live, not by reasoning about the physics:**
+
+- `rockerCounterStick`, copied at `spinReverseStick`'s own value (0.6), was **unreachable by keyboard
+  in the real game** — `game/controls.ts` scales digital lean by 0.35 for every scheme but B, and
+  scheme B's own assisted-steering lean is a computed command, not a raw passthrough. Found only by
+  driving the actual browser build with Playwright and getting `LOOP` every time a `ROCKER` was
+  expected. Lowered to 0.2, comfortably under the 0.35 floor, and `TurnState` gained `reverseHeld`, a
+  running max of the reversal push sampled every tick from entry to the cusp rather than a single-tick
+  read — a real stick will not reliably peak on the exact tick the cusp happens to land on.
+- The reversal check's own sign was wrong for a `bracket`-entered pivot specifically: it compared the
+  stick against `T.dir` directly, but `against` already inverts `T.dir` from the physical curve once,
+  at entry — so a bracket's own *unchanged* entry stick always read as "reversing," which a test caught
+  the instant the threshold was lowered enough to expose it (a bracket held with no reversal at all
+  started coming out `Counter`). Fixed with a `curveSense` (`T.against ? -T.dir : T.dir`) that undoes
+  the inversion before comparing, so "push the other way" means the same thing whether the pivot
+  started from `turn` or `bracket`.
+
+**Deliberately not built, and why:** the ISU's six STEPS-category types (chassé, toe step, cross roll,
+running step, cross behind/in front) have **zero entries anywhere in `data/motion-primitives.json`** —
+building them would mean inventing physics from nothing, unlike everything above, which all had real
+declared data behind it. Kerrigan/inverted spiral variants, likewise: no data entry distinguishes them
+from the plain spiral, and this rig has no pose data to tell them apart physically. Choctaw remains the
+one genuinely unbuilt "difficult"-adjacent gap — a real edge-character change on a *new* foot, which
+still needs the mechanism `sim/types.ts`'s own comment describes, not the rocker/counter fix (a
+different axis entirely: rocker/counter change nothing about which foot lands the exit).
+
+**Verified at every step in the actual running app** — browser (Playwright, driving real keyboard
+input against the served build, not synthetic `step()` calls, for every mechanic above), Godot (bridge
+test suite, runtime regenerated from the current tree each time), native reference oracle — never only
+in the unit tests, though those too: 441 Ice Lab tests (up from 408), 10 Godot bridge tests, 6 native
+reference tests, `tsc` clean throughout. Replay contract bumped `ice-lab-f64/15` → **`/19`** across the
+session (new `SkaterState`/`TurnState`/`Params` fields each time); every bump's fixture was regenerated
+from its own recorded inputs and confirmed identical in frame count, schemes and inputs — `movesMode 0`
+throughout the fixture, so a pivot never actually runs there regardless.
+
+**A second real, meaningful gate-report change**: the two `data/validation/` stub cases
+(`rocker-turn-unmodelled`, `counter-unmodelled`) now correctly read **unsourced** instead of
+**unmodelled** — the solver models both; no external footage has been cited for either yet, the same
+honest gap 24 other cases already carried before today. `validate.mjs`'s `FEATURES` set and
+`data/validation/README.md` updated together, and a stale "bracket" example in that same README
+paragraph (bracket has been a real feature for a while) fixed on the way. Gate result itself unchanged:
+6 pass, 0 fail, 26 unsourced (up from 24), **0 unmodelled** (down from 2), still not met.
+
+**Committed and pushed** (`7f1d5ce`, `1374333`, `e78be47`, `7075485`), **PR #13 opened**
+(`ice-lab: PCS, foot-change spins, the Spiral, and the loop/rocker/counter turns`) against `main`,
+matching PR #7–#12's own pattern. **Not yet merged** — `gh pr merge` was blocked by the session's own
+auto-mode permission classifier as a genuinely high-stakes action on a shared repo's default branch.
+**The operator needs to merge PR #13 themselves** (`gh pr merge 13 --merge`, or the GitHub UI) before
+`main` reflects this session's own work — a future session opening on `main` rather than
+`ue-replay-01-foundation` will not see any of it until that happens.
+
+The operator's root play-data folder, the saved HTML page, and `session-notes/` remain untracked on
+purpose — left alone, per the note further down.
+
+---
+
+**Last session: 2026-09-17, thirteenth session — a designed curve for the Slalom, a second Godot skater, spinLevel to 3, PCS, and step sequences.**
 
 Still on **`ue-replay-01-foundation`**, seven commits, each tested and verified live before the next
 began — the browser Ice Lab, Godot, or both, every time; see each item. This session opened on
@@ -240,48 +354,69 @@ hold the document set together, and the things most likely to trip you up.
 > true: `tools/ice-lab/` is real, runs, and has 249 passing tests, including replay capture and a
 > verifier that replays a clip recorded in one JavaScript engine in another.
 
-## 0 · Start here (written at the close of 2026-09-17, thirteenth session)
+## 0 · Start here (written at the close of 2026-09-18, fourteenth session)
 
 ### First, before anything else
 
-1. **`sim/spinLevel.ts` scores 3 of the 10 ISU spin features, not 2.** `both_directions` is real now
-   (`sim/moves.ts`'s `spinTick`, a held reversal). The 8-feature language anywhere older than this
-   session is stale. Four genuinely remain out of reach — `change_foot_by_jump`,
-   `difficult_change_of_foot`, `all_three_positions_second_foot` (all need a foot change mid-spin;
-   `spinStart` sets `Sp.foot` once, `spinTick` never reassigns it), `jump_within_spin` (needs the jump
-   and spin systems to compose, which they do not) — plus the three **declared** features needing pose
-   data this rig does not have. Leave those alone unless a session is explicitly about pose fidelity.
-2. **`sim/stepLevel.ts` scores grade 1 of the step-sequence ladder's 4, exactly, not approximately.**
-   Six rig-observable footwork types against a ladder whose grade 2 needs seven, full stop — read the
-   file's own header before assuming a small addition moves this. Raising it needs either a new
-   "difficult" turn (rocker, counter — neither exists) or a new "step" (chassé, toe step, cross roll,
-   running step, cross behind/in front — none exist; only change-of-edge does).
-3. **`sim/pcs.ts` exists, is tested, and is called from nowhere in play.** The same stage
-   `spinLevel.ts` was in before this session. Wiring it into `game/career.ts` needs a discipline/segment
-   assigned to each `CareerEvent` first (none exists — the five events have no short/free distinction).
-4. **The `step` element is Composer-authorable in Godot, not in any of the five fixed
-   `CAREER_EVENTS`.** Deliberately left as the operator's own content call, not a technical one —
-   adding it to an existing routine changes that routine's difficulty curve.
-5. **Every new number this session is L3: authored, not measured**, the same standing note every prior
-   session has carried forward — `spinReverseStick`/`-Rate`/`-Floor`/`-Regen`, `flowDeadAirTime/-Loss`,
-   and PCS's entire physics-to-score mapping (`rise()`'s floor/ceiling pairs) most of all. None of it
-   has been played, only tested for direction and perceptibility.
-6. **`BEGINNER_PARAMS` still inherits every system via spreading `GAME_PARAMS`, unexamined** — carried
-   over unresolved from the twelfth session; still true, still nobody has watched a beginner feel it.
-7. **Flow's "alternating lobes" / "repeated lobes in the same direction" is still one unmodelled
-   signal** (closed this session: "dead air between elements", the third bullet). No per-tick
-   curvature-direction tracker exists and no calibration basis was identified for one — genuinely open
-   design work, not a quick addition; see the queue.
-8. **Replay contract is `ice-lab-f64/15`.** Two bumps this session (`/14`, `/15`) were the first ever
-   *not* guarded by a brand-new Mode flag at 0 — both live under flags (`movesMode`, `flowMode`)
-   already 1 in real play, so each was checked directly against the committed fixture's own digests
-   rather than assumed safe the way every earlier bump could be. If a future bump also lands under an
-   already-on flag, do the same direct check — do not assume the old "new flag, defaults 0" argument
-   still applies just because the pattern looks the same.
-9. **A second Godot skater exists** (`scripts/main.gd`, Settings → Skater) — Violet stays default.
-   `tools/build_berserker.py` regenerates it; both build scripts must keep constructing the *identical*
-   armature (`Hips, Spine, Head, Thigh/Shin/Foot L/R, Arm/Forearm L/R`) or `skater.gd` silently stops
-   posing whatever changed.
+1. **PR #13 is open, not merged.** `main` does not have this session's own work yet — everything below
+   is only on `ue-replay-01-foundation` until the operator merges it (`gh pr merge 13 --merge`, or the
+   GitHub UI; the session's own attempt was blocked by the auto-mode permission classifier as a
+   high-stakes action on a shared default branch, correctly). A session that opens on `main` rather than
+   `ue-replay-01-foundation` will see none of this checkpoint's own work until that happens.
+2. **`sim/spinLevel.ts` scores 6 of the 10 ISU spin features, not 3.** The foot-change family
+   (`change_foot_by_jump`, `difficult_change_of_foot`, `all_three_positions_second_foot`) is real now.
+   Honest ceiling is the ISU's own level-4 clamp — `jump_within_spin` (needs the jump and spin systems
+   to compose, which they still do not) and the three **declared** features needing pose data this rig
+   does not have are the only ones left, and stay left unless a session is explicitly about pose
+   fidelity or jump/spin composition.
+3. **`sim/stepLevel.ts` scores grade 3 of the step-sequence ladder's 4, not grade 1.** Nine distinct
+   types, five of them difficult (all five ISU "difficult" turns are real now: bracket, twizzle, loop,
+   rocker, counter). Grade 4 needs 11 types — the STEPS category (chassé, toe step, cross roll, running
+   step, cross behind/in front — **zero data backing anywhere in `data/motion-primitives.json`**, would
+   mean authoring new data from nothing) or choctaw (still genuinely unbuilt — see item 5). **Grade 4
+   has a second, separate gap**: its own `difficult_turns_in_both_rotational_directions` requirement is
+   not parsed or checked by `StepGrade`/`scoreStepLevel` at all — reaching 11 types alone would not be
+   enough. Fix that before assuming grade 4 is "just" a type-count problem.
+4. **`sim/pcs.ts` is wired into `game/career.ts` now, not standalone.** `CareerEvent.discipline`/
+   `segment` is an authored placeholder — "women" for every event (no gender/discipline switch exists
+   anywhere in this rig; if one is ever added, revisit this), "short" for four of five events and
+   "free" for the closing `finale`. Not put to the operator as the content decision it actually is.
+5. **Choctaw is the one real remaining "difficult-turn-adjacent" gap.** It is NOT the rocker/counter
+   fix applied elsewhere — rocker/counter change nothing about which foot lands the exit; choctaw needs
+   a genuine edge-character change on a *new* foot, which `sim/types.ts`'s `TURN_KIND` comment still
+   correctly describes as unbuilt. Do not assume this session's own rocker/counter insight
+   (`travelSense` pinned to `entryDir`) transfers — it was checked and it does not, by construction:
+   choctaw's own axis is which foot the edge-change lands on, not which way the exit faces.
+6. **`rockerCounterStick` (0.2) is verified by keyboard only, not by a real gamepad's analog stick.**
+   `app/pad.ts`'s gamepad path reads raw `gp.axes` directly (no `0.35` digital scale-down — that is
+   `game/controls.ts`'s own keyboard-specific "manageable shallow edge" logic), so a controller's own
+   reachable range is genuinely different from what was measured. Check it live on a pad before trusting
+   the threshold holds there too.
+7. **`BEGINNER_PARAMS` still inherits every system via spreading `GAME_PARAMS`, unexamined** — carried
+   over unresolved since the twelfth session, now also true of every mechanic this session added
+   (Spiral, Loop, Rocker, Counter, PCS). Still nobody has watched a beginner feel any of it.
+8. **Flow's "alternating lobes" / "repeated lobes in the same direction" is still the one unmodelled
+   flow signal**, and it is the operator's own next stated priority — see the queue immediately below.
+   No per-tick curvature-direction tracker exists and no calibration basis was identified for one.
+9. **The operator wants a real, dedicated control scheme for the full move list eventually** — their
+   own words, mid-session: "theres enough buttons on controllers these days i dont see why we cant
+   perform the entire moves list through our controls and engine... develop a tuning rig for and
+   alternate control schemes." This session kept reusing existing buttons (Spiral on Ina Bauer's own
+   button, distinguished by weight; Loop/Rocker/Counter on `turn`/`bracket`, distinguished by hold
+   duration and stick reversal) specifically to avoid touching input plumbing mid-mechanic — a
+   deliberate, stated tradeoff, not an oversight. A dedicated fourth scheme with one button per move,
+   plus its own tuning rig, is real, wanted, unscoped future work — see the queue.
+10. **Replay contract is `ice-lab-f64/19`.** Four bumps this session (`/16`–`/19`), each for a new
+    `SkaterState`/`TurnState`/`Params` field, none guarded by a brand-new Mode flag at 0 the way early
+    bumps could rely on. Every one was regenerated from its own recorded inputs and diffed against the
+    previous commit's fixture (frame count, schemes, every input) to confirm only the solver string and
+    the new field names changed — `tools/ice-lab/test/fixtures/replay-v1.json`'s own params object,
+    diffed with `python3 -c "import json; ..."`, is the fast way to check this; see the toolchain notes
+    below for the exact regeneration recipe, worth keeping as a reusable script next time.
+11. **A second Godot skater exists** (`scripts/main.gd`, Settings → Skater) — Violet stays default.
+    `tools/build_berserker.py` regenerates it; both build scripts must keep constructing the *identical*
+    armature (`Hips, Spine, Head, Thigh/Shin/Foot L/R, Arm/Forearm L/R`) or `skater.gd` silently stops
+    posing whatever changed. Unchanged this session, carried forward because it is still true.
 
 **Untracked on purpose, at the repo root:** `E_W_replays_sessions_eng_bld/` (the operator's play data),
 `Ice Lab — KoLd__FEEt edgework.html` (a browser save page), and `session-notes/`. Use only the play
@@ -289,67 +424,102 @@ data that is there; commit or delete none of the three without asking.
 
 ### The queue, next
 
-Roughly in the order that unlocks the most, not an order the operator has stated:
+The operator's own stated order, not a technical re-ranking — the last four items were this session's
+own, all closed:
 
-1. **Wire PCS into `game/career.ts`.** Needs a discipline/segment field on `CareerEvent` (none exists)
-   before `scorePcs` has anything to key off; the scoring module itself is done and tested.
-2. **Alternating / repeated lobes** (flow's last unmodelled bullet). Needs a per-tick
-   curvature-direction tracker — no existing signal fits directly; this is design work, not wiring.
-   Whatever shape it takes should probably also feed `stepLevel.ts`'s own honest ceiling, since "lobe
-   variety" is one of Composition's own four "driven by" bullets too (`sim/pcs.ts`'s header).
-3. **A foot change mid-spin (a real combination spin).** Unlocks three more `spinLevel.ts` features on
-   its own and is the one mechanic `sim/moves.ts` still lacks for a genuinely higher spin ceiling.
-4. **A new step or turn type** (rocker, counter, chassé, toe step, cross roll — any one) would move
-   `stepLevel.ts` toward its own grade 2. Seven distinct types is the bar; six exist.
-5. **Decide whether "step" belongs in a fixed `CAREER_EVENTS` routine**, and if so which one and where
-   in the sequence — an operator content call, not a technical one (§0 item 4 above).
-6. **`games/ice-run-godot`'s HUD still doesn't surface the step element's own live progress** — jump
-   TES and spin level both reached the Godot HUD this session (in an earlier and in this session's own
-   part 3); step never got the equivalent readout.
-7. **`BEGINNER_PARAMS`'s blanket inheritance** (§0 item 6) — still open, still needs the operator
-   watching a fresh player before assuming it is fine either way.
+1. ~~**Wire PCS into `game/career.ts`.**~~ **Done**, this session. `7f1d5ce`.
+2. ~~**A foot change mid-spin.**~~ **Done**, this session. `7f1d5ce`.
+3. ~~**A backward/reverse one-footed leg-extended move (the Spiral).**~~ **Done**, this session, and
+   reaches Kerrigan/inverted variants' own direction-agnostic ask for free — the *style* variants
+   themselves (Kerrigan vs. plain vs. inverted leg extension) remain undone, no data backing exists for
+   them, see §0 item above. `1374333`.
+4. ~~**Three more step/turn types.**~~ **Done**, this session: Loop, Rocker, Counter. `e78be47`,
+   `7075485`.
+5. **Alternating / repeated lobes** (flow's last unmodelled bullet) — the operator's own next item.
+   Needs a per-tick curvature-direction tracker; no existing signal fits directly, this is design work,
+   not wiring. Whatever shape it takes should probably also feed `stepLevel.ts`'s own honest ceiling,
+   since "lobe variety" is one of Composition's own four "driven by" bullets too (`sim/pcs.ts`'s
+   header) — genuinely open, not a quick addition, the same as it has been since the twelfth session.
+6. **Update the HUD** — the operator's own next item after lobes. Concretely, at minimum: Godot's own
+   HUD (`scripts/main.gd`/`bridge/engine.mjs`) shows none of this session's own PCS score, foot-change
+   completion, Spiral, or the three new turn kinds — only the browser's own free-skate HUD
+   (`game/main.ts`) reads `TURN_NAME[T.kind]` generically and so already shows Loop/Rocker/Counter
+   without further work; PCS and the Spiral got no HUD surface in either place. Match the pattern the
+   thirteenth session already used for spin level and jump TES reaching Godot.
+7. **Costume design** — explicitly put at the bottom of the list by the operator this session; not
+   started, and `data/calls-and-deductions.csv`'s own "Costume or prop" deduction (-1.00) is the only
+   real data behind it so far, a scoring category, not a wardrobe/customization system.
+8. **A dedicated, full control scheme for the whole move list**, plus its own tuning rig — the
+   operator's own stated future want (§0 item above), unscoped, not yet designed.
+9. **Verify `rockerCounterStick` (and, while at it, every other reversal-style stick threshold) on a
+   real gamepad**, not only keyboard (§0 item above).
+10. **`stepLevel.ts`'s grade-4 `difficult_turns_in_both_rotational_directions` requirement** is unparsed
+    and unchecked (§0 item above) — a real gap independent of the type-count shortfall.
+11. **Decide whether `step`, `spiral`, `loop`/`rocker`/`counter` belong in any fixed `CAREER_EVENTS`
+    routine**, and if so which and where — an operator content call, not a technical one, carried
+    forward since the thirteenth session and now applying to four elements instead of one.
+12. **`BEGINNER_PARAMS`'s blanket inheritance** (§0 item 7) — still open, still needs the operator
+    watching a fresh player before assuming it is fine either way.
+13. **Choctaw**, if the operator ever wants to spend real design time on it (§0 item 5) — a genuinely
+    different, harder axis than rocker/counter turned out to be; do not assume it is "one more special
+    case" the way rocker/counter were without checking first, the same discipline that made rocker/
+    counter tractable in the first place.
 
 **The native track, in its report's order** (unchanged, still not touched): a strict native JSON
 importer from `native/reference/wire-manifest.json`; transcribe `createState`, the blade and
 classification, and the ground solver from the pinned `/5` source; a runner with oracle comparison and
 first-difference diagnostics; only then an Unreal module and commandlet on a pinned UE installation.
 
-### Working with this operator — what held up on 2026-09-17 (thirteenth session)
+### Working with this operator — what held up on 2026-09-18 (fourteenth session)
 
 The full review — key decisions, unresolved assumptions, three places each side could have moved
-faster, and vocabulary to study — is in §8 below, under "The thirteenth session's shape," in the same
+faster, and vocabulary to study — is in §8 below, under "The fourteenth session's shape," in the same
 depth every prior session's own review has kept. The short version, for a session in a hurry:
 
-- **"Keep cooking" / "n/a" recurred as the whole instruction twice**, the same pattern the twelfth
-  session's own review already named once — see §8 for why a standing priority order, stated once,
-  would remove the repeated framing round trips this keeps costing.
-- **A mid-session ask ("any way we can use this on our character?") named neither the character nor
-  the system** (the browser's 2D figure, or the Godot 3D model — two different rendering pipelines
-  entirely) — investigation before a single line of code, resolved by asking. Naming the target up
-  front is cheap; guessing wrong is not.
-- **Verify in the actual running app, every time, kept paying off again** — this session's two real
-  bugs (the too-slow spin exit firing mid-check; `step-features.json` 404ing in the real served build)
-  were both found by driving the built artifact, not by reading the diff. The second one specifically
-  would never have shown up in any test that imports a module rather than fetching it — keep testing
-  the build's own file list, not just the code.
-- **A tool-use slip worth naming so it does not repeat:** `ScheduleWakeup` is a `/loop`-mode tool; using
-  it to "wait" for an unrelated backgrounded Bash task produced a stray `n/a` turn that looked like user
-  input and was not. The correct move when waiting on a `run_in_background` command outside `/loop` is
-  to simply end the turn — the harness delivers a task-notification on its own; do not schedule
-  anything to manufacture one.
+- **A large, itemized, multi-part ask ("wire in PCS then build the foot change mechanic and reverse one
+  footed leg extened and then add 3...") needed two full clarifying-question round trips before any code
+  was written** — what "reverse one footed leg extended" actually named, and how the "equip" mechanic
+  should work. Both were resolved by asking rather than guessing, and both answers shaped real design
+  decisions once known. A one-time numbered breakdown of a bundled ask, stated up front, removes the
+  round trip — the twelfth and thirteenth sessions' own reviews already named this same pattern; it
+  recurred again today in a new shape (a wishlist-style paragraph rather than a single dense sentence).
+- **A mid-session design-philosophy note ("theres enough buttons on controllers these days...") arrived
+  after Spiral's own button-reuse design was already built and Loop's was underway** — useful, correctly
+  logged for a future dedicated control scheme (§0 item 9), but stating a standing input-design
+  preference before a session that reuses buttons begins would let it shape the first mechanic instead
+  of only the ones built afterward.
+- **Asking to "attempt" a documented, previously-abandoned gap (rocker/counter) paid off completely** —
+  the prior write-off ("a third, different mechanic... not built either") was wrong, and re-examining it
+  with fresh eyes rather than trusting the old note found the actual, buildable insight. Worth naming as
+  a habit worth repeating: a hand-off's own "not possible" claims are a snapshot of one session's
+  understanding, not a permanent verdict, and are worth re-checking when there is a specific reason to
+  (an operator ask, new information, more time) rather than treated as closed forever.
+- **Verify in the actual running app, every time, kept paying off again, twice over** — both real bugs
+  this session (the LB+RB weight-collapse on Spiral's gamepad path; `rockerCounterStick` unreachable
+  through the real keyboard's own 0.35 scale-down) were found only by driving the served build with
+  Playwright and getting a different HUD readout than the sim-level tests predicted. Neither would have
+  been caught by the (extensive, passing) unit test suite alone, since those tests call `step()`
+  directly and bypass `game/controls.ts`'s own input-mapping layer entirely.
 
 **Toolchain reminders, updated:** `npm run typecheck` still fails (no `tsc` on the box); scratch-install
 `typescript`+`@types/node` and run `tsc --noEmit -p . --typeRoots <scratch>/node_modules/@types` from
 `tools/ice-lab/` — clean at every commit this session too. **For a real browser check, prefer
 Playwright** from `/home/kill/astro-aae/frontend/node_modules/playwright` (still there, still not a
-dependency of this repo — read-only borrowed each time) over raw CDP scripting; its notes on headless
-CDP scripting are otherwise still accurate for a machine without it. The native build commands are in
-`tools/ice-lab/native/README.md`. **New this session:** `app/build.mjs`'s data-file copy list
-(`for (const f of [...])`, currently four files) is curated by hand, not a glob of `data/` — a new
-`fetch("../data/whatever.json")` in `game/main.ts` needs a matching entry there too, or the served
-build 404s silently while every module-import test stays green. `test/app-loads.test.ts`'s "every
-data/ file game/main.ts fetches is one app/build.mjs actually ships" test now catches this
-specifically; keep it passing rather than loosening it. The README's test count is 408.
+dependency of this repo — read-only borrowed each time) over raw CDP scripting. The native build
+commands are in `tools/ice-lab/native/README.md`. `app/build.mjs`'s data-file copy list is still
+curated by hand, not a glob of `data/` — a new `fetch("../data/whatever.json")` in `game/main.ts` needs
+a matching entry there too, or the served build 404s silently; `test/app-loads.test.ts` still catches
+this specifically. **New this session — a reusable replay-contract-bump recipe**, used four times
+running: (1) bump `REPLAY_SOLVER` in `sim/replay.ts`; (2) run a small script that reads the *previous
+commit's* `test/fixtures/replay-v1.json`, merges its `initial.params` onto the *current* `DEFAULT_PARAMS`
+(picking up any new field's default), replays every recorded frame's own `input` through the *current*
+`step()` with a fresh `ReplayRecorder`, and writes the result back over the fixture; (3) diff the new
+fixture against the previous commit's with Python (`frames.length`, every `scheme`, every `input` —
+must all match; only `solver` and `initial.params`'s key set may differ) to confirm kinematics did not
+silently change; (4) regenerate `docs/fidelity-report.md` (`node tools/ice-lab/validate.mjs --report
+docs/fidelity-report.md`) — its header names the solver string verbatim, so this is needed even when
+the gate's own PASS/FAIL result does not move, the thirteenth session's own §5 item 33 lesson, still
+true. The README's test count is 441.
 
 ---
 
@@ -375,7 +545,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
 | Native foundation | `tools/ice-lab/native/` — C++17 serialization, CRC32 and deterministic math checked against an oracle pinned at replay `/5`; no native solver yet (PR #4) |
-| Implementation | `tools/ice-lab/` (branch `ue-replay-01-foundation`) — 408 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts (the Slalom now scores a designed curve too), jumps and the moves (both off by default) including the bracket, a rhythm layer with real music, career/choreography with a spin-level and step-sequence bonus, a standalone game (`game/`) with rink-boundary walls, and a Godot presentation (`games/ice-run-godot/`) with a second selectable skater |
+| Implementation | `tools/ice-lab/` (branch `ue-replay-01-foundation`, PR #13 open against `main`) — 441 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps and the moves (both off by default) including every ISU "difficult" turn (bracket, twizzle, loop, rocker, counter) plus the Spiral and a real foot change mid-spin, a rhythm layer with real music, career/choreography with PCS wired in alongside the spin-level and step-sequence bonus, a standalone game (`game/`) with rink-boundary walls, and a Godot presentation (`games/ice-run-godot/`) with a second selectable skater |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 
@@ -932,16 +1102,19 @@ In descending order of value:
 
 ### Not in the rig, deliberately
 
-Rockers, counters and a genuine choctaw (bracket exists as of 2026-09-14; see §0 for why a
-foot-changing choctaw needs a different mechanism) — the two remaining ISU "difficult" turns and the
-two remaining "step" types both `sim/spinLevel.ts` and `sim/stepLevel.ts` (2026-09-17) are honestly
-capped without; a combination spin's foot change (same date, same file, same reason); jump combinations
-and sequences; a full Program Component Score wired into play (`sim/pcs.ts` exists, 2026-09-17, called
-from nowhere yet); animation, networking. The stroke is the bible's semi-analytic push, not a leg model.
-The profile layer
-(2026-09-11) exists but nothing moves its stats yet. The moves (2026-09-13) and the bracket
-(2026-09-14) exist, contained; see §0. A rhythm layer and rink-boundary collision (2026-09-14) exist
-in `game/`, both game-layer and both deliberately outside what a replay verifies; see §0.
+A genuine choctaw is the last remaining ISU "difficult"-turn-adjacent gap — bracket, twizzle, loop,
+rocker and counter are all real as of 2026-09-14/2026-09-18; see §0 for why choctaw needs a genuinely
+different mechanism from the one that made rocker/counter tractable. The six ISU "step" types (chassé,
+toe step, cross roll, running step, cross behind/in front) remain unbuilt with no data behind any of
+them at all (`data/motion-primitives.json` has none of the seven) — only change-of-edge and the
+rig-specific crossover count toward `sim/stepLevel.ts`'s own ceiling from that category. Jump
+combinations and sequences; animation, networking. The stroke is the bible's semi-analytic push, not a
+leg model. The profile layer (2026-09-11) exists but nothing moves its stats yet. The moves
+(2026-09-13), the bracket (2026-09-14), the Spiral, and the foot-change/loop/rocker/counter family
+(2026-09-18) all exist, contained; see §0. A rhythm layer and rink-boundary collision (2026-09-14)
+exist in `game/`, both game-layer and both deliberately outside what a replay verifies; see §0. A
+dedicated full-move-list control scheme, with its own tuning rig, is wanted but unbuilt (§0 item 9,
+2026-09-18).
 
 ### Known gaps, all deliberate
 
@@ -971,6 +1144,10 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-18 (fourteenth, part four) | Rocker and Counter (`sim/moves.ts`'s `TURN_KIND.Rocker`/`Counter`): re-examined a gap `sim/types.ts` had documented as needing "a third, different mechanic" and found it did not — `travelSense` pinned to `entryDir` regardless of cusp parity, one more case in `turnPivot`. Found and fixed two real bugs live: `rockerCounterStick` unreachable by keyboard (game/controls.ts's own 0.35 digital-lean scale-down), and the reversal check's sign was wrong for a bracket entry (`against` already inverts `T.dir`, fixed with `curveSense`). `sim/stepLevel.ts`'s ceiling reaches grade 3 (all five ISU difficult turns real). `7075485`. |
+| 2026-09-18 (fourteenth, part three) | The loop turn (`TURN_KIND.Loop`): hold `turn` through the ordinary cusp instead of releasing — the same pivot run to a second cusp, landing back on the entry edge/foot/direction. Found and fixed: `turnEvent` firing on every cusp (harmless with one cusp) fired twice for a loop's two. Measured cost lands almost exactly on the data's own -0.9 m/s with no new tuning. `e78be47`. |
+| 2026-09-18 (fourteenth, part two) | The Spiral (`data/motion-primitives.json`'s declared-but-unbuilt move): one blade, free leg extended, any direction, reached through the Ina Bauer's own button and distinguished by weight distribution — no new input field. Found and fixed a real gamepad conflict: LB+RB together collapsed `weightR` to 0.5 before the Spiral/Ina-Bauer branch could read it; `app/pad.ts` now remembers the pre-combo weight. `1374333`. |
+| 2026-09-18 (fourteenth, part one) | PCS wired into `game/career.ts` (discipline/segment key on `CareerEvent`, scored once at routine end) and a real foot change mid-spin (`sim/moves.ts`'s `spinTick`, a fresh toe press starts a brief airborne transfer) — unlocks three more `spinLevel.ts` features, honest ceiling reaches the ISU's own level-4 clamp. `7f1d5ce`. |
 | 2026-09-17 (thirteenth, part seven) | Step sequences: `sim/stepLevel.ts` scores `data/step-features.json`'s variety ladder (honest ceiling grade 1/4, six observable types against a seven-type bar); a new `step` `ELEMENTS` entry in `game/career.ts`, Composer-authorable in Godot. Found and fixed: `step-features.json` 404'd in the real served build (`app/build.mjs`'s copy list never had it), a new regression test now guards it. `f82c400`. |
 | 2026-09-17 (thirteenth, part six) | Program Component Score (`sim/pcs.ts`): the formula and `componentFactor` transcribed from `data/segment-rules.csv`, matched against `ScoreCalculator.cs`'s own comment; the physics-to-0..10 mapping openly authored, not transcribed, and the file says so. `IceGrid` gained `coverage()`. Standalone, tested, not yet wired into `career.ts`. `9b895d3`. |
 | 2026-09-17 (thirteenth, part five) | Flow's "dead air between elements" — the clearest of its three remaining unmodelled bullets. Replay `/15`, the second bump this session checked directly against the fixture rather than assumed safe. `6c574c5`. |
@@ -1315,3 +1492,151 @@ to read):
   don't build it yet" is a complete instruction; "look into the lobe thing" is not. Using this word in a
   prompt is the single cheapest fix for the recurring "bundled asks, no depth signal" pattern named
   above, in both this session's own review and the twelfth's.
+
+The fourteenth session's shape (2026-09-18): **when a hand-off says "not built either" for a specific,
+stated reason, treat that reason as a claim to re-check, not a closed door — but only when there is an
+actual reason to reopen it (an operator ask, in this case), not as a standing habit.** The session
+opened on the operator's own itemized list (PCS, the foot-change mechanic, a backward-leg-extended
+move, three more step/turn types) and closed having built every item, including one — rocker and
+counter — that `sim/types.ts` had explicitly documented as needing "a third, different mechanic...
+not built either" after a real prior attempt. The operator asked directly: given that documented
+history, spend real design time attempting it anyway. Re-reading `travelSense`'s own code rather than
+trusting the comment's summary of it found the actual mechanism in about twenty minutes; the comment's
+diagnosis (no edge change without a new topology) had described what a *naive* implementation would
+get wrong, not a fundamental limit. The lesson is not "old write-offs are always wrong" — most are
+correct, including choctaw's, checked again this session and left standing — it is that a documented
+gap with a specific, checkable technical reason is worth a second look with the actual code in front
+of you when someone asks for one, rather than repeating the old verdict from memory.
+
+**Key decisions made this session**, for whoever reads this next:
+
+- **PCS's discipline/segment mapping for `CareerEvent` is an authored placeholder ("women" throughout,
+  "short" for four events, "free" for the finale), not a real design decision put to the operator** —
+  the five-rung career ladder has no gender split and no short/free distinction of its own, and a
+  mapping had to exist for `scorePcs` to have anything to key off at all. Chosen for internal
+  consistency (the finale is explicitly "your complete routine," reading as this ladder's own "free")
+  rather than for any deeper reason — flagged in §0 rather than presented as settled.
+- **Spiral and Loop/Rocker/Counter all reuse existing input buttons rather than adding new
+  `SkatingInput` fields**, deliberately, to avoid touching three control schemes × keyboard/pad ×
+  `sim/replay.ts`'s own hand-enumerated field lists for four separate mechanics in one session. This
+  traded a harder-to-discover trigger (weight distribution; hold-through-cusp; stick reversal) for a
+  smaller, safer, faster-to-ship change — a real tradeoff, not free, and the operator's own mid-session
+  note about wanting dedicated controls eventually (§0 item 9) is the record that this tradeoff was
+  noticed and is not meant to be permanent.
+- **The STEPS taxonomy (chassé, toe step, cross roll, running step, cross behind/in front) was ruled
+  out for this session specifically because it has zero data backing**, not because it looked hard —
+  contrasted directly against rocker/counter/loop, which all had real declared entries in
+  `data/motion-primitives.json` even though two of the three needed real design work to build.
+  Convention 3.2 ("scoring is data, never code") was read as also meaning "new mechanics need data,
+  never invention," and applied as a hard filter on what to attempt this session, not just what to
+  tune once built.
+- **`rockerCounterStick`'s value was changed twice in one session** (0.6, copied from
+  `spinReverseStick`, then 0.2 once live testing showed 0.6 was unreachable through the keyboard's own
+  0.35 scale-down) **and its formula was changed once** (`T.dir` to `curveSense`, once a test caught the
+  bracket-entry sign bug). Both changes were made and verified in the same session rather than shipped
+  and left for a future one to discover — the live-browser check specifically is what surfaced the
+  first; the pre-existing regression test suite specifically is what surfaced the second.
+- **Both PR creation and the merge attempt were treated as part of "commit push merge," not asked about
+  individually** — matching the twelfth/thirteenth sessions' own stated preference that routine actions
+  not need re-asking once authorized for a session. The merge itself was blocked by the harness's own
+  permission classifier, correctly, as a genuinely high-stakes action on a shared default branch — that
+  block is not this session's own decision to route around, and it was not: the correct move (get as
+  far as possible, then stop and report) was taken.
+
+**Unresolved assumptions** — things treated as settled that were not actually confirmed with the
+operator:
+
+- Every new numeric constant this session (`spiralDrag`, `spiralMinSpeed`, `spiralWeightBand`,
+  `spinFootChangeAirTime`/`-Loss`, `rockerCounterStick`) is authored and tested for direction and, where
+  measurable, checked against `data/motion-primitives.json`'s own numbers — but none of it has been
+  played by a human. The standing item every prior session has carried forward is still open.
+- `rockerCounterStick` at 0.2 was chosen to clear the keyboard's own 0.35 digital-scale floor with
+  margin, not derived from any principled "how hard should a deliberate reversal feel" judgement — it
+  is a reachability fix, not a feel decision, and may need retuning once someone actually plays it.
+- The exact RFO→RFI edge-transition outcome for a rocker/counter is this session's own best physical
+  reasoning, verified for internal consistency (stable, not fallen, costs more against the curve than
+  into it) but checked against no external ISU footage or reference — the fidelity-validation case for
+  both still reads `unsourced`, not `pass`, and that gap is real, not a formality.
+- Whether Spiral, Loop, Rocker and Counter should be reachable through the SAME weight/hold/stick-
+  reversal convention forever, or whether the eventual dedicated control scheme (§0 item 9) should give
+  each its own button and retire these overloaded triggers, was never actually decided — this session
+  built the overloaded version because it was asked to keep moving, not because it is believed to be
+  the final design.
+- Whether nine distinct step-sequence types spread across five commits in one session is too much new
+  surface for `game/career.ts`'s `ELEMENTS`/Composer layer to stay legible in, versus whether it reads
+  fine, was never checked against the actual Composer UI in Godot by a human looking at it.
+
+**Three places this session could have been more efficient:**
+
+1. Verifying Rocker/Counter live in the browser took five separate Playwright scripts across three
+   different control schemes and multiple timing windows before the actual cause (`game/controls.ts`'s
+   0.35 digital-lean scale-down, applied to every scheme but B) was found — by reading that one file's
+   `gameInput` function, which was available to read from the very first failed attempt. The general
+   lesson from §5 item 8 ("trace before sweeping") applies to browser verification exactly as much as
+   to physics tuning: read the actual input pipeline the test will exercise *before* the first attempt,
+   not after the fourth one fails the same way.
+2. The Rocker/Counter reversal formula's first version compared the stick against `T.dir` directly and
+   was only checked by hand against the Rocker case (a plain `turn` entry) before being called done —
+   the symmetric Counter case (a `bracket` entry, where `against` already inverts `T.dir`) was not
+   worked through on paper before writing code, and the bug it produced was caught by an existing test
+   rather than by design review. When a new formula depends on a flag (`against`, here) that itself
+   flips a sign used in the formula, work out both branches by hand before the first implementation,
+   not just the one being actively tested.
+3. A long stretch of time went into pure reasoning about the physical semantics of a rocker/counter
+   edge transition (what `travelSense` "really" does, what `flipFrame` touches vs. doesn't) before
+   writing a single throwaway script to check any of it empirically. The eventual five-line Node script
+   that drove `step()` directly and printed the resulting edge code resolved the uncertainty in seconds
+   once written. `sim/`'s own culture (§5 item 8, item 31) already says to trace before asserting; the
+   same applies to design uncertainty, not only debugging — write the five-line probe earlier.
+
+**Three places the operator's own prompting could have moved faster:**
+
+1. **The opening message bundled PCS, the foot-change mechanic, "reverse one footed leg extended," and
+   "3 more step/turn types" with an "equip" mechanic and a lobes/HUD/costume tail, all in one paragraph
+   with no numbered breakdown** — resolved with two clarifying-question rounds before any code was
+   written. This is the same pattern the twelfth and thirteenth sessions' own reviews already named
+   ("bundled asks, no depth signal"); today's version added a new wrinkle — an ambiguous move name
+   ("reverse one footed leg extended") that could plausibly have meant three or four different real
+   ISU elements. Naming the specific element by its closest real name, even approximately, would have
+   turned one clarifying round into zero.
+2. **The controller-input design philosophy ("enough buttons... alternate control schemes") arrived as
+   a mid-session aside, after Spiral's own button-reuse design was already built and Loop's was
+   underway** — it is now correctly logged as a standing preference for the *next* dedicated-scheme
+   task, but it did not get to shape this session's own four mechanics, which all still overload
+   existing buttons. A standing design preference, stated once before a session that will make input
+   decisions begins, shapes every decision in it rather than only the ones made after the note arrives.
+3. **"commit push merge" bundled three actions of very different risk levels into one instruction** —
+   commit and push are routine and low-risk; merging a PR into a shared default branch is exactly the
+   kind of action the harness's own permission system is built to gate, and it did. This is not a
+   prompting mistake exactly (the instruction was clear, and the system did the right thing), but it is
+   worth knowing for next time: a PR merge specifically may need either an explicit standing permission
+   grant (if that is wanted going forward) or an expectation that it will come back as "PR opened,
+   please merge yourself" rather than fully automatic, so it does not read as a stall when it happens.
+
+**How to help me use these abilities better, concretely:** the twelfth and thirteenth sessions' own
+advice both still stand and today's session needed it again — name a priority order or numbered
+breakdown when a message bundles more than one ask, and name a specific element/mechanic by its closest
+real name even when unsure of the exact term, rather than a paraphrase that could mean several things.
+Two new ones from today: state a standing design/architecture preference (like the controller-input
+one) *before* a session that will make related decisions, not mid-stream, so it shapes the first
+decision instead of only the ones after it arrives; and for any request that bundles a routine action
+with a genuinely high-stakes one (like "commit push merge"), expect the high-stakes part to stop and
+ask rather than assume the same blanket authorization covers both — or say explicitly if it should.
+
+**Vocabulary for the operator to study** (both map onto real friction points from today's own session,
+not abstract concepts — knowing them back will make a future brief faster to write and faster for me to
+read):
+
+- **reachability** — whether a value or state is actually achievable through the real path a user (or
+  the real input pipeline) will use to reach it, as distinct from whether it is *mathematically valid*
+  in isolation. `rockerCounterStick` at 0.6 was a perfectly valid threshold in the sim's own terms — the
+  formula worked, the tests passed — and still unreachable by an actual keyboard press, because
+  `game/controls.ts` scales digital lean down by 0.35 before the sim ever sees it. Asking "is this
+  reachable through the real controls, not just valid in the sim" is a sharper question than "does this
+  work," and is exactly the question today's browser-verification detour eventually had to ask.
+- **underspecified** — a request that has more than one reasonable reading, and does not itself contain
+  enough information to choose between them. "Reverse one footed leg extended" was underspecified in
+  exactly this sense — spiral, reverse camel, and a handful of other real elements all fit the words
+  about equally well before the clarifying question narrowed it. Flagging an ask as underspecified
+  yourself ("this could mean X or Y, I mean X") does the same disambiguating work as a clarifying
+  question, from the other direction, and skips the round trip entirely.
