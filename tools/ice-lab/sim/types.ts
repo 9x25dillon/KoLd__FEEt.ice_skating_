@@ -543,15 +543,36 @@ export interface SkaterState {
   hypeStreak: number;
   /**
    * The flow scalar, design-bible.md §2.6: 0..1, integrated continuously.
-   * Rises on a real, unskidded edge and continuous motion; falls on a skid,
-   * a flat blade, stopping, or re-crossing already-damaged ice. Feeds
-   * stamina efficiency (bible: "high flow means... cheaper to skate well")
-   * while both `flowMode` and `staminaMode` are on. "Alternating lobes",
-   * "turns on the beat grid" (partly modelled — a beat-grid bonus, not the
-   * full table) and "dead air between elements" are the bible's own list;
-   * only some of it is modelled here, and README.md says which.
+   * Rises on a real, unskidded edge, continuous motion, and an alternating
+   * lobe; falls on a skid, a flat blade, stopping, re-crossing already-
+   * damaged ice, or a repeated lobe. Feeds stamina efficiency (bible: "high
+   * flow means... cheaper to skate well") while both `flowMode` and
+   * `staminaMode` are on. "Turns on the beat grid" is only partly modelled
+   * (a beat-grid bonus, not the full table); README.md says so.
    */
   flow: number;
+  /**
+   * The curvature-direction tracker flow's own "alternating lobes"/
+   * "repeated lobes in the same direction" bullets need (solver.ts §14):
+   * one signal, not two. `lobeDir` is the CURRENTLY active lobe's sign
+   * (-1/1), or 0 while in a sustained gap between lobes (a flat blade, a
+   * skid, or a direct reversal too brief to count as its own gap never
+   * actually clears it — see solver.ts). `lobeLastDir` is the most
+   * recently ENDED lobe's sign, kept across the gap on purpose — a brief
+   * glide between two pushes does not erase which way the skater was
+   * curving before it, which is what lets a genuine repeat (curve left,
+   * glide, curve left again) read as one instead of every new lobe
+   * reading as an alternation by construction. `lobeCandDir`/`lobeCandT`
+   * debounce a fresh sign for `flowLobeMinHoldTime` before it is allowed
+   * to change either of the above.
+   */
+  lobeDir: number;
+  lobeLastDir: number;
+  lobeCandDir: number;
+  lobeCandT: number;
+  /** Cumulative counts of established lobe transitions, like `flips`: how many opposed vs matched the lobe before them. */
+  lobeAlternations: number;
+  lobeRepeats: number;
   fallReason: Fall;
   fallen: boolean;
   tick: number;

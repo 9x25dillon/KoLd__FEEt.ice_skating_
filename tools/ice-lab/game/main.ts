@@ -10,7 +10,7 @@ import { JUMP_PHASE, JUMP_CODE } from "../sim/jump.ts";
 import { GAME_PARAMS, CONTROL_NAMES, gameInput } from "./controls.ts";
 import { IceRun } from "./run.ts";
 import { SkateScene } from "./scene.ts";
-import { SKINS, skinById } from "./appearance.ts";
+import { SKINS, skinById, skinPreviewSvg } from "./appearance.ts";
 import { Practice, LESSONS } from "./practice.ts";
 import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
@@ -114,6 +114,9 @@ let skater = createState(params, 4.5), steering = newSchemeState(), run = new Ic
 let ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
 let mode: "ready" | "playing" | "paused" | "done" = "ready";
 let best = 0, accumulator = 0, last = 0, flash = 0;
+/** Foot-change mid-spin (sim/moves.ts spinTick), never surfaced anywhere before: a toast the moment
+ *  SpinState.changeCompletedTick advances, the same decaying-flash idiom `flash` already uses. */
+let footChangeFlash = 0, lastChangeCompletedTick = -1;
 let width = 0, height = 0;
 const trail: Array<Array<{ x: number; y: number; contact: boolean }>> = [[], []];
 function traceBlades() {
@@ -144,6 +147,7 @@ function start() {
     : null;
   renderRoutine();
   spinTracker.reset(); lastSpinLabel = ""; wasSpinning = false;
+  lastChangeCompletedTick = -1; footChangeFlash = 0;
   trail.forEach(t => t.length = 0); accumulator = 0; flash = 0; pendingPush = false; mode = "playing";
   pendingToe = false; cantilever = false; elapsedSkate = 0;
   practice = new Practice(); scene.reset(skater);
@@ -190,15 +194,26 @@ el("timed").addEventListener("click", () => { careerMode = false; freeSkate = fa
 el("controls").addEventListener("click", () => {
   resumeAfterGuide = mode === "playing"; pause(); guide.showModal();
 });
+// The wardrobe's own buttons, built from SKINS rather than hand-authored per
+// costume (appearance.ts's own header explains why): a future costume is one
+// entry there, nothing here or in index.html needs to change to show it.
+for (const skin of SKINS) {
+  const button = document.createElement("button");
+  button.className = "skin-option"; button.id = `skin-${skin.id}`; button.setAttribute("aria-pressed", "false");
+  button.style.setProperty("--accent", skin.bodice);
+  button.style.setProperty("--accent-wash", `${skin.bodice}20`);
+  button.innerHTML = `${skinPreviewSvg(skin)}<strong>${skin.name}</strong><span>${skin.description}</span><span class="skin-selected">Selected ✓</span>`;
+  button.addEventListener("click", () => {
+    scene.skin = skin;
+    try { localStorage.setItem("edgework-skin", skin.id); } catch { /* Keep the choice for this session. */ }
+    refreshWardrobe();
+  });
+  el("skin-options").appendChild(button);
+}
 function refreshWardrobe() {
   for (const skin of SKINS) el(`skin-${skin.id}`).setAttribute("aria-pressed", String(scene.skin.id === skin.id));
   el("skin-status").textContent = `${scene.skin.name} selected · ready for the ice`;
 }
-for (const skin of SKINS) el(`skin-${skin.id}`).addEventListener("click", () => {
-  scene.skin = skin;
-  try { localStorage.setItem("edgework-skin", skin.id); } catch { /* Keep the choice for this session. */ }
-  refreshWardrobe();
-});
 function openWardrobe() {
   resumeAfterWardrobe = mode === "playing"; pause(); refreshWardrobe(); wardrobe.showModal();
 }
@@ -322,7 +337,7 @@ function draw(_now: number) {
   el("stance").textContent = `${CONTROL_NAMES[scheme]} · ${codeToString(skater.blade[0].code)} / ${codeToString(skater.blade[1].code)} · ${Math.hypot(skater.vel.x, skater.vel.y).toFixed(1)} m/s`;
   el("landing").textContent = skater.landed.tick < 0 ? "" : `Last jump: ${JUMP_CODE[skater.landed.kind] ?? "hop"} · ${skater.landed.turned.toFixed(2)} rev · ${skater.landed.fall ? "fall" : skater.landed.stepOut ? "step-out" : "landed"}`;
   el("spin-level").textContent = lastSpinLabel;
-  el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
+  el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : footChangeFlash > 0 ? "Foot change!" : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
   drawCareer();
 }
 function frame(now: number) {
@@ -370,6 +385,14 @@ function frame(now: number) {
       pendingPush = false; pendingToe = false;
       const events: EdgeEvent[] = [];
       step(skater, input, params, SIM_DT, events, ice);
+      // sim/moves.ts spinTick's own foot change: changeCompletedTick advances
+      // the instant a transfer resolves, mid-spin, well before the spin
+      // itself ends — a toast now, not only ever reflected later in the
+      // level `lastSpinLabel` shows once the whole spin is scored.
+      if (skater.spin.changeCompletedTick >= 0 && skater.spin.changeCompletedTick !== lastChangeCompletedTick) {
+        lastChangeCompletedTick = skater.spin.changeCompletedTick;
+        footChangeFlash = 1.2;
+      }
       // sim/spinLevel.ts: sample every tick a spin is live, score the moment
       // it ends (fallen or released — either way, s.move leaves MOVE.Spin).
       const spinning = skater.move === MOVE.Spin;
@@ -407,6 +430,7 @@ function frame(now: number) {
         }
       }
       flash = Math.max(0, flash - SIM_DT);
+      footChangeFlash = Math.max(0, footChangeFlash - SIM_DT);
       traceBlades();
       accumulator -= SIM_DT;
       if (!freeSkate && run.done) finish();
@@ -491,7 +515,10 @@ function finishCareer() {
   const c = choreography, xp = career.award(c); saveCareer();
   el("title").textContent = c.complete ? `${MEDALS[c.medal]} on ice.` : "One more rehearsal.";
   const next = careerEvent < CAREER_EVENTS.length - 1 ? `Next event: ${CAREER_EVENTS[careerEvent + 1].title}. Open Career to continue.` : "Season complete! Replay events to improve your medals.";
-  el("description").textContent = `${c.index}/${c.event.routine.length} elements · ${c.falls} falls · +${xp} XP. ${c.complete ? next : `Time ran out at ${ELEMENTS[c.current].title}. Follow the moves in order and try again.`} ${saveNotice}`;
+  // sim/pcs.ts's own score, never shown anywhere before this — silently absent (rather than a
+  // misleading "0.00") whenever finalizePcs left it null (no segmentRules/ice at construction).
+  const pcs = c.pcsScore ? ` · PCS ${c.pcsScore.total.toFixed(2)} (Comp ${c.pcsScore.composition.toFixed(2)} / Pres ${c.pcsScore.presentation.toFixed(2)} / Skills ${c.pcsScore.skatingSkills.toFixed(2)})` : "";
+  el("description").textContent = `${c.index}/${c.event.routine.length} elements · ${c.falls} falls · +${xp} XP${pcs}. ${c.complete ? next : `Time ran out at ${ELEMENTS[c.current].title}. Follow the moves in order and try again.`} ${saveNotice}`;
   el("help").hidden = true; el("start").textContent = "Retry this program →";
   el("overlay").hidden = false; el("pause").hidden = true; el("start").focus();
 }

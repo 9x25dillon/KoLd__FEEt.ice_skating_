@@ -1,9 +1,9 @@
 // The flow scalar, design-bible.md §2.6: "a single value in [0,1], integrated
-// continuously." Only the ground-based rises-with/falls-with terms, the
-// beat-grid bonus, and — added 2026-09-17 — "dead air between elements" are
-// modelled. "Alternating lobes" and "repeated lobes in the same direction"
-// (one signal: no per-tick curvature-direction tracker exists) are still
-// not. Off in every preset, the way everything else here is.
+// continuously." The ground-based rises-with/falls-with terms, the beat-grid
+// bonus, "dead air between elements" (added 2026-09-17), and — added
+// 2026-09-18 — "alternating lobes" / "repeated lobes in the same direction"
+// (one signal, not two: solver.ts §14's curvature-direction tracker) are
+// modelled. Off in every preset, the way everything else here is.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -145,6 +145,49 @@ test("flow validates, and a bad lever is caught", () => {
   assert.ok(validate({ ...p, flowStaminaEfficiencyMin: 1.5 }).length > 0);
   assert.ok(validate({ ...p, flowDeadAirTime: -1 }).length > 0);
   assert.ok(validate({ ...p, flowDeadAirLoss: -1 }).length > 0);
+  assert.ok(validate({ ...p, flowLobeMinHoldTime: -1 }).length > 0);
+  assert.ok(validate({ ...p, flowLobeAlternateGain: -1 }).length > 0);
+  assert.ok(validate({ ...p, flowLobeRepeatLoss: -1 }).length > 0);
+});
+
+test("the very first established lobe has nothing to compare against: no score either way", () => {
+  const p = mk();
+  const s = createState(p, 5);
+  run(s, holding(deg(25), p), p, 200); // 200 ticks: real time to settle into a held edge, past the initial-transient wobble below
+  assert.equal(s.lobeDir, 1);
+  assert.equal(s.lobeAlternations, 0);
+  assert.equal(s.lobeRepeats, 0);
+});
+
+test("an alternating lobe gains flow relative to a repeated one, all else equal", () => {
+  const p = mk();
+  const alternating = createState(p, 5);
+  const repeating = createState(p, 5);
+  // Seed both as mid-gap, with a lobe curving right (+1) already ended —
+  // isolates the comparison itself from the physical transient of actually
+  // getting there (holding a fresh lean briefly swings tiltCmd's sign the
+  // wrong way before settling, the test just above; under
+  // flowLobeMinHoldTime, so it never falsely establishes on its own) and
+  // from how long a real gap takes to register as one (types.ts's own note).
+  for (const s of [alternating, repeating]) { s.lobeDir = 0; s.lobeLastDir = 1; s.lobeCandDir = 0; s.lobeCandT = 0; }
+  run(alternating, holding(deg(-25), p), p, 200); // opposes the ended lobe: alternate
+  run(repeating, holding(deg(25), p), p, 200);    // matches the ended lobe: repeat
+  assert.equal(alternating.lobeAlternations, 1);
+  assert.equal(alternating.lobeRepeats, 0);
+  assert.equal(repeating.lobeAlternations, 0);
+  assert.equal(repeating.lobeRepeats, 1);
+  assert.ok(alternating.flow > repeating.flow,
+    `alternating (${alternating.flow.toFixed(4)}) should out-flow repeating (${repeating.flow.toFixed(4)})`);
+});
+
+test("a direct reversal, with no gap ever registering, still alternates against the lobe still active", () => {
+  const p = mk();
+  const s = createState(p, 5);
+  s.lobeDir = 1; s.lobeLastDir = 0; s.lobeCandDir = 0; s.lobeCandT = 0;
+  run(s, holding(deg(-25), p), p, 200);
+  assert.equal(s.lobeAlternations, 1);
+  assert.equal(s.lobeRepeats, 0);
+  assert.equal(s.lobeDir, -1);
 });
 
 test("flow replays tick for tick", () => {

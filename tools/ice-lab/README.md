@@ -5,9 +5,10 @@
 The game's sports-anime presentation pairs an original illustrated opening screen
 with procedural cel-shaded skaters: ink outlines, angular hair, directional faces,
 geometric costume panels, two-tone fabric shadows, and restrained action strokes
-at high speed. Both Violet and Aurora retain their selectable outfits. The key
-visual is bundled locally in `game/art/`; the live athlete is canvas-rendered and
-still follows the solver's pose, rather than using the illustration as a sprite.
+at high speed. Three selectable outfits (Violet, Aurora, and — added 2026-09-18 —
+Solstice) ship today; see "Costumes" below for how a future one gets added. The
+key visual is bundled locally in `game/art/`; the live athlete is canvas-rendered
+and still follows the solver's pose, rather than using the illustration as a sprite.
 
 `game/` is a standalone browser game on the same 120 Hz solver as the lab, with
 a close, angled momentum camera: it follows **velocity**, not body heading, so
@@ -85,10 +86,11 @@ blade, skid and jump audio. Separate ice tracings follow the two blade contacts
 and break while airborne. The athlete uses the engine's body pose, including
 knee compression, height, lean, arm carriage and spin positions.
 
-**Style** opens a wardrobe with the original **Violet** outfit and the optional
-**Aurora** teal-and-gold outfit with a ballet bun. It is also available from the
-opening card. Selection applies immediately without resetting a run, and is
-remembered in this browser when storage is available. The wardrobe pauses skating.
+**Style** opens a wardrobe with three preset outfits — **Violet** (plum, ponytail),
+**Aurora** (teal and gold, ballet bun) and **Solstice** (amber and garnet,
+ponytail). It is also available from the opening card. Selection applies
+immediately without resetting a run, and is remembered in this browser when
+storage is available. The wardrobe pauses skating.
 
 The game adds contact-driven ice spray for braking, skidding and deeper carves,
 plus a burst and brief result card for each landing (including step-outs, two-foot
@@ -195,6 +197,49 @@ no `enum`, no `namespace`, no constructor parameter properties — and
 The separate [UE-REPLAY-01 native foundation](native/README.md) builds C++ math
 and serialization checks against the pinned `/5` oracle. It does not yet run
 a native solver or Unreal verifier.
+
+---
+
+## Costumes
+
+**Preset only, never player-designed** — the operator's own instruction, 2026-09-18: *"i dont want
+the players to have to design thier own costumes, but make sure theres plent of space for new
+costume updates in the future."* `game/appearance.ts`'s `SKINS` array is the whole cost of a new
+one: a name, a description, ten colours and a `bun` flag (ponytail vs. a pinned-up bun — the only
+field that changes the drawn silhouette itself, not just its colour). Before this session, adding an
+entry there was not actually safe — `game/main.ts` read `SKINS` generically to wire click handlers,
+but `game/index.html`'s wardrobe dialog held two hand-authored `<button>`s with a hand-drawn SVG
+preview each, so a third `SKINS` entry with no matching button would 404 the DOM lookup and crash
+the page on load. Fixed: `appearance.ts`'s new `skinPreviewSvg(skin)` builds that same preview bust
+from a `Skin`'s own fields — every colour in it is one of `Skin`'s own, and `bun` swaps a ponytail
+path for a bun-and-pin one — so `game/main.ts` now builds all three wardrobe buttons at load time
+from `SKINS` alone; `index.html` keeps only an empty container. **Solstice**, an amber-and-garnet
+third costume, is the proof: added with no other file touched, and its own preview and in-game
+figure both render correctly (`game/scene.ts` already read every `Skin` field generically before
+this session — only the picker's own artwork was hand-authored, not the skater itself).
+
+**A real bug found while writing the generator, not merely one avoided**: the two hand-drawn SVG
+previews it replaces both hard-coded Violet's own `#342e46` hair colour for the head-hair path —
+Aurora's markup carried the same wrong hex for that one path, alongside its own correct `#302825`
+everywhere else, because nothing had ever generated the second preview from its own data to catch
+the copy-paste. `skinPreviewSvg` reads `skin.hair` in both places, so it cannot recur.
+
+**Not attempted: parity in `games/ice-run-godot`.** The browser skater is a flat-shaded canvas
+figure with fill colours read straight off `Skin`; the Godot skater is a rigged, baked-material
+Blender export (`scripts/skater.gd`, `tools/build_skater.py`) with no per-costume colour hook at
+all today. The existing precedent for "a second look" there is `tools/build_berserker.py` — an
+entire separate armature-compatible model, not a recolour, selectable the same way `Skin` is in the
+browser (Settings → Skater). Giving Godot the browser's own finer-grained costume system would mean
+either authored material variants per costume in the `.blend` source or a runtime shader/material
+override — real, scoped work, not attempted here rather than rushed.
+
+**`data/calls-and-deductions.csv`'s own "Costume or prop" deduction (-1.00) remains real, unread
+data** — a judged-competition rule violation (an inappropriate costume or a dropped prop), not a
+description of *this* preset system, and nothing in the sim or either game reads that row. It would
+need its own trigger condition — some notion of a costume "violating" a rule — that no data file
+here defines, unlike every other calls-and-deductions row this rig already scores; inventing one
+would be authoring a rule, not wiring an existing one. Left alone, the same honesty every other
+undrawn row in that file already gets.
 
 ---
 
@@ -1146,14 +1191,32 @@ group" measurement uses. A flat bonus, `flowBeatGain`, applies when the same tur
 already earns `musicMode` credit lands on the beat grid.
 
 **"Dead air between elements," added 2026-09-17,** the clearest-defined of the bible's three
-remaining bullets: once a turn, twizzle, spin, Ina Bauer or jump has actually finished at least once
-(`moveDone.tick`/`landed.tick` both start at -1, so an opening glide before the first element is never
-dead air — checked directly, not assumed), a `flowDeadAirTime` grace period past it, with no new
-element under way, costs `flowDeadAirLoss` a second. **Still not modelled**, the bible's other two
-bullets — "alternating lobes" and "repeated lobes in the same direction" — because they are one signal,
-not two: a per-tick curvature-direction tracker (has the current arc's sign held long enough to call it
-a lobe, and did the *next* one match or oppose it) that this rig does not have yet and that has no
-calibration data of its own to build against, unlike `both_directions`' precise ISU thresholds.
+remaining bullets at the time: once a turn, twizzle, spin, Ina Bauer or jump has actually finished at
+least once (`moveDone.tick`/`landed.tick` both start at -1, so an opening glide before the first
+element is never dead air — checked directly, not assumed), a `flowDeadAirTime` grace period past it,
+with no new element under way, costs `flowDeadAirLoss` a second.
+
+**"Alternating lobes" and "repeated lobes in the same direction," added 2026-09-18,** the bible's
+last two — one signal, not two, the same curvature-direction tracker README.md and Hand_off.md had
+both called out as missing (`solver.ts` §14): does the current curve's sign (`s.tiltCmd`'s) hold long
+enough to call it a lobe (`flowLobeMinHoldTime`), and did the one before it match or oppose it. Only a
+real `Carve`/`Edge` counts as curving. The comparison target, `SkaterState.lobeLastDir`, is kept
+across the gap between two lobes on purpose — a brief flat stretch between two pushes does not erase
+which way the skater was curving before it, which is what lets a genuine repeat (curve left, glide,
+curve left again) read as one, rather than every new lobe reading as an alternation by construction
+(there are only two signs, so a *direct* reversal, with no gap ever registering, always alternates —
+checked explicitly in `test/flow.test.ts`). A flat bonus/loss, `flowLobeAlternateGain`/
+`flowLobeRepeatLoss`, applies once per established transition; the very first lobe of a session scores
+neither, having nothing yet to compare against. No calibration data exists for either constant, unlike
+`both_directions`' precise ISU thresholds — both are authored placeholders, the same honesty
+`musicBeatWindow`'s own comment already holds itself to.
+
+The same signal also reaches PCS's Composition score (`sim/pcs.ts`) for the first time: `lobeVariety`
+— the share of a program's established lobe transitions that alternated rather than repeated — joins
+`IceGrid.coverage()` as the second of Composition's four bible-named "driven by" bullets, `pcs.ts`'s
+own header updated to say so. `SkaterState` gained `lobeAlternations`/`lobeRepeats`, cumulative counts
+like `flips`, read by `game/career.ts`'s `finalizePcs` the same baseline-and-delta way `musicCredit`
+already was.
 
 **Feeds stamina efficiency**, the one link with an actual bible quote behind the number: *"high flow
 means you carry speed and push less, so it is literally cheaper to skate well."* Wind's own drain
@@ -1175,7 +1238,9 @@ drains over 5 s in the first place; both scale together over a longer program.
 Replay contract `/13` added `flowMode` and its eight levers to `Params`, and `flow` to `SkaterState`.
 `/15` added dead air's two levers to `Params`, no `SkaterState` change — checked directly against the
 committed fixture (`flowMode` 0 there, so §14 never runs at all) rather than assumed safe the way every
-bump under a brand-new Mode flag at 0 already was.
+bump under a brand-new Mode flag at 0 already was. `/20` added the lobe tracker's three levers to
+`Params` and six fields to `SkaterState` (`lobeDir`, `lobeLastDir`, `lobeCandDir`, `lobeCandT`,
+`lobeAlternations`, `lobeRepeats`), checked the same direct way as `/15`.
 
 ## Wiring it all in — the ice grid, stamina, hype and flow, live
 
@@ -1254,23 +1319,30 @@ representation — design-bible.md §3.1 is explicit that the sim is a reduced-o
 reads it — and a spin's position is exactly three values (`SPIN_POSITION`: upright, sit, camel), not a
 catalogue of named variations with a reference pose to check a skater's own joints against.
 
-**Four of the seven observed features still need a mechanic this rig does not have.**
-`change_foot_by_jump`, `difficult_change_of_foot` and `all_three_positions_second_foot` all need a
-combination spin with a foot change mid-element — `spinStart` sets the spinning foot once and
-`spinTick` never reassigns it. `jump_within_spin` needs a small jump mid-spin that resumes spinning,
-which the jump and spin systems do not compose into. `change_of_edge` is not merely unbuilt: in this
-model a spin's blade tilt is `-Sp.dir * SPIN_EDGE`, so edge sign **is** rotation direction here, not an
-independent quantity — scoring it apart from `both_directions` (below) would double-count the same
-event.
+**Two of the seven observed features still need a mechanic this rig does not have.**
+`jump_within_spin` needs a small jump mid-spin that resumes spinning, which the jump and spin systems
+do not compose into. `change_of_edge` is not merely unbuilt: in this model a spin's blade tilt is
+`-Sp.dir * SPIN_EDGE`, so edge sign **is** rotation direction here, not an independent quantity —
+scoring it apart from `both_directions` (below) would double-count the same event.
+**`change_foot_by_jump`, `difficult_change_of_foot` and `all_three_positions_second_foot` are no
+longer on that list** — added 2026-09-18 (fourteenth session): a fresh toe press mid-spin
+(`input.toe`, otherwise unused during a spin) starts a brief airborne transfer to the other foot —
+angular momentum conserved but for one transfer cost paid once, `SpinState.foot` toggled on landing.
+`SpinLevelTracker` splits a segment on a foot change too, not only a position or direction change, so
+segments adjacent across any of the three stay findable. Reaches the HUD in both engines: the browser
+free-skate HUD (`game/main.ts`) flashes "Foot change!" the tick it completes, and
+`games/ice-run-godot/bridge/engine.mjs` exposes the same as `footChange` in its snapshot (added
+2026-09-18, fifteenth session, alongside the rest of the HUD-parity work below).
 
-**That leaves three:** `increase_of_speed` (the ratio of peak to trough angular velocity within one
-held position, at least 1.30× over at least 2 revolutions — "emerges naturally from the player pulling
-in: ω = L / I", the doc's own words, and the same physics `test/spin.test.ts`'s "a camel is slow and
-an upright fast" case already measures), `eight_revolutions_no_change` (a single unbroken segment of 8
-or more revolutions), and — added 2026-09-17 — `both_directions`, described below. All three are real
-ISU features, read straight from `data/spin-features.json` (never hardcoded — the same "scoring is
-data" convention `sim/score.ts` already follows) rather than authored numbers, so a rules update to
-that file moves the thresholds without a code change.
+**That leaves six:** `increase_of_speed` (the ratio of peak to trough angular velocity within one held
+position, at least 1.30× over at least 2 revolutions — "emerges naturally from the player pulling in:
+ω = L / I", the doc's own words, and the same physics `test/spin.test.ts`'s "a camel is slow and an
+upright fast" case already measures), `eight_revolutions_no_change` (a single unbroken segment of 8 or
+more revolutions), `both_directions` (added 2026-09-17, described below), and the three foot-change
+features just named. All six are real ISU features, read straight from `data/spin-features.json`
+(never hardcoded — the same "scoring is data" convention `sim/score.ts` already follows) rather than
+authored numbers, so a rules update to that file moves the thresholds without a code change. A level
+built from six of ten reaches the ISU's own clamp of 4 — an honest ceiling, not a bug avoided.
 
 `sim/moves.ts`'s own `SpinState` only keeps the **current** segment's stats, overwritten the moment
 position (or, now, direction) changes — enough for its own purposes, not enough to score a whole spin
@@ -1342,10 +1414,11 @@ reduced-order rig can actually observe, checked one bible bullet at a time in th
 - **Presentation** — one of five: musical credit's own accumulation rate, which already folds in accent
   usage (every credit is a hit accent, `sim/music.ts`). Carriage activity, gaze and posture need
   telemetry this rig does not keep, or — gaze — data it cannot observe at all.
-- **Composition** — one of four: `IceGrid.coverage()`, a new method, share of the sheet a blade has ever
-  touched — the exact "ice-coverage map from the tracing buffer" the bible names. Lobe variety needs the
-  same curvature-direction tracker flow's own "alternating lobes" is still missing; element distribution
-  and Composer layout are real gaps too, not built yet.
+- **Composition** — two of four now: `IceGrid.coverage()`, share of the sheet a blade has ever touched
+  — the exact "ice-coverage map from the tracing buffer" the bible names — and, added 2026-09-18, lobe
+  variety: the share of a program's established lobe transitions that alternated rather than repeated,
+  the same curvature-direction tracker flow's own "alternating lobes" bullet uses (see Flow, above).
+  Element distribution and Composer layout are real gaps too, not built yet.
 
 `sim/session.ts` is deliberately reserved for pre-production-plan.md §6's own gate metrics ("inventing a
 parallel set would produce numbers that look like evidence and answer nothing" — that file's own words)
@@ -1359,10 +1432,20 @@ argument to `scorePcs`, not optional the way `step()`'s own grid is: this runs o
 once a tick, so there is no need for a silent-no-op fallback — a caller with no grid should not call
 this at all, the same way one with no score tables skips `scoreJump`.
 
-**Not yet wired into `game/career.ts` or either live game** — `sim/pcs.ts` exists the same way
-`sim/spinLevel.ts` first did, as a real, tested scoring module with nowhere in play that calls it yet.
-Wiring it in needs a discipline/segment assigned to each `CareerEvent` (none exists today — the five
-events have no short/free distinction at all) as much as it needs the plumbing itself.
+**Wired into `game/career.ts`, added 2026-09-18 (fourteenth session).** `CareerEvent` gained a
+`discipline`/`segment` key (`data/segment-rules.csv`'s own two axes) — an authored content decision,
+"women" throughout (no discipline switch exists in this rig) and "short" for every event but the
+closing `finale`, which reads as this ladder's own "free". `Choreography` runs its own
+`SessionMeter`/`PcsMeter` across a routine and scores once at the end, feeding a `PCS_XP_PER_POINT`
+bonus alongside the existing technical/spin/step ones.
+
+**Reaches both HUDs, added 2026-09-18 (fifteenth session).** Neither engine showed a PCS number
+anywhere before this: `game/main.ts`'s `finishCareer()` appends the total (and the three component
+scores) to the routine's own result text when `Choreography.pcsScore` is not null; `games/ice-run-
+godot/bridge/engine.mjs` puts the same total in its `result.detail` and the whole `PcsScore` object in
+`snapshot().routine.pcsScore`, and `scripts/main.gd`'s `update_hud()` reads it the same way it already
+reads jump TES and spin level. Both stay silent (no misleading "0.00") whenever `finalizePcs` left it
+null.
 
 ## Step sequences
 
@@ -1427,6 +1510,32 @@ headless smoke test (`--smoke-test`, career routine unaffected); and a live brow
 Playwright, after the 404 fix, with zero console errors. 408 Ice Lab tests (up from 394), 10 Godot
 bridge tests, `tsc` clean. No replay contract change: this lives entirely in `game/career.ts`
 external analysis over already-recorded state, the same situation `sim/spinLevel.ts` is already in.
+
+### HUD parity, Godot vs. browser — added 2026-09-18, fifteenth session
+
+Every mechanic above already had a real HUD surface in `game/main.ts`'s free-skate readout; the
+bridge (`games/ice-run-godot/bridge/engine.mjs`, `scripts/main.gd`) lagged behind it in three places,
+found by checking rather than assuming parity:
+
+- **Turn kind.** The browser's HUD has always broken a held turn down by `TURN_KIND` (three-turn,
+  mohawk, bracket, loop, rocker, counter); the bridge's `snapshot().move` said the bare `'Turn'` for
+  all six, because `scripts/main.gd`'s `hud_move` reads `frame.move` as a plain string with no turn-
+  specific case of its own. Fixed at the source: `snapshot()` now builds the same breakdown the
+  browser's ternary does, so the GDScript needed no change at all — the exact "add it to the bridge
+  where the GDScript already reads generically" pattern the thirteenth session used for `spinLevel`.
+- **The foot change mid-spin** and **PCS's score** are the other two — see "The foot change mid-spin"
+  above (§"A spin's level") and "Program Component Score" above for what each now shows in both
+  engines.
+
+Verified: three new `games/ice-run-godot/tests/engine.test.mjs` cases (turn-kind labels by direct
+state, matching the browser's own ternary case for case; a real driven foot change reaching
+`snapshot().footChange` as a flash that decays; a finished career routine's `snapshot().routine.
+pcsScore` and `result.detail` both carrying a real PCS total) — 12 Godot bridge tests, up from 10. The
+browser side verified live: built and served the actual game, drove it headlessly with Playwright
+(hold `d` to carve, `q`+`y` to spin at zero weight, hold `f` mid-spin for the change), and watched
+`#hint` read "Foot change!" then decay to the next toast, with zero console errors. No replay contract
+change: every field here is presentational, read from already-recorded state the same way `spinLevel`
+and `technical` already are.
 
 ## What a session measures
 

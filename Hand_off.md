@@ -1,6 +1,117 @@
 # Hand-off
 
-## Current checkpoint — 2026-09-18, fourteenth session: PCS wired live, a real foot change, the Spiral, and the loop/rocker/counter turns
+## Current checkpoint — 2026-09-18, fifteenth session: flow's lobes, then HUD parity between Godot and the browser
+
+Still on **`ue-replay-01-foundation`**. Two commits, each tested and verified live before the next
+began. This session opened on the operator's own two-part ask: log a standing decision (Choctaw's own
+new-foot edge-change mechanism is wanted, eventually, not hedged as "if" anymore — §0 item 0.5 below)
+and then work the queue in order, starting from its own top item — and, mid-session, "keep going,
+update the hud" continued straight into the queue's next item without a fresh round of questions.
+
+**In order:**
+
+0.5. **Logged, not built**: the operator confirmed wanting a new-foot edge-change mechanism
+   (Choctaw's own blocker) — see §0 item 0.5 and queue item 13, both updated to say "confirmed,
+   eventually" instead of "if the operator ever wants to." No code changed by this.
+1. **Flow's "alternating lobes" / "repeated lobes in the same direction"** (design-bible.md §2.6),
+   the queue's own top item and the last of flow's three bullets this file had called unmodelled since
+   the twelfth session — one signal, not two, per every prior session's own note: a per-tick
+   curvature-direction tracker (does the current curve's sign hold long enough to call it a lobe, and
+   did the one before it match or oppose it).
+
+   **The design that made it tractable**: `SkaterState.tiltCmd`'s own sign is already the signed
+   curvature direction every tick (no new physics needed) — what was missing was purely the lobe
+   *bookkeeping*. Three states, not two: `lobeDir` (the currently active lobe, ±1, or 0 during a
+   sustained gap — a flat blade or a skid), and `lobeLastDir` (the most recently ENDED lobe's
+   direction, kept across the gap on purpose). Without a third "currently in a gap" state, every
+   established transition is, by construction, an alternation — there are only two signs, so a
+   "repeat" can only exist by comparing against a direction that has been allowed to lapse and be
+   remembered separately, not against whatever is currently active. `lobeCandDir`/`lobeCandT` debounce
+   a fresh sign for a new `flowLobeMinHoldTime` (0.35 s, authored) before it can change either state.
+   A flat `flowLobeAlternateGain`/`flowLobeRepeatLoss` (authored placeholders, no calibration data
+   exists for either, the same honesty `musicBeatWindow`'s own comment holds itself to) applies once
+   per established transition; the very first lobe of a session scores neither way.
+
+   **The same signal reaches PCS's Composition score for the first time too** (`sim/pcs.ts`):
+   `lobeVariety` — the share of a program's established transitions that alternated — joins
+   `IceGrid.coverage()` as the second of Composition's four bible-named bullets. `SkaterState` gained
+   `lobeAlternations`/`lobeRepeats`, cumulative like `flips`, read by `game/career.ts`'s `finalizePcs`
+   the same baseline-and-delta way `musicCredit` already was.
+
+   **A real test-authoring trap, found and worked around, not papered over**: holding a fresh lean from
+   rest swings `tiltCmd`'s sign the WRONG way for the first ~0.25 s (a balance-loop transient) before
+   settling — under `flowLobeMinHoldTime`, so it never falsely establishes on its own, but it makes
+   naively constructing an "alternate vs. repeat" comparison test by driving real inputs from a
+   standing start fragile: the transient briefly reads as a candidate direction that can confound a
+   test authored without accounting for it. Worked around by seeding `lobeDir`/`lobeLastDir` directly
+   in the two comparison tests (isolating the classification logic from the transient) while a separate
+   test still exercises the real, undisturbed physical path end to end.
+
+   Replay contract bumped **`ice-lab-f64/19` → `/20`** — three new `Params` levers, six new
+   `SkaterState` fields, checked the same direct way `/15`'s dead-air bump was (the committed fixture
+   has `flowMode` 0, so §14 never executes for it; the regenerated fixture's own frame count, every
+   `scheme`, and every `input` matched the previous commit's exactly, confirming identical kinematics
+   — only `solver` and `initial.params`'s key set differ, which is what the recipe's own diff step
+   checks, not raw digest equality, which does change and is expected to, once new fields exist for the
+   digest's own JSON serialization to hash).
+
+   **Verified live, not only in tests**: built and served the actual browser game
+   (`node app/build.mjs && node app/serve.mjs`), drove it headlessly with Playwright (holding `d` to
+   carve), and watched the HUD's own `EDGE` readout climb to 100 with zero console errors — the same
+   discipline the fourteenth session's own review named as having paid off twice, kept up a third time.
+   `docs/fidelity-report.md` regenerated (solver string only; gate unchanged: 6 pass, 0 fail, 26
+   unsourced, 0 unmodelled, still not met). The Godot bridge (`games/ice-run-godot/`) needed no source
+   change — it imports the runtime mirror `tools/prepare.mjs` regenerates from this same tree — but was
+   still rebuilt and its own 10-test suite re-run to confirm. `e6edfbd`.
+2. **HUD parity between Godot and the browser** (queue item 6). Checked what the browser's own
+   free-skate HUD already showed and what the Godot bridge's `snapshot()` actually exposed, rather
+   than trusting the fourteenth session's own checkpoint note that named the gap — one of the three it
+   named turned out to already be closed:
+
+   - **Turn kind — a real gap, fixed.** The browser has always broken a held turn down by `TURN_KIND`
+     (three-turn, mohawk, bracket, loop, rocker, counter); the bridge's `snapshot().move` said the bare
+     `'Turn'` for all six, because `scripts/main.gd`'s `hud_move` reads `frame.move` as a plain string
+     generically. Fixed at the source — `engine.mjs`'s `snapshot()` now runs the same ternary the
+     browser's HUD does — so the GDScript needed no change at all, the exact "fix it where the reader
+     is already generic" pattern the thirteenth session used for `spinLevel`.
+   - **The foot change mid-spin — a real gap, fixed.** `SpinState.changeCompletedTick` had never been
+     read by any UI code in either engine. Both now flash a toast ("Foot change!" / `footChange` in the
+     snapshot) the tick it advances, the same decaying-flash idiom each engine's own toast already uses
+     (`flash` in `game/main.ts`, the new `footChangeFlash` mirroring it in `engine.mjs`).
+   - **PCS's score — a real gap, fixed.** Wired into `game/career.ts` since the fourteenth session but
+     never displayed anywhere. Both engines now show the total (the browser also breaks out all three
+     components) when a routine finishes, silently absent rather than a misleading "0.00" whenever
+     `finalizePcs` left it null.
+   - **The Spiral — NOT a real gap, the fourteenth session's own checkpoint note was already stale by
+     the time it was written.** Both `game/main.ts` and `engine.mjs` already label `MOVE.Spiral` —
+     added in the very same commit that built the Spiral itself (`1374333`), confirmed by `git log -S`
+     before touching anything. Worth remembering: a hand-off's own claims are a snapshot, not a
+     standing fact, and are worth checking against the actual code before building on them — the same
+     lesson the fourteenth session's own rocker/counter re-examination already drew, now cutting the
+     other way (finding a claimed gap was already closed, not that a claimed wall was not one).
+
+   **Two more stale README passages fixed on the way**, found the same way: the spin-level section
+   still listed the foot-change features as needing "a mechanic this rig does not have" (built two
+   sessions ago) and the PCS section still said "not yet wired into `game/career.ts`" (also already
+   done). Neither was touched by this session's own code changes — both were just never updated when
+   the work that made them stale actually shipped.
+
+   **Verified live, not only in tests**: three new `games/ice-run-godot/tests/engine.test.mjs` cases
+   (12 Godot bridge tests, up from 10) — turn-kind labels checked by direct state (isolating the label
+   map from turn-entry physics `tools/ice-lab/test/turn.test.ts` already covers), a real driven foot
+   change reaching `snapshot().footChange` as a flash that decays, and a finished career routine's
+   `snapshot().routine.pcsScore`/`result.detail` both carrying a real total. The browser side verified
+   in the actual running game: built and served it, drove it headlessly with Playwright (hold `d` to
+   carve, `q`+`y` to spin at zero weight, hold `f` mid-spin for the change — the exact recipe
+   `test/spin.test.ts`'s own `change_foot_by_jump` case uses), and watched `#hint` read "Foot change!"
+   then decay to the next toast, zero console errors both times. `5c6cc5d`.
+
+**Both commits pushed** (`e6edfbd`, `5c6cc5d`) to `ue-replay-01-foundation`, reaching the still-open
+PR #13 automatically — nothing new to open, matching item 1's own note above.
+
+---
+
+## Previous checkpoint — 2026-09-18, fourteenth session: PCS wired live, a real foot change, the Spiral, and the loop/rocker/counter turns
 
 Still on **`ue-replay-01-foundation`**, four commits, each tested and verified live before the next
 began — the browser Ice Lab, Godot, native reference, or all three, every time; see each item. This
@@ -354,7 +465,7 @@ hold the document set together, and the things most likely to trip you up.
 > true: `tools/ice-lab/` is real, runs, and has 249 passing tests, including replay capture and a
 > verifier that replays a clip recorded in one JavaScript engine in another.
 
-## 0 · Start here (written at the close of 2026-09-18, fourteenth session)
+## 0 · Start here (written at the close of 2026-09-18, fifteenth session)
 
 ### First, before anything else
 
@@ -381,6 +492,11 @@ hold the document set together, and the things most likely to trip you up.
    `segment` is an authored placeholder — "women" for every event (no gender/discipline switch exists
    anywhere in this rig; if one is ever added, revisit this), "short" for four of five events and
    "free" for the closing `finale`. Not put to the operator as the content decision it actually is.
+0.5. **Confirmed, 2026-09-18: the operator wants a new-foot edge-change mechanism built — eventually,
+    not this session.** This is Choctaw's own blocker (item 5 just below), no longer hedged as "if the
+    operator ever wants to spend real design time on it" (the old queue's own wording) — they do. Queue
+    position is unchanged (still item 13, still behind the operator's own stated order); this note only
+    upgrades the decision from conditional to confirmed so a future session does not have to re-ask.
 5. **Choctaw is the one real remaining "difficult-turn-adjacent" gap.** It is NOT the rocker/counter
    fix applied elsewhere — rocker/counter change nothing about which foot lands the exit; choctaw needs
    a genuine edge-character change on a *new* foot, which `sim/types.ts`'s `TURN_KIND` comment still
@@ -395,9 +511,12 @@ hold the document set together, and the things most likely to trip you up.
 7. **`BEGINNER_PARAMS` still inherits every system via spreading `GAME_PARAMS`, unexamined** — carried
    over unresolved since the twelfth session, now also true of every mechanic this session added
    (Spiral, Loop, Rocker, Counter, PCS). Still nobody has watched a beginner feel any of it.
-8. **Flow's "alternating lobes" / "repeated lobes in the same direction" is still the one unmodelled
-   flow signal**, and it is the operator's own next stated priority — see the queue immediately below.
-   No per-tick curvature-direction tracker exists and no calibration basis was identified for one.
+8. **Flow is fully modelled now — all three of the bible's own §2.6 bullets, not two.** "Alternating
+   lobes" / "repeated lobes in the same direction" (fifteenth session, `e6edfbd`) closes it: see the
+   fifteenth session's own checkpoint entry above for the mechanism (`lobeDir`/`lobeLastDir`, a
+   three-state tracker, not two — that third state is what makes a genuine "repeat" possible at all).
+   Still no calibration data exists for `flowLobeAlternateGain`/`flowLobeRepeatLoss` — both are authored
+   placeholders, playtest them.
 9. **The operator wants a real, dedicated control scheme for the full move list eventually** — their
    own words, mid-session: "theres enough buttons on controllers these days i dont see why we cant
    perform the entire moves list through our controls and engine... develop a tuning rig for and
@@ -406,13 +525,18 @@ hold the document set together, and the things most likely to trip you up.
    duration and stick reversal) specifically to avoid touching input plumbing mid-mechanic — a
    deliberate, stated tradeoff, not an oversight. A dedicated fourth scheme with one button per move,
    plus its own tuning rig, is real, wanted, unscoped future work — see the queue.
-10. **Replay contract is `ice-lab-f64/19`.** Four bumps this session (`/16`–`/19`), each for a new
-    `SkaterState`/`TurnState`/`Params` field, none guarded by a brand-new Mode flag at 0 the way early
-    bumps could rely on. Every one was regenerated from its own recorded inputs and diffed against the
-    previous commit's fixture (frame count, schemes, every input) to confirm only the solver string and
-    the new field names changed — `tools/ice-lab/test/fixtures/replay-v1.json`'s own params object,
-    diffed with `python3 -c "import json; ..."`, is the fast way to check this; see the toolchain notes
-    below for the exact regeneration recipe, worth keeping as a reusable script next time.
+10. **Replay contract is `ice-lab-f64/20`.** Five bumps across the fourteenth and fifteenth sessions
+    (`/16`–`/20`), each for a new `SkaterState`/`TurnState`/`Params` field, none guarded by a brand-new
+    Mode flag at 0 the way early bumps could rely on. Every one was regenerated from its own recorded
+    inputs and diffed against the previous commit's fixture (frame count, schemes, every input) to
+    confirm only the solver string and the new field names changed — `tools/ice-lab/test/fixtures/
+    replay-v1.json`'s own params object, diffed with `python3 -c "import json; ..."`, is the fast way to
+    check this. **Per-frame digests are NOT part of that check and are expected to differ** once new
+    `SkaterState` fields exist at all — `replayDigest` hashes the whole state object, so adding any
+    field (even at its inert default) changes the JSON being hashed; verified against `7f1d5ce`'s own
+    fixture bump, which also changed every digest. The invariant is frame count / scheme / input, never
+    the digest number itself. See the toolchain notes below for the exact regeneration recipe, worth
+    keeping as a reusable script next time — nobody has yet.
 11. **A second Godot skater exists** (`scripts/main.gd`, Settings → Skater) — Violet stays default.
     `tools/build_berserker.py` regenerates it; both build scripts must keep constructing the *identical*
     armature (`Hips, Spine, Head, Thigh/Shin/Foot L/R, Arm/Forearm L/R`) or `skater.gd` silently stops
@@ -424,28 +548,29 @@ data that is there; commit or delete none of the three without asking.
 
 ### The queue, next
 
-The operator's own stated order, not a technical re-ranking — the last four items were this session's
-own, all closed:
+The operator's own stated order, not a technical re-ranking — items 1-4 were the fourteenth session's
+own; item 5 is the fifteenth's:
 
-1. ~~**Wire PCS into `game/career.ts`.**~~ **Done**, this session. `7f1d5ce`.
-2. ~~**A foot change mid-spin.**~~ **Done**, this session. `7f1d5ce`.
-3. ~~**A backward/reverse one-footed leg-extended move (the Spiral).**~~ **Done**, this session, and
-   reaches Kerrigan/inverted variants' own direction-agnostic ask for free — the *style* variants
+1. ~~**Wire PCS into `game/career.ts`.**~~ **Done**, fourteenth session. `7f1d5ce`.
+2. ~~**A foot change mid-spin.**~~ **Done**, fourteenth session. `7f1d5ce`.
+3. ~~**A backward/reverse one-footed leg-extended move (the Spiral).**~~ **Done**, fourteenth session,
+   and reaches Kerrigan/inverted variants' own direction-agnostic ask for free — the *style* variants
    themselves (Kerrigan vs. plain vs. inverted leg extension) remain undone, no data backing exists for
    them, see §0 item above. `1374333`.
-4. ~~**Three more step/turn types.**~~ **Done**, this session: Loop, Rocker, Counter. `e78be47`,
+4. ~~**Three more step/turn types.**~~ **Done**, fourteenth session: Loop, Rocker, Counter. `e78be47`,
    `7075485`.
-5. **Alternating / repeated lobes** (flow's last unmodelled bullet) — the operator's own next item.
-   Needs a per-tick curvature-direction tracker; no existing signal fits directly, this is design work,
-   not wiring. Whatever shape it takes should probably also feed `stepLevel.ts`'s own honest ceiling,
-   since "lobe variety" is one of Composition's own four "driven by" bullets too (`sim/pcs.ts`'s
-   header) — genuinely open, not a quick addition, the same as it has been since the twelfth session.
-6. **Update the HUD** — the operator's own next item after lobes. Concretely, at minimum: Godot's own
-   HUD (`scripts/main.gd`/`bridge/engine.mjs`) shows none of this session's own PCS score, foot-change
-   completion, Spiral, or the three new turn kinds — only the browser's own free-skate HUD
-   (`game/main.ts`) reads `TURN_NAME[T.kind]` generically and so already shows Loop/Rocker/Counter
-   without further work; PCS and the Spiral got no HUD surface in either place. Match the pattern the
-   thirteenth session already used for spin level and jump TES reaching Godot.
+5. ~~**Alternating / repeated lobes** (flow's last unmodelled bullet).~~ **Done**, fifteenth session:
+   `SkaterState.tiltCmd`'s own sign, held long enough (`flowLobeMinHoldTime`) and compared against the
+   last ended lobe's own direction (`lobeLastDir`, kept across the gap on purpose — see §0 item 1
+   below). Also reached `sim/pcs.ts`'s Composition "lobe variety" bullet (`lobeVariety`), one of its
+   four bible-named ones — **not** `stepLevel.ts`, on reflection: that ceiling scores discrete turn/
+   footwork *types*, and ordinary curvature variety between them has no natural hook there the way it
+   does in Composition. `e6edfbd`.
+6. ~~**Update the HUD.**~~ **Done**, fifteenth session: turn kind and the foot change were real gaps
+   in Godot, fixed; PCS was a real gap in both engines, fixed in both; the Spiral turned out to already
+   be covered in both (the checkpoint note above was already stale when it named it as a gap — checked
+   with `git log -S` before touching anything, see the fifteenth session's own checkpoint entry).
+   `5c6cc5d`.
 7. **Costume design** — explicitly put at the bottom of the list by the operator this session; not
    started, and `data/calls-and-deductions.csv`'s own "Costume or prop" deduction (-1.00) is the only
    real data behind it so far, a scoring category, not a wardrobe/customization system.
@@ -460,10 +585,10 @@ own, all closed:
     forward since the thirteenth session and now applying to four elements instead of one.
 12. **`BEGINNER_PARAMS`'s blanket inheritance** (§0 item 7) — still open, still needs the operator
     watching a fresh player before assuming it is fine either way.
-13. **Choctaw**, if the operator ever wants to spend real design time on it (§0 item 5) — a genuinely
-    different, harder axis than rocker/counter turned out to be; do not assume it is "one more special
-    case" the way rocker/counter were without checking first, the same discipline that made rocker/
-    counter tractable in the first place.
+13. **Choctaw — confirmed wanted, eventually** (§0 item 0.5); still not next, position unchanged. A
+    genuinely different, harder axis than rocker/counter turned out to be (§0 item 5); do not assume it
+    is "one more special case" the way rocker/counter were without checking first, the same discipline
+    that made rocker/counter tractable in the first place.
 
 **The native track, in its report's order** (unchanged, still not touched): a strict native JSON
 importer from `native/reference/wire-manifest.json`; transcribe `createState`, the blade and
@@ -519,7 +644,9 @@ must all match; only `solver` and `initial.params`'s key set may differ) to conf
 silently change; (4) regenerate `docs/fidelity-report.md` (`node tools/ice-lab/validate.mjs --report
 docs/fidelity-report.md`) — its header names the solver string verbatim, so this is needed even when
 the gate's own PASS/FAIL result does not move, the thirteenth session's own §5 item 33 lesson, still
-true. The README's test count is 441.
+true. Used a fifth time, fifteenth session, confirming it generalizes — still not saved as an actual
+script anywhere, written fresh each time; worth doing that next time rather than retyping it again.
+The README's test count is 452.
 
 ---
 
@@ -545,7 +672,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
 | Native foundation | `tools/ice-lab/native/` — C++17 serialization, CRC32 and deterministic math checked against an oracle pinned at replay `/5`; no native solver yet (PR #4) |
-| Implementation | `tools/ice-lab/` (branch `ue-replay-01-foundation`, PR #13 open against `main`) — 441 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps and the moves (both off by default) including every ISU "difficult" turn (bracket, twizzle, loop, rocker, counter) plus the Spiral and a real foot change mid-spin, a rhythm layer with real music, career/choreography with PCS wired in alongside the spin-level and step-sequence bonus, a standalone game (`game/`) with rink-boundary walls, and a Godot presentation (`games/ice-run-godot/`) with a second selectable skater |
+| Implementation | `tools/ice-lab/` (branch `ue-replay-01-foundation`, PR #13 open against `main`) — 452 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps and the moves (both off by default) including every ISU "difficult" turn (bracket, twizzle, loop, rocker, counter) plus the Spiral and a real foot change mid-spin, a rhythm layer with real music, career/choreography with PCS (now including a lobe-variety Composition signal) wired in alongside the spin-level and step-sequence bonus, flow fully modelled (all three design-bible §2.6 bullets), a standalone game (`game/`) with rink-boundary walls, and a Godot presentation (`games/ice-run-godot/`) with a second selectable skater |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 

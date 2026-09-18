@@ -27,8 +27,8 @@ const repo = new URL("../../../", import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, repo), "utf8");
 const rules = loadSegmentRules(read("data/segment-rules.csv"));
 
-const noInputs: PcsInputs = { meanFlow: 0, meanLeanDepth: 0, skidRatio: 0, edgeChangesPerMinute: 0, musicCreditRate: 0 };
-const goodInputs: PcsInputs = { meanFlow: 1, meanLeanDepth: 0.5, skidRatio: 0, edgeChangesPerMinute: 100, musicCreditRate: 10 };
+const noInputs: PcsInputs = { meanFlow: 0, meanLeanDepth: 0, skidRatio: 0, edgeChangesPerMinute: 0, musicCreditRate: 0, lobeVariety: 0 };
+const goodInputs: PcsInputs = { meanFlow: 1, meanLeanDepth: 0.5, skidRatio: 0, edgeChangesPerMinute: 100, musicCreditRate: 10, lobeVariety: 1 };
 
 test("segment-rules.csv parses into the four rows, and the free-skate factors match ScoreCalculator.cs's own comment", () => {
   assert.equal(rules.length, 4);
@@ -113,10 +113,19 @@ test("PcsMeter's mean flow matches a hand-computed average over the same ticks",
 test("pcsInputsFrom reads session.ts's own fields, and a session with no free play never divides by zero", () => {
   const session = new SessionMeter().summary();
   const meter = new PcsMeter();
-  const inputs = pcsInputsFrom(session, meter, 0);
+  const inputs = pcsInputsFrom(session, meter, 0, 0, 0);
   assert.equal(inputs.meanFlow, 0);
   assert.equal(inputs.meanLeanDepth, session.meanLeanDepth);
   assert.equal(inputs.skidRatio, session.skidRatio);
   assert.equal(inputs.edgeChangesPerMinute, session.edgeChangesPerMinute);
   assert.equal(inputs.musicCreditRate, 0, "freePlaySeconds is 0: must not be NaN or Infinity");
+  assert.equal(inputs.lobeVariety, 0.5, "no lobe transitions yet: neither good nor bad, not NaN");
+});
+
+test("pcsInputsFrom's lobe variety is the alternating share of established lobe transitions", () => {
+  const session = new SessionMeter().summary();
+  const meter = new PcsMeter();
+  assert.equal(pcsInputsFrom(session, meter, 0, 3, 1).lobeVariety, 0.75);
+  assert.equal(pcsInputsFrom(session, meter, 0, 0, 4).lobeVariety, 0);
+  assert.equal(pcsInputsFrom(session, meter, 0, 4, 0).lobeVariety, 1);
 });

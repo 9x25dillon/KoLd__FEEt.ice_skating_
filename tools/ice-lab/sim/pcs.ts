@@ -98,16 +98,29 @@ export interface PcsInputs {
   edgeChangesPerMinute: number;
   /** SkaterState.musicCredit accumulated per second of free play. 0 if musicMode was never on. */
   musicCreditRate: number;
+  /**
+   * 0..1, share of SkaterState.lobeAlternations among (lobeAlternations +
+   * lobeRepeats) — solver.ts §14's curvature-direction tracker, over the
+   * program rather than per tick. 0.5 (neither good nor bad) when there have
+   * been no established lobe transitions yet to judge, the same reason
+   * musicCreditRate reads 0 rather than NaN with no free play.
+   */
+  lobeVariety: number;
 }
 
 /** The session/PCS meters' own fields, read into the shape scorePcs wants. */
-export function pcsInputsFrom(session: SessionSummary, meter: PcsMeter, musicCredit: number): PcsInputs {
+export function pcsInputsFrom(
+  session: SessionSummary, meter: PcsMeter, musicCredit: number,
+  lobeAlternations: number, lobeRepeats: number,
+): PcsInputs {
+  const lobeTotal = lobeAlternations + lobeRepeats;
   return {
     meanFlow: meter.meanFlow,
     meanLeanDepth: session.meanLeanDepth,
     skidRatio: session.skidRatio,
     edgeChangesPerMinute: session.edgeChangesPerMinute,
     musicCreditRate: session.freePlaySeconds > 0 ? musicCredit / session.freePlaySeconds : 0,
+    lobeVariety: lobeTotal > 0 ? lobeAlternations / lobeTotal : 0.5,
   };
 }
 
@@ -138,11 +151,12 @@ const rise = (v: number, floor: number, ceiling: number): number => saturate((v 
  * has no way to observe at all.
  *
  * Composition — "ice-coverage map from the tracing buffer, lobe variety,
- * element distribution, Composer layout". One of four: `IceGrid.coverage()`
- * directly, the exact "tracing buffer" the bible names (sim/ice.ts). Lobe
- * variety needs the same curvature-direction tracker flow's own "alternating
- * lobes" is still missing (README.md, solver.ts §14). Element distribution
- * and Composer layout are real gaps too, not built yet.
+ * element distribution, Composer layout". Two of four now: `IceGrid.coverage()`
+ * directly, the exact "tracing buffer" the bible names (sim/ice.ts), and lobe
+ * variety — the share of established lobe transitions that alternated rather
+ * than repeated, the same curvature-direction tracker flow's own "alternating
+ * lobes" bullet uses (solver.ts §14). Element distribution and Composer
+ * layout are real gaps too, not built yet.
  */
 function skatingSkillsQuality(i: PcsInputs): number {
   const lean = rise(i.meanLeanDepth, 0.05, 0.35);
@@ -153,6 +167,10 @@ function skatingSkillsQuality(i: PcsInputs): number {
 
 function presentationQuality(i: PcsInputs): number {
   return rise(i.musicCreditRate, 0, 4);
+}
+
+function compositionQuality(i: PcsInputs, ice: IceGrid): number {
+  return (ice.coverage() + saturate(i.lobeVariety)) / 2;
 }
 
 // ── the judge panel, and the total ───────────────────────────────────────────
@@ -193,7 +211,7 @@ export interface PcsScore {
  */
 export function scorePcs(rule: SegmentRule, inputs: PcsInputs, ice: IceGrid, seed: number): PcsScore {
   const panels = {
-    composition: pcsJudgePanel(ice.coverage(), seed ^ 0x9e3779b1),
+    composition: pcsJudgePanel(compositionQuality(inputs, ice), seed ^ 0x9e3779b1),
     presentation: pcsJudgePanel(presentationQuality(inputs), seed ^ 0x85ebca77),
     skatingSkills: pcsJudgePanel(skatingSkillsQuality(inputs), seed ^ 0xc2b2ae35),
   };
