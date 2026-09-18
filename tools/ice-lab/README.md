@@ -1146,14 +1146,32 @@ group" measurement uses. A flat bonus, `flowBeatGain`, applies when the same tur
 already earns `musicMode` credit lands on the beat grid.
 
 **"Dead air between elements," added 2026-09-17,** the clearest-defined of the bible's three
-remaining bullets: once a turn, twizzle, spin, Ina Bauer or jump has actually finished at least once
-(`moveDone.tick`/`landed.tick` both start at -1, so an opening glide before the first element is never
-dead air — checked directly, not assumed), a `flowDeadAirTime` grace period past it, with no new
-element under way, costs `flowDeadAirLoss` a second. **Still not modelled**, the bible's other two
-bullets — "alternating lobes" and "repeated lobes in the same direction" — because they are one signal,
-not two: a per-tick curvature-direction tracker (has the current arc's sign held long enough to call it
-a lobe, and did the *next* one match or oppose it) that this rig does not have yet and that has no
-calibration data of its own to build against, unlike `both_directions`' precise ISU thresholds.
+remaining bullets at the time: once a turn, twizzle, spin, Ina Bauer or jump has actually finished at
+least once (`moveDone.tick`/`landed.tick` both start at -1, so an opening glide before the first
+element is never dead air — checked directly, not assumed), a `flowDeadAirTime` grace period past it,
+with no new element under way, costs `flowDeadAirLoss` a second.
+
+**"Alternating lobes" and "repeated lobes in the same direction," added 2026-09-18,** the bible's
+last two — one signal, not two, the same curvature-direction tracker README.md and Hand_off.md had
+both called out as missing (`solver.ts` §14): does the current curve's sign (`s.tiltCmd`'s) hold long
+enough to call it a lobe (`flowLobeMinHoldTime`), and did the one before it match or oppose it. Only a
+real `Carve`/`Edge` counts as curving. The comparison target, `SkaterState.lobeLastDir`, is kept
+across the gap between two lobes on purpose — a brief flat stretch between two pushes does not erase
+which way the skater was curving before it, which is what lets a genuine repeat (curve left, glide,
+curve left again) read as one, rather than every new lobe reading as an alternation by construction
+(there are only two signs, so a *direct* reversal, with no gap ever registering, always alternates —
+checked explicitly in `test/flow.test.ts`). A flat bonus/loss, `flowLobeAlternateGain`/
+`flowLobeRepeatLoss`, applies once per established transition; the very first lobe of a session scores
+neither, having nothing yet to compare against. No calibration data exists for either constant, unlike
+`both_directions`' precise ISU thresholds — both are authored placeholders, the same honesty
+`musicBeatWindow`'s own comment already holds itself to.
+
+The same signal also reaches PCS's Composition score (`sim/pcs.ts`) for the first time: `lobeVariety`
+— the share of a program's established lobe transitions that alternated rather than repeated — joins
+`IceGrid.coverage()` as the second of Composition's four bible-named "driven by" bullets, `pcs.ts`'s
+own header updated to say so. `SkaterState` gained `lobeAlternations`/`lobeRepeats`, cumulative counts
+like `flips`, read by `game/career.ts`'s `finalizePcs` the same baseline-and-delta way `musicCredit`
+already was.
 
 **Feeds stamina efficiency**, the one link with an actual bible quote behind the number: *"high flow
 means you carry speed and push less, so it is literally cheaper to skate well."* Wind's own drain
@@ -1175,7 +1193,9 @@ drains over 5 s in the first place; both scale together over a longer program.
 Replay contract `/13` added `flowMode` and its eight levers to `Params`, and `flow` to `SkaterState`.
 `/15` added dead air's two levers to `Params`, no `SkaterState` change — checked directly against the
 committed fixture (`flowMode` 0 there, so §14 never runs at all) rather than assumed safe the way every
-bump under a brand-new Mode flag at 0 already was.
+bump under a brand-new Mode flag at 0 already was. `/20` added the lobe tracker's three levers to
+`Params` and six fields to `SkaterState` (`lobeDir`, `lobeLastDir`, `lobeCandDir`, `lobeCandT`,
+`lobeAlternations`, `lobeRepeats`), checked the same direct way as `/15`.
 
 ## Wiring it all in — the ice grid, stamina, hype and flow, live
 
@@ -1342,10 +1362,11 @@ reduced-order rig can actually observe, checked one bible bullet at a time in th
 - **Presentation** — one of five: musical credit's own accumulation rate, which already folds in accent
   usage (every credit is a hit accent, `sim/music.ts`). Carriage activity, gaze and posture need
   telemetry this rig does not keep, or — gaze — data it cannot observe at all.
-- **Composition** — one of four: `IceGrid.coverage()`, a new method, share of the sheet a blade has ever
-  touched — the exact "ice-coverage map from the tracing buffer" the bible names. Lobe variety needs the
-  same curvature-direction tracker flow's own "alternating lobes" is still missing; element distribution
-  and Composer layout are real gaps too, not built yet.
+- **Composition** — two of four now: `IceGrid.coverage()`, share of the sheet a blade has ever touched
+  — the exact "ice-coverage map from the tracing buffer" the bible names — and, added 2026-09-18, lobe
+  variety: the share of a program's established lobe transitions that alternated rather than repeated,
+  the same curvature-direction tracker flow's own "alternating lobes" bullet uses (see Flow, above).
+  Element distribution and Composer layout are real gaps too, not built yet.
 
 `sim/session.ts` is deliberately reserved for pre-production-plan.md §6's own gate metrics ("inventing a
 parallel set would produce numbers that look like evidence and answer nothing" — that file's own words)

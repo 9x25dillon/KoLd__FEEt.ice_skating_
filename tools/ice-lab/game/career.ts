@@ -126,6 +126,8 @@ export class Choreography {
   private sessionMeter = new SessionMeter();
   private pcsMeter = new PcsMeter();
   private startMusicCredit = -1;
+  private startLobeAlternations = -1;
+  private startLobeRepeats = -1;
   constructor(
     event: CareerEvent, tables?: ScoreTables, spinThresholds?: SpinFeatureThresholds,
     stepThresholds?: StepFeatureThresholds, segmentRules?: readonly SegmentRule[], ice?: IceGrid,
@@ -145,6 +147,8 @@ export class Choreography {
     this.elapsed = Math.min(this.event.seconds, this.elapsed + dt);
     this.hypeSum += s.hype; this.flowSum += s.flow; this.samples++;
     if (this.startMusicCredit < 0) this.startMusicCredit = s.musicCredit;
+    if (this.startLobeAlternations < 0) this.startLobeAlternations = s.lobeAlternations;
+    if (this.startLobeRepeats < 0) this.startLobeRepeats = s.lobeRepeats;
     // SessionMeter.sample's `input` argument only feeds its own stroke/retry
     // counters (SkatingInput.push) — neither field PCS reads (meanLeanDepth,
     // skidRatio, edgeChangesPerMinute) comes from it, so a routine-wide
@@ -239,7 +243,9 @@ export class Choreography {
     const rule = this.segmentRules.find(r => r.discipline === this.event.discipline && r.segment === this.event.segment);
     if (!rule) return;
     const musicCredit = Math.max(0, s.musicCredit - Math.max(0, this.startMusicCredit));
-    const inputs = pcsInputsFrom(this.sessionMeter.summary(), this.pcsMeter, musicCredit);
+    const lobeAlternations = Math.max(0, s.lobeAlternations - Math.max(0, this.startLobeAlternations));
+    const lobeRepeats = Math.max(0, s.lobeRepeats - Math.max(0, this.startLobeRepeats));
+    const inputs = pcsInputsFrom(this.sessionMeter.summary(), this.pcsMeter, musicCredit, lobeAlternations, lobeRepeats);
     this.pcsScore = scorePcs(rule, inputs, this.ice, s.tick);
   }
 }

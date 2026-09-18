@@ -159,7 +159,19 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       `initial.params` grew the two new keys. A clip that has flowMode 1
 //       and a completed element followed by an idle stretch will diverge
 //       under /15 and must be re-recorded.
-export const REPLAY_SOLVER = "ice-lab-f64/19";
+//   /20 Flow's "alternating lobes" / "repeated lobes in the same direction"
+//       (bible §2.6, `solver.ts` §14's curvature-direction tracker): Params
+//       gained flowLobeMinHoldTime/flowLobeAlternateGain/flowLobeRepeatLoss,
+//       and SkaterState gained lobeDir/lobeLastDir/lobeCandDir/lobeCandT/
+//       lobeAlternations/lobeRepeats. Lives under the existing `flowMode`,
+//       the same situation as /14 and /15 — some clips already carry it at
+//       1 — so this was checked directly too: the committed fixture has
+//       flowMode 0, so the whole of §14 (this term included) never executes
+//       for it, and its 240 digests are byte-identical before and after;
+//       only `initial.params` grew the three new keys. A clip that has
+//       flowMode 1 and holds a real edge will diverge under /20 and must be
+//       re-recorded.
+export const REPLAY_SOLVER = "ice-lab-f64/20";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

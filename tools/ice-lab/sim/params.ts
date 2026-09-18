@@ -535,13 +535,13 @@ export interface Params {
 
   // ── flow ──────────────────────────────────────────────────────────────────
   // design-bible.md §2.6: "a single value in [0,1], integrated continuously".
-  // The bible's own rises-with/falls-with table is wider than this models —
-  // "alternating lobes" / "repeated lobes in the same direction" (one signal,
-  // not modelled: no per-tick curvature-direction tracker exists) and "turns
-  // on the beat grid" beyond a flat bonus are not modelled; README.md says
-  // so. "Dead air between elements" now is (flowDeadAirTime/-Loss). Feeds
-  // "stamina efficiency" (bible: "high flow means... cheaper to skate well")
-  // while both flowMode and staminaMode are on. 0 in every preset.
+  // "Turns on the beat grid" beyond a flat bonus is not modelled; README.md
+  // says so. "Dead air between elements" is flowDeadAirTime/-Loss;
+  // "alternating lobes" / "repeated lobes in the same direction" (one
+  // signal, not two — solver.ts §14's curvature-direction tracker) is
+  // flowLobeMinHoldTime/-AlternateGain/-RepeatLoss. Feeds "stamina
+  // efficiency" (bible: "high flow means... cheaper to skate well") while
+  // both flowMode and staminaMode are on. 0 in every preset.
   /** 0 off, 1 flow is integrated and feeds stamina efficiency. */
   flowMode: number;
   /** Flow gained per second on a real, unskidded, held edge (REGIME.Carve or .Edge) while moving. */
@@ -562,6 +562,12 @@ export interface Params {
   flowDeadAirTime: number;
   /** Flow lost per second past flowDeadAirTime with no new element under way: "dead air between elements". */
   flowDeadAirLoss: number;
+  /** s a curve's sign must hold, unbroken, before it counts as an established lobe rather than noise. */
+  flowLobeMinHoldTime: number;
+  /** Flat flow bonus when a newly established lobe opposes the one before it: "alternating lobes". */
+  flowLobeAlternateGain: number;
+  /** Flat flow loss when a newly established lobe matches the one before it: "repeated lobes in the same direction". */
+  flowLobeRepeatLoss: number;
   /** Wind drain multiplier at flow 1: "cheaper to skate well". */
   flowStaminaEfficiencyMin: number;
 
@@ -778,6 +784,9 @@ export const DEFAULT_PARAMS: Params = {
   flowDamagedIceLoss: 0.2,
   flowDeadAirTime: 1.5,
   flowDeadAirLoss: 0.15,
+  flowLobeMinHoldTime: 0.35, // just past strokeDuration, so one push cannot flicker a lobe by itself
+  flowLobeAlternateGain: 0.08,
+  flowLobeRepeatLoss: 0.06,
   flowStaminaEfficiencyMin: 0.6,
 
   rinkRelief: 0,
@@ -922,6 +931,9 @@ export function validate(p: Params): string[] {
   if (p.flowDamagedIceLoss < 0) errs.push("flowDamagedIceLoss cannot be negative");
   if (p.flowDeadAirTime < 0) errs.push("flowDeadAirTime cannot be negative");
   if (p.flowDeadAirLoss < 0) errs.push("flowDeadAirLoss cannot be negative");
+  if (p.flowLobeMinHoldTime < 0) errs.push("flowLobeMinHoldTime cannot be negative");
+  if (p.flowLobeAlternateGain < 0) errs.push("flowLobeAlternateGain cannot be negative");
+  if (p.flowLobeRepeatLoss < 0) errs.push("flowLobeRepeatLoss cannot be negative");
   if (p.flowStaminaEfficiencyMin <= 0 || p.flowStaminaEfficiencyMin > 1)
     errs.push("flowStaminaEfficiencyMin is a multiplier that shrinks Wind's drain, in (0, 1]");
   if (![0, 1].includes(p.staminaMode)) errs.push("staminaMode is 0 (off) or 1 (the pools drain)");

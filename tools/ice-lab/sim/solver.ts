@@ -110,6 +110,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     move: MOVE.None, turn: newTurn(), spin: newSpin(), inaBauer: newInaBauer(), spiral: newSpiral(), moveDone: noMove(),
     movesHeld: 0, flips: 0, spinCarry: 0, musicCredit: 0,
     wind: 1, legs: 1, hype: 0, hypeStreak: 0, flow: 0,
+    lobeDir: 0, lobeLastDir: 0, lobeCandDir: 0, lobeCandT: 0, lobeAlternations: 0, lobeRepeats: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
   };
@@ -880,9 +881,7 @@ export function step(
   // ── 14. flow: continuous motion, held on a real edge ──────────────────────
   // design-bible.md §2.6. Ground-based terms only; the beat-grid bonus is
   // handled in landingAndTurnCredit below, alongside music and hype, for the
-  // same early-return reason. The bible's own table also has "alternating
-  // lobes" and "repeated lobes in the same direction" — one signal, not
-  // modelled: no per-tick curvature-direction tracker exists; see README.md.
+  // same early-return reason.
   if (flowOn && alive && !turning) {
     const speed = len(s.vel);
     const regime = s.blade[s.supportFoot].regime;
@@ -893,6 +892,33 @@ export function step(
     // Re-crossing already-damaged ice, only while the ice grid is in play.
     if (iceOn && condAt(s.blade[s.supportFoot].contact) >= p.flowDamagedIceThreshold)
       s.flow = clamp(s.flow - p.flowDamagedIceLoss * dt, 0, 1);
+    // "Alternating lobes" / "repeated lobes in the same direction": one
+    // signal, not two — does the current curve's sign (s.tiltCmd's, the same
+    // convention every other lean-derived signed quantity in this state
+    // uses) hold long enough to call it a lobe, and did the one before it
+    // match or oppose it. Only a real Carve/Edge counts as curving; a skid
+    // or a flat blade cannot be a lobe. See types.ts's own comment on
+    // `lobeDir`/`lobeLastDir` for why the gap between two lobes is tracked
+    // as its own state rather than folded into one field.
+    const curveDir = (regime === REGIME.Carve || regime === REGIME.Edge) ? Math.sign(s.tiltCmd) : 0;
+    if (curveDir === s.lobeCandDir) s.lobeCandT += dt;
+    else { s.lobeCandDir = curveDir; s.lobeCandT = dt; }
+    if (s.lobeCandT >= p.flowLobeMinHoldTime && curveDir !== s.lobeDir) {
+      if (curveDir === 0) {
+        // The active lobe just ended: a sustained flat blade or skid.
+        s.lobeLastDir = s.lobeDir;
+        s.lobeDir = 0;
+      } else {
+        // A new lobe becomes active, from a gap or (no gap having lasted
+        // flowLobeMinHoldTime) directly from the one still active.
+        const endingDir = s.lobeDir !== 0 ? s.lobeDir : s.lobeLastDir;
+        if (endingDir !== 0) {
+          if (curveDir === -endingDir) { s.lobeAlternations++; s.flow = clamp(s.flow + p.flowLobeAlternateGain, 0, 1); }
+          else { s.lobeRepeats++; s.flow = clamp(s.flow - p.flowLobeRepeatLoss, 0, 1); }
+        }
+        s.lobeDir = curveDir;
+      }
+    }
     // "Dead air between elements": once at least one has actually happened
     // (moveDone/landed both start at -1, so an opening glide before the
     // first element is not dead air), a grace period past it, with no new
