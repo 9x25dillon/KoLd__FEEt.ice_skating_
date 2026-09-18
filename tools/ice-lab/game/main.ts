@@ -10,7 +10,7 @@ import { JUMP_PHASE, JUMP_CODE } from "../sim/jump.ts";
 import { GAME_PARAMS, CONTROL_NAMES, gameInput } from "./controls.ts";
 import { IceRun } from "./run.ts";
 import { SkateScene } from "./scene.ts";
-import { SKINS, skinById } from "./appearance.ts";
+import { SKINS, skinById, skinPreviewSvg } from "./appearance.ts";
 import { Practice, LESSONS } from "./practice.ts";
 import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
@@ -194,15 +194,26 @@ el("timed").addEventListener("click", () => { careerMode = false; freeSkate = fa
 el("controls").addEventListener("click", () => {
   resumeAfterGuide = mode === "playing"; pause(); guide.showModal();
 });
+// The wardrobe's own buttons, built from SKINS rather than hand-authored per
+// costume (appearance.ts's own header explains why): a future costume is one
+// entry there, nothing here or in index.html needs to change to show it.
+for (const skin of SKINS) {
+  const button = document.createElement("button");
+  button.className = "skin-option"; button.id = `skin-${skin.id}`; button.setAttribute("aria-pressed", "false");
+  button.style.setProperty("--accent", skin.bodice);
+  button.style.setProperty("--accent-wash", `${skin.bodice}20`);
+  button.innerHTML = `${skinPreviewSvg(skin)}<strong>${skin.name}</strong><span>${skin.description}</span><span class="skin-selected">Selected ✓</span>`;
+  button.addEventListener("click", () => {
+    scene.skin = skin;
+    try { localStorage.setItem("edgework-skin", skin.id); } catch { /* Keep the choice for this session. */ }
+    refreshWardrobe();
+  });
+  el("skin-options").appendChild(button);
+}
 function refreshWardrobe() {
   for (const skin of SKINS) el(`skin-${skin.id}`).setAttribute("aria-pressed", String(scene.skin.id === skin.id));
   el("skin-status").textContent = `${scene.skin.name} selected · ready for the ice`;
 }
-for (const skin of SKINS) el(`skin-${skin.id}`).addEventListener("click", () => {
-  scene.skin = skin;
-  try { localStorage.setItem("edgework-skin", skin.id); } catch { /* Keep the choice for this session. */ }
-  refreshWardrobe();
-});
 function openWardrobe() {
   resumeAfterWardrobe = mode === "playing"; pause(); refreshWardrobe(); wardrobe.showModal();
 }

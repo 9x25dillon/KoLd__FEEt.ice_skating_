@@ -5,9 +5,10 @@
 The game's sports-anime presentation pairs an original illustrated opening screen
 with procedural cel-shaded skaters: ink outlines, angular hair, directional faces,
 geometric costume panels, two-tone fabric shadows, and restrained action strokes
-at high speed. Both Violet and Aurora retain their selectable outfits. The key
-visual is bundled locally in `game/art/`; the live athlete is canvas-rendered and
-still follows the solver's pose, rather than using the illustration as a sprite.
+at high speed. Three selectable outfits (Violet, Aurora, and — added 2026-09-18 —
+Solstice) ship today; see "Costumes" below for how a future one gets added. The
+key visual is bundled locally in `game/art/`; the live athlete is canvas-rendered
+and still follows the solver's pose, rather than using the illustration as a sprite.
 
 `game/` is a standalone browser game on the same 120 Hz solver as the lab, with
 a close, angled momentum camera: it follows **velocity**, not body heading, so
@@ -85,10 +86,11 @@ blade, skid and jump audio. Separate ice tracings follow the two blade contacts
 and break while airborne. The athlete uses the engine's body pose, including
 knee compression, height, lean, arm carriage and spin positions.
 
-**Style** opens a wardrobe with the original **Violet** outfit and the optional
-**Aurora** teal-and-gold outfit with a ballet bun. It is also available from the
-opening card. Selection applies immediately without resetting a run, and is
-remembered in this browser when storage is available. The wardrobe pauses skating.
+**Style** opens a wardrobe with three preset outfits — **Violet** (plum, ponytail),
+**Aurora** (teal and gold, ballet bun) and **Solstice** (amber and garnet,
+ponytail). It is also available from the opening card. Selection applies
+immediately without resetting a run, and is remembered in this browser when
+storage is available. The wardrobe pauses skating.
 
 The game adds contact-driven ice spray for braking, skidding and deeper carves,
 plus a burst and brief result card for each landing (including step-outs, two-foot
@@ -195,6 +197,49 @@ no `enum`, no `namespace`, no constructor parameter properties — and
 The separate [UE-REPLAY-01 native foundation](native/README.md) builds C++ math
 and serialization checks against the pinned `/5` oracle. It does not yet run
 a native solver or Unreal verifier.
+
+---
+
+## Costumes
+
+**Preset only, never player-designed** — the operator's own instruction, 2026-09-18: *"i dont want
+the players to have to design thier own costumes, but make sure theres plent of space for new
+costume updates in the future."* `game/appearance.ts`'s `SKINS` array is the whole cost of a new
+one: a name, a description, ten colours and a `bun` flag (ponytail vs. a pinned-up bun — the only
+field that changes the drawn silhouette itself, not just its colour). Before this session, adding an
+entry there was not actually safe — `game/main.ts` read `SKINS` generically to wire click handlers,
+but `game/index.html`'s wardrobe dialog held two hand-authored `<button>`s with a hand-drawn SVG
+preview each, so a third `SKINS` entry with no matching button would 404 the DOM lookup and crash
+the page on load. Fixed: `appearance.ts`'s new `skinPreviewSvg(skin)` builds that same preview bust
+from a `Skin`'s own fields — every colour in it is one of `Skin`'s own, and `bun` swaps a ponytail
+path for a bun-and-pin one — so `game/main.ts` now builds all three wardrobe buttons at load time
+from `SKINS` alone; `index.html` keeps only an empty container. **Solstice**, an amber-and-garnet
+third costume, is the proof: added with no other file touched, and its own preview and in-game
+figure both render correctly (`game/scene.ts` already read every `Skin` field generically before
+this session — only the picker's own artwork was hand-authored, not the skater itself).
+
+**A real bug found while writing the generator, not merely one avoided**: the two hand-drawn SVG
+previews it replaces both hard-coded Violet's own `#342e46` hair colour for the head-hair path —
+Aurora's markup carried the same wrong hex for that one path, alongside its own correct `#302825`
+everywhere else, because nothing had ever generated the second preview from its own data to catch
+the copy-paste. `skinPreviewSvg` reads `skin.hair` in both places, so it cannot recur.
+
+**Not attempted: parity in `games/ice-run-godot`.** The browser skater is a flat-shaded canvas
+figure with fill colours read straight off `Skin`; the Godot skater is a rigged, baked-material
+Blender export (`scripts/skater.gd`, `tools/build_skater.py`) with no per-costume colour hook at
+all today. The existing precedent for "a second look" there is `tools/build_berserker.py` — an
+entire separate armature-compatible model, not a recolour, selectable the same way `Skin` is in the
+browser (Settings → Skater). Giving Godot the browser's own finer-grained costume system would mean
+either authored material variants per costume in the `.blend` source or a runtime shader/material
+override — real, scoped work, not attempted here rather than rushed.
+
+**`data/calls-and-deductions.csv`'s own "Costume or prop" deduction (-1.00) remains real, unread
+data** — a judged-competition rule violation (an inappropriate costume or a dropped prop), not a
+description of *this* preset system, and nothing in the sim or either game reads that row. It would
+need its own trigger condition — some notion of a costume "violating" a rule — that no data file
+here defines, unlike every other calls-and-deductions row this rig already scores; inventing one
+would be authoring a rule, not wiring an existing one. Left alone, the same honesty every other
+undrawn row in that file already gets.
 
 ---
 
