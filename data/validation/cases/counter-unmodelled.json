@@ -6,7 +6,7 @@
     "type": "footage",
     "citation": "",
     "primary_checked": null,
-    "notes": "Recorded so the gap is visible. The solver has no counter."
+    "notes": "Historical case ID retained. The solver now models a counter (sim/moves.ts's TURN_KIND.Counter); external footage and measurements are still missing."
   },
   "requires": [
     "counter"

@@ -1,7 +1,7 @@
 // A step sequence's ISU level, from the variety ladder sim/stepLevel.ts can
-// actually score. See that file's own header for why seven rig-observable
-// types reach grade 2, never grade 3 or 4 — this file does not re-litigate
-// that, only tests what remains.
+// actually score. See that file's own header for why nine rig-observable
+// types reach grade 3, never grade 4 — this file does not re-litigate that,
+// only tests what remains.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -52,17 +52,28 @@ test("five distinct types on one foot never clears grade 1: both_feet_used is a 
   assert.equal(scoreStepLevel(events, T).level, 0);
 });
 
-test("all seven of this rig's types, both feet, three difficult: grade 2, exactly what seven types can reach", () => {
+test("all nine of this rig's types, spread over both feet, five difficult: grade 3, exactly what nine types can reach", () => {
   const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left));
   const r = scoreStepLevel(events, T);
-  assert.equal(r.distinctTypes.length, 7);
-  assert.equal(r.level, 2, "seven distinct types, two or more difficult, both feet: grade 2's own requirement, met");
+  assert.equal(r.distinctTypes.length, 9);
+  assert.equal(r.level, 3, "nine distinct types, five difficult spread over both feet: grade 3's own requirement, met");
 });
 
-test("grade 3 stays out of reach: seven types and three difficult, but grade 3 needs nine and four", () => {
+test("grade 4 stays out of reach: nine types and five difficult, but grade 4 needs eleven", () => {
   const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left));
   const r = scoreStepLevel(events, T);
-  assert.ok(r.level < 3, `grade 3 needs 9 distinct types and 4 difficult; this rig has ${r.distinctTypes.length} and reached level ${r.level}`);
+  assert.ok(r.level < 4, `grade 4 needs 11 distinct types; this rig has ${r.distinctTypes.length} and reached level ${r.level}`);
+});
+
+test("difficult types on one foot only caps at grade 2, even with nine total types and both feet used overall: difficultBothFeet is a real gate", () => {
+  const difficult = new Set<number>([STEP_TYPE.Bracket, STEP_TYPE.Twizzle, STEP_TYPE.Loop, STEP_TYPE.Rocker, STEP_TYPE.Counter]);
+  const events = Object.values(STEP_TYPE).map((ty) =>
+    ev(ty as number, difficult.has(ty) ? FOOT.Right : ty % 2 === 0 ? FOOT.Right : FOOT.Left));
+  const r = scoreStepLevel(events, T);
+  assert.equal(r.distinctTypes.length, 9);
+  assert.equal(r.bothFeet, true, "the non-difficult types alone already use both feet");
+  assert.equal(r.difficultBothFeet, false, "every difficult type is on the right foot only");
+  assert.equal(r.level, 2, "grade 3 needs difficult_turns_on_both_feet; one foot only holds it at grade 2");
 });
 
 test("repeating the same type does not inflate the distinct count", () => {

@@ -307,9 +307,11 @@ function draw(_now: number) {
   const backward = skater.vel.x * skater.heading.x + skater.vel.y * skater.heading.y < -0.1;
   const move = skater.jump.phase === JUMP_PHASE.Air ? `AIR · ${(skater.jump.rotation / (2 * Math.PI)).toFixed(1)} rev · ${skater.jump.z.toFixed(2)} m`
     : skater.move === MOVE.Spin ? `${["UPRIGHT", "SIT", "CAMEL"][skater.spin.position]} SPIN · ${(skater.spin.swept / (2 * Math.PI)).toFixed(1)} rev`
-    : skater.move === MOVE.Turn ? (skater.turn.against ? "BRACKET"
+    : skater.move === MOVE.Turn ? (skater.turn.against
+        ? (skater.turn.kind === TURN_KIND.Counter ? "COUNTER" : "BRACKET · hold through, stick reversed, for a counter")
         : skater.turn.kind === TURN_KIND.Mohawk ? "MOHAWK"
-        : skater.turn.kind === TURN_KIND.Loop ? "LOOP" : "THREE-TURN · shift weight for a mohawk, hold through for a loop")
+        : skater.turn.kind === TURN_KIND.Loop ? "LOOP" : skater.turn.kind === TURN_KIND.Rocker ? "ROCKER"
+        : "THREE-TURN · shift weight for a mohawk, hold through for a loop or reversed for a rocker")
     : skater.move === MOVE.Twizzle ? "TWIZZLE" : skater.move === MOVE.InaBauer ? "INA BAUER"
     : skater.move === MOVE.Spiral ? "SPIRAL"
     : cantilever ? "CANTILEVER POSE" : skater.crossover && skater.strokeTime > 0 ? `${backward ? "BACK " : ""}CROSSOVER`

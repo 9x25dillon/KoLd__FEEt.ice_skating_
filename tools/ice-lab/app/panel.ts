@@ -115,6 +115,8 @@ const GROUPS: Array<{ title: string; note: string; sliders: Slider[] }> = [
       { key: "spinFootChangeAirTime", label: "spin foot change · air time (s)", min: 0.12, max: 0.4, step: 0.01,
         note: "A fresh toe press mid-spin: briefly airborne, landing on the other foot — data/spin-features.json's change_foot_by_jump." },
       { key: "spinFootChangeLoss", label: "spin foot change · momentum lost", min: 0, max: 0.6, step: 0.01 },
+      { key: "rockerCounterStick", label: "rocker/counter · stick threshold", min: 0.1, max: 1, step: 0.01,
+        note: "Held through the turn's own cusp, stick pushed past this against the pivot's own sense: a Rocker (from turn) or Counter (from bracket) instead of a Loop." },
     ],
   },
   {

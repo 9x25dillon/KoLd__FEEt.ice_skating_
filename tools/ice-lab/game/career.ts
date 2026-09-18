@@ -21,7 +21,7 @@ export const ELEMENTS = {
   crossover: { title: "Crossover phrase", hint: "Carve and push with Space / A. Keep the curve through a crossover.", duration: 0.08 },
   jump: { title: "Jump accent", hint: "Build speed, then J / D-pad up in Beginner. In Simulation, load Shift / RT and release. Land without a fall or step-out.", duration: 0 },
   spin: { title: "Spin phrase", hint: "Carve at speed, then hold Y for one new full rotation. Release to exit.", duration: 0 },
-  step: { title: "Step sequence", hint: "Chain different footwork: three-turns, mohawks, brackets, loops (hold B through the cusp), twizzles, crossovers, edge changes. Five distinct types, both feet, inside a rolling stretch of skating.", duration: 2 },
+  step: { title: "Step sequence", hint: "Chain different footwork: three-turns, mohawks, brackets, loops and rockers (hold B through the cusp), counters (hold N), twizzles, crossovers, edge changes. Five distinct types, both feet, inside a rolling stretch of skating.", duration: 2 },
   spiral: { title: "Spiral", hint: "Carve with weight fully on one foot, then hold I / LB+RB. The free leg extends; works backward too. Hold for 2 seconds.", duration: 2 },
   pose: { title: "Closing pose", hint: "Glide above 2 m/s and hold U / D-pad down for 2 seconds.", duration: 2 },
 } as const;
@@ -185,7 +185,9 @@ export class Choreography {
         ? (s.moveDone.detail === TURN_KIND.ThreeTurn ? STEP_TYPE.ThreeTurn
           : s.moveDone.detail === TURN_KIND.Mohawk ? STEP_TYPE.Mohawk
             : s.moveDone.detail === TURN_KIND.Bracket ? STEP_TYPE.Bracket
-              : s.moveDone.detail === TURN_KIND.Loop ? STEP_TYPE.Loop : null)
+              : s.moveDone.detail === TURN_KIND.Loop ? STEP_TYPE.Loop
+                : s.moveDone.detail === TURN_KIND.Rocker ? STEP_TYPE.Rocker
+                  : s.moveDone.detail === TURN_KIND.Counter ? STEP_TYPE.Counter : null)
         : s.moveDone.kind === MOVE.Twizzle ? STEP_TYPE.Twizzle : null;
       if (stepType !== null) this.stepTracker.record(stepType, foot, s.moveDone.tick);
     }

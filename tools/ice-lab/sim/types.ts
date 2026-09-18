@@ -267,9 +267,6 @@ export interface SpinState {
  * does, just rotated the other way — no ISU turn is that). So a bracket
  * cannot become anything at its cusp; weight is ignored while `against`.
  *
- * Rocker and counter — same foot, same edge, curve reverses — are a third,
- * different mechanic (no edge change at all) and are not built either.
- *
  * Loop, the fourth, is not a fifth axis: it is the SAME pivot (data/motion-
  * primitives.json's own `post: {foot: same, edge: same, forward: same}`) run
  * through two cusps back to back instead of one — a second flipFrame at
@@ -278,9 +275,40 @@ export interface SpinState {
  * ordinary cusp instead of letting it check out at π (sim/moves.ts's
  * `turnPivot`); a bracket has no loop sibling, the same reason it has no
  * mohawk one — `against` is not read again once the pivot is under way.
+ *
+ * Rocker and Counter, the fifth and sixth, were the one gap genuinely
+ * re-examined and found buildable after all — the note above ("no edge
+ * change at all") was wrong about what `travelSense` actually does. It does
+ * not track how far anything has rotated; `endPivot` builds the exit frame
+ * from `mul(s.vel, travelSense(T) / speed)` — CURRENT velocity, signed. Its
+ * only job is "does the exit blade face WITH the body's own momentum
+ * (forward) or AGAINST it (backward)". A three-turn/bracket/mohawk flips
+ * that sign once, at the one cusp they have — the exit faces backward
+ * relative to a momentum that never itself reversed (a three-turn does not
+ * stop the skater; it reverses which way the blade meets that continuing
+ * momentum). A loop flips it twice, net unchanged, over two cusps. Rocker
+ * and Counter need a THIRD case travelSense must special-case explicitly:
+ * one cusp, `flipFrame` runs exactly once (so the edge character changes,
+ * same as a three-turn's own single flip) — but travelSense stays
+ * `entryDir` regardless, because a rocker's whole point is that the exit
+ * still faces the way the momentum is already going. Requested at the same
+ * cusp as Loop, distinguished by the stick: held through with the SAME
+ * sense as the entry curve continues it (Loop); held through PUSHED AGAINST
+ * the entry curve's own sense asks to reverse the lobe instead (Rocker from
+ * `turn`, Counter from `bracket` — the same into/against split as
+ * ThreeTurn/Bracket carries over, since nothing else distinguishes them
+ * once the edge outcome no longer does). The comparison itself is against
+ * the entry curve's own sense (`T.against ? -T.dir : T.dir`, sim/moves.ts's
+ * `curveSense`), not `T.dir` directly — `against` already inverts `T.dir`
+ * from the curve once, at entry, and reading it raw would make a bracket's
+ * own UNCHANGED entry stick misread as a reversal request. `T.reverseHeld`
+ * tracks the push as a running max across the whole pre-cusp half, not a
+ * single-tick snapshot — a real stick, and a digital one scaled down by
+ * game/controls.ts's own "manageable shallow edge", will not reliably peak
+ * on the exact tick the cusp happens to land on.
  */
-export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1, Bracket: 2, Loop: 3 } as const;
-export const TURN_NAME = ["three-turn", "mohawk", "bracket", "loop"] as const;
+export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1, Bracket: 2, Loop: 3, Rocker: 4, Counter: 5 } as const;
+export const TURN_NAME = ["three-turn", "mohawk", "bracket", "loop", "rocker", "counter"] as const;
 
 /**
  * A pivot in progress — a turn or a twizzle. The blade rotates about its
@@ -319,6 +347,14 @@ export interface TurnState {
   fromCode: number;
   /** Speed when the pivot began, m/s. */
   entrySpeed: number;
+  /**
+   * Running max of the reversal push (Math.max(0, -dir * leanAxis)), sampled
+   * every tick from entry to the first cusp — not a single-tick snapshot, the
+   * same reason a real stick or a scaled-down digital one still reaches a
+   * Rocker/Counter even if it never happens to be at its own peak on the
+   * exact cusp tick. See turnPivot's own comment.
+   */
+  reverseHeld: number;
 }
 
 /** The last move that finished, for the panel and the tests. */

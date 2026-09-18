@@ -101,7 +101,7 @@ export function newTurn(): TurnState {
   return {
     t: 0, swept: 0, dir: 0, rate: 0, pathRate: 0, entryDir: 1,
     foot: FOOT.Right, exitFoot: FOOT.Right, cusps: 0, release: false, kind: TURN_KIND.ThreeTurn,
-    against: false, fromCode: EDGE_CODE_NONE, entrySpeed: 0,
+    against: false, fromCode: EDGE_CODE_NONE, entrySpeed: 0, reverseHeld: 0,
   };
 }
 
@@ -247,7 +247,12 @@ export const pivoting = (s: SkaterState): boolean => s.move === MOVE.Turn || s.m
 export const replacesCarve = (s: SkaterState): boolean => pivoting(s) || s.move === MOVE.Spin;
 
 /** +1 while the travel frame points the way the pivot began, -1 after an odd number of cusps. */
-const travelSense = (T: TurnState): number => (T.cusps % 2 === 0 ? T.entryDir : -T.entryDir);
+// A rocker or counter never reverses travel — that is the whole distinction
+// from a three-turn/bracket (bible §2.3, sim/types.ts's own TURN_KIND
+// comment): the lobe (curve sense) reverses, the direction facing it does
+// not. Every other kind alternates on cusp parity, the way it always has.
+const travelSense = (T: TurnState): number =>
+  (T.kind === TURN_KIND.Rocker || T.kind === TURN_KIND.Counter || T.cusps % 2 === 0) ? T.entryDir : -T.entryDir;
 
 /** The foot a pivot in progress has its weight on. */
 export function turnLoadFoot(s: SkaterState): Foot {
@@ -293,6 +298,7 @@ function beginPivot(s: SkaterState, p: Params, minSpeed: number, needEdge: boole
   T.kind = against ? TURN_KIND.Bracket : TURN_KIND.ThreeTurn;
   T.fromCode = b.code;
   T.entrySpeed = speed;
+  T.reverseHeld = 0;
   s.strokeTime = 0;
   s.crossover = false;
   return true;
@@ -372,8 +378,12 @@ export interface PivotTick { lat: number; cusp: boolean; ended: boolean }
  */
 export function turnPivot(
   s: SkaterState, p: Params, dt: number, weightR: number,
-  /** `input.turn`, this tick — read only at the first cusp, to decide a Loop (see TURN_KIND's own comment). */
-  turnHeld = false,
+  /** Whichever button started this pivot (`input.turn`, or `input.bracket` if `against`) — read
+   *  only at the first cusp, to decide a Loop, Rocker or Counter (see TURN_KIND's own comment). */
+  entryHeld = false,
+  /** Raw stick, -1..1 — NOT solver.ts's own radian-scaled `leanCmd`; only the Rocker/Counter
+   *  reversal check reads this, the same idiom sim/moves.ts's own spinTick already uses. */
+  leanAxis = 0,
 ): PivotTick {
   const T = s.turn;
   T.t += dt;
@@ -388,6 +398,20 @@ export function turnPivot(
   // same fraction for a choctaw, since nothing distinguishes the landing.
   const scrub = (T.against ? p.againstTurnScrub : 1) * (T.cusps > 0 && footChanged ? p.mohawkScrub : 1);
   let speed = pivotStep(s, p, dt, stepAngle, scrub);
+
+  // "Reversing" means against the PHYSICAL curve the skater is actually on,
+  // the same thing regardless of which button asked for this pivot — not
+  // against T.dir, which `against` (a bracket or counter) deliberately
+  // inverts from that curve already. Undoing that inversion here is what
+  // keeps "push the other way" meaning the same thing whether this pivot
+  // started from `turn` or `bracket`.
+  const curveSense = T.against ? -T.dir : T.dir;
+  // Tracked every tick, not read only at the cusp: a real stick (and a
+  // digital one, scaled down for its own "manageable shallow edge" reason,
+  // game/controls.ts) will not reliably be at its own peak push on the
+  // exact tick the cusp happens to land on. A running max survives that the
+  // same way a held check already has to.
+  if (T.cusps === 0) T.reverseHeld = Math.max(T.reverseHeld, Math.max(0, -curveSense * leanAxis));
 
   // The cusp: blade square to the path. The frame reverses, and — entered
   // into the curve — the weight decides which turn this was: still on the
@@ -404,6 +428,11 @@ export function turnPivot(
     flipFrame(s);
     const other = (1 - T.foot) as Foot;
     const toOther = !T.against && (other === FOOT.Right ? weightR > 0.75 : weightR < 0.25);
+    // Held through the cusp, stick pushed past p.rockerCounterStick against
+    // this pivot's own rotational sense: a request to reverse the lobe
+    // instead of continuing it — TURN_KIND's own comment on why travelSense
+    // has to special-case these two.
+    const reversing = entryHeld && Math.max(T.reverseHeld, Math.max(0, -curveSense * leanAxis)) >= p.rockerCounterStick;
     if (toOther) {
       T.kind = TURN_KIND.Mohawk;
       T.exitFoot = other;
@@ -411,10 +440,12 @@ export function turnPivot(
       to.normalLoad = from.normalLoad; to.weight = 1; to.inContact = true;
       from.normalLoad = 0; from.weight = 0; from.inContact = false;
       s.supportFoot = other;
-    } else if (!T.against && turnHeld) {
-      // Still holding `turn`, weight not shifted: a Loop instead of checking
-      // out here (TURN_KIND's own comment) — the same pivot, run to a second
-      // cusp instead of ending at this first one.
+    } else if (reversing) {
+      T.kind = T.against ? TURN_KIND.Counter : TURN_KIND.Rocker;
+    } else if (!T.against && entryHeld) {
+      // Still holding `turn`, weight not shifted, stick not reversed: a Loop
+      // instead of checking out here — the same pivot, run to a second cusp
+      // instead of ending at this first one.
       T.kind = TURN_KIND.Loop;
     }
     // A jump being loaded through the turn takes its setup from the exit edge.

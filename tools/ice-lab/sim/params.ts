@@ -313,6 +313,13 @@ export interface Params {
   turnCarry: number;
   /** Seconds that carried rotation takes to drain away. */
   turnCarryTime: number;
+  /** 0..1, the held-stick threshold (raw axis, not radians, tracked as a running max over the whole
+   *  pre-cusp half — TurnState's own `reverseHeld`) that asks a held Loop-candidate cusp to reverse
+   *  the lobe instead — a Rocker from `turn`, a Counter from `bracket` (TURN_KIND's own comment).
+   *  Deliberately well under game/controls.ts's own 0.35 digital-lean scale-down for schemes other
+   *  than B ("a manageable shallow edge") — a threshold above what a keyboard press can even reach
+   *  there would make the move unreachable outside scheme B, not merely hard. */
+  rockerCounterStick: number;
   /**
    * rad/s a twizzle spins at with the arms in. data/motion-primitives.json's
    * twizzle is two revolutions over 4.5 m at 6 m/s: 16.8 rad/s.
@@ -695,6 +702,7 @@ export const DEFAULT_PARAMS: Params = {
   turnMinSpeed: 1.0,
   turnCarry: 0.11,           // a three-turn entry worth about a third of a revolution at a full whip
   turnCarryTime: 0.5,
+  rockerCounterStick: 0.2,
   twizzleRate: 16.0,
   twizzleArmsOut: 0.5,
   twizzleScrub: 0.75,
@@ -851,6 +859,7 @@ export function validate(p: Params): string[] {
   if (p.turnCarry > 1) errs.push("turnCarry is a share of the pivot rate, 0..1");
   if (p.againstTurnScrub < 1) errs.push("againstTurnScrub is against a three-turn's cost, and fighting the curve cannot be cheaper");
   if (p.turnCarryTime <= 0) errs.push("turnCarryTime must be positive");
+  if (p.rockerCounterStick <= 0 || p.rockerCounterStick > 1) errs.push("rockerCounterStick is a stick threshold, in (0, 1]");
   if (p.twizzleRate * SIM_DT >= Math.PI / 2)
     errs.push("twizzleRate turns a quarter revolution in a tick, so a cusp could be skipped");
   if (p.twizzleArmsOut >= 1) errs.push("twizzleArmsOut is a share of the rate, below 1");
