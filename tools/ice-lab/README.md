@@ -1274,23 +1274,30 @@ representation — design-bible.md §3.1 is explicit that the sim is a reduced-o
 reads it — and a spin's position is exactly three values (`SPIN_POSITION`: upright, sit, camel), not a
 catalogue of named variations with a reference pose to check a skater's own joints against.
 
-**Four of the seven observed features still need a mechanic this rig does not have.**
-`change_foot_by_jump`, `difficult_change_of_foot` and `all_three_positions_second_foot` all need a
-combination spin with a foot change mid-element — `spinStart` sets the spinning foot once and
-`spinTick` never reassigns it. `jump_within_spin` needs a small jump mid-spin that resumes spinning,
-which the jump and spin systems do not compose into. `change_of_edge` is not merely unbuilt: in this
-model a spin's blade tilt is `-Sp.dir * SPIN_EDGE`, so edge sign **is** rotation direction here, not an
-independent quantity — scoring it apart from `both_directions` (below) would double-count the same
-event.
+**Two of the seven observed features still need a mechanic this rig does not have.**
+`jump_within_spin` needs a small jump mid-spin that resumes spinning, which the jump and spin systems
+do not compose into. `change_of_edge` is not merely unbuilt: in this model a spin's blade tilt is
+`-Sp.dir * SPIN_EDGE`, so edge sign **is** rotation direction here, not an independent quantity —
+scoring it apart from `both_directions` (below) would double-count the same event.
+**`change_foot_by_jump`, `difficult_change_of_foot` and `all_three_positions_second_foot` are no
+longer on that list** — added 2026-09-18 (fourteenth session): a fresh toe press mid-spin
+(`input.toe`, otherwise unused during a spin) starts a brief airborne transfer to the other foot —
+angular momentum conserved but for one transfer cost paid once, `SpinState.foot` toggled on landing.
+`SpinLevelTracker` splits a segment on a foot change too, not only a position or direction change, so
+segments adjacent across any of the three stay findable. Reaches the HUD in both engines: the browser
+free-skate HUD (`game/main.ts`) flashes "Foot change!" the tick it completes, and
+`games/ice-run-godot/bridge/engine.mjs` exposes the same as `footChange` in its snapshot (added
+2026-09-18, fifteenth session, alongside the rest of the HUD-parity work below).
 
-**That leaves three:** `increase_of_speed` (the ratio of peak to trough angular velocity within one
-held position, at least 1.30× over at least 2 revolutions — "emerges naturally from the player pulling
-in: ω = L / I", the doc's own words, and the same physics `test/spin.test.ts`'s "a camel is slow and
-an upright fast" case already measures), `eight_revolutions_no_change` (a single unbroken segment of 8
-or more revolutions), and — added 2026-09-17 — `both_directions`, described below. All three are real
-ISU features, read straight from `data/spin-features.json` (never hardcoded — the same "scoring is
-data" convention `sim/score.ts` already follows) rather than authored numbers, so a rules update to
-that file moves the thresholds without a code change.
+**That leaves six:** `increase_of_speed` (the ratio of peak to trough angular velocity within one held
+position, at least 1.30× over at least 2 revolutions — "emerges naturally from the player pulling in:
+ω = L / I", the doc's own words, and the same physics `test/spin.test.ts`'s "a camel is slow and an
+upright fast" case already measures), `eight_revolutions_no_change` (a single unbroken segment of 8 or
+more revolutions), `both_directions` (added 2026-09-17, described below), and the three foot-change
+features just named. All six are real ISU features, read straight from `data/spin-features.json`
+(never hardcoded — the same "scoring is data" convention `sim/score.ts` already follows) rather than
+authored numbers, so a rules update to that file moves the thresholds without a code change. A level
+built from six of ten reaches the ISU's own clamp of 4 — an honest ceiling, not a bug avoided.
 
 `sim/moves.ts`'s own `SpinState` only keeps the **current** segment's stats, overwritten the moment
 position (or, now, direction) changes — enough for its own purposes, not enough to score a whole spin
@@ -1380,10 +1387,20 @@ argument to `scorePcs`, not optional the way `step()`'s own grid is: this runs o
 once a tick, so there is no need for a silent-no-op fallback — a caller with no grid should not call
 this at all, the same way one with no score tables skips `scoreJump`.
 
-**Not yet wired into `game/career.ts` or either live game** — `sim/pcs.ts` exists the same way
-`sim/spinLevel.ts` first did, as a real, tested scoring module with nowhere in play that calls it yet.
-Wiring it in needs a discipline/segment assigned to each `CareerEvent` (none exists today — the five
-events have no short/free distinction at all) as much as it needs the plumbing itself.
+**Wired into `game/career.ts`, added 2026-09-18 (fourteenth session).** `CareerEvent` gained a
+`discipline`/`segment` key (`data/segment-rules.csv`'s own two axes) — an authored content decision,
+"women" throughout (no discipline switch exists in this rig) and "short" for every event but the
+closing `finale`, which reads as this ladder's own "free". `Choreography` runs its own
+`SessionMeter`/`PcsMeter` across a routine and scores once at the end, feeding a `PCS_XP_PER_POINT`
+bonus alongside the existing technical/spin/step ones.
+
+**Reaches both HUDs, added 2026-09-18 (fifteenth session).** Neither engine showed a PCS number
+anywhere before this: `game/main.ts`'s `finishCareer()` appends the total (and the three component
+scores) to the routine's own result text when `Choreography.pcsScore` is not null; `games/ice-run-
+godot/bridge/engine.mjs` puts the same total in its `result.detail` and the whole `PcsScore` object in
+`snapshot().routine.pcsScore`, and `scripts/main.gd`'s `update_hud()` reads it the same way it already
+reads jump TES and spin level. Both stay silent (no misleading "0.00") whenever `finalizePcs` left it
+null.
 
 ## Step sequences
 
@@ -1448,6 +1465,32 @@ headless smoke test (`--smoke-test`, career routine unaffected); and a live brow
 Playwright, after the 404 fix, with zero console errors. 408 Ice Lab tests (up from 394), 10 Godot
 bridge tests, `tsc` clean. No replay contract change: this lives entirely in `game/career.ts`
 external analysis over already-recorded state, the same situation `sim/spinLevel.ts` is already in.
+
+### HUD parity, Godot vs. browser — added 2026-09-18, fifteenth session
+
+Every mechanic above already had a real HUD surface in `game/main.ts`'s free-skate readout; the
+bridge (`games/ice-run-godot/bridge/engine.mjs`, `scripts/main.gd`) lagged behind it in three places,
+found by checking rather than assuming parity:
+
+- **Turn kind.** The browser's HUD has always broken a held turn down by `TURN_KIND` (three-turn,
+  mohawk, bracket, loop, rocker, counter); the bridge's `snapshot().move` said the bare `'Turn'` for
+  all six, because `scripts/main.gd`'s `hud_move` reads `frame.move` as a plain string with no turn-
+  specific case of its own. Fixed at the source: `snapshot()` now builds the same breakdown the
+  browser's ternary does, so the GDScript needed no change at all — the exact "add it to the bridge
+  where the GDScript already reads generically" pattern the thirteenth session used for `spinLevel`.
+- **The foot change mid-spin** and **PCS's score** are the other two — see "The foot change mid-spin"
+  above (§"A spin's level") and "Program Component Score" above for what each now shows in both
+  engines.
+
+Verified: three new `games/ice-run-godot/tests/engine.test.mjs` cases (turn-kind labels by direct
+state, matching the browser's own ternary case for case; a real driven foot change reaching
+`snapshot().footChange` as a flash that decays; a finished career routine's `snapshot().routine.
+pcsScore` and `result.detail` both carrying a real PCS total) — 12 Godot bridge tests, up from 10. The
+browser side verified live: built and served the actual game, drove it headlessly with Playwright
+(hold `d` to carve, `q`+`y` to spin at zero weight, hold `f` mid-spin for the change), and watched
+`#hint` read "Foot change!" then decay to the next toast, with zero console errors. No replay contract
+change: every field here is presentational, read from already-recorded state the same way `spinLevel`
+and `technical` already are.
 
 ## What a session measures
 

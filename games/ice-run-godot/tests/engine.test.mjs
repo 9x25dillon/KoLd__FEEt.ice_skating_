@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {IceEngine,emptyControls} from '../bridge/engine.mjs';
 import {createState,step} from '../runtime/sim/solver.js';
 import {IceGrid} from '../runtime/sim/ice.js';
-import {NEUTRAL_INPUT,MOVE} from '../runtime/sim/types.js';
+import {NEUTRAL_INPUT,MOVE,TURN_KIND} from '../runtime/sim/types.js';
 import {verifyReplay,parseReplay} from '../runtime/sim/replay.js';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -38,6 +38,44 @@ test('a completed spin reaches snapshot().spinLevel, the free-skate readout game
  assert.ok(level>=0&&level<=4,`spinLevel should be a real, scored level, got ${level}`);
 });
 
+test("a turn's own kind reaches snapshot().move — the bridge used to say the bare 'Turn' for all six",()=>{
+ // Fourteenth session (this file's own note in engine.mjs): the bridge never
+ // broke Turn down the way game/main.ts's free-skate HUD already did. Direct
+ // state, not a real entry: isolates the label mapping from turn-entry
+ // physics tools/ice-lab/test/turn.test.ts already covers on its own.
+ const e=new IceEngine();
+ e.state.move=MOVE.Turn;
+ e.state.turn.kind=TURN_KIND.ThreeTurn;e.state.turn.against=false;
+ assert.equal(e.snapshot().move,'Three-turn');
+ e.state.turn.kind=TURN_KIND.Mohawk;
+ assert.equal(e.snapshot().move,'Mohawk');
+ e.state.turn.kind=TURN_KIND.Bracket;e.state.turn.against=true;
+ assert.equal(e.snapshot().move,'Bracket');
+ e.state.turn.kind=TURN_KIND.Loop;e.state.turn.against=false;
+ assert.equal(e.snapshot().move,'Loop');
+ e.state.turn.kind=TURN_KIND.Rocker;
+ assert.equal(e.snapshot().move,'Rocker');
+ e.state.turn.kind=TURN_KIND.Counter;e.state.turn.against=true;
+ assert.equal(e.snapshot().move,'Counter');
+});
+
+test('a foot change mid-spin reaches snapshot().footChange as a brief flash, then decays',()=>{
+ // tools/ice-lab/test/spin.test.ts's own recipe for change_foot_by_jump,
+ // driven through engine.tick() the same way the spinLevel test above does.
+ const e=new IceEngine();
+ let sawFlash=false;
+ for(let i=0;i<240+900;i++){
+  const t=i-240;
+  const input={...NEUTRAL_INPUT,weight:0,lean:t<0?.3:0,knee:.7,toe:t===50,spin:t>=0&&t<900};
+  e.tick(input);
+  if(e.snapshot().footChange)sawFlash=true;
+ }
+ assert.ok(e.state.spin.changeCompletedTick>0,'the change must actually have completed');
+ assert.ok(sawFlash,'footChange must flash true on the tick(s) right after it completes');
+ for(let i=0;i<200;i++)e.tick({...NEUTRAL_INPUT,weight:0,lean:0,knee:.7});
+ assert.equal(e.snapshot().footChange,false,'the flash must decay rather than stick forever');
+});
+
 test('bridge runs full physical choreography and persists earned progression',()=>{
  const e=new IceEngine();e.start({mode:'career',event:0});
  for(let i=0;i<9000&&!e.finished;i++){
@@ -45,6 +83,9 @@ test('bridge runs full physical choreography and persists earned progression',()
   e.advance(c,1,e.routine.index===2);
  }
  assert.equal(e.routine.index,3);assert.equal(e.result.complete,true);assert.equal(e.career.medals[0],3);
+ // sim/pcs.ts's own score, never reached the bridge snapshot before this.
+ assert.ok(e.snapshot().routine.pcsScore.total>0,'a finished career routine must carry a real PCS score');
+ assert.match(e.result.detail,/PCS \d+\.\d\d/,"the finished routine's own result text must carry it too");
  const restored=new IceEngine(e.career.serialize());assert.equal(restored.career.unlocked,1);
  restored.train('balance');assert.equal(restored.career.profile.stats.balance,51);
  assert.throws(()=>restored.start({mode:'career',event:3}),/previous/);

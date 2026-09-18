@@ -1,7 +1,7 @@
 import {createState,step} from '../runtime/sim/solver.js';
 import {IceGrid} from '../runtime/sim/ice.js';
 import {SIM_DT,PRESETS} from '../runtime/sim/params.js';
-import {MOVE,NEUTRAL_INPUT,codeToString} from '../runtime/sim/types.js';
+import {MOVE,TURN_KIND,NEUTRAL_INPUT,codeToString} from '../runtime/sim/types.js';
 import {JUMP_PHASE,JUMP_CODE} from '../runtime/sim/jump.js';
 import {ReplayRecorder,ReplayPlayer,parseReplay} from '../runtime/sim/replay.js';
 import {SessionMeter} from '../runtime/sim/session.js';
@@ -55,6 +55,9 @@ export class IceEngine {
   // sample every tick a spin is live, score the moment it ends. -1 means no spin has finished yet;
   // scoreSpinLevel's own 0 is a real result, "level B", so it cannot double as that sentinel.
   this.spinTracker=new SpinLevelTracker();this.wasSpinning=false;this.spinLevel=-1;
+  // sim/moves.ts spinTick's foot change: never surfaced here before, the
+  // same decaying-flash idiom game/main.ts's own `flash` uses.
+  this.lastChangeCompletedTick=-1;this.footChangeFlash=0;
   return this.snapshot();
  }
  configure(o) {
@@ -103,6 +106,10 @@ export class IceEngine {
   if(this.mode==='timed')this.run.sample(this.state,SIM_DT);
   // Free Skate stays quiet per the bible. The original playground remains available in runtime.
   if(this.state.landed.tick>=0&&this.scoredTick!==this.state.landed.tick){this.scoredTick=this.state.landed.tick;this.technical+=scoreJump(tables,this.state.landed)?.score??0;}
+  if(this.state.spin.changeCompletedTick>=0&&this.state.spin.changeCompletedTick!==this.lastChangeCompletedTick){
+   this.lastChangeCompletedTick=this.state.spin.changeCompletedTick;this.footChangeFlash=1.2;
+  }
+  this.footChangeFlash=Math.max(0,this.footChangeFlash-SIM_DT);
   const spinning=this.state.move===MOVE.Spin;
   if(spinning)this.spinTracker.sample(this.state.spin);
   else if(this.wasSpinning){this.spinLevel=scoreSpinLevel(this.spinTracker.finish(),spinThresholds,this.spinTracker.footChanges).level;this.spinTracker.reset();}
@@ -110,7 +117,10 @@ export class IceEngine {
   if(this.routine)this.routine.sample(this.state,this.low,SIM_DT,events);
   if(this.routine?.done) {
    const r=this.routine,xp=this.mode==='career'?this.career.award(r):0;
-   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls · ${this.technical.toFixed(2)} jump TES`,xp,complete:r.complete};
+   // sim/pcs.ts's own score, never shown here before — silently absent (not a misleading "0.00")
+   // whenever finalizePcs left it null, the same as game/main.ts's own equivalent line.
+   const pcs=r.pcsScore?` · PCS ${r.pcsScore.total.toFixed(2)}`:'';
+   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls · ${this.technical.toFixed(2)} jump TES${pcs}`,xp,complete:r.complete};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
  }
  replay(json){const clip=parseReplay(json);this.start({mode:'free'});this.player=new ReplayPlayer(clip);this.state=this.player.state;this.params=this.player.params;return this.snapshot();}
@@ -118,10 +128,16 @@ export class IceEngine {
  train(stat){if(!['strength','spring','edgeControl','balance'].includes(stat))throw Error('Unknown training skill');this.career.train(stat);}
  snapshot() {
   const s=this.state,r=this.routine;
-  const move=s.fallen?'Recover · press Space / A':s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?'Turn':this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
-  return {state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+  // Turn's own kind, broken down the same way game/main.ts's free-skate HUD
+  // already does — this bridge used to say the bare 'Turn' for all six.
+  const turnLabel=s.turn.against?(s.turn.kind===TURN_KIND.Counter?'Counter':'Bracket')
+   :s.turn.kind===TURN_KIND.Mohawk?'Mohawk'
+   :s.turn.kind===TURN_KIND.Loop?'Loop':s.turn.kind===TURN_KIND.Rocker?'Rocker'
+   :'Three-turn';
+  const move=s.fallen?'Recover · press Space / A':s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
+  return {state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
-   routine:r?{title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal}:null,
+   routine:r?{title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal,pcsScore:r.pcsScore}:null,
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},
    rookie:{index:this.rookie.index,cleared:this.rookie.cleared,title:this.rookie.title,hint:this.rookie.hint,target:this.rookie.target},
    run:{seconds:this.run.seconds,score:this.run.score,collected:this.run.collected,target:this.run.target},

@@ -472,6 +472,11 @@ func cycle_camera() -> void:
 func update_hud() -> void:
 	var s: Dictionary = frame.state
 	hud_move.text = "%s   ·   %.1f m/s" % [str(frame.move),Vector2(s.vel.x,s.vel.y).length()]
+	# sim/moves.ts spinTick's foot change, never surfaced here before: a brief
+	# flash beside the move name, the same decaying-flash idiom game/main.ts's
+	# own #hint already uses for its equivalent toast.
+	if bool(frame.get("footChange",false)):
+		hud_move.text += "   ·   FOOT CHANGE!"
 	var spin_level := int(frame.get("spinLevel",-1))
 	hud_technical.text = "Jump TES %.2f" % float(frame.get("technical",0.0))
 	if spin_level >= 0:
@@ -483,6 +488,11 @@ func update_hud() -> void:
 	if frame.routine != null:
 		var r: Dictionary = frame.routine
 		hud_time.text = "%02d:%02d" % [int(r.seconds)/60,int(r.seconds)%60]
+		# sim/pcs.ts's own score, never shown here before — silently absent
+		# (not a misleading "0.00") whenever finalizePcs left it null.
+		if r.get("pcsScore") != null:
+			var pcs: Dictionary = r.pcsScore
+			hud_technical.text += "   ·   PCS %.2f" % float(pcs.total)
 		if int(r.index)<r.sequence.size():
 			var element: Dictionary = catalog.elements[r.sequence[int(r.index)]]
 			coach_title.text = element.title
