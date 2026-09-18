@@ -158,7 +158,7 @@ export const MOVE = { None: 0, Turn: 1, Twizzle: 2, Spin: 3, InaBauer: 4 } as co
 export const MOVE_NAME = ["", "TURN", "TWIZZLE", "SPIN", "INA BAUER"] as const;
 
 /** Bits of SkaterState.movesHeld: which move buttons were down last tick. */
-export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8, Bracket: 16 } as const;
+export const HELD = { Turn: 1, Twizzle: 2, Spin: 4, InaBauer: 8, Bracket: 16, Toe: 32 } as const;
 
 /**
  * An Ina Bauer in progress: both feet down on parallel tracks, the lead foot
@@ -207,13 +207,30 @@ export interface SpinState {
   /** rad/s, the slowest and fastest in the current position: "clear increase of speed". */
   segOmegaMin: number;
   segOmegaMax: number;
-  /** The spinning foot. */
+  /** The spinning foot. Toggles across a completed foot change (sim/moves.ts spinTick). */
   foot: Foot;
   /** Where the spin began, and the furthest it has travelled from there, m. */
   anchor: Vec2;
   travel: number;
   fromCode: number;
   entrySpeed: number;
+
+  // ── the foot change (data/spin-features.json's change_foot_by_jump,
+  // difficult_change_of_foot, all_three_positions_second_foot) ────────────
+  /** A brief, airborne foot change is under way — `foot` has not yet toggled. */
+  changingFoot: boolean;
+  /** Seconds into the current change, while `changingFoot`. */
+  changeAirT: number;
+  /** omega and SPIN_POSITION at the moment the change was triggered — for scoring the completed one. */
+  changeStartOmega: number;
+  changeStartPosition: number;
+  /** s.tick the most recently completed change finished on, or -1 if none yet this spin. */
+  changeCompletedTick: number;
+  changeAirTimeS: number;
+  /** Revolutions not swept during the air time, at the pre-change rate — what "lost" means here. */
+  changeRevolutionsLost: number;
+  /** Whether SPIN_POSITION also differs across the change (difficult_change_of_foot). */
+  changePositionChanged: boolean;
 }
 
 /** Which turn a pivot became, decided at the cusp by the foot the weight is on. */

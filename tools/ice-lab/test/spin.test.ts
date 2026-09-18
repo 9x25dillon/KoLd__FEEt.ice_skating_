@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { PRESETS, DEFAULT_PARAMS, SIM_DT, validate } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import { createState, step } from "../sim/solver.ts";
-import { NEUTRAL_INPUT, EVENT, MOVE, SPIN_POSITION, codeToString } from "../sim/types.ts";
+import { NEUTRAL_INPUT, EVENT, MOVE, SPIN_POSITION, FOOT, REGIME, codeToString } from "../sim/types.ts";
 import type { SkaterState, EdgeEvent, SkatingInput } from "../sim/types.ts";
 import { SPIN_INERTIA_SCALE } from "../sim/moves.ts";
 import { ReplayRecorder, parseReplay, verifyReplay } from "../sim/replay.ts";
@@ -120,6 +120,56 @@ test("a light push against the direction, under spinReverseStick, costs nothing:
   const bare = spin(4.5, 480, () => ({ knee: 0.7 }));
   assert.equal(held.s.spin.dir, 1);
   assert.ok(Math.abs(held.omegaAt(2) - bare.omegaAt(2)) < 1e-9, "under the stick threshold, `against` is clamped to 0");
+});
+
+test("a fresh toe press mid-spin starts a brief airborne change, landing on the other foot", () => {
+  // data/spin-features.json's change_foot_by_jump: an entry, then one clean
+  // foot change well clear of the exit.
+  const r = spin(4.5, 900, (t) => ({ knee: 0.7, toe: t === 50 }));
+  assert.equal(r.s.spin.foot, FOOT.Right, "one completed change toggles Sp.foot from its LFO entry (Left)");
+  assert.ok(r.s.spin.changeCompletedTick > 0, "the change is recorded as completed, not still in progress");
+  assert.ok(r.s.spin.changeAirTimeS >= 0.12, `air time ${r.s.spin.changeAirTimeS}s must clear the data's own floor`);
+  assert.ok(r.s.spin.changeRevolutionsLost >= 0 && r.s.spin.changeRevolutionsLost <= 0.75,
+    `revolutions lost ${r.s.spin.changeRevolutionsLost} must be small and non-negative`);
+  assert.equal(r.s.spin.changePositionChanged, false, "the pose did not change across this particular hop");
+  assert.ok(r.s.moveDone.revolutions > 5, "the spin continues and keeps sweeping after the change");
+});
+
+test("holding toe through the change does not chain a second one: only a fresh press starts it", () => {
+  const r = spin(4.5, 900, (t) => ({ knee: 0.7, toe: t >= 50 }));
+  assert.equal(r.s.spin.foot, FOOT.Right, "exactly one change from one fresh edge, however long toe stays held after");
+});
+
+test("during the airborne moment neither blade is on the ice, and angular momentum only pays the transfer cost once", () => {
+  const p = moves();
+  const s = createState(p, 4.5);
+  let momentumAtTrigger = -1, sawUnloadedDuringChange = false, changed = false;
+  for (let i = 0; i < 240 + 200; i++) {
+    const t = i - 240;
+    const input: SkatingInput = {
+      ...NEUTRAL_INPUT, weight: 0, lean: i < 240 ? 0.3 : 0, knee: 0.7,
+      toe: t === 40, spin: t >= 0 && t < 200,
+    };
+    const before = s.spin.angMomentum;
+    step(s, input, p, SIM_DT, []);
+    if (s.move === MOVE.Spin && t === 40) momentumAtTrigger = before;
+    if (s.move === MOVE.Spin && s.spin.changingFoot) {
+      sawUnloadedDuringChange = true;
+      for (const b of s.blade) assert.equal(b.regime, REGIME.Unloaded, "neither blade is on the ice mid-change");
+    }
+    if (s.move === MOVE.Spin && s.spin.changeCompletedTick === s.tick) changed = true;
+  }
+  assert.ok(sawUnloadedDuringChange, "must actually have observed the airborne window");
+  assert.ok(changed, "the change must have completed within the window this test ran");
+  assert.ok(momentumAtTrigger > 0, "must have been mid-spin when toe was pressed");
+});
+
+test("releasing spin mid-air-change still ends it, exactly like releasing mid-check does", () => {
+  // spin() only holds for a fixed number of ticks; release right after the
+  // trigger, before spinFootChangeAirTime (about 22 ticks at 120 Hz) elapses.
+  const r = spin(4.5, 55, (t) => ({ knee: 0.7, toe: t === 50 }));
+  assert.equal(r.ends.length, 1, "the spin still ends, mid-hop or not");
+  assert.equal(r.s.spin.changeCompletedTick, -1, "an interrupted change never completes");
 });
 
 test("the spinning blade is on the back edge the rotation curves, and letting go checks out backward", () => {

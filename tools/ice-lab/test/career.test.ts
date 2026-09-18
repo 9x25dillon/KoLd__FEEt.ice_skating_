@@ -16,6 +16,8 @@ import { applyProfile, overall, TIERS } from "../sim/profile.ts";
 import { loadTables } from "../sim/score.ts";
 import { loadSpinFeatureThresholds } from "../sim/spinLevel.ts";
 import { loadStepFeatureThresholds } from "../sim/stepLevel.ts";
+import { loadSegmentRules } from "../sim/pcs.ts";
+import { IceGrid } from "../sim/ice.ts";
 
 const tables = loadTables(
   readFileSync(new URL("../../../data/scale-of-values.csv", import.meta.url), "utf8"),
@@ -24,6 +26,8 @@ const spinThresholds = loadSpinFeatureThresholds(
   readFileSync(new URL("../../../data/spin-features.json", import.meta.url), "utf8"));
 const stepThresholds = loadStepFeatureThresholds(
   readFileSync(new URL("../../../data/step-features.json", import.meta.url), "utf8"));
+const segmentRules = loadSegmentRules(
+  readFileSync(new URL("../../../data/segment-rules.csv", import.meta.url), "utf8"));
 
 const state = () => createState(GAME_PARAMS, 4.5);
 const program = (...routine: ElementId[]) => new Choreography({ id: "test", title: "Test", venue: "Test", seconds: 30, routine });
@@ -289,6 +293,48 @@ test("technicalScore and bestSpinLevel accumulate from real physics, not just th
   step(spinner, { ...NEUTRAL_INPUT, weight: 0, knee: 0.45, spin: false }, GAME_PARAMS, SIM_DT, []); // release
   c.sample(spinner, false, SIM_DT);
   assert.ok(c.bestSpinLevel > 0, `a real spin must reach a real level, got ${c.bestSpinLevel}`);
+});
+
+test("PCS scores once a routine with segmentRules and an ice grid actually finishes, and feeds the award bonus", () => {
+  // CAREER_EVENTS[0] ("first-ice"): glide, edge, pose. Its own discipline/
+  // segment ("women"/"short") is a real row in data/segment-rules.csv.
+  const ice = new IceGrid(GAME_PARAMS.rinkHalfLength, GAME_PARAMS.rinkHalfWidth);
+  const c = new Choreography(CAREER_EVENTS[0], tables, spinThresholds, stepThresholds, segmentRules, ice);
+  // Not `assert.equal(c.pcsScore, null, ...)`: assert.strict's `equal<T>(actual, expected):
+  // asserts actual is T` would pin the mutable `pcsScore` property to `null` clear across
+  // every `sample()` call below — the exact tsc failure a prior session already found and
+  // fixed once (Hand_off.md) for `effects.landing`. Assert the boolean instead.
+  assert.equal(c.pcsScore === null, true, "nothing to score before the routine has even started");
+  const s = state();
+  c.sample(s, false, 3);      // glide: grounded, no move, >=3 m/s, held 3s
+  s.lean = 0.2;
+  c.sample(s, false, 2);      // edge: a moving edge held 2s
+  c.sample(s, true, 2);       // pose: low=true, held 2s
+  assert.equal(c.complete, true, "the routine must actually finish for PCS to score");
+  assert.ok(c.pcsScore, "a finished routine with segmentRules and ice must score PCS");
+  assert.ok(c.pcsScore!.total > 0, `PCS total should be positive, got ${c.pcsScore!.total}`);
+  for (const component of [c.pcsScore!.composition, c.pcsScore!.presentation, c.pcsScore!.skatingSkills]) {
+    assert.ok(component >= 0, "every component score is non-negative");
+  }
+  // Sampling again after the routine is done must not re-score it (scorePcs
+  // runs once, post-hoc — sample()'s own top guard returns before reaching
+  // finalizePcs a second time).
+  const firstScore = c.pcsScore;
+  c.sample(s, true, 1);
+  assert.equal(c.pcsScore, firstScore, "PCS is computed once, not resampled after the routine ends");
+
+  const career = new CareerState();
+  const withoutPcs = new CareerState().award(finish(CAREER_EVENTS[0]));
+  const earned = career.award(c);
+  assert.ok(earned > withoutPcs, "a scored PCS total must add to the award over the plain medal + checklist bonus");
+});
+
+test("PCS stays unscored, gracefully, without segmentRules or an ice grid", () => {
+  const c = new Choreography(CAREER_EVENTS[0], tables, spinThresholds, stepThresholds); // no segmentRules, no ice
+  const s = state();
+  c.sample(s, false, 3); s.lean = 0.2; c.sample(s, false, 2); c.sample(s, true, 2);
+  assert.equal(c.complete, true);
+  assert.equal(c.pcsScore === null, true, "no segmentRules/ice supplied means PCS silently stays unscored, not a crash");
 });
 
 test("stats gate progression independent of medals: a neutral profile holds at regionals", () => {

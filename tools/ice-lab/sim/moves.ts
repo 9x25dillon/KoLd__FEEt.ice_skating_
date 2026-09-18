@@ -175,6 +175,8 @@ export function newSpin(): SpinState {
     position: SPIN_POSITION.Upright, positionsHeld: 0, segRevs: 0, bestSegRevs: 0,
     segOmegaMin: 0, segOmegaMax: 0, foot: FOOT.Right, anchor: { x: 0, y: 0 }, travel: 0,
     fromCode: EDGE_CODE_NONE, entrySpeed: 0,
+    changingFoot: false, changeAirT: 0, changeStartOmega: 0, changeStartPosition: SPIN_POSITION.Upright,
+    changeCompletedTick: -1, changeAirTimeS: 0, changeRevolutionsLost: 0, changePositionChanged: false,
   };
 }
 
@@ -479,9 +481,25 @@ export function spinTick(
   s: SkaterState, p: Params, dt: number, knee: number, pitch: number, carriage: number, held: boolean,
   /** Raw stick, -1..1 — NOT solver.ts's own radian-scaled `leanCmd`; only a reversal check reads this. */
   leanAxis = 0,
+  /**
+   * A fresh toe press this tick (solver.ts's own HELD.Toe edge, `input.toe` unused elsewhere during
+   * a spin) — starts a brief, airborne foot change if one is not already under way. The blade leaves
+   * the ice for `spinFootChangeAirTime`, angular momentum conserved but for the one-time transfer
+   * cost, and lands on the other foot: data/spin-features.json's change_foot_by_jump family.
+   */
+  footChangeTrigger = false,
 ): PivotTick {
   const Sp = s.spin;
   Sp.t += dt;
+
+  if (footChangeTrigger && !Sp.changingFoot) {
+    Sp.changingFoot = true;
+    Sp.changeAirT = 0;
+    Sp.changeStartOmega = Sp.omega;
+    Sp.changeStartPosition = Sp.position;
+    Sp.angMomentum *= 1 - p.spinFootChangeLoss;
+    Sp.omega = Sp.angMomentum / Sp.inertia;
+  }
 
   const pos = spinPosition(knee, pitch, p);
   if (pos !== Sp.position) {
@@ -500,22 +518,27 @@ export function spinTick(
   // ordinary decay; once that is checked to spinReverseFloor the direction
   // flips and regenerates, scaled by how hard the check was held. Free while
   // the stick agrees with Sp.dir or sits near neutral — `against` is 0 there.
-  const against = Math.max(0, -Sp.dir * leanAxis);
+  // No blade-ice friction and no reversal check while airborne on a foot
+  // change — angular momentum is exactly conserved there but for the one-time
+  // transfer cost already spent at the trigger.
+  const against = Sp.changingFoot ? 0 : Math.max(0, -Sp.dir * leanAxis);
   // Below the threshold this is not a check at all — a stick imperfectly
   // centred, or nudged the "wrong" way by a little, costs nothing. Only past
   // it does the extra decay (and the possibility of a flip) apply.
   const checking = against >= p.spinReverseStick;
   const drift = len(s.vel);
   s.vel = mul(s.vel, Math.max(0, 1 - dt / p.spinTravelTime));
-  Sp.angMomentum *= Math.max(0, 1 - (p.spinDecay + p.spinTravelDecay * drift + p.spinReverseRate * (checking ? against : 0)) * dt);
-  if (checking && Sp.angMomentum <= p.spinReverseFloor) {
-    Sp.dir = -Sp.dir;
-    Sp.angMomentum = p.spinReverseRegen * against;
-    // A fresh segment, the same reason a position change starts one: the
-    // pre-flip revolutions must not bleed into the new direction's count.
-    Sp.segRevs = 0;
-    Sp.segOmegaMin = Sp.angMomentum / Sp.inertia;
-    Sp.segOmegaMax = Sp.segOmegaMin;
+  if (!Sp.changingFoot) {
+    Sp.angMomentum *= Math.max(0, 1 - (p.spinDecay + p.spinTravelDecay * drift + p.spinReverseRate * (checking ? against : 0)) * dt);
+    if (checking && Sp.angMomentum <= p.spinReverseFloor) {
+      Sp.dir = -Sp.dir;
+      Sp.angMomentum = p.spinReverseRegen * against;
+      // A fresh segment, the same reason a position change starts one: the
+      // pre-flip revolutions must not bleed into the new direction's count.
+      Sp.segRevs = 0;
+      Sp.segOmegaMin = Sp.angMomentum / Sp.inertia;
+      Sp.segOmegaMax = Sp.segOmegaMin;
+    }
   }
   Sp.omega = Sp.angMomentum / Sp.inertia;
 
@@ -528,6 +551,22 @@ export function spinTick(
   const ax = s.pos.x - Sp.anchor.x, ay = s.pos.y - Sp.anchor.y;
   Sp.travel = Math.max(Sp.travel, Math.sqrt(ax * ax + ay * ay));
 
+  if (Sp.changingFoot) {
+    Sp.changeAirT += dt;
+    if (Sp.changeAirT >= p.spinFootChangeAirTime) {
+      Sp.changingFoot = false;
+      Sp.foot = (1 - Sp.foot) as Foot;
+      Sp.changeCompletedTick = s.tick;
+      Sp.changeAirTimeS = Sp.changeAirT;
+      // What "lost" means here: the revolutions NOT swept, at the pre-change
+      // rate, during the time the blade was actually off the ice — not a
+      // fabricated number, the same operational honesty spinLevel.ts's own
+      // header holds every other scored quantity to.
+      Sp.changeRevolutionsLost = (Sp.changeStartOmega * Sp.changeAirT) / (2 * Math.PI);
+      Sp.changePositionChanged = Sp.position !== Sp.changeStartPosition;
+    }
+  }
+
   s.heading = normalizeOr(rotate(s.heading, Sp.dir * dAngle), s.heading);
   s.yawRate = Sp.dir * Sp.omega;
   s.lean += (0 - s.lean) * Math.min(1, dt / SPIN_SETTLE);
@@ -537,7 +576,11 @@ export function spinTick(
     const b = s.blade[i];
     b.tangent = { x: s.heading.x, y: s.heading.y };
     b.latForce = 0; b.latSlipAccel = 0; b.demandRatio = 0; b.biteCapacity = 0; b.turnRadius = Infinity;
-    if (b.inContact) {
+    if (Sp.changingFoot) {
+      // Airborne, briefly: neither blade is on the ice mid-change.
+      b.longSpeed = 0;
+      b.regime = REGIME.Unloaded;
+    } else if (b.inContact) {
       // On the back edge that curves the way the spin turns.
       b.tilt = -Sp.dir * SPIN_EDGE;
       b.longSpeed = -SPIN_BLADE_SPEED;
@@ -551,9 +594,10 @@ export function spinTick(
   // A reversal in progress is deliberately, briefly slower than spinMinOmega
   // — that dip through near-zero is what "killing all angular momentum" IS —
   // so an active check (against past the stick threshold) is exempted from
-  // the ordinary too-slow exit for as long as it is held. Letting go without
-  // completing one still ends the spin exactly as before.
-  const ended = !held || (Sp.omega < p.spinMinOmega && !checking);
+  // the ordinary too-slow exit for as long as it is held, and so is a foot
+  // change's own brief airborne moment. Letting go without completing either
+  // still ends the spin exactly as before.
+  const ended = !held || (Sp.omega < p.spinMinOmega && !checking && !Sp.changingFoot);
   if (ended) {
     if (Sp.segRevs >= 2) Sp.positionsHeld |= 1 << Sp.position;
     const exitFoot = (Sp.dir > 0 ? FOOT.Right : FOOT.Left) as Foot;

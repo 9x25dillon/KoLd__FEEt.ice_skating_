@@ -182,7 +182,7 @@ export function step(
   // A move also starts on a fresh press, and for the same reason.
   const heldNow = (input.turn === true ? HELD.Turn : 0) | (input.twizzle === true ? HELD.Twizzle : 0)
     | (input.spin === true ? HELD.Spin : 0) | (input.inaBauer === true ? HELD.InaBauer : 0)
-    | (input.bracket === true ? HELD.Bracket : 0);
+    | (input.bracket === true ? HELD.Bracket : 0) | (input.toe === true ? HELD.Toe : 0);
   const freshMoves = heldNow & ~s.movesHeld;
   s.movesHeld = heldNow;
   if (s.fallen && freshPush) {
@@ -325,7 +325,7 @@ export function step(
     pivot = s.move === MOVE.Turn ? turnPivot(s, p, dt, weightR)
       : s.move === MOVE.Twizzle ? twizzleTick(s, p, dt, leanCmd, axis(input.carriage, 0), input.twizzle === true)
         : spinTick(s, pFatigue, dt, knee, axis(input.pitch, 0), axis(input.carriage, 0), input.spin === true,
-            axis(input.lean, 0));
+            axis(input.lean, 0), (freshMoves & HELD.Toe) !== 0);
     latForceTotal = pivot.lat * p.mass;
     // A sit position, held: bible §2.8's "low spin positions" drain Legs.
     if (staminaOn && s.move === MOVE.Spin && knee >= p.spinSitKnee)

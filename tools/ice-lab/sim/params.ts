@@ -370,6 +370,18 @@ export interface Params {
   spinReverseFloor: number;
   /** angMomentum the flip regenerates, at full opposition — comparable to a fresh entry's own. */
   spinReverseRegen: number;
+  // ── the foot change (a combination spin) ─────────────────────────────────
+  // data/spin-features.json's change_foot_by_jump, difficult_change_of_foot
+  // and all_three_positions_second_foot all need a real second foot to change
+  // to — sim/moves.ts's spinTick triggers this on a fresh toe press (input.toe,
+  // unused during a spin otherwise), briefly airborne on the same body, the
+  // ordinary way a change-foot spin actually works: the blade leaves the ice
+  // just long enough to land on the other one, spinning throughout.
+  /** Seconds the change stays airborne — comfortably over the data's own 0.12 s floor and under
+   *  its 0.4 s resume window, so a completed change always qualifies on both counts by construction. */
+  spinFootChangeAirTime: number;
+  /** Fraction of angMomentum the transfer costs, applied once at the moment the change triggers. */
+  spinFootChangeLoss: number;
   /** m/s an Ina Bauer needs: it is a glide, and a slow one falls over. */
   inaBauerMinSpeed: number;
   /**
@@ -687,6 +699,8 @@ export const DEFAULT_PARAMS: Params = {
   spinReverseRate: 1.5,      // measured: kills a typical entry L in under 2 s of held opposition
   spinReverseFloor: 0.5,     // near-zero: the too-slow exit is held off while a check is in progress
   spinReverseRegen: 25.0,    // a fresh spin's own entry L is roughly 17-40 across spinMinSpeed..5 m/s
+  spinFootChangeAirTime: 0.18, // over data's min_air_time_s 0.12, under its resumes_spin_within_s 0.4
+  spinFootChangeLoss: 0.15,
   inaBauerMinSpeed: 2.0,
   inaBauerDrag: 2.0,
   inaBauerScrub: 0.13,
@@ -830,6 +844,9 @@ export function validate(p: Params): string[] {
   if (p.spinReverseRate <= 0) errs.push("spinReverseRate must be positive: a reversal has to actually check the spin");
   if (p.spinReverseFloor <= 0) errs.push("spinReverseFloor must be positive: angMomentum decays toward it, never past zero");
   if (p.spinReverseRegen <= 0) errs.push("spinReverseRegen must be positive: the flip has to regenerate real momentum");
+  if (p.spinFootChangeAirTime < 0.12) errs.push("spinFootChangeAirTime is under data/spin-features.json's own min_air_time_s (0.12)");
+  if (p.spinFootChangeAirTime > 0.4) errs.push("spinFootChangeAirTime exceeds data/spin-features.json's own resumes_spin_within_s (0.4)");
+  if (p.spinFootChangeLoss < 0 || p.spinFootChangeLoss >= 1) errs.push("spinFootChangeLoss is a fraction of angMomentum lost, [0, 1)");
   if (p.inaBauerDrag < 1) errs.push("inaBauerDrag multiplies the upright drag area: a side-on body has more, not less");
   if (p.jumpSpeedShare > 1) errs.push("jumpSpeedShare is a share of the lift, 0..1");
   if (p.backPushScale <= 0 || p.backPushScale > 1)
