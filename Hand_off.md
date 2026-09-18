@@ -1,12 +1,16 @@
 # Hand-off
 
-## Current checkpoint — 2026-09-18, fifteenth session: flow's lobes, then HUD parity between Godot and the browser
+## Current checkpoint — 2026-09-18, fifteenth session: flow's lobes, HUD parity, and data-driven costumes — merged to `main`
 
-Still on **`ue-replay-01-foundation`**. Two commits, each tested and verified live before the next
-began. This session opened on the operator's own two-part ask: log a standing decision (Choctaw's own
-new-foot edge-change mechanism is wanted, eventually, not hedged as "if" anymore — §0 item 0.5 below)
-and then work the queue in order, starting from its own top item — and, mid-session, "keep going,
-update the hud" continued straight into the queue's next item without a fresh round of questions.
+**`main` is fully current as of this checkpoint** (PR #14, merged after this file's own three
+commits below plus a documentation commit closing this entry — the operator's own explicit "commit
+push merge" instruction, all three treated as one authorized sequence for this session). A future
+session opening on `main` sees everything here; `ue-replay-01-foundation` is not ahead of it. This
+session opened on the operator's own two-part ask: log a standing decision (Choctaw's own new-foot
+edge-change mechanism is wanted, eventually, not hedged as "if" anymore — §0 item 0.5 below) and then
+work the queue in order, starting from its own top item — "keep going, update the hud" and then "keep
+going, and why not a wardrobe system..." each continued straight into the queue's next item with no
+fresh round of clarifying questions needed.
 
 **In order:**
 
@@ -105,9 +109,52 @@ update the hud" continued straight into the queue's next item without a fresh ro
    carve, `q`+`y` to spin at zero weight, hold `f` mid-spin for the change — the exact recipe
    `test/spin.test.ts`'s own `change_foot_by_jump` case uses), and watched `#hint` read "Foot change!"
    then decay to the next toast, zero console errors both times. `5c6cc5d`.
+3. **Costumes** (queue item 7), on the operator's own explicit follow-up ask: *"why not a wardrobe
+   system. i dont want the players to have to design thier own costumes, but make sure theres plent
+   of space for new costume updates in the future."* Checked the actual code before answering rather
+   than repeating the queue's own framing (a scoring deduction, "not a wardrobe/customization
+   system") — that framing was already wrong: `game/appearance.ts`'s `SKINS` array, a browser
+   wardrobe dialog, and a persisted picker (`localStorage`) all already existed, preset-only,
+   matching exactly what the operator said they wanted. The real gap, found by reading
+   `game/index.html`: the picker's two buttons were hand-authored HTML with a hand-drawn SVG preview
+   each, so `main.ts`'s own generic `SKINS` loop would crash on `el()`'s non-null assertion the
+   moment a third entry existed with no matching button — "plenty of space" was not actually true.
 
-**Both commits pushed** (`e6edfbd`, `5c6cc5d`) to `ue-replay-01-foundation`, reaching the still-open
-PR #13 automatically — nothing new to open, matching item 1's own note above.
+   **Fixed at the actual gap**: `appearance.ts`'s new `skinPreviewSvg(skin)` builds the preview bust
+   from a `Skin`'s own ten colour fields and its `bun` flag (the only field that changes the drawn
+   silhouette, a ponytail path vs. a bun-and-pin one) — nothing else about a costume affects the
+   preview or the in-game figure, both already read every field generically. `game/main.ts` now
+   builds all three wardrobe buttons at load from `SKINS` alone; `index.html` keeps an empty
+   container. **Solstice**, an amber-and-garnet third costume, is the proof this actually works — one
+   `SKINS` entry, zero other files touched to make it appear correctly in both the picker and on ice.
+
+   **A real bug found while writing the generator**: the two hand-drawn previews it replaces both
+   hard-coded Violet's own hair hex for the head-hair path — Aurora's own markup included, alongside
+   its own correct hair colour everywhere else — because nothing had ever generated the second
+   preview from its own data to catch the copy-paste. Now structurally impossible: `skinPreviewSvg`
+   reads `skin.hair` in both places, for every skin.
+
+   **Deliberately not attempted, and said so rather than faked**: Godot costume parity (the skater
+   there is a rigged, baked-material Blender export with no per-costume colour hook — real, separate
+   work, either authored material variants or a runtime shader override) and any connection to
+   `data/calls-and-deductions.csv`'s "Costume or prop" deduction (a judged rule-violation category
+   with no trigger condition any data file here defines — not a description of this preset system at
+   all, and inventing one would be authoring a competition rule, not wiring an existing one).
+
+   **Verified**: a new `test/appearance.test.ts` (6 tests, pure — no DOM), including a direct
+   regression test for the hair-colour bug just found. 458 Ice Lab tests total (up from 452), `tsc`
+   clean. Live in the actual browser game: built, served, opened the wardrobe with Playwright,
+   confirmed all three costumes render distinct generated previews, selected Solstice, confirmed it
+   persisted to `localStorage` — zero console errors. `d1798d5`.
+
+**All five commits pushed, then merged: PR #14** (`ice-lab: flow's lobes, Godot/browser HUD parity,
+and data-driven costumes`) **opened and merged into `main`**, on the operator's own explicit
+instruction ("commit push merge"). Note for next time: **PR #13 (fourteenth session's own work) had
+already been merged by the operator between sessions**, found only when this session went to act on
+"merge" — the version of this file this session opened on still said PR #13 was open, which was
+already stale by then. `ue-replay-01-foundation` had no open PR of its own when this session's first
+commit landed on it; PR #14 covers only this session's five commits, opened after item 1's own commit
+and kept open (CI polled to green, four checks) until this final entry was ready, then merged whole.
 
 ---
 
@@ -469,11 +516,13 @@ hold the document set together, and the things most likely to trip you up.
 
 ### First, before anything else
 
-1. **PR #13 is open, not merged.** `main` does not have this session's own work yet — everything below
-   is only on `ue-replay-01-foundation` until the operator merges it (`gh pr merge 13 --merge`, or the
-   GitHub UI; the session's own attempt was blocked by the auto-mode permission classifier as a
-   high-stakes action on a shared default branch, correctly). A session that opens on `main` rather than
-   `ue-replay-01-foundation` will see none of this checkpoint's own work until that happens.
+1. **`main` is current.** PR #13 (fourteenth session) and PR #14 (fifteenth) are both merged; `main`
+   and `ue-replay-01-foundation` point at the same commit as of this checkpoint. A session opening
+   fresh can start on `main` directly — there is no reason left to prefer the feature branch, though
+   nothing stops a future session from branching again the same way if it wants its own PR. **Do not
+   assume this stays true without checking** (`git log --oneline origin/main -1` vs. this file's own
+   top commit hash) — this exact assumption (that a named PR was still open) was wrong at the start of
+   this session, see the fifteenth session's own §8 review for what that cost.
 2. **`sim/spinLevel.ts` scores 6 of the 10 ISU spin features, not 3.** The foot-change family
    (`change_foot_by_jump`, `difficult_change_of_foot`, `all_three_positions_second_foot`) is real now.
    Honest ceiling is the ISU's own level-4 clamp — `jump_within_spin` (needs the jump and spin systems
@@ -541,6 +590,17 @@ hold the document set together, and the things most likely to trip you up.
     `tools/build_berserker.py` regenerates it; both build scripts must keep constructing the *identical*
     armature (`Hips, Spine, Head, Thigh/Shin/Foot L/R, Arm/Forearm L/R`) or `skater.gd` silently stops
     posing whatever changed. Unchanged this session, carried forward because it is still true.
+12. **Godot has no costume system at all** — the browser's three-costume `SKINS` wardrobe (fifteenth
+    session) has no Godot equivalent; the closest thing, the second-skater picker (item 11 above), is a
+    whole separate rigged model, not a recolour, and does not read `SKINS` or anything like it. Giving
+    Godot real costume parity needs either authored material variants in the `.blend` source or a
+    runtime shader/material override on the imported glTF — real, scoped work, not started.
+13. **HUD parity between Godot and the browser is done for turn kind, the foot-change toast, and PCS's
+    score** (fifteenth session) — `games/ice-run-godot/bridge/engine.mjs`'s `snapshot()` now matches
+    what `game/main.ts` already showed for all three. **Check what a hand-off claims against the actual
+    code before scoping work to fix it**: the same session's own checkpoint entry found that a fourth
+    named gap (the Spiral) had already been closed, in the very commit that built it, and the note
+    calling it a gap was already wrong when written. Don't repeat that specific claim.
 
 **Untracked on purpose, at the repo root:** `E_W_replays_sessions_eng_bld/` (the operator's play data),
 `Ice Lab — KoLd__FEEt edgework.html` (a browser save page), and `session-notes/`. Use only the play
@@ -571,9 +631,12 @@ own; item 5 is the fifteenth's:
    be covered in both (the checkpoint note above was already stale when it named it as a gap — checked
    with `git log -S` before touching anything, see the fifteenth session's own checkpoint entry).
    `5c6cc5d`.
-7. **Costume design** — explicitly put at the bottom of the list by the operator this session; not
-   started, and `data/calls-and-deductions.csv`'s own "Costume or prop" deduction (-1.00) is the only
-   real data behind it so far, a scoring category, not a wardrobe/customization system.
+7. ~~**Costume design.**~~ **Done in the browser**, fifteenth session: the "not a wardrobe system"
+   framing this line used to carry was already wrong (a preset picker already existed) — the real fix
+   was making it genuinely data-driven (`skinPreviewSvg`, `test/appearance.test.ts`); Solstice is the
+   third costume. **Godot costume parity is a new, real, separate open item — see §0 item 12.**
+   `data/calls-and-deductions.csv`'s "Costume or prop" deduction remains deliberately untouched: a
+   judged rule-violation category, not a description of this preset system, with no trigger data.
 8. **A dedicated, full control scheme for the whole move list**, plus its own tuning rig — the
    operator's own stated future want (§0 item above), unscoped, not yet designed.
 9. **Verify `rockerCounterStick` (and, while at it, every other reversal-style stick threshold) on a
@@ -672,7 +735,7 @@ CC BY-NC-ND, code/data Apache-2.0) is deliberate and reasoned.
 | Reference code | 6 files in `src/reference/` — specifications-as-code, do not compile |
 | Engineering material | `big_reffg.txt` — 3,711 lines, three concatenated documents, **has known defects, see §2.2** |
 | Native foundation | `tools/ice-lab/native/` — C++17 serialization, CRC32 and deterministic math checked against an oracle pinned at replay `/5`; no native solver yet (PR #4) |
-| Implementation | `tools/ice-lab/` (branch `ue-replay-01-foundation`, PR #13 open against `main`) — 452 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps and the moves (both off by default) including every ISU "difficult" turn (bracket, twizzle, loop, rocker, counter) plus the Spiral and a real foot change mid-spin, a rhythm layer with real music, career/choreography with PCS (now including a lobe-variety Composition signal) wired in alongside the spin-level and step-sequence bonus, flow fully modelled (all three design-bible §2.6 bullets), a standalone game (`game/`) with rink-boundary walls, and a Godot presentation (`games/ice-run-godot/`) with a second selectable skater |
+| Implementation | `tools/ice-lab/` (developed on `ue-replay-01-foundation`, merged to `main` through PR #14 — both branches level) — 458 tests, zero dependencies, engine-independent replay, camera, three courses with ghosts, jumps and the moves (both off by default) including every ISU "difficult" turn (bracket, twizzle, loop, rocker, counter) plus the Spiral and a real foot change mid-spin, a rhythm layer with real music, career/choreography with PCS (now including a lobe-variety Composition signal) wired in alongside the spin-level and step-sequence bonus, flow fully modelled (all three design-bible §2.6 bullets), HUD parity between the browser and Godot for turn kind/foot-change/PCS, three preset costumes built from data rather than hand-authored HTML, a standalone game (`game/`) with rink-boundary walls, and a Godot presentation (`games/ice-run-godot/`) with a second selectable skater |
 | Rendered pages | 5, published as Artifacts **and** mirrored in `docs/web/` |
 | Decisions | **4 of 6 closed.** D1 and D5 remain |
 
@@ -1767,3 +1830,150 @@ read):
   about equally well before the clarifying question narrowed it. Flagging an ask as underspecified
   yourself ("this could mean X or Y, I mean X") does the same disambiguating work as a clarifying
   question, from the other direction, and skips the round trip entirely.
+
+The fifteenth session's shape (2026-09-18): **a hand-off's own claims about what is or is not built
+need to be checked against the actual code before acting on them either way — and this session hit
+that in both directions, not just one.** The fourteenth session's own review had already drawn the
+mirror-image lesson (a claimed *wall* — rocker/counter — turned out to be buildable). This session
+found the opposite twice: a claimed *gap* (the Spiral's HUD surface) had already been closed, in the
+very commit that built it, and two README passages (the spin-level feature list, the PCS wiring
+status) still described work as unbuilt or unwired that had actually shipped two sessions earlier,
+simply never updated when it did. And it cost the session once more, outside the code entirely: this
+file's own top line said PR #13 was still open when this session began, and it was not — the operator
+had merged it between sessions — found only when the operator's own "commit push merge" instruction
+required actually checking. The general habit is the same one either way: **treat a hand-off's claim
+about current state — code, docs, or git — as a hypothesis to verify at the point it starts to matter,
+not a fact to build on.** `git log -S` (for "was this actually added"), a direct README grep (for "is
+this description still true"), and `gh pr view`/`git log origin/main` (for "is this still open") are
+each a few seconds of work; skipping them is what let two stale claims stand in this file until this
+session read past them, and almost cost a third redundant build of something already done.
+
+**Key decisions made this session**, for whoever reads this next:
+
+- **The lobe tracker uses three states (`lobeDir`, currently active or 0; `lobeLastDir`, the most
+  recently ended one), not two.** With only `lobeDir` and no memory of what it was before a gap, every
+  established transition is an alternation by construction — there are only two signs, so "differs
+  from whatever is currently active" can never mean "matches the one from before the gap." The third
+  state is not an implementation detail; it is the only way "repeated lobes" can be represented at all.
+- **`lobeVariety` reaches PCS's Composition score, not `sim/stepLevel.ts`'s own ceiling** — the
+  fourteenth session's own queue note had suggested it "should probably" feed step-sequence grading
+  too, since "lobe variety" sounded adjacent to footwork variety. Checked and rejected: Composition's
+  own bible bullet names "lobe variety" explicitly, `stepLevel.ts` scores discrete turn *types*, not
+  curvature variety between them, and no natural hook exists there. A suggestion carried forward from
+  an earlier session's own queue is not itself a decision — it still needs checking against the actual
+  target file before being followed.
+- **Godot's turn-kind fix was made at the bridge source (`engine.mjs`'s `snapshot()`), not in
+  GDScript**, because `scripts/main.gd`'s `hud_move` already read `frame.move` as a plain string
+  generically — the exact pattern the thirteenth session used for `spinLevel` reaching Godot at all.
+  Fixing a gap at the most generic layer that already exists, rather than adding a new specific one,
+  was chosen deliberately each time this session had the choice (also true of the costume picker).
+- **The costume system was extended, not replaced.** `SKINS` and its browser wardrobe already existed
+  and already matched the operator's own stated preference (preset-only, no player design) before this
+  session touched anything — the actual gap was that the picker UI was hand-authored per costume, not
+  that no system existed. Recognizing "this mostly already works, only the UI-authoring cost is the
+  real gap" before writing any code avoided rebuilding a working system from scratch.
+- **Godot costume recolouring and the "Costume or prop" deduction were both deliberately left
+  untouched, not attempted and left broken.** The Godot skater has no per-costume colour hook at all
+  (a baked-material rig, not `SKINS`-style flat colour), and the deduction has no trigger condition any
+  data file defines — both real, scoped, separate work, named as open rather than rushed or faked.
+- **A new PR (#14) was opened rather than assuming PR #13 was still receiving commits**, once checking
+  showed #13 had already merged — and PR #14 was kept open, CI polled to green (four checks), before
+  merging, matching every prior session's own practice rather than merging on a hope.
+- **The merge itself was carried out**, unlike the fourteenth session's blocked attempt — the operator's
+  own explicit instruction this time ("commit push merge") is the difference; the action itself (a
+  green-CI PR into a shared default branch) was materially the same kind of action both times.
+
+**Unresolved assumptions** — things treated as settled that were not actually confirmed with the
+operator:
+
+- `flowLobeMinHoldTime` (0.35 s), `flowLobeAlternateGain` (0.08) and `flowLobeRepeatLoss` (0.06) are
+  authored placeholders with no calibration data of any kind, the same honesty `musicBeatWindow`'s own
+  comment already holds itself to — nobody has played a session with real lobes and said whether they
+  feel right. The standing "nothing here has been played by a human" item every recent session carries
+  forward is still open, now with three more untested numbers on the pile.
+- Solstice's own palette (amber bodice, garnet skirt, a deeper skin tone than the other two) was this
+  session's own creative choice, not put to the operator before or after building it — reasonable by
+  the existing two costumes' own precedent, but unconfirmed.
+- `skinPreviewSvg`'s generalization covers every *colour* a costume could vary, and one *silhouette*
+  axis (`bun`) — but a costume that wanted a genuinely different silhouette (short hair, a braid, no
+  headwear at all) would need a new case added to the generator itself, not just a new `SKINS` entry.
+  "Plenty of space for new costume updates" is true for palette swaps and not yet true for silhouette
+  ones; this distinction was not put to the operator, who may have meant either or both.
+- The regular-merge strategy for PR #14 (matching PR #13's own precedent) was assumed rather than
+  reconfirmed — a squash merge was never considered or ruled out explicitly this session.
+- Whether `game/index.html`'s wardrobe copy ("Preset looks. Your skating. Change your outfit anytime.")
+  and dialog framing read as well with three costumes and room for more as they did when hand-written
+  for exactly two was not checked against a human's actual reaction, only against consistency with the
+  existing tone.
+
+**Three places this session could have been more efficient:**
+
+1. The lobe tracker's design went through a real false start: a first version used only two states
+   (`lobeDir`, a plain sign) and was built, wired, and test-written before the tests themselves proved
+   it could never represent a "repeat" — a fact derivable on paper in one line ("only two signs exist,
+   so any different established value is definitionally the opposite one") before any code was written.
+   The three-state redesign (`lobeLastDir`, kept across a gap) came only after that empirical failure.
+   Work out what a design *can and cannot represent*, from its own state space, before implementing it,
+   not after the first test built to exercise the missing case fails to find one.
+2. Verifying the foot-change toast live cost two failed Playwright attempts — first with default
+   keyboard weight (not the `weight: 0` the underlying mechanic's own recipe requires), then with
+   `keyboard.press("f")` releasing before the game's own input poll caught it — before switching to
+   `keyboard.down("f")` held for 150 ms. `test/spin.test.ts`'s own `change_foot_by_jump` case had the
+   exact working input recipe (including `weight: 0`) the whole time; reading it before the first
+   headless attempt, not after two failed ones, would have skipped both misses entirely.
+3. This session verified PR #13's status only at the moment "merge" needed it, after already trusting
+   this same file's stale claim about it earlier in the same session (in §0 item 1, read and acted on
+   without a second check). Having just spent two separate finds on stale hand-off/README claims about
+   *code*, the same skepticism was not automatically extended to this file's own claims about *git
+   state* until the operator's instruction forced the question. The lesson from finding #1 and #2 this
+   session should have generalized to git/PR state without needing a third, separate trigger to notice.
+
+**Three places the operator's own prompting could have moved faster:**
+
+1. **"why not a wardrobe system"** was a good instinct — it questioned the queue's own framing rather
+   than accepting it — but did not say which specific worry mattered most (a fixed HTML picker that
+   cannot grow? no such system at all? something else?), so this session had to investigate the whole
+   area from scratch to find the actual gap. Naming the specific concern already in mind ("I don't want
+   to have to hand-write HTML for every new costume") would have pointed straight at the real fix.
+2. **"commit push merge"** bundled three actions of genuinely different character (routine, routine,
+   high-stakes-but-now-authorized) with an unrelated, large writing request (this review and hand-off)
+   in the same message. Git operations that need to poll CI have real wall-clock latency; a message
+   that asks for both "wait on this" and "write a lot of careful prose" at once means one or the other
+   effectively waits on infrastructure it does not depend on. Splitting a request with a real wait
+   built into it from a request that does not have one lets both proceed on their own schedule.
+3. **The whole session's worth of work (three separate mechanics) was merged in one PR at the very
+   end**, rather than incrementally — meaning one large CI wait (four checks, roughly ninety seconds of
+   polling) landed at the very end of the session instead of three smaller ones spread across it. This
+   is a real tradeoff, not a pure inefficiency (one PR is also less review noise than three), but if
+   the operator wants "keep going" sessions to stay mergeable at any stopping point rather than only at
+   the very end, saying so once would change how commits get grouped into PRs going forward.
+
+**How to help me use these abilities better, concretely:** every piece of standing advice from the
+twelfth through fourteenth sessions' own reviews (numbered breakdowns for bundled asks, naming the
+target system, naming a real element instead of a paraphrase, stating a depth ceiling, stating a
+standing design preference before a session that needs it) still applies and was not contradicted by
+anything today. Two new, session-specific to add: when a request questions this file's own framing of
+something ("why not X," "is Y really true"), say what specific worry prompted the question if there is
+one — it turns an open investigation into a targeted check. And for a request that bundles routine git
+actions with a large writing task, expect (or explicitly say) whether they should be sequenced or can
+overlap — this session ran them in the order asked, which worked, but was not necessarily the fastest
+order available.
+
+**Vocabulary for the operator to study** (both tie directly to mechanisms this session actually built,
+not abstract concepts — recognising them back will make a future brief about either one faster to
+write and faster for me to read):
+
+- **hysteresis** — a system whose current state depends on its own recent history, not just the
+  instantaneous input, specifically so a noisy or briefly-flickering signal cannot immediately flip it.
+  `flowLobeMinHoldTime` is exactly this: a curve's sign has to hold for 0.35 s before it is allowed to
+  become the next established lobe, which is what stops the balance loop's own brief post-entry
+  transient (real, measured this session: about a quarter-second of the wrong sign every time a fresh
+  lean is applied) from constantly flickering the lobe state. Asking "does this need hysteresis" is a
+  sharper question than "should this react instantly," any time a raw signal is noisy but the decision
+  built on it should not be.
+- **idempotent** — an operation that produces the same result no matter how many times it is run, given
+  the same input. `tools/prepare.mjs` (the Godot runtime mirror) and the replay-contract fixture
+  regeneration script (retyped fresh this session, a fourth time now, still not saved anywhere) are both
+  meant to be this: running either one twice in a row should leave the tree in the same state as running
+  it once. Asking "is this idempotent" before relying on a regeneration step is a fast way to check
+  whether it is safe to re-run casually or needs to be run exactly once and trusted.
