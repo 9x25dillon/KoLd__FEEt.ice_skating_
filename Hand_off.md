@@ -1,6 +1,43 @@
 # Hand-off
 
-## Current checkpoint — 2026-09-18, fifteenth session: flow's lobes, HUD parity, and data-driven costumes — merged to `main`
+## Current checkpoint — 2026-09-21: Full repertoire controls and controller workshop
+
+Implemented locally on `ue-replay-01-foundation`; not committed or published in this
+session. The user's explicit next task was “full controller scheme and tuning rig.”
+The previous 2026-09-18 checkpoint below describes the last merged work.
+
+- **Queue item 8 is implemented.** Full repertoire is game scheme 3 (replay label D)
+  in both browser and Godot. `game/full-controls.ts` holds the shared raw-input
+  mapping, profile validation and per-turn input gestures. The blind lab A/B/C
+  schemes are unchanged. No new solver move or scoring behavior was introduced.
+- **Workshop:** `game/controller.html` / `controller-rig.ts`, served at
+  `http://localhost:8123/game/controller.html`. Raw and mapped inputs, live skating
+  and trace, forward/backward starts, virtual pad, sensitivity sliders, button
+  remapping with conflict swaps, local save, profile import/export and replay export.
+  Godot has a tuning/settings page and validates imported profiles through the same
+  JS parser. The [controller guide](docs/controller-scheme.md) lists the full layout.
+- **Entry-frame bug caught and fixed:** backward Loop could initially feed the
+  reversal accumulator the wrong sign and become Rocker. Direct turn gestures now
+  account for the physical curve on their very first input tick. Tests cover both
+  travel directions. Modifier banks stay latched until the move button is released;
+  holding Push through a fall cannot silently recover the skater.
+- **Replay:** still `ice-lab-f64/20`; D is additional mapping metadata only. The
+  fixture was not regenerated. Raw hardware, profiles and mapping state are outside
+  the recorded solver inputs. Older builds reject D clips; current A/B/C clips
+  still verify. Godot can replay D without supplying any live hardware.
+- **Verification:** 474 browser/simulation and Godot bridge/host tests passed;
+  TypeScript checking and browser/runtime builds passed. Real served-browser checks
+  performed a virtual-pad Rocker, saved a profile, selected Full repertoire, and
+  observed a keyboard Loop on the game HUD with no page errors. Godot's regular and
+  `--smoke-test --full-controls` paths both completed a three-element career routine.
+- **Still open:** human play on a real controller (queue item 9), tuning calibration,
+  Choctaw and unsupported pose variants. Default lean sensitivity 0.7, modifier L3,
+  retained-foot behavior and extra-move chord layout are authored design choices
+  awaiting the user's hands-on feedback. Dedicated bindings use existing physics
+  gestures; they do not guarantee entry or manufacture speed/edges.
+
+
+## Previous checkpoint — 2026-09-18, fifteenth session: flow's lobes, HUD parity, and data-driven costumes — merged to `main`
 
 **`main` is fully current as of this checkpoint** (PR #14, merged after this file's own three
 commits below plus a documentation commit closing this entry — the operator's own explicit "commit
@@ -637,8 +674,8 @@ own; item 5 is the fifteenth's:
    third costume. **Godot costume parity is a new, real, separate open item — see §0 item 12.**
    `data/calls-and-deductions.csv`'s "Costume or prop" deduction remains deliberately untouched: a
    judged rule-violation category, not a description of this preset system, with no trigger data.
-8. **A dedicated, full control scheme for the whole move list**, plus its own tuning rig — the
-   operator's own stated future want (§0 item above), unscoped, not yet designed.
+8. **Full control scheme and tuning rig — implemented locally, 2026-09-21.** See the
+   current checkpoint and `docs/controller-scheme.md`; physical-pad playtesting remains open.
 9. **Verify `rockerCounterStick` (and, while at it, every other reversal-style stick threshold) on a
    real gamepad**, not only keyboard (§0 item above).
 10. **`stepLevel.ts`'s grade-4 `difficult_turns_in_both_rotational_directions` requirement** is unparsed

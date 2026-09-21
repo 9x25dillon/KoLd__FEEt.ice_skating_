@@ -39,6 +39,13 @@ Free Skate, the guided Rookie course and the 90-second light course are also
 available. Controls, music and assists includes five tracks and free-skate
 profiles; career uses its own trained profile.
 
+**Full repertoire** is available in Settings as the fourth scheme. Open
+**Controller tuning & bindings** to tune sensitivity, view its layout, or import a
+profile exported by the browser workshop. See the
+[full control layout and workshop runbook](../../docs/controller-scheme.md).
+The table below describes the original schemes; in Full repertoire, LT only brakes,
+R3 is toe pick/foot change, and J/D-pad up requests a loop turn.
+
 | Action | Keyboard | Controller |
 | --- | --- | --- |
 | Carve / steer | A / D | Left stick |

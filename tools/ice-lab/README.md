@@ -31,6 +31,14 @@ controller required; touch controls are not implemented. **U** holds the low pos
 **comma (,)** winds up a jump. The lab retains **U** for wind-up. A low pose
 suppresses wind-up, including right-stick wind-up, so it cannot arm a later jump.
 
+**Full repertoire** is the fourth game control scheme. Select it in **Controls**
+for dedicated turn/glide bindings, a separate toe-pick button, and retained foot
+selection. Its [controller workshop](http://localhost:8123/game/controller.html)
+provides live raw/mapped input, a virtual controller, sensitivity tuning, remapping,
+and profile import/export shared with Godot. See the
+[layout and runbook](../../docs/controller-scheme.md). The controls above describe
+the existing schemes; Full repertoire uses the new guide's layout.
+
 The opening card offers four modes. **Free Skate** is open practice: seven
 objectives worth 250 points each, once per run (`game/practice.ts`), plus a FLOW
 meter that rewards staying upright at speed and unlocks a scattered field of

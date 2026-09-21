@@ -177,7 +177,8 @@ export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
 export interface ReplayFrame {
   input: SkatingInput;
-  scheme: "A" | "B" | "C";
+  // D is game-only Full repertoire. Mapping metadata does not change solver arithmetic.
+  scheme: "A" | "B" | "C" | "D";
   /** Full tuning snapshot on changes, applied BEFORE this tick. */
   params?: Params;
   digest: number;
@@ -308,7 +309,7 @@ export function parseReplay(json: string): Replay {
     for (const key of ["push", "brake", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]) {
       if (typeof input[key] !== "boolean") throw new Error(`${path}.input.${key}: expected a boolean`);
     }
-    if (!["A", "B", "C"].includes(frame.scheme as string)) throw new Error(`${path}.scheme: expected A, B, or C`);
+    if (!["A", "B", "C", "D"].includes(frame.scheme as string)) throw new Error(`${path}.scheme: expected A, B, C, or D`);
     if (!Number.isInteger(number(frame.digest, `${path}.digest`, 0, 0xffffffff)))
       throw new Error(`${path}.digest: expected an unsigned 32-bit integer`);
     if (Object.hasOwn(frame, "params")) params(frame.params, `${path}.params`);

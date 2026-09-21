@@ -130,3 +130,34 @@ test('every prepared module is sourced from the entire current Ice Lab tree',()=
   assert.equal(createHash('sha256').update(source).digest('hex'),hash,path);
  }
 });
+
+test('Full repertoire uses shared raw mapping in Godot, including batched taps and D replay', async()=>{
+ const {gameInput}=await import('../runtime/game/controls.js');
+ const {newSchemeState}=await import('../runtime/app/schemes.js');
+ const e=new IceEngine();e.configure({scheme:3,beginner:false,cruise:false});e.start({mode:'free'});
+ const s=createState(e.params,4.5),st=newSchemeState(),ice=new IceGrid(e.params.rinkHalfLength,e.params.rinkHalfWidth);
+ const hardware={connected:true,axes:[-.5,0,0,0],buttons:Array(16).fill(0),keys:[]};hardware.buttons[7]=.38;
+ for(let batch=0;batch<180;batch++){
+  hardware.buttons[15]=batch===120?1:0;
+  for(let i=0;i<2;i++){
+   const {input}=gameInput({...emptyControls(),hardware},s,3,st,false,e.params,e.controllerProfile);
+   step(s,input,e.params,1/120,[],ice);
+  }
+  e.advance({hardware},2);
+  assert.deepEqual(e.state,s,`raw mapping parity, batch ${batch}`);
+ }
+ assert.equal(e.state.moveDone.detail,TURN_KIND.Rocker);
+ const clip=parseReplay(e.exportReplay());assert.ok(clip.frames.every(f=>f.scheme==='D'));
+ assert.equal(verifyReplay(clip).divergence,null);
+});
+test('controller profiles validate before replacing settings and raw payloads are bounded',()=>{
+ const e=new IceEngine(),p=structuredClone(e.controllerProfile);
+ p.leanGain=.4;[p.bindings.rocker,p.bindings.loop]=[p.bindings.loop,p.bindings.rocker];
+ e.configure({scheme:3,controllerProfile:p});
+ assert.equal(e.controllerProfile.leanGain,.4);
+ assert.equal(e.snapshot().controllerBindings.find(b=>b.name==='Rocker turn').binding,'D-pad ↑');
+ assert.throws(()=>e.configure({controllerProfile:{...p,deadzone:1}}));assert.deepEqual(e.controllerProfile,p);
+ assert.throws(()=>e.advance({hardware:{axes:[NaN,0,0,0],buttons:[],keys:[],connected:true}},2));
+ assert.throws(()=>e.advance({hardware:{axes:[0,0,0,0],buttons:[],keys:Array(65).fill('x'),connected:true}},2));
+ assert.throws(()=>e.advance({},2));
+});

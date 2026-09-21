@@ -99,7 +99,7 @@ function bundle(modules) {
 emit("sim");
 emit("app");
 emit("game");
-copyFileSync(join(root, "game/index.html"), join(out, "game/index.html"));
+for (const page of ["index.html", "controller.html"]) copyFileSync(join(root, "game", page), join(out, "game", page));
 mkdirSync(join(out, "game/art"), { recursive: true });
 for (const file of readdirSync(join(root, "game/art"))) {
   if (/\.(png|webp|jpg)$/.test(file)) copyFileSync(join(root, "game/art", file), join(out, "game/art", file));
