@@ -11,6 +11,10 @@ def material(name,color,metal=0,rough=.4):
  return m
 skin=material('Warm porcelain',(.62,.39,.28),0,.45)
 fabric=material('Midnight plum satin',(.075,.035,.145),.24,.26)
+# The skirt and the legs carry their own slots (same colours as the bodice and
+# the skin) so scripts/skater.gd can recolour them separately per costume.
+skirt=material('Flowing skirt satin',(.075,.035,.145),.24,.26)
+tights=material('Skin-tone tights',(.62,.39,.28),0,.45)
 meshmat=material('Illusion sleeve',(.33,.20,.22),0,.6)
 hair=material('Espresso hair',(.025,.014,.022),.12,.28)
 white=material('Ivory leather boots',(.82,.83,.78),0,.36)
@@ -59,8 +63,8 @@ for side,sgn in [('L',-1),('R',1)]:
  bone('Forearm'+side,(sgn*.42,0,1.18),(sgn*.60,-.025,1.08),'Arm'+side)
 bpy.ops.object.mode_set(mode='OBJECT')
 rings('Tailored bodice',[(.84,.15,.105,0),(.94,.155,.10,0),(1.07,.115,.09,0),(1.22,.155,.10,0),(1.31,.178,.092,0),(1.37,.13,.074,0)],fabric,'Spine')
-rings('Flowing skirt',[(.97,.145,.108,0),(.90,.17,.13,0),(.80,.24,.185,0),(.73,.28,.215,0)],fabric,'Hips')
-ellipsoid('Pelvis',(0,0,.89),(.145,.105,.13),fabric,'Hips')
+rings('Flowing skirt',[(.97,.145,.108,0),(.90,.17,.13,0),(.80,.24,.185,0),(.73,.28,.215,0)],skirt,'Hips')
+ellipsoid('Pelvis',(0,0,.89),(.145,.105,.13),skirt,'Hips')
 tube('Neck',(0,0,1.36),(0,0,1.48),.046,.044,skin,'Head')
 ellipsoid('Face',(0,-.004,1.56),(.084,.078,.115),skin,'Head')
 ellipsoid('Jaw',(0,-.014,1.50),(.056,.061,.059),skin,'Head')
@@ -73,9 +77,9 @@ for x in [-.032,.032]:
 ellipsoid('Lip',(0,-.074,1.521),(.022,.004,.0045),material('Rose lips',(.37,.10,.12),0,.45),'Head')
 for side,sgn in [('L',-1),('R',1)]:
  hip=(sgn*.105,0,.88);knee=(sgn*.105,-.02,.48);ankle=(sgn*.105,0,.105)
- tube('Thigh'+side,knee,hip,.052,.08,skin,'Thigh'+side)
- ellipsoid('Knee'+side,knee,(.052,.047,.051),skin,'Shin'+side)
- tube('Calf'+side,ankle,knee,.031,.051,skin,'Shin'+side)
+ tube('Thigh'+side,knee,hip,.052,.08,tights,'Thigh'+side)
+ ellipsoid('Knee'+side,knee,(.052,.047,.051),tights,'Shin'+side)
+ tube('Calf'+side,ankle,knee,.031,.051,tights,'Shin'+side)
  ellipsoid('Boot'+side,(sgn*.105,-.037,.095),(.043,.105,.06),white,'Foot'+side)
  tube('Ankle boot'+side,(sgn*.105,0,.095),(sgn*.105,0,.19),.043,.037,white,'Foot'+side)
  tube('Blade rail'+side,(sgn*.105,-.14,.027),(sgn*.105,.066,.027),.008,.008,blade,'Foot'+side)

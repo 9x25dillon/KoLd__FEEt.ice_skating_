@@ -39,6 +39,13 @@ Free Skate, the guided Rookie course and the 90-second light course are also
 available. Controls, music and assists includes five tracks and free-skate
 profiles; career uses its own trained profile.
 
+**Full repertoire** is available in Settings as the fourth scheme. Open
+**Controller tuning & bindings** to tune sensitivity, view its layout, or import a
+profile exported by the browser workshop. See the
+[full control layout and workshop runbook](../../docs/controller-scheme.md).
+The table below describes the original schemes; in Full repertoire, LT only brakes,
+R3 is toe pick/foot change, and J/D-pad up requests a loop turn.
+
 | Action | Keyboard | Controller |
 | --- | --- | --- |
 | Carve / steer | A / D | Left stick |
@@ -120,6 +127,14 @@ Spine, Head, Thigh/Shin/Foot L/R, Arm/Forearm L/R`) every frame, straight from
 the physics state — a bone it does not find is simply left in its rest pose,
 never an error — so both build scripts construct the identical skeleton
 `build_skater.py` originated, and a third character only needs to do the same.
+
+**Costumes** are the browser's own presets (`tools/ice-lab/game/appearance.ts`'s `SKINS`, sent in the
+bridge's catalog), not a Godot copy. Settings → Costume recolours Violet at runtime:
+`scripts/skater.gd` matches `build_skater.py`'s material names — bodice, skirt, sleeves, crystal trim,
+hair, skin and tights, each its own slot — and overrides their albedo. The choice is saved with the
+other preferences. The Berserker has no such slots and keeps its authored look. A costume's `bun`
+field is not honoured: the hair is one joined mesh, so every costume wears the sculpted bun. The
+smoke test fails if fewer than all seven slots take the costume; `--capture --costume=N` screenshots one.
 
 ## Design direction and current limits
 

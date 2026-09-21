@@ -16,6 +16,7 @@ lines.on('line',line=>{
   switch(req.op){
    case 'hello':data={catalog:engine.catalog(),frame:engine.snapshot()};break;
    case 'start':data=engine.start(req.options);break;
+   case 'controller':engine.configure({controllerProfile:req.profile});data={profile:engine.controllerProfile};break;
    case 'configure':engine.configure(req.options);data=engine.snapshot();break;
    case 'frame':data=engine.advance(req.controls,req.ticks,req.low);break;
    case 'train':engine.train(req.stat);data=engine.snapshot();break;

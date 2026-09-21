@@ -306,9 +306,20 @@ export interface SpinState {
  * single-tick snapshot — a real stick, and a digital one scaled down by
  * game/controls.ts's own "manageable shallow edge", will not reliably peak
  * on the exact tick the cusp happens to land on.
+ *
+ * Choctaw, the seventh, is the new-foot edge change the fourth-cell note
+ * above says flipFrame cannot give — so it skips flipFrame. The cusp still
+ * counts (travelSense reverses: forward becomes backward, as data/motion-
+ * primitives.json's `forward: flip` asks) and the weight still moves to the
+ * other foot, but the lean frame is left alone: an unchanged tilt on the
+ * mirrored foot IS the opposite edge character (`edge: opposite`), and with
+ * travel reversed it curves the other way — the lobe reverses. Requested as
+ * a mohawk's weight shift plus a rocker's reversal: `turn` held through the
+ * cusp, stick pushed against the entry curve, weight on the other foot.
+ * Only from `turn` — a bracket still ignores weight, as above.
  */
-export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1, Bracket: 2, Loop: 3, Rocker: 4, Counter: 5 } as const;
-export const TURN_NAME = ["three-turn", "mohawk", "bracket", "loop", "rocker", "counter"] as const;
+export const TURN_KIND = { ThreeTurn: 0, Mohawk: 1, Bracket: 2, Loop: 3, Rocker: 4, Counter: 5, Choctaw: 6 } as const;
+export const TURN_NAME = ["three-turn", "mohawk", "bracket", "loop", "rocker", "counter", "choctaw"] as const;
 
 /**
  * A pivot in progress — a turn or a twizzle. The blade rotates about its

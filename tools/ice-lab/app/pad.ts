@@ -59,7 +59,18 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, BACK = 8, STAR
  * direction exactly as pushed, since "point where you want to go" is distorted
  * by any suppression at all.
  */
+export interface ControllerHardware {
+  /** Standard Gamepad ordering; Y axes are positive down, triggers are buttons 6/7. */
+  axes: number[];
+  buttons: number[];
+  keys: string[];
+  connected: boolean;
+}
+
 export interface Controls {
+  hardware?: ControllerHardware;
+  /** Game-authored Cruise pulse, separate from physical button presses. */
+  autoPush?: boolean;
   /** Left stick, radial deadzone and curve applied, direction preserved. */
   lx: number;
   ly: number;
@@ -331,6 +342,11 @@ export class Pad {
     for (let n = 1; n <= 6; n++) if (this.pressed(String(n))) out.pickJump = n - 1;
 
     this.prevKeys = new Set(this.keys);
+    out.hardware = {
+      axes: gp ? Array.from(gp.axes) : [0, 0, 0, 0],
+      buttons: gp ? gp.buttons.map(b => b.value) : [],
+      keys: [...this.keys], connected: gp !== null,
+    };
     return out;
   }
 }

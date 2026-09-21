@@ -1,6 +1,75 @@
 # Hand-off
 
-## Current checkpoint — 2026-09-18, fifteenth session: flow's lobes, HUD parity, and data-driven costumes — merged to `main`
+## Current checkpoint — 2026-09-21, sixteenth session: controls pushed, grade-4 gate, the choctaw
+
+On `ue-replay-01-foundation`, pushed (`b1a42fd` controls, `e4fa7de` grade-4 gate, then the choctaw).
+Not merged to `main`. Operator's asks: "keep building", "commit and start item 10", "push it and keep
+going" — items 9, 11 and 12 need the operator, so the session went on to item 13.
+
+- **Queue item 10 done** — see the queue.
+- **Queue item 13, the choctaw, done.** Mohawk foot change with `flipFrame` skipped at the cusp: the
+  kept tilt on the new foot is the opposite edge, travel reverses, the lobe reverses (RFI>LBO). Gesture
+  = mohawk weight shift + rocker reversal (`turn` held through the cusp, stick against the entry
+  curve); Full repertoire binds it to L3 + D-pad right / G, and a saved v1 controller profile without
+  the new binding is upgraded, not discarded. `choctawScrub` 1.65 (−0.55 m/s at 6 m/s, data). Replay
+  **`/21`** — the gesture was a mohawk under `/20`; fixture re-recorded, digests unchanged. Ten step
+  types now; grade 4 needs one STEPS mechanic more. Full account: `tools/ice-lab/README.md`, "The
+  choctaw, and grade 4's rotational gate".
+- **The replay-bump recipe is a script now**: `node tools/ice-lab/replay/rebase-fixture.ts [rev]`.
+- **Verified**: 483 tests (468 browser/sim + 15 Godot bridge), typecheck clean, fidelity report
+  regenerated (solver line only), live Playwright run in Full repertoire showed CHOCTAW then BACKWARD
+  GLIDE with no page errors, both Godot `--smoke-test` paths passed.
+- **Godot costume parity (§0 item 12) done**: `build_skater.py` gives the skirt and the legs their own
+  material slots (default colours unchanged; glb rebuilt with Blender 5.2.2, same nodes and vertex
+  count), the bridge catalog carries `SKINS`, `skater.gd` recolours seven slots by material name, and
+  Settings → Costume picks one (saved). Godot's default Violet now wears the browser's Violet colours
+  rather than the old authored midnight plum. Not honoured: `bun` (hair is one joined mesh). Verified
+  by `--capture --costume=0..2` screenshots and a smoke-test surface count (negative-checked).
+- **PR #16** (items 8, 10, 13) is open with CI green; the merge was blocked by the session's permission
+  classifier, not by review — the operator merges it.
+- **Still the operator's**: item 9 (real pad — now including the choctaw gesture), item 11 (career
+  routine content), item 12 (watch a beginner).
+
+## Previous checkpoint — 2026-09-21: Full repertoire controls and controller workshop
+
+Implemented locally on `ue-replay-01-foundation`; not committed or published in this
+session. The user's explicit next task was “full controller scheme and tuning rig.”
+The previous 2026-09-18 checkpoint below describes the last merged work.
+
+- **Queue item 8 is implemented.** Full repertoire is game scheme 3 (replay label D)
+  in both browser and Godot. `game/full-controls.ts` holds the shared raw-input
+  mapping, profile validation and per-turn input gestures. The blind lab A/B/C
+  schemes are unchanged. No new solver move or scoring behavior was introduced.
+- **Workshop:** `game/controller.html` / `controller-rig.ts`, served at
+  `http://localhost:8123/game/controller.html`. Raw and mapped inputs, live skating
+  and trace, forward/backward starts, virtual pad, sensitivity sliders, button
+  remapping with conflict swaps, local save, profile import/export and replay export.
+  Godot has a tuning/settings page and validates imported profiles through the same
+  JS parser. The [controller guide](docs/controller-scheme.md) lists the full layout.
+- **Entry-frame bug caught and fixed:** backward Loop could initially feed the
+  reversal accumulator the wrong sign and become Rocker. Direct turn gestures now
+  account for the physical curve on their very first input tick. Tests cover both
+  travel directions. Modifier banks stay latched until the move button is released;
+  holding Push through a fall cannot silently recover the skater.
+- **Replay:** still `ice-lab-f64/20`; D is additional mapping metadata only. The
+  fixture was not regenerated. Raw hardware, profiles and mapping state are outside
+  the recorded solver inputs. Older builds reject D clips; current A/B/C clips
+  still verify. Godot can replay D without supplying any live hardware.
+- **Verification:** 474 browser/simulation and Godot bridge/host tests passed;
+  TypeScript checking and browser/runtime builds passed. Real served-browser checks
+  performed a virtual-pad Rocker, saved a profile, selected Full repertoire, and
+  observed a keyboard Loop on the game HUD with no page errors. Godot's regular and
+  `--smoke-test --full-controls` paths both completed a three-element career routine.
+- **Queue item 10 done** (committed after item 8): grade 4's both-rotational-directions gate is
+  checked now; see the queue. 479 tests pass (464 browser/sim + 15 Godot bridge); typecheck clean.
+- **Still open:** human play on a real controller (queue item 9), tuning calibration,
+  Choctaw and unsupported pose variants. Default lean sensitivity 0.7, modifier L3,
+  retained-foot behavior and extra-move chord layout are authored design choices
+  awaiting the user's hands-on feedback. Dedicated bindings use existing physics
+  gestures; they do not guarantee entry or manufacture speed/edges.
+
+
+## Previous checkpoint — 2026-09-18, fifteenth session: flow's lobes, HUD parity, and data-driven costumes — merged to `main`
 
 **`main` is fully current as of this checkpoint** (PR #14, merged after this file's own three
 commits below plus a documentation commit closing this entry — the operator's own explicit "commit
@@ -546,7 +615,7 @@ hold the document set together, and the things most likely to trip you up.
     operator ever wants to spend real design time on it" (the old queue's own wording) — they do. Queue
     position is unchanged (still item 13, still behind the operator's own stated order); this note only
     upgrades the decision from conditional to confirmed so a future session does not have to re-ask.
-5. **Choctaw is the one real remaining "difficult-turn-adjacent" gap.** It is NOT the rocker/counter
+5. **(Closed 2026-09-21 — the choctaw is built; see the current checkpoint.)** Choctaw was the one real remaining "difficult-turn-adjacent" gap. It is NOT the rocker/counter
    fix applied elsewhere — rocker/counter change nothing about which foot lands the exit; choctaw needs
    a genuine edge-character change on a *new* foot, which `sim/types.ts`'s `TURN_KIND` comment still
    correctly describes as unbuilt. Do not assume this session's own rocker/counter insight
@@ -590,7 +659,7 @@ hold the document set together, and the things most likely to trip you up.
     `tools/build_berserker.py` regenerates it; both build scripts must keep constructing the *identical*
     armature (`Hips, Spine, Head, Thigh/Shin/Foot L/R, Arm/Forearm L/R`) or `skater.gd` silently stops
     posing whatever changed. Unchanged this session, carried forward because it is still true.
-12. **Godot has no costume system at all** — the browser's three-costume `SKINS` wardrobe (fifteenth
+12. **(Closed 2026-09-21 — see the current checkpoint.)** **Godot has no costume system at all** — the browser's three-costume `SKINS` wardrobe (fifteenth
     session) has no Godot equivalent; the closest thing, the second-skater picker (item 11 above), is a
     whole separate rigged model, not a recolour, and does not read `SKINS` or anything like it. Giving
     Godot real costume parity needs either authored material variants in the `.blend` source or a
@@ -637,21 +706,24 @@ own; item 5 is the fifteenth's:
    third costume. **Godot costume parity is a new, real, separate open item — see §0 item 12.**
    `data/calls-and-deductions.csv`'s "Costume or prop" deduction remains deliberately untouched: a
    judged rule-violation category, not a description of this preset system, with no trigger data.
-8. **A dedicated, full control scheme for the whole move list**, plus its own tuning rig — the
-   operator's own stated future want (§0 item above), unscoped, not yet designed.
+8. **Full control scheme and tuning rig — implemented locally, 2026-09-21.** See the
+   current checkpoint and `docs/controller-scheme.md`; physical-pad playtesting remains open.
 9. **Verify `rockerCounterStick` (and, while at it, every other reversal-style stick threshold) on a
    real gamepad**, not only keyboard (§0 item above).
-10. **`stepLevel.ts`'s grade-4 `difficult_turns_in_both_rotational_directions` requirement** is unparsed
-    and unchecked (§0 item above) — a real gap independent of the type-count shortfall.
+10. ~~**`stepLevel.ts`'s grade-4 `difficult_turns_in_both_rotational_directions` requirement.**~~
+    **Done**, 2026-09-21: parsed from `data/step-features.json`, checked in `scoreStepLevel`. Each
+    `StepEvent` carries `dir` (+1 anticlockwise, −1 clockwise), read by `game/career.ts` from
+    `s.turn.dir` on the tick the turn or twizzle finishes (no new solver state, replay still `/20`).
+    Grade 4 needs difficult turns in both senses; crossovers and changes of edge carry none. The
+    11-type count is now grade 4's only blocker (choctaw or a STEPS mechanic).
 11. **Decide whether `step`, `spiral`, `loop`/`rocker`/`counter` belong in any fixed `CAREER_EVENTS`
     routine**, and if so which and where — an operator content call, not a technical one, carried
     forward since the thirteenth session and now applying to four elements instead of one.
 12. **`BEGINNER_PARAMS`'s blanket inheritance** (§0 item 7) — still open, still needs the operator
     watching a fresh player before assuming it is fine either way.
-13. **Choctaw — confirmed wanted, eventually** (§0 item 0.5); still not next, position unchanged. A
-    genuinely different, harder axis than rocker/counter turned out to be (§0 item 5); do not assume it
-    is "one more special case" the way rocker/counter were without checking first, the same discipline
-    that made rocker/counter tractable in the first place.
+13. ~~**Choctaw.**~~ **Done**, 2026-09-21 — see the current checkpoint. It turned out to be one more
+    special case after all, but not rocker/counter's: the missing mechanism was *not* flipping the lean
+    frame on a foot change, which the data's own `post` for a choctaw spells out.
 
 **The native track, in its report's order** (unchanged, still not touched): a strict native JSON
 importer from `native/reference/wire-manifest.json`; transcribe `createState`, the blade and

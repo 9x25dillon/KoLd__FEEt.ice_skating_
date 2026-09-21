@@ -40,7 +40,7 @@ const REFERENCE_PRESET = "spec";
 /** Model features a case may require; anything else is unmodelled (data/validation/README.md). */
 const FEATURES = new Set([
   "jumps", "moves", "three-turn", "mohawk", "bracket", "twizzle", "spin", "ina-bauer", "crossover",
-  "loop", "rocker-turn", "counter", "spiral",
+  "loop", "rocker-turn", "counter", "spiral", "choctaw",
 ]);
 const KINDS = new Set(["carve", "tracing", "transition", "glide", "jump", "inertia", "propulsion"]);
 const SOURCES = new Set(["derived", "literature", "protocol", "footage"]);

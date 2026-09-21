@@ -44,9 +44,12 @@ var follow_direction := Vector3(1,0,0)
 var music_enabled := true
 var beginner := true
 var scheme := 1
+var controller_profile: Dictionary = {}
+var saved_controller_profile: Dictionary = {}
 var track := 0
 var profile := 0
 var character := 0
+var costume := 0
 var cruise := true
 var push_pending := false
 var toe_pending := false
@@ -62,12 +65,19 @@ var tick_debt := 0.0
 var test_stage := 0
 var test_wait := 0.0
 var settings_path := "user://preferences.json"
+# Every costume slot on Violet's model (skater.gd SKIN_SLOTS), each one surface.
+const SKIN_SURFACES := 7
 
 func _ready() -> void:
 	boot_test = "--smoke-test" in OS.get_cmdline_user_args()
 	screenshot_test = "--capture" in OS.get_cmdline_user_args()
+	if boot_test and "--full-controls" in OS.get_cmdline_user_args():
+		scheme = 3
 	if not boot_test and not screenshot_test:
 		load_preferences()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--costume="):
+			costume = maxi(int(arg.trim_prefix("--costume=")),0)
 	arena = Arena.new()
 	add_child(arena)
 	skater = Skater.new()
@@ -336,7 +346,8 @@ func show_page(page: String) -> void:
 	elif page == "settings":
 		clear_menu("Your skating setup", "Changes apply to your next skate. Keyboard and analog controller are supported. Face buttons request moves; the physics decides what is possible.")
 		menu.add_child(button("Assist: "+("Beginner" if beginner else "Simulation"),func():beginner=not beginner;show_page("settings")))
-		menu.add_child(button("Control: "+["Lean & load","Assisted steering","Two-foot control"][scheme],func():scheme=(scheme+1)%3;show_page("settings")))
+		menu.add_child(button("Control: "+["Lean & load","Assisted steering","Two-foot control","Full repertoire"][scheme],func():scheme=(scheme+1)%4;show_page("settings")))
+		menu.add_child(button("Controller tuning & bindings",func():show_page("controller")))
 		menu.add_child(button("Cruise: "+("On" if cruise else "Off"),func():cruise=not cruise;show_page("settings")))
 		menu.add_child(button("Music: "+("On" if music_enabled else "Off"),func():music_enabled=not music_enabled;show_page("settings")))
 		menu.add_child(label("Skater",16))
@@ -344,8 +355,16 @@ func show_page(page: String) -> void:
 		for entry in CHARACTERS:
 			character_picker.add_item(str(entry.name))
 		character_picker.selected = character
-		character_picker.item_selected.connect(func(index: int):character=index)
+		character_picker.item_selected.connect(func(index: int):character=index;show_page("settings"))
 		menu.add_child(character_picker)
+		if not catalog.is_empty() and character == 0:
+			menu.add_child(label("Costume",16))
+			var costume_picker := OptionButton.new()
+			for entry in catalog.skins:
+				costume_picker.add_item("%s — %s" % [entry.name, entry.description])
+			costume_picker.selected = costume
+			costume_picker.item_selected.connect(func(index: int):costume=index;skater.apply_skin(catalog.skins[costume]))
+			menu.add_child(costume_picker)
 		if not catalog.is_empty():
 			menu.add_child(label("Soundtrack",16))
 			var track_picker := OptionButton.new()
@@ -361,11 +380,39 @@ func show_page(page: String) -> void:
 			profile_picker.selected = profile
 			profile_picker.item_selected.connect(func(index: int):profile=index)
 			menu.add_child(profile_picker)
-		menu.add_child(paragraph("Controller: left stick steers; RT loads the knee; A pushes; Y spins; B turns; X twizzles; LT taps the toe, holds the brake; bumpers choose the foot; right stick opens the arms. D-pad up requests the Beginner jump; down holds the low pose.\n\nKeyboard: Q/E choose the foot; W/S move the rocker; F plants the toe; comma winds up a jump; I holds Ina Bauer; N requests a bracket. R restarts. Esc pauses.",14))
+		menu.add_child(paragraph("Full repertoire: dedicated turns and glides. Open Controller tuning & bindings for your current layout. RT loads/releases jumps; LT only brakes. Bumpers retain the chosen foot.\n\n" if scheme == 3 else "Controller: left stick steers; RT loads the knee; A pushes; Y spins; B turns; X twizzles; LT taps the toe, holds the brake; bumpers choose the foot; right stick opens the arms. D-pad up requests the Beginner jump; down holds the low pose.\n\nKeyboard: Q/E choose the foot; W/S move the rocker; F plants the toe; comma winds up a jump; I holds Ina Bauer; N requests a bracket. R restarts. Esc pauses.",14))
 		menu.add_child(button("Save this skate's replay",func():link.send("export")))
 		menu.add_child(button("Watch saved replay",func():link.send("replay")))
 		menu.add_child(button("Export session measurements",func():link.send("metrics")))
 		menu.add_child(button("Save settings & back",func():save_preferences();show_page("home")))
+	elif page == "controller":
+		clear_menu("Full repertoire controller", "Tune the fourth scheme here, or import bindings from the browser controller workshop.")
+		if controller_profile.is_empty():
+			menu.add_child(paragraph("Waiting for the skating engine."))
+		else:
+			for setting in catalog.controller.tuning:
+				var title := label(str(setting.label)+": %.2f" % float(controller_profile[setting.key]),14)
+				menu.add_child(title)
+				var slider := HSlider.new()
+				slider.min_value = float(setting.min)
+				slider.max_value = float(setting.max)
+				slider.step = float(setting.step)
+				slider.value = float(controller_profile[setting.key])
+				slider.value_changed.connect(func(value: float):
+					controller_profile[setting.key]=value
+					title.text=str(setting.label)+": %.2f" % value)
+				menu.add_child(slider)
+			var mapping := ""
+			for action in catalog.controller.actions:
+				var binding: Dictionary = controller_profile.bindings[action.id]
+				mapping += str(action.name)+": "+(str(catalog.controller.buttons[int(controller_profile.modifier)])+" + " if binding.modified else "")+str(catalog.controller.buttons[int(binding.button)])+"\n"
+			menu.add_child(paragraph(mapping,13))
+			menu.add_child(paragraph("Left stick leans; RT loads/releases a jump; LT brakes. LB/RB retain a foot; both share weight. Right stick opens the arms and selects camel in a spin. RT selects sit. Turns need speed and an edge.\n\nBrowser workshop: run node tools/ice-lab/app/serve.mjs, then open localhost:8123/game/controller.html.",13))
+			menu.add_child(button("Import controller profile",func():controller_file(false)))
+			menu.add_child(button("Export controller profile",func():controller_file(true)))
+			menu.add_child(button("Restore controller defaults",func():controller_profile=catalog.controller.profile.duplicate(true);show_page("controller")))
+			menu.add_child(button("Use Full repertoire & save",func():scheme=3;link.send("controller",{"profile":controller_profile})))
+		menu.add_child(button("← Settings",func():show_page("settings")))
 	elif page == "result":
 		clear_menu(str(frame.result.title),str(frame.result.detail))
 		if frame.result.has("xp"):
@@ -390,20 +437,35 @@ func start_game(mode: String, index: int = 0) -> void:
 	event_index = index
 	playing = false
 	skater.load_model(CHARACTERS[character].path)
-	link.send("configure",{"options":{"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile}})
+	link.send("configure",{"options":{"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile}})
 	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null}})
 
 func on_engine(op: String, data: Dictionary) -> void:
 	if op == "hello":
 		catalog = data.catalog
+		costume = clampi(costume,0,catalog.skins.size()-1)
+		var worn: int = skater.apply_skin(catalog.skins[costume])
+		if boot_test and worn < SKIN_SURFACES:
+			push_error("Costume reached %d of %d surfaces" % [worn, SKIN_SURFACES])
+			get_tree().quit(1)
+		controller_profile = catalog.controller.profile.duplicate(true)
+		if not saved_controller_profile.is_empty():
+			link.send("controller",{"profile":saved_controller_profile})
 		frame = data.frame
 		skater.apply_frame(frame,true)
 		show_page(current_page)
 		if boot_test:
-			for page in ["career","composer","settings","home"]:
+			for page in ["career","composer","settings","controller","home"]:
 				show_page(page)
 		if boot_test or screenshot_test:
 			start_game("career")
+		return
+	if op == "controller":
+		controller_profile = data.profile
+		save_preferences()
+		notice.text = "Controller profile saved. Full repertoire uses these settings."
+		if overlay.visible and current_page == "controller":
+			show_page("controller")
 		return
 	if op == "export" or op == "metrics":
 		notice.text = "Saved: "+str(data.path)
@@ -524,7 +586,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				start_game(active_mode,event_index)
 		KEY_SPACE: push_pending = true
 		KEY_F: toe_pending = true
-		KEY_J: trick_pending = true
+		KEY_J:
+			if scheme != 3: trick_pending = true
 
 func pressed(key: Key) -> bool:
 	return Input.is_physical_key_pressed(key)
@@ -545,6 +608,8 @@ func controls(dt: float) -> Dictionary:
 		right = shaped_stick(Vector2(Input.get_joy_axis(joy,JOY_AXIS_RIGHT_X),-Input.get_joy_axis(joy,JOY_AXIS_RIGHT_Y)))
 		rt = maxf(0,Input.get_joy_axis(joy,JOY_AXIS_TRIGGER_RIGHT))
 		lt = maxf(0,Input.get_joy_axis(joy,JOY_AXIS_TRIGGER_LEFT))
+	if scheme == 3:
+		return {"hardware":full_hardware(joy)}
 	var held_lt := lt>.35
 	if held_lt and not previous_lt:
 		toe_pending = true
@@ -563,6 +628,50 @@ func controls(dt: float) -> Dictionary:
 	var k2 := float(pressed(KEY_RIGHT))-float(pressed(KEY_LEFT))
 	return {"lx":left.x,"ly":left.y,"rx":right.x,"ry":right.y,"lean":raw_left.x,"pitch":raw_left.y,"kx":clampf(k1+k2,-1,1),"ky":float(pressed(KEY_W) or pressed(KEY_UP))-float(pressed(KEY_S) or pressed(KEY_DOWN)),"kPrimaryX":k1,"kAltX":k2,"knee":maxf(.95 if pressed(KEY_SHIFT) else .35,rt),"weight":0.0 if lb and not rb else 1.0 if rb and not lb else .5,"carriage":1.0 if pressed(KEY_C) else right.length(),"windup":1.0 if pressed(KEY_COMMA) else 0.0,"push":push_pending,"pushHeld":pressed(KEY_SPACE) or pad(joy,JOY_BUTTON_A),"brake":pressed(KEY_X) or lt_time>.15,"toe":toe_pending,"turn":pressed(KEY_B) or pad(joy,JOY_BUTTON_B),"bracket":pressed(KEY_N) or pad(joy,JOY_BUTTON_RIGHT_STICK),"twizzle":pressed(KEY_Z) or pad(joy,JOY_BUTTON_X),"spin":pressed(KEY_Y) or pad(joy,JOY_BUTTON_Y),"inaBauer":pressed(KEY_I) or (lb and rb),"cycleJump":trick_pending}
 
+func full_hardware(joy: int) -> Dictionary:
+	var axes := [0.0,0.0,0.0,0.0]
+	var buttons: Array = []
+	buttons.resize(16)
+	buttons.fill(0.0)
+	if joy >= 0:
+		axes = [Input.get_joy_axis(joy,JOY_AXIS_LEFT_X),Input.get_joy_axis(joy,JOY_AXIS_LEFT_Y),Input.get_joy_axis(joy,JOY_AXIS_RIGHT_X),Input.get_joy_axis(joy,JOY_AXIS_RIGHT_Y)]
+		var codes := [JOY_BUTTON_A,JOY_BUTTON_B,JOY_BUTTON_X,JOY_BUTTON_Y,JOY_BUTTON_LEFT_SHOULDER,JOY_BUTTON_RIGHT_SHOULDER,-1,-1,JOY_BUTTON_BACK,JOY_BUTTON_START,JOY_BUTTON_LEFT_STICK,JOY_BUTTON_RIGHT_STICK,JOY_BUTTON_DPAD_UP,JOY_BUTTON_DPAD_DOWN,JOY_BUTTON_DPAD_LEFT,JOY_BUTTON_DPAD_RIGHT]
+		for i in codes.size():
+			if codes[i]>=0:
+				buttons[i]=1.0 if pad(joy,codes[i]) else 0.0
+		buttons[6]=maxf(0,Input.get_joy_axis(joy,JOY_AXIS_TRIGGER_LEFT))
+		buttons[7]=maxf(0,Input.get_joy_axis(joy,JOY_AXIS_TRIGGER_RIGHT))
+	var keys: Array = []
+	var mapping := {KEY_A:"a",KEY_D:"d",KEY_W:"w",KEY_S:"s",KEY_Q:"q",KEY_E:"e",KEY_SHIFT:"shift",KEY_SPACE:" ",KEY_X:"x",KEY_C:"c",KEY_COMMA:",",KEY_B:"b",KEY_N:"n",KEY_Z:"z",KEY_Y:"y",KEY_F:"f",KEY_J:"j",KEY_K:"k",KEY_L:"l",KEY_H:"h",KEY_I:"i",KEY_O:"o",KEY_U:"u",KEY_LEFT:"arrowleft",KEY_RIGHT:"arrowright",KEY_UP:"arrowup",KEY_DOWN:"arrowdown"}
+	for code in mapping:
+		if pressed(code):
+			keys.append(mapping[code])
+	return {"axes":axes,"buttons":buttons,"keys":keys,"connected":joy>=0}
+
+func controller_file(exporting: bool) -> void:
+	var picker := FileDialog.new()
+	picker.access = FileDialog.ACCESS_FILESYSTEM
+	picker.file_mode = FileDialog.FILE_MODE_SAVE_FILE if exporting else FileDialog.FILE_MODE_OPEN_FILE
+	picker.filters = PackedStringArray(["*.json ; Controller profile"])
+	picker.current_file = "edgework-controller.json" if exporting else ""
+	picker.file_selected.connect(func(path: String):
+		if exporting:
+			var file := FileAccess.open(path,FileAccess.WRITE)
+			if file: file.store_string(JSON.stringify(controller_profile,"  "))
+			else: on_error("Could not export the controller profile.")
+		else:
+			var file := FileAccess.open(path,FileAccess.READ)
+			if file == null or file.get_length()>65536:
+				on_error("Could not read profile (64 KiB maximum).")
+			else:
+				var candidate = JSON.parse_string(file.get_as_text())
+				if candidate is Dictionary: link.send("controller",{"profile":candidate})
+				else: on_error("Expected a controller profile JSON object.")
+		picker.queue_free())
+	picker.canceled.connect(picker.queue_free)
+	add_child(picker)
+	picker.popup_centered_ratio(.7)
+
 func pad(joy: int, code: JoyButton) -> bool:
 	return joy>=0 and Input.is_joy_button_pressed(joy,code)
 
@@ -570,7 +679,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton and event.pressed:
 		match event.button_index:
 			JOY_BUTTON_A: push_pending = true
-			JOY_BUTTON_DPAD_UP: trick_pending = true
+			JOY_BUTTON_DPAD_UP:
+				if scheme != 3: trick_pending = true
 			JOY_BUTTON_START: pause_game()
 			JOY_BUTTON_BACK:
 				if playing:
@@ -589,11 +699,14 @@ func _physics_process(dt: float) -> void:
 	tick_debt -= ticks
 	var c := controls(dt)
 	var devices := Input.get_connected_joypads()
-	var low := pressed(KEY_U) or (not devices.is_empty() and pad(int(devices[0]),JOY_BUTTON_DPAD_DOWN))
+	var low := scheme != 3 and (pressed(KEY_U) or (not devices.is_empty() and pad(int(devices[0]),JOY_BUTTON_DPAD_DOWN)))
 	if boot_test and not frame.is_empty():
 		var index := int(frame.routine.index) if frame.routine != null else 0
-		c.kx = -1.0 if index==1 else 0.0
-		low = index==2
+		if scheme == 3:
+			c.hardware.keys = ["a"] if index==1 else ["u"] if index==2 else []
+		else:
+			c.kx = -1.0 if index==1 else 0.0
+			low = index==2
 	link.send("frame",{"controls":c,"ticks":ticks,"low":low})
 	push_pending = false
 	toe_pending = false
@@ -676,10 +789,13 @@ func load_preferences() -> void:
 	if not saved is Dictionary:
 		return
 	beginner = bool(saved.get("beginner",true))
-	scheme = clampi(int(saved.get("scheme",1)),0,2)
+	scheme = clampi(int(saved.get("scheme",1)),0,3)
+	if saved.get("controllerProfile") is Dictionary:
+		saved_controller_profile = saved.controllerProfile
 	track = clampi(int(saved.get("track",0)),0,4)
 	profile = clampi(int(saved.get("profile",0)),0,3)
 	character = clampi(int(saved.get("character",0)),0,CHARACTERS.size()-1)
+	costume = maxi(int(saved.get("costume",0)),0)
 	cruise = bool(saved.get("cruise",true))
 	music_enabled = bool(saved.get("music",true))
 	var ids = saved.get("sequence",[])
@@ -695,6 +811,6 @@ func save_preferences() -> void:
 		return
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"beginner":beginner,"scheme":scheme,"track":track,"profile":profile,"character":character,"cruise":cruise,"music":music_enabled,"sequence":sequence}))
+		file.store_string(JSON.stringify({"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"sequence":sequence}))
 	else:
 		on_error("Preferences could not be saved.")

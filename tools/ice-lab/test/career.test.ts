@@ -15,7 +15,7 @@ import { SIM_DT } from "../sim/params.ts";
 import { applyProfile, overall, TIERS } from "../sim/profile.ts";
 import { loadTables } from "../sim/score.ts";
 import { loadSpinFeatureThresholds } from "../sim/spinLevel.ts";
-import { loadStepFeatureThresholds } from "../sim/stepLevel.ts";
+import { loadStepFeatureThresholds, STEP_TYPE } from "../sim/stepLevel.ts";
 import { loadSegmentRules } from "../sim/pcs.ts";
 import { IceGrid } from "../sim/ice.ts";
 
@@ -230,6 +230,26 @@ test("step sequence: fewer than five distinct types, or only one foot, never act
   oneFoot.sample(s2, false, 3);
   assert.equal(oneFoot.index, 0, "five distinct types, but never the left foot: both_feet_used fails");
   assert.equal(oneFoot.bestStepLevel, 0);
+});
+
+test("each recorded turn carries its rotation sense from s.turn.dir; a crossover carries none", () => {
+  const c = program("step");
+  const s = state();
+  s.tick = 0; s.moveDone.tick = 0; s.moveDone.kind = MOVE.Turn; s.moveDone.detail = TURN_KIND.Rocker;
+  s.moveDone.toCode = makeCode(FOOT.Right, DIR.Forward, EDGE.Inside); s.turn.dir = -1;
+  c.sample(s, false, 0.01);
+  s.tick = 100; s.crossover = true; s.strokeTime = 0.1; s.strokeFoot = FOOT.Left;
+  c.sample(s, false, 0.01);
+  assert.deepEqual(c["stepTracker"].events.map((e) => e.dir), [-1, 0]);
+});
+
+test("a finished choctaw is recorded as its own step type", () => {
+  const c = program("step");
+  const s = state();
+  s.tick = 0; s.moveDone.tick = 0; s.moveDone.kind = MOVE.Turn; s.moveDone.detail = TURN_KIND.Choctaw;
+  s.moveDone.toCode = makeCode(FOOT.Left, DIR.Backward, EDGE.Outside);
+  c.sample(s, false, 0.01);
+  assert.deepEqual(c["stepTracker"].events.map((e) => [e.type, e.foot]), [[STEP_TYPE.Choctaw, FOOT.Left]]);
 });
 
 test("without stepThresholds, the step element never activates — the same graceful degradation as spin/technical", () => {

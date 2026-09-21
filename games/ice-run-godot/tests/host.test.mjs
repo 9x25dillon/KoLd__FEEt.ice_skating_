@@ -62,3 +62,21 @@ test('a rejected host command leaves the live skating process usable', {timeout:
   assert.equal(next.data.state.tick, 2);
   assert.equal(next.data.career.xp, 0);
 });
+
+test('controller profile import is validated by the real host and D replay needs no hardware', {timeout: 10000}, async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'ice-controller-host-'));
+  t.after(() => rmSync(dir, {recursive: true, force: true}));
+  const send = host(t, dir), hello = await send('hello');
+  const profile = hello.data.catalog.controller.profile;
+  profile.leanGain = .45;
+  assert.equal((await send('controller', {profile})).data.profile.leanGain, .45);
+  assert.equal((await send('controller', {profile: {...profile, curve: 100}})).ok, false);
+  assert.equal((await send('configure', {options: {scheme: 3, beginner: false, cruise: false}})).ok, true);
+  const hardware = {connected: true, axes: [-.5, 0, 0, 0], buttons: Array(16).fill(0), keys: []};
+  for (let i = 0; i < 20; i++) assert.equal((await send('frame', {ticks: 12, controls: {hardware}})).ok, true);
+  await send('export'); await send('replay');
+  let reply;
+  for (let i = 0; i < 20; i++) reply = await send('frame', {ticks: 12});
+  assert.equal(reply.ok, true);
+  assert.equal(reply.data.result.title, 'Replay verified');
+});

@@ -4,7 +4,8 @@ import { createState, step } from "../sim/solver.ts";
 import { SIM_DT } from "../sim/params.ts";
 import { Pad } from "../app/pad.ts";
 import { newSchemeState, SCHEME } from "../app/schemes.ts";
-import type { Scheme } from "../app/schemes.ts";
+import type { GameScheme as Scheme } from "./controls.ts";
+import { FULL_SCHEME, ACTIONS, bindingLabel, loadControllerProfile } from "./full-controls.ts";
 import { MOVE, TURN_KIND, FALL, codeToString } from "../sim/types.ts";
 import { JUMP_PHASE, JUMP_CODE } from "../sim/jump.ts";
 import { GAME_PARAMS, CONTROL_NAMES, gameInput } from "./controls.ts";
@@ -103,7 +104,11 @@ scene.effects.reducedMotion = motionPreference.matches;
 motionPreference.addEventListener("change", () => { scene.effects.reducedMotion = motionPreference.matches; });
 try { scene.skin = skinById(localStorage.getItem("edgework-skin")); } catch { /* Style works without storage. */ }
 let practice = new Practice(), cruise = true, sound = false, pushHeld = false;
-let scheme: Scheme = SCHEME.B, freeSkate = true, cantilever = false, lowHeld = false;
+let controllerProfile = loadControllerProfile();
+window.addEventListener("focus", () => { controllerProfile = loadControllerProfile(); renderFullBindings(); });
+let scheme: Scheme = SCHEME.B;
+try { const saved = Number(localStorage.getItem("edgework-control-scheme") ?? SCHEME.B); if ([0, 1, 2, 3].includes(saved)) scheme = saved as Scheme; } catch { /* Session controls work without storage. */ }
+let freeSkate = true, cantilever = false, lowHeld = false;
 let elapsedSkate = 0, pendingToe = false;
 const guide = el("guide") as HTMLDialogElement;
 let resumeAfterGuide = false;
@@ -226,9 +231,17 @@ wardrobe.addEventListener("close", () => { if (resumeAfterWardrobe) resume(); })
 });
 el("trick").addEventListener("click", () => { pendingTrick=true; });
 const schemeSelect = el("scheme-select") as HTMLSelectElement;
+schemeSelect.value = String(scheme);
 const profileSelect = el("profile-select") as HTMLSelectElement;
 SAMPLE_PROFILES.forEach((profile, index) => { const option = document.createElement("option"); option.value = String(index); option.textContent = profile.name; profileSelect.append(option); });
-schemeSelect.addEventListener("change", () => { scheme = Number(schemeSelect.value) as Scheme; steering = newSchemeState(); });
+function saveControlScheme() { try { localStorage.setItem("edgework-control-scheme", String(scheme)); } catch { /* Session-only selection. */ } }
+function renderFullBindings() {
+  el("full-bindings").innerHTML = ACTIONS.map(a => `<tr><td>${a.name}</td><td>${a.key === " " ? "Space" : a.key.toUpperCase()}</td><td>${bindingLabel(controllerProfile, a.id)}</td></tr>`).join("");
+  el("full-guide").hidden = scheme !== FULL_SCHEME;
+  el("legacy-guide").hidden = scheme === FULL_SCHEME;
+}
+renderFullBindings();
+schemeSelect.addEventListener("change", () => { scheme = Number(schemeSelect.value) as Scheme; steering = newSchemeState(); saveControlScheme(); renderFullBindings(); });
 profileSelect.addEventListener("change", () => { profileIndex = Number(profileSelect.value); start(); pause(); });
 el("save-replay").addEventListener("click", () => {
   const blob = new Blob([playback ? replayJson : recorder.toJson()], {type:"application/json"});
@@ -322,11 +335,11 @@ function draw(_now: number) {
   const backward = skater.vel.x * skater.heading.x + skater.vel.y * skater.heading.y < -0.1;
   const move = skater.jump.phase === JUMP_PHASE.Air ? `AIR · ${(skater.jump.rotation / (2 * Math.PI)).toFixed(1)} rev · ${skater.jump.z.toFixed(2)} m`
     : skater.move === MOVE.Spin ? `${["UPRIGHT", "SIT", "CAMEL"][skater.spin.position]} SPIN · ${(skater.spin.swept / (2 * Math.PI)).toFixed(1)} rev`
-    : skater.move === MOVE.Turn ? (skater.turn.against
+    : skater.move === MOVE.Turn ? (scheme === FULL_SCHEME ? ["THREE-TURN", "MOHAWK", "BRACKET", "LOOP", "ROCKER", "COUNTER", "CHOCTAW"][skater.turn.kind] : skater.turn.against
         ? (skater.turn.kind === TURN_KIND.Counter ? "COUNTER" : "BRACKET · hold through, stick reversed, for a counter")
-        : skater.turn.kind === TURN_KIND.Mohawk ? "MOHAWK"
+        : skater.turn.kind === TURN_KIND.Mohawk ? "MOHAWK" : skater.turn.kind === TURN_KIND.Choctaw ? "CHOCTAW"
         : skater.turn.kind === TURN_KIND.Loop ? "LOOP" : skater.turn.kind === TURN_KIND.Rocker ? "ROCKER"
-        : "THREE-TURN · shift weight for a mohawk, hold through for a loop or reversed for a rocker")
+        : "THREE-TURN · shift weight for a mohawk, hold through for a loop or reversed for a rocker, both for a choctaw")
     : skater.move === MOVE.Twizzle ? "TWIZZLE" : skater.move === MOVE.InaBauer ? "INA BAUER"
     : skater.move === MOVE.Spiral ? "SPIRAL"
     : cantilever ? "CANTILEVER POSE" : skater.crossover && skater.strokeTime > 0 ? `${backward ? "BACK " : ""}CROSSOVER`
@@ -346,7 +359,7 @@ function frame(now: number) {
   if (guide.open || wardrobe.open || careerBoard.open) { pendingPush = false; pendingToe = false; pendingTrick=false; draw(now); requestAnimationFrame(frame); return; }
   if (controls.cycleView && !lowHeld && !(navigator.getGamepads?.().find(g => g?.connected)?.buttons[13]?.pressed)) scene.overview = !scene.overview;
   if (controls.zoom) scene.zoom = Math.max(0.65, Math.min(1.8, scene.zoom * Math.pow(1.15, controls.zoom)));
-  if (controls.cycleScheme) { scheme = ((scheme + 1) % 3) as Scheme; steering = newSchemeState(); }
+  if (controls.cycleScheme) { scheme = ((scheme + 1) % 4) as Scheme; steering = newSchemeState(); schemeSelect.value = String(scheme); saveControlScheme(); renderFullBindings(); }
   if (controls.pause) { if (mode === "playing") pause(); else if (mode === "paused") resume(); }
   if (controls.reset && mode !== "ready") start();
   if (mode === "ready" && controls.push) start();
@@ -355,7 +368,7 @@ function frame(now: number) {
     // A press lasts one simulation tick. Preserve it if this display frame has no tick.
     pendingPush ||= controls.push;
     pendingToe ||= controls.toe;
-    if(beginner) pendingTrick ||= controls.cycleJump;
+    if(beginner && scheme !== FULL_SCHEME) pendingTrick ||= controls.cycleJump;
     const lowPose = lowHeld || (navigator.getGamepads?.().find(g => g?.connected)?.buttons[13]?.pressed ?? false);
     while (accumulator >= SIM_DT && mode === "playing") {
       if(playback) {
@@ -376,10 +389,10 @@ function frame(now: number) {
       }
       const padPush = navigator.getGamepads?.().find(g => g?.connected)?.buttons[0]?.pressed ?? false;
       const canStroke = !skater.fallen && skater.move === MOVE.None && skater.jump.phase === JUMP_PHASE.None && !controls.brake && !controls.spin && !controls.turn && !controls.twizzle && !controls.inaBauer && !lowPose;
-      const repeated = canStroke && skater.tick % 90 === 0 && (pushHeld || padPush || (cruise && Math.hypot(skater.vel.x, skater.vel.y) < (courseMode ? 5.5 : beginner ? 5.5 + playground.flow * 0.035 : 5.5)));
+      const repeated = canStroke && skater.tick % 90 === 0 && ((scheme !== FULL_SCHEME && (pushHeld || padPush)) || (cruise && Math.hypot(skater.vel.x, skater.vel.y) < (courseMode ? 5.5 : beginner ? 5.5 + playground.flow * 0.035 : 5.5)));
       const aim = scene.worldAim(controls.lx, controls.ly);
       const aimed = scheme === SCHEME.B ? { ...controls, lx: aim.x, ly: aim.y } : controls;
-      const mapped = gameInput({ ...aimed, push: pendingPush || repeated, toe: pendingToe }, skater, scheme, steering, lowPose, params);
+      const mapped = gameInput({ ...aimed, push: pendingPush || repeated, autoPush: repeated, toe: pendingToe }, skater, scheme, steering, lowPose, params, controllerProfile);
       const input = beginner ? coach.apply(mapped.input, skater, params, pendingTrick, SIM_DT) : mapped.input;
       pendingTrick = false; cantilever = mapped.cantilever;
       pendingPush = false; pendingToe = false;
@@ -414,7 +427,7 @@ function frame(now: number) {
       }
       rookie?.sample(skater,SIM_DT);
       scene.update(skater, SIM_DT);
-      recorder.capture(input, params, skater, events, (["A","B","C"] as const)[scheme]);
+      recorder.capture(input, params, skater, events, (["A","B","C","D"] as const)[scheme]);
       const wasUp = !skater.fallen;
       resolveRinkCollision(skater, events);
       if (sound && wasUp && skater.fallReason === FALL.Collision) audio.crash();

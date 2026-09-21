@@ -278,7 +278,7 @@ function beginPivot(s: SkaterState, p: Params, minSpeed: number, needEdge: boole
   const T = s.turn;
   // Into the curve: the way the path is already turning. A twizzle off a flat
   // blade has no curve to follow and turns anticlockwise, the rig's rotation.
-  // `against` reverses it — a bracket or a choctaw fights the curve instead
+  // `against` reverses it — a bracket fights the curve instead
   // (bible §2.3): the button that asked for one, not a twizzle's own choice.
   const pathSense = sign(b.tilt) * sign(b.longSpeed);
   if (pathSense === 0 && needEdge) return false;
@@ -306,8 +306,8 @@ function beginPivot(s: SkaterState, p: Params, minSpeed: number, needEdge: boole
 
 /**
  * Start a turn, if the edge the skater is on permits one: moves on, on the
- * ice, one blade on an edge, moving. `against` asks for a bracket (or, with a
- * foot change at the cusp, a choctaw) instead of a three-turn or mohawk.
+ * ice, one blade on an edge, moving. `against` asks for a bracket instead of a
+ * three-turn, mohawk or choctaw.
  * Returns whether it started.
  */
 export function turnStart(s: SkaterState, p: Params, against = false): boolean {
@@ -390,13 +390,14 @@ export function turnPivot(
   const ceiling = T.kind === TURN_KIND.Loop ? 2 * Math.PI : Math.PI;
   const stepAngle = Math.min(T.rate * dt, ceiling - T.swept);
   T.swept += stepAngle;
-  const footChanged = T.kind === TURN_KIND.Mohawk;
+  const footChanged = T.kind === TURN_KIND.Mohawk || T.kind === TURN_KIND.Choctaw;
   // Fighting the curve scrapes harder throughout (bible §2.3: bracket and
   // counter outrank a three-turn and a mohawk); a foot change's second half,
   // on the newly placed foot, still scrapes less than the pivoting one did —
-  // measured for the mohawk (data/motion-primitives.json) and taken as the
-  // same fraction for a choctaw, since nothing distinguishes the landing.
-  const scrub = (T.against ? p.againstTurnScrub : 1) * (T.cusps > 0 && footChanged ? p.mohawkScrub : 1);
+  // measured for the mohawk (data/motion-primitives.json). A choctaw's
+  // landing has its own share, choctawScrub, from the same file.
+  const landing = T.kind === TURN_KIND.Choctaw ? p.choctawScrub : p.mohawkScrub;
+  const scrub = (T.against ? p.againstTurnScrub : 1) * (T.cusps > 0 && footChanged ? landing : 1);
   let speed = pivotStep(s, p, dt, stepAngle, scrub);
 
   // "Reversing" means against the PHYSICAL curve the skater is actually on,
@@ -417,15 +418,13 @@ export function turnPivot(
   // into the curve — the weight decides which turn this was: still on the
   // pivot foot, a three-turn; on the other, a mohawk, and the other foot
   // takes the exit. A bracket has no such foot-changing sibling here: a real
-  // choctaw changes edge character on the new foot, which is the mohawk's
-  // OTHER axis, not this one, and this rig does not model it (sim/types.ts's
-  // `bracket` field explains why). So weight cannot move a bracket to the
-  // other foot; it stays a bracket regardless.
+  // choctaw changes edge character on the new foot — a mohawk with the lobe
+  // reversed, below, never a bracket with the weight moved. So weight cannot
+  // move a bracket to the other foot; it stays a bracket regardless.
   let cusp = false;
   if (T.cusps === 0 && T.swept >= Math.PI / 2) {
     cusp = true;
     T.cusps = 1;
-    flipFrame(s);
     const other = (1 - T.foot) as Foot;
     const toOther = !T.against && (other === FOOT.Right ? weightR > 0.75 : weightR < 0.25);
     // Held through the cusp, stick pushed past p.rockerCounterStick against
@@ -433,8 +432,13 @@ export function turnPivot(
     // instead of continuing it — TURN_KIND's own comment on why travelSense
     // has to special-case these two.
     const reversing = entryHeld && Math.max(T.reverseHeld, Math.max(0, -curveSense * leanAxis)) >= p.rockerCounterStick;
+    // A choctaw keeps the lean frame (TURN_KIND's comment): the new foot's
+    // unchanged tilt is the opposite edge, and the body's arc bends onto the
+    // new lobe, so the lateral load keeps the side the lean is already on.
+    if (toOther && reversing) { T.kind = TURN_KIND.Choctaw; T.pathRate = -T.pathRate; }
+    else flipFrame(s);
     if (toOther) {
-      T.kind = TURN_KIND.Mohawk;
+      if (T.kind !== TURN_KIND.Choctaw) T.kind = TURN_KIND.Mohawk;
       T.exitFoot = other;
       const from = s.blade[T.foot], to = s.blade[other];
       to.normalLoad = from.normalLoad; to.weight = 1; to.inContact = true;

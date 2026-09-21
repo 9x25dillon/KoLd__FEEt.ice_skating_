@@ -31,6 +31,14 @@ controller required; touch controls are not implemented. **U** holds the low pos
 **comma (,)** winds up a jump. The lab retains **U** for wind-up. A low pose
 suppresses wind-up, including right-stick wind-up, so it cannot arm a later jump.
 
+**Full repertoire** is the fourth game control scheme. Select it in **Controls**
+for dedicated turn/glide bindings, a separate toe-pick button, and retained foot
+selection. Its [controller workshop](http://localhost:8123/game/controller.html)
+provides live raw/mapped input, a virtual controller, sensitivity tuning, remapping,
+and profile import/export shared with Godot. See the
+[layout and runbook](../../docs/controller-scheme.md). The controls above describe
+the existing schemes; Full repertoire uses the new guide's layout.
+
 The opening card offers four modes. **Free Skate** is open practice: seven
 objectives worth 250 points each, once per run (`game/practice.ts`), plus a FLOW
 meter that rewards staying upright at speed and unlocks a scattered field of
@@ -1536,6 +1544,28 @@ browser side verified live: built and served the actual game, drove it headlessl
 `#hint` read "Foot change!" then decay to the next toast, with zero console errors. No replay contract
 change: every field here is presentational, read from already-recorded state the same way `spinLevel`
 and `technical` already are.
+
+### The choctaw, and grade 4's rotational gate — added 2026-09-21, sixteenth session
+
+**The choctaw** (`TURN_KIND.Choctaw`, `sim/moves.ts`'s `turnPivot`) is the new-foot edge change every
+earlier note called unbuilt. It needed no new pivot: it is the mohawk's foot change with `flipFrame`
+*skipped* at the cusp. The cusp still counts, so travel reverses (forward to backward), and the
+weight still moves to the other foot; but the lean frame is kept, and an unchanged tilt on the
+mirrored foot is the opposite edge character — RFI onto LBO, the lobe reversed, exactly
+`data/motion-primitives.json`'s `post: {foot: other, edge: opposite, forward: flip}`. The body's arc
+(`T.pathRate`) reverses with it, so the lateral load stays on the side the lean is already on. Asked
+for as a mohawk's weight shift plus a rocker's reversal: `turn` held through the cusp, stick pushed
+against the entry curve, weight on the other foot. Full repertoire binds it directly (L3 + D-pad
+right, keyboard G). New lever `choctawScrub` 1.65 calibrates the landing to the data's −0.55 m/s at
+6 m/s (measured 0.548). Replay contract **`/21`**: the gesture was a mohawk under `/20`.
+
+**Grade 4's `difficult_turns_in_both_rotational_directions`** is parsed and checked: each
+`StepEvent` carries the turn's `TurnState.dir`, read by `game/career.ts` on the tick it finishes.
+With the choctaw the rig observes **ten** step types (three of three simple, five of five difficult);
+grade 4's eleven-type count, needing one STEPS-category mechanic, is its only remaining blocker.
+
+`replay/rebase-fixture.ts [git-rev]` is the contract-bump recipe as a script: it re-records the
+fixture from `git-rev`'s inputs and refuses to write if frames, schemes or inputs moved.
 
 ## What a session measures
 

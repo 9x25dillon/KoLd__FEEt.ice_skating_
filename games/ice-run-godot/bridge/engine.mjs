@@ -12,11 +12,13 @@ import {loadStepFeatureThresholds} from '../runtime/sim/stepLevel.js';
 import {loadSegmentRules} from '../runtime/sim/pcs.js';
 import {newSchemeState} from '../runtime/app/schemes.js';
 import {gameInput,GAME_PARAMS} from '../runtime/game/controls.js';
+import {defaultControllerProfile,parseControllerProfile,validHardware,ACTIONS,BUTTON_NAMES,TUNING,bindingLabel} from '../runtime/game/full-controls.js';
 import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
 import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS} from '../runtime/game/career.js';
 import {Practice,LESSONS} from '../runtime/game/practice.js';
 import {IceRun,LIGHTS} from '../runtime/game/run.js';
 import {RookieCourse,ROOKIE_GATES} from '../runtime/game/rookie.js';
+import {SKINS} from '../runtime/game/appearance.js';
 import {Playground,SNOWFLAKES,TARGETS} from '../runtime/game/playground.js';
 import {resolveRinkCollision,RINK} from '../runtime/game/rink.js';
 import {readFileSync} from 'node:fs';
@@ -29,11 +31,12 @@ export const tracks=JSON.parse(readFileSync(new URL('../runtime/tracks.json',imp
 export const emptyControls=()=>({lx:0,ly:0,rx:0,ry:0,lean:0,pitch:0,kx:0,ky:0,kPrimaryX:0,kAltX:0,knee:.35,weight:.5,carriage:0,windup:0,push:false,brake:false,toe:false,turn:false,bracket:false,twizzle:false,spin:false,inaBauer:false,reset:false,pause:false,cyclePreset:false,cycleScheme:false,cycleJump:false,cycleView:false,zoom:0,dpadStep:0,tilt:0,toggleGame:false,cycleGhost:false,pickJump:-1,cycleProfile:false,cycleMoves:false,cycleRink:false});
 export class IceEngine {
  constructor(save=null) {
+  this.controllerProfile=defaultControllerProfile();
   this.career=CareerState.restore(save); this.track=0; this.scheme=1; this.beginner=true;
   this.profile=0; this.cruise=true; this.sequence=['glide','edge','jump','spin','pose'];
   this.start({mode:'free'});
  }
- catalog() {return {events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,flakes:SNOWFLAKES,targets:TARGETS};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer'].includes(mode)) throw Error('Unknown skating mode');
@@ -61,7 +64,8 @@ export class IceEngine {
   return this.snapshot();
  }
  configure(o) {
-  if(o.scheme!==undefined) {if(![0,1,2].includes(o.scheme))throw Error('Unknown control scheme');this.scheme=o.scheme;this.steering=newSchemeState();}
+  if(o.controllerProfile!==undefined) {this.controllerProfile=parseControllerProfile(o.controllerProfile);this.steering=newSchemeState();}
+  if(o.scheme!==undefined) {if(![0,1,2,3].includes(o.scheme))throw Error('Unknown control scheme');this.scheme=o.scheme;this.steering=newSchemeState();}
   if(o.beginner!==undefined)this.beginner=Boolean(o.beginner);
   if(o.cruise!==undefined)this.cruise=Boolean(o.cruise);
   if(o.track!==undefined){if(!Number.isInteger(o.track)||!tracks[o.track])throw Error('Unknown track');this.track=o.track;}
@@ -70,6 +74,7 @@ export class IceEngine {
  advance(controls={},ticks=2,low=false) {
   if(!Number.isInteger(ticks)||ticks<1||ticks>12)throw Error('Tick batches must contain 1–12 ticks');
   const c={...emptyControls(),...controls};
+  if(!this.player&&this.scheme===3&&!validHardware(c.hardware))throw Error("Invalid raw controller input");
   for(const [key,value] of Object.entries(emptyControls())) {
    if(typeof value==='number'&&(!Number.isFinite(c[key])||Math.abs(c[key])>10))throw Error('Invalid control '+key);
    if(typeof value==='boolean'&&typeof c[key]!=='boolean')throw Error('Invalid button '+key);
@@ -84,8 +89,8 @@ export class IceEngine {
     const s=this.state;
     const canPush=!s.fallen&&s.move===MOVE.None&&s.jump.phase===JUMP_PHASE.None&&!c.brake&&!c.spin&&!c.turn&&!c.twizzle&&!c.inaBauer&&!low;
     const repeat=canPush&&s.tick%90===0&&(controls.pushHeld||(this.cruise&&Math.hypot(s.vel.x,s.vel.y)<5.5));
-    const mapped=gameInput({...c,push:(i===0&&c.push)||repeat,toe:i===0&&c.toe},s,this.scheme,this.steering,low,this.params);
-    const input=this.beginner?this.coach.apply(mapped.input,s,this.params,i===0&&c.cycleJump,SIM_DT):mapped.input;
+    const mapped=gameInput({...c,push:(i===0&&c.push)||repeat,autoPush:repeat,toe:i===0&&c.toe},s,this.scheme,this.steering,low,this.params,this.controllerProfile);
+    const input=this.beginner?this.coach.apply(mapped.input,s,this.params,this.scheme!==3&&i===0&&c.cycleJump,SIM_DT):mapped.input;
     this.low=mapped.cantilever;
     this.tick(input);
    }
@@ -98,7 +103,7 @@ export class IceEngine {
  tick(input) {
   const events=[];
   step(this.state,input,this.params,SIM_DT,events,this.ice);
-  this.recorder.capture(input,this.params,this.state,events,['A','B','C'][this.scheme]);
+  this.recorder.capture(input,this.params,this.state,events,['A','B','C','D'][this.scheme]);
   this.meter.sample(this.state,input,events,SIM_DT);
   resolveRinkCollision(this.state,events);this.events.push(...events);
   this.practice.sample(this.state,this.low,SIM_DT);
@@ -131,11 +136,11 @@ export class IceEngine {
   // Turn's own kind, broken down the same way game/main.ts's free-skate HUD
   // already does — this bridge used to say the bare 'Turn' for all six.
   const turnLabel=s.turn.against?(s.turn.kind===TURN_KIND.Counter?'Counter':'Bracket')
-   :s.turn.kind===TURN_KIND.Mohawk?'Mohawk'
+   :s.turn.kind===TURN_KIND.Mohawk?'Mohawk':s.turn.kind===TURN_KIND.Choctaw?'Choctaw'
    :s.turn.kind===TURN_KIND.Loop?'Loop':s.turn.kind===TURN_KIND.Rocker?'Rocker'
    :'Three-turn';
   const move=s.fallen?'Recover · press Space / A':s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
-  return {state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+  return {controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    routine:r?{title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal,pcsScore:r.pcsScore}:null,
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},

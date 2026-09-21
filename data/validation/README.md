@@ -67,7 +67,8 @@ must still pass, but never count toward coverage ([gate §7.2](../../docs/fideli
 
 **`requires`** — model features the case needs. Current features: `jumps`, `moves`, `three-turn`,
 `mohawk`, `bracket`, `twizzle`, `spin`, `ina-bauer`, `crossover`, `loop`, `rocker-turn`, `counter`,
-`spiral`. A feature not in that list — for example `choctaw` — makes the verdict *unmodelled*.
+`spiral`, `choctaw`. A feature not in that list — for example `kerrigan-spiral` — makes the verdict
+*unmodelled*.
 
 **`skater`** — `null` for the reference skater (55 kg, 1.65 m), or `{ "mass_kg", "height_m" }`. Stats
 stay at the neutral 50 ([open-constants §12](../../docs/open-constants.md#12--outside-the-gate)).

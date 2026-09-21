@@ -159,6 +159,38 @@ test("holding turn through the cusp with the stick reversed rockers it: same foo
   assert.equal(r.s.fallen, false);
 });
 
+test("a mohawk's weight shift with a rocker's reversal is a choctaw: RFI onto LBO, the new foot on the other edge", () => {
+  // Weight to the left foot at the cusp, turn held through it, stick pushed
+  // against the entry curve. RFI curves left; LBO, skated backward, curves
+  // the other way — the lobe reverses, which no mohawk does.
+  const r = drive(moves(), 6.8, 1, 0.3, { mohawkAt: 244, each: (i) => (i >= 240 && i < 280 ? { turn: true, lean: -0.6 } : {}) });
+  assert.equal(r.turns.length, 1);
+  assert.equal(r.turns[0].value, TURN_KIND.Choctaw);
+  assert.equal(`${codeToString(r.s.moveDone.fromCode)}>${codeToString(r.s.moveDone.toCode)}`, "RFI>LBO");
+  assert.equal(r.s.flips, 0, "the lean frame never flipped: the kept tilt IS the new edge");
+  assert.ok(dot(r.s.vel, r.s.heading) < 0, "skating BACKWARD, as data/motion-primitives.json's forward: flip asks");
+  assert.ok(r.s.yawRate < 0, "the path now curves clockwise: the entry's anticlockwise lobe reversed");
+  assert.equal(r.s.fallen, false);
+  // data/motion-primitives.json: -0.55 m/s at 6 m/s; at this 6.8 entry, measured 0.558.
+  const lost = r.s.moveDone.speedLost;
+  assert.ok(lost > 0.5 && lost < 0.6, `choctaw cost ${lost.toFixed(3)} m/s`);
+});
+
+test("a choctaw needs all three: without the weight it is a rocker, without the reversal a mohawk", () => {
+  const reversed = (i: number) => (i >= 240 && i < 280 ? { turn: true, lean: -0.6 } : {});
+  assert.equal(drive(moves(), 6.8, 1, 0.3, { each: reversed }).turns[0].value, TURN_KIND.Rocker);
+  assert.equal(drive(moves(), 6.8, 1, 0.3, { mohawkAt: 244 }).turns[0].value, TURN_KIND.Mohawk);
+  // A bracket still ignores weight, reversed or not: a counter, on the entry foot.
+  const r = drive(moves(), 6.8, 1, 0.3, { against: true, mohawkAt: 244, each: (i) => (i >= 240 && i < 280 ? { bracket: true, lean: -0.6 } : {}) });
+  assert.equal(r.turns[0].value, TURN_KIND.Counter);
+});
+
+test("the choctaw replays tick for tick", () => {
+  const rec = new ReplayRecorder(moves(), 6.8);
+  drive(moves(), 6.8, 1, 0.3, { mohawkAt: 244, each: (i) => (i >= 240 && i < 280 ? { turn: true, lean: -0.6 } : {}) }, rec);
+  assert.equal(verifyReplay(parseReplay(rec.toJson())).divergence, null);
+});
+
 test("a counter is the same reversal from a bracket entry: against the curve, the same edge outcome, but costs more", () => {
   const r = drive(moves(), 6.8, 1, -0.3, { against: true, each: (i) => (i >= 240 && i < 280 ? { bracket: true, lean: 0.6 } : {}) });
   assert.equal(r.turns.length, 1);
@@ -245,6 +277,16 @@ test("weight at a bracket's cusp does not move it to the other foot: there is no
   assert.equal(stay.turns[0].value, TURN_KIND.Bracket);
   assert.equal(triedTransfer.turns[0].value, TURN_KIND.Bracket, "weight at the cusp is ignored while against");
   assert.equal(codeToString(triedTransfer.turns[0].newCode), codeToString(stay.turns[0].newCode));
+});
+
+test("a turn's rotation sense survives in s.turn.dir after it ends: what the step ladder's both-directions gate reads", () => {
+  // Nothing starts a new pivot after these, so the state still holds each run's only turn.
+  const rfoThree = drive(moves(), 6.8, 1, -0.3), lfoThree = drive(moves(), 6.8, 0, 0.3);
+  const rfoBracket = drive(moves(), 6.8, 1, -0.3, { against: true });
+  for (const r of [rfoThree, lfoThree, rfoBracket]) assert.equal(r.turns.length, 1);
+  assert.equal(lfoThree.s.turn.dir, 1, "LFO three-turn: anticlockwise");
+  assert.equal(rfoThree.s.turn.dir, -1, "its mirror, RFO: clockwise");
+  assert.equal(rfoBracket.s.turn.dir, 1, "a bracket fights the same curve, so it rotates the other way");
 });
 
 test("with the moves off, the bracket button does nothing at all", () => {

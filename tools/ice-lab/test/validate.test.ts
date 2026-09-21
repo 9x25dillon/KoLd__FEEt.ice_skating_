@@ -47,7 +47,7 @@ test("each verdict, for the reason the gate gives", () => {
     derivedHop("hop-wrong-on-purpose", 1.0),
     derivedHop("hop-bad-arithmetic", 0, 0.5),
     stub("a-stub"),
-    stub("a-choctaw", ["choctaw"]),
+    stub("a-kerrigan", ["kerrigan-spiral"]),
   ]);
   try {
     const r = validateCorpus(dir);
@@ -57,7 +57,7 @@ test("each verdict, for the reason the gate gives", () => {
     assert.equal(by["hop-bad-arithmetic"].verdict, "fail");
     assert.match(by["hop-bad-arithmetic"].reason ?? "", /tolerance/);
     assert.equal(by["a-stub"].verdict, "unsourced");
-    assert.equal(by["a-choctaw"].verdict, "unmodelled");
+    assert.equal(by["a-kerrigan"].verdict, "unmodelled");
     assert.deepEqual(r.summary, { cases: 5, pass: 1, fail: 2, unsourced: 1, unmodelled: 1 });
     assert.equal(r.gate.met, false);
   } finally { rmSync(dir, { recursive: true, force: true }); }

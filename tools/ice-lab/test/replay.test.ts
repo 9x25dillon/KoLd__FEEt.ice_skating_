@@ -183,7 +183,7 @@ test("malformed files fail before a player runs", () => {
     x => { x.initial.params.mass = "55"; }, x => { x.initial.params.mass = null; },
     x => { x.initial.params.maxLean = 10; }, x => { x.initial.speed = null; },
     x => { x.frames[0].input.lean = 2; }, x => { delete x.frames[0].input.leanSplit; },
-    x => { x.frames[0].input.brake = 1; }, x => { x.frames[0].scheme = "D"; },
+    x => { x.frames[0].input.brake = 1; }, x => { x.frames[0].scheme = "E"; },
     x => { x.frames[0].digest = -1; }, x => { x.frames[0].digest = 0.5; },
     x => { x.frames[0].params = {}; }, x => { x.script = "anything"; },
   ];
