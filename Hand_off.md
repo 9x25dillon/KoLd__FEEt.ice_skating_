@@ -34,6 +34,10 @@ going" — items 9, 11 and 12 need the operator, so the session went on to item 
   values; no data for a combined GOE); jump sequences not recognised. Godot's saved-Composer check now
   also accepts `spiral` (it silently dropped it). Not yet seen live from real play: a scripted keyboard
   run could not land one (Cruise's pushes); tests and the Godot bridge drive it from real physics.
+- **Protocol sheet, new**: `sim/sheet.ts` — career programs group jumps into elements (combinations as
+  one), apply bible §2.7's repetition rule (`*`, zero), charge the data's fall deductions, and print
+  TES + PCS − deductions = segment total on both result screens. Medals unchanged (fall-based), XP
+  formula unchanged. PR #17 (combinations) was merged by the operator (`fb8b912`).
 - **Considered and not done**: an eleventh step type would have to be invented (the toe pick does
   nothing outside a jump), and the native C++ track is pinned to `/5` against `/21` — re-pin or not is
   the operator's architecture call.
