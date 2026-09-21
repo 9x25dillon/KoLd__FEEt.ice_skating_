@@ -26,7 +26,10 @@ export const ACTIONS = [
   { id: "ina", name: "Ina Bauer", key: "i", button: 2, modified: true },
   { id: "spiral", name: "Spiral", key: "o", button: 3, modified: true },
   { id: "low", name: "Cantilever", key: "u", button: 0, modified: true },
+  { id: "choctaw", name: "Choctaw", key: "g", button: 15, modified: true },
 ] as const;
+/** Actions added after profile version 1 shipped: a saved profile without one takes its default slot. */
+const LATER_ACTIONS: readonly string[] = ["choctaw"];
 export type Action = typeof ACTIONS[number]["id"];
 export interface Binding { button: number; modified: boolean }
 export interface ControllerProfile {
@@ -59,8 +62,10 @@ export function parseControllerProfile(value: unknown): ControllerProfile {
   if (![10, 11].includes(p.modifier)) throw Error("Choose L3 or R3 as the modifier");
   const seen = new Set<string>();
   const bindings = {} as Record<Action, Binding>;
+  // Later actions come last in ACTIONS, so every older binding is already in
+  // `seen` when a missing one falls back — a taken default is still an error.
   for (const a of ACTIONS) {
-    const b = p.bindings?.[a.id];
+    const b = p.bindings?.[a.id] ?? (LATER_ACTIONS.includes(a.id) ? { button: a.button, modified: a.modified } : undefined);
     if (!b || !BINDABLE_BUTTONS.includes(b.button) || b.button === p.modifier || typeof b.modified !== "boolean") throw Error(`Invalid binding for ${a.name}`);
     const key = `${b.button}:${b.modified}`;
     if (seen.has(key)) throw Error(`Two actions share ${b.modified ? "modifier + " : ""}${BUTTON_NAMES[b.button]}`);
@@ -103,7 +108,7 @@ export interface FullState {
 }
 export type GameControlState = SchemeState & { full?: FullState };
 export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks: new Map(), feedbackUntil: -1, turn: null, turnStarted: false, foot: 1, request: "Glide", left: { x: 0, y: 0 }, right: { x: 0, y: 0 } });
-const TURNS: Action[] = ["three", "mohawk", "bracket", "loop", "rocker", "counter"];
+const TURNS: Action[] = ["three", "mohawk", "bracket", "loop", "rocker", "counter", "choctaw"];
 
 export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: Params, profile: ControllerProfile) {
   const f = st.full ??= newFullState();
@@ -161,17 +166,17 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     const blade = s.blade[s.supportFoot];
     const curve = Math.sign(blade.tilt) * Math.sign(blade.longSpeed);
     if (requested === "loop") input.lean = curve * Math.abs(input.lean);
-    if (requested === "rocker" || requested === "counter") input.lean = -curve * Math.max(p.rockerCounterStick, Math.abs(input.lean));
+    if (requested === "rocker" || requested === "counter" || requested === "choctaw") input.lean = -curve * Math.max(p.rockerCounterStick, Math.abs(input.lean));
   } else if (f.turn && s.move === MOVE.Turn) {
     f.turnStarted = true;
     const kind = f.turn;
-    input.weight = kind === "mohawk" ? 1 - s.turn.foot : s.turn.foot;
+    input.weight = kind === "mohawk" || kind === "choctaw" ? 1 - s.turn.foot : s.turn.foot;
     f.foot = input.weight;
     if (s.turn.cusps === 0) {
-      input.turn = kind === "loop" || kind === "rocker";
+      input.turn = kind === "loop" || kind === "rocker" || kind === "choctaw";
       input.bracket = kind === "counter";
       const curve = s.turn.against ? -s.turn.dir : s.turn.dir;
-      if (kind === "rocker" || kind === "counter") input.lean = -curve * Math.max(p.rockerCounterStick, Math.abs(input.lean));
+      if (kind === "rocker" || kind === "counter" || kind === "choctaw") input.lean = -curve * Math.max(p.rockerCounterStick, Math.abs(input.lean));
       else if (kind === "loop") input.lean = curve * Math.abs(input.lean);
     }
   } else if (f.turn) { f.feedbackUntil = s.tick + 144; f.turn = null; }

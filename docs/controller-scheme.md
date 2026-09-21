@@ -23,6 +23,7 @@ Button names use Xbox labels; the workshop also shows PlayStation equivalents.
 | Loop turn | D-pad up | J |
 | Rocker turn | D-pad right | K |
 | Counter | D-pad left | L |
+| Choctaw | Hold L3, then D-pad right | G |
 | Twizzle | Hold X | Hold Z |
 | Spin | Hold Y | Hold Y |
 | Sit / camel during a spin | RT / right stick forward | Shift / W |
@@ -38,8 +39,8 @@ The bank is latched when a move button goes down, so releasing the modifier firs
 does not trigger another move. Release the move button before changing banks.
 
 Turns can be tapped or held. The mapping performs the existing input gesture for
-the requested turn: entry pulse, held pivot, weight transfer for a mohawk, or lean
-reversal for a rocker/counter. It emits ordinary `SkatingInput` values and never
+the requested turn: entry pulse, held pivot, weight transfer for a mohawk, lean
+reversal for a rocker/counter, or both for a choctaw. It emits ordinary `SkatingInput` values and never
 writes a move, blade, score, or skater state. Speed, an established edge, and the
 solver's entry conditions still decide whether a turn starts. A failed entry is
 not queued; establish the edge and press again. Continuous moves end on release.
@@ -47,7 +48,7 @@ not queued; establish the edge and press again. Continuous moves end on release.
 Jump type still comes from takeoff foot, edge, direction and toe assistance.
 Full repertoire does not map J/D-pad up to the Beginner shortcut: those controls
 request a loop turn. The game's on-screen Beginner shortcut remains available.
-Choctaw and unimplemented pose variants require further mechanics; this scheme
+Unimplemented pose variants require further mechanics; this scheme
 covers the implemented repertoire, not every move in the design documents.
 
 ## Controller workshop
@@ -102,7 +103,7 @@ godot4 --headless --path games/ice-run-godot -- --smoke-test --full-controls
 ```
 
 First-time Godot setup still requires the full preparation command to generate audio.
-Replay frames use scheme label **D**. The solver contract remains `ice-lab-f64/20`:
+Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/21`:
 only accepted mapping metadata expanded, and the pinned fixture is unchanged. Older
 builds reject D-labelled clips; current builds continue accepting A/B/C clips.
 

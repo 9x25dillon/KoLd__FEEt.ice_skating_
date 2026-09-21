@@ -27,12 +27,12 @@ function rig(speed = 6.8) {
   skate(240); return { s, st, h, tick, skate, hold, recorder, profile };
 }
 test("direct turn buttons produce distinct physical turns from short taps, with D replay parity", () => {
-  for (const [action, kind] of Object.entries({ three: TURN_KIND.ThreeTurn, mohawk: TURN_KIND.Mohawk, bracket: TURN_KIND.Bracket, loop: TURN_KIND.Loop, rocker: TURN_KIND.Rocker, counter: TURN_KIND.Counter })) {
+  for (const [action, kind] of Object.entries({ three: TURN_KIND.ThreeTurn, mohawk: TURN_KIND.Mohawk, bracket: TURN_KIND.Bracket, loop: TURN_KIND.Loop, rocker: TURN_KIND.Rocker, counter: TURN_KIND.Counter, choctaw: TURN_KIND.Choctaw })) {
     const r = rig(); assert.equal(r.s.fallen, false); const foot = r.s.supportFoot;
     r.hold(action as Action); r.tick(); assert.equal(r.s.move, MOVE.Turn, action);
     r.hold(action as Action, false); r.skate(110);
     assert.equal(r.s.moveDone.detail, kind, action);
-    assert.equal(r.s.supportFoot, action === "mohawk" ? 1 - foot : foot, action);
+    assert.equal(r.s.supportFoot, action === "mohawk" || action === "choctaw" ? 1 - foot : foot, action);
     assert.equal(r.s.fallen, false, `${action} exit`);
     assert.equal(verifyReplay(parseReplay(r.recorder.toJson())).divergence, null, action);
   }
@@ -61,6 +61,12 @@ test("profiles reject conflicts, reserved buttons and invalid numbers; radial st
   for (const deadzone of [NaN, Infinity, -0.1, 0.9]) assert.throws(() => parseControllerProfile({ ...p, deadzone }));
   assert.throws(() => parseControllerProfile({ ...p, bindings: { ...p.bindings, spin: p.bindings.push } }));
   assert.throws(() => parseControllerProfile({ ...p, bindings: { ...p.bindings, spin: { button: 7, modified: false } } }));
+  // A profile saved before the Choctaw binding existed keeps its tuning and gains the default slot.
+  const { choctaw: _added, ...older } = p.bindings;
+  const upgraded = parseControllerProfile({ ...p, leanGain: 0.5, bindings: older });
+  assert.equal(upgraded.leanGain, 0.5); assert.deepEqual(upgraded.bindings.choctaw, p.bindings.choctaw);
+  // ...unless that slot was since given to something else: a conflict, as ever.
+  assert.throws(() => parseControllerProfile({ ...p, bindings: { ...older, rocker: p.bindings.choctaw } }));
   assert.deepEqual(shapeStick(0.1, 0.1, p), { x: 0, y: 0 }); const c = shapeStick(1, 1, p); assert.ok(Math.hypot(c.x, c.y) <= 1.00000001);
 });
 test("releasing a modifier first keeps a held glide in its original bank", () => {
@@ -74,7 +80,7 @@ test("holding Push through a fall never auto-recovers; a new press does", () => 
   r.hold("push",false);r.tick();r.hold("push");r.tick();assert.equal(r.s.fallen,false);
 });
 test("keyboard fallback reaches every direct turn on either travel direction", () => {
-  for(const speed of [6.8,-6.8]) for(const [key,kind] of [["b",0],["h",1],["n",2],["j",3],["k",4],["l",5]] as const){
+  for(const speed of [6.8,-6.8]) for(const [key,kind] of [["b",0],["h",1],["n",2],["j",3],["k",4],["l",5],["g",6]] as const){
     const r=rig(speed);r.h.connected=false;r.h.axes.fill(0);r.h.keys=['a'];r.skate(120);
     r.h.keys.push(key);r.tick();r.h.keys=['a'];r.skate(110);
     assert.equal(r.s.moveDone.detail,kind,`${key} at ${speed}`);

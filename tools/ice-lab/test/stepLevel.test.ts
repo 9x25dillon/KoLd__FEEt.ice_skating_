@@ -1,5 +1,5 @@
 // A step sequence's ISU level, from the variety ladder sim/stepLevel.ts can
-// actually score. See that file's own header for why nine rig-observable
+// actually score. See that file's own header for why ten rig-observable
 // types reach grade 3, never grade 4 — this file does not re-litigate that,
 // only tests what remains, including grade 4's rotational-direction gate.
 
@@ -52,41 +52,41 @@ test("five distinct types on one foot never clears grade 1: both_feet_used is a 
   assert.equal(scoreStepLevel(events, T).level, 0);
 });
 
-test("all nine of this rig's types, spread over both feet, five difficult: grade 3, exactly what nine types can reach", () => {
+test("all ten of this rig's types, spread over both feet, five difficult: grade 3, exactly what ten types can reach", () => {
   const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left));
   const r = scoreStepLevel(events, T);
-  assert.equal(r.distinctTypes.length, 9);
-  assert.equal(r.level, 3, "nine distinct types, five difficult spread over both feet: grade 3's own requirement, met");
+  assert.equal(r.distinctTypes.length, 10);
+  assert.equal(r.level, 3, "ten distinct types, five difficult spread over both feet: grade 3's own requirement, met");
 });
 
-test("grade 4 stays out of reach: nine types and five difficult, but grade 4 needs eleven", () => {
+test("grade 4 stays out of reach: ten types and five difficult, but grade 4 needs eleven", () => {
   const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left));
   const r = scoreStepLevel(events, T);
   assert.ok(r.level < 4, `grade 4 needs 11 distinct types; this rig has ${r.distinctTypes.length} and reached level ${r.level}`);
 });
 
-test("difficult types on one foot only caps at grade 2, even with nine total types and both feet used overall: difficultBothFeet is a real gate", () => {
+test("difficult types on one foot only caps at grade 2, even with ten total types and both feet used overall: difficultBothFeet is a real gate", () => {
   const difficult = new Set<number>([STEP_TYPE.Bracket, STEP_TYPE.Twizzle, STEP_TYPE.Loop, STEP_TYPE.Rocker, STEP_TYPE.Counter]);
   const events = Object.values(STEP_TYPE).map((ty) =>
     ev(ty as number, difficult.has(ty) ? FOOT.Right : ty % 2 === 0 ? FOOT.Right : FOOT.Left));
   const r = scoreStepLevel(events, T);
-  assert.equal(r.distinctTypes.length, 9);
+  assert.equal(r.distinctTypes.length, 10);
   assert.equal(r.bothFeet, true, "the non-difficult types alone already use both feet");
   assert.equal(r.difficultBothFeet, false, "every difficult type is on the right foot only");
   assert.equal(r.level, 2, "grade 3 needs difficult_turns_on_both_feet; one foot only holds it at grade 2");
 });
 
 // Grade 4 is still out of reach on the type count, so these two use a
-// hypothetical ladder at this rig's own nine types to isolate the new gate.
-const T9: StepFeatureThresholds = {
-  grades: [...T.grades.slice(0, 3), { grade: 4, distinctTypes: 9, distinctDifficult: 5, bothFeet: true, difficultBothFeet: true, difficultBothDirections: true }],
+// hypothetical ladder at this rig's own ten types to isolate the new gate.
+const T10: StepFeatureThresholds = {
+  grades: [...T.grades.slice(0, 3), { grade: 4, distinctTypes: 10, distinctDifficult: 5, bothFeet: true, difficultBothFeet: true, difficultBothDirections: true }],
 };
 const DIFFICULT_TYPES = new Set<number>([STEP_TYPE.Bracket, STEP_TYPE.Twizzle, STEP_TYPE.Loop, STEP_TYPE.Rocker, STEP_TYPE.Counter]);
 
 test("difficult turns all rotating one way hold grade 4 back: difficult_turns_in_both_rotational_directions is a real gate", () => {
   const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left, 0,
     DIFFICULT_TYPES.has(ty) ? 1 : 0));
-  const r = scoreStepLevel(events, T9);
+  const r = scoreStepLevel(events, T10);
   assert.equal(r.difficultBothDirections, false, "every difficult turn rotated anticlockwise");
   assert.equal(r.level, 3);
 });
@@ -94,12 +94,12 @@ test("difficult turns all rotating one way hold grade 4 back: difficult_turns_in
 test("difficult turns in both rotational directions clear it; only a difficult turn's own direction counts", () => {
   const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left, 0,
     ty === STEP_TYPE.Rocker ? -1 : DIFFICULT_TYPES.has(ty) ? 1 : 0));
-  const r = scoreStepLevel(events, T9);
+  const r = scoreStepLevel(events, T10);
   assert.equal(r.difficultBothDirections, true);
   assert.equal(r.level, 4);
   // A clockwise three-turn (not difficult) does not stand in for a clockwise difficult one.
   const simpleOnly = events.map((e) => e.type === STEP_TYPE.Rocker ? { ...e, dir: 1 } : e.type === STEP_TYPE.ThreeTurn ? { ...e, dir: -1 } : e);
-  assert.equal(scoreStepLevel(simpleOnly, T9).difficultBothDirections, false);
+  assert.equal(scoreStepLevel(simpleOnly, T10).difficultBothDirections, false);
 });
 
 test("StepSequenceTracker.record keeps a turn's direction, and defaults to none", () => {

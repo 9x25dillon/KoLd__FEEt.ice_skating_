@@ -296,6 +296,13 @@ export interface Params {
    */
   mohawkScrub: number;
   /**
+   * A choctaw's second half, on the new foot, as a fraction of a three-turn's.
+   * The data has a choctaw at -0.55 m/s: the placed foot lands on the other
+   * edge character and the arc reverses under it, so it scrapes more than a
+   * mohawk's landing does, and more than the pivot itself.
+   */
+  choctawScrub: number;
+  /**
    * A bracket's whole pivot, against a three-turn's, at the same entry speed
    * and rate. No motion-capture entry exists for it (data/motion-primitives.json
    * has only three-turn and mohawk) — authored from the bible's own difficulty
@@ -704,6 +711,7 @@ export const DEFAULT_PARAMS: Params = {
   turnTime: 0.30,
   muTurn: 0.20,              // three-turn -0.45 m/s at 6 m/s with glide and drag, data/motion-primitives.json
   mohawkScrub: 0.78,         // mohawk -0.40 m/s, the same file
+  choctawScrub: 1.65,        // choctaw -0.55 m/s at 6 m/s, the same file (measured 0.548)
   againstTurnScrub: 1.35,    // authored, not measured; see the field comment
   turnMinSpeed: 1.0,
   turnCarry: 0.11,           // a three-turn entry worth about a third of a revolution at a full whip
@@ -866,6 +874,7 @@ export function validate(p: Params): string[] {
   if (![0, 1].includes(p.movesMode)) errs.push("movesMode is 0 (the carve only) or 1 (the moves)");
   if (p.turnTime < 4 * SIM_DT) errs.push("turnTime is under four ticks: a pivot needs a cusp to flip at");
   if (p.turnCarry > 1) errs.push("turnCarry is a share of the pivot rate, 0..1");
+  if (!(p.choctawScrub > 0)) errs.push("choctawScrub must be positive");
   if (p.againstTurnScrub < 1) errs.push("againstTurnScrub is against a three-turn's cost, and fighting the curve cannot be cheaper");
   if (p.turnCarryTime <= 0) errs.push("turnCarryTime must be positive");
   if (p.rockerCounterStick <= 0 || p.rockerCounterStick > 1) errs.push("rockerCounterStick is a stick threshold, in (0, 1]");

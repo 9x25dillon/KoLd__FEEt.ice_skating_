@@ -191,7 +191,8 @@ export class Choreography {
             : s.moveDone.detail === TURN_KIND.Bracket ? STEP_TYPE.Bracket
               : s.moveDone.detail === TURN_KIND.Loop ? STEP_TYPE.Loop
                 : s.moveDone.detail === TURN_KIND.Rocker ? STEP_TYPE.Rocker
-                  : s.moveDone.detail === TURN_KIND.Counter ? STEP_TYPE.Counter : null)
+                  : s.moveDone.detail === TURN_KIND.Counter ? STEP_TYPE.Counter
+                    : s.moveDone.detail === TURN_KIND.Choctaw ? STEP_TYPE.Choctaw : null)
         : s.moveDone.kind === MOVE.Twizzle ? STEP_TYPE.Twizzle : null;
       // s.turn still holds the pivot that just finished — a new one cannot
       // begin until the tick after — so its dir is this turn's rotation sense.

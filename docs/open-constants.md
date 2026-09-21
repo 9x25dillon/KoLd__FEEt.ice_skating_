@@ -534,6 +534,14 @@ project design data**, so every level is L2 at best.
   - Fixed by: `turn_speed_loss_ms` for mohawks against three-turns on the same skater
   - Source: −0.40 m/s, the same file
 
+- **`choctawScrub`** — a choctaw's second half, on the new foot, as a share of a three-turn's scrape
+  - Value: `1.65`
+  - Used: `moves.ts` `turnPivot`
+  - Level: L3
+  - Range: none recorded
+  - Fixed by: `turn_speed_loss_ms` for choctaws against mohawks on the same skater
+  - Source: −0.55 m/s at 6 m/s, the same file (measured 0.548)
+
 - **`turnMinSpeed`** — below this there is no edge to turn on
   - Value: `1.0` m/s
   - Used: `moves.ts` `turnStart`

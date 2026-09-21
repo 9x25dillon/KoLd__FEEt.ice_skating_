@@ -724,7 +724,7 @@ export class Renderer {
     if (s.move === MOVE.Turn) {
       const T = s.turn;
       out.push([`TURN  ${codeToString(T.fromCode)} ${T.dir > 0 ? "↺" : "↻"} ${(T.swept * 180 / Math.PI).toFixed(0)}°`
-        + `${T.cusps > 0 ? `  ${TURN_NAME[T.kind]}` : "  — weight to the other foot for a mohawk"}`, GOLD]);
+        + `${T.cusps > 0 ? `  ${TURN_NAME[T.kind]}` : "  — weight to the other foot for a mohawk, and hold it reversed for a choctaw"}`, GOLD]);
     } else if (s.move === MOVE.Spin) {
       const S = s.spin;
       out.push([`SPIN  ${SPIN_POSITION_NAME[S.position]} ${S.dir > 0 ? "↺" : "↻"}  ${(S.omega / (2 * Math.PI)).toFixed(1)} rev/s`

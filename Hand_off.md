@@ -1,6 +1,28 @@
 # Hand-off
 
-## Current checkpoint — 2026-09-21: Full repertoire controls and controller workshop
+## Current checkpoint — 2026-09-21, sixteenth session: controls pushed, grade-4 gate, the choctaw
+
+On `ue-replay-01-foundation`, pushed (`b1a42fd` controls, `e4fa7de` grade-4 gate, then the choctaw).
+Not merged to `main`. Operator's asks: "keep building", "commit and start item 10", "push it and keep
+going" — items 9, 11 and 12 need the operator, so the session went on to item 13.
+
+- **Queue item 10 done** — see the queue.
+- **Queue item 13, the choctaw, done.** Mohawk foot change with `flipFrame` skipped at the cusp: the
+  kept tilt on the new foot is the opposite edge, travel reverses, the lobe reverses (RFI>LBO). Gesture
+  = mohawk weight shift + rocker reversal (`turn` held through the cusp, stick against the entry
+  curve); Full repertoire binds it to L3 + D-pad right / G, and a saved v1 controller profile without
+  the new binding is upgraded, not discarded. `choctawScrub` 1.65 (−0.55 m/s at 6 m/s, data). Replay
+  **`/21`** — the gesture was a mohawk under `/20`; fixture re-recorded, digests unchanged. Ten step
+  types now; grade 4 needs one STEPS mechanic more. Full account: `tools/ice-lab/README.md`, "The
+  choctaw, and grade 4's rotational gate".
+- **The replay-bump recipe is a script now**: `node tools/ice-lab/replay/rebase-fixture.ts [rev]`.
+- **Verified**: 483 tests (468 browser/sim + 15 Godot bridge), typecheck clean, fidelity report
+  regenerated (solver line only), live Playwright run in Full repertoire showed CHOCTAW then BACKWARD
+  GLIDE with no page errors, both Godot `--smoke-test` paths passed.
+- **Still the operator's**: item 9 (real pad — now including the choctaw gesture), item 11 (career
+  routine content), item 12 (watch a beginner).
+
+## Previous checkpoint — 2026-09-21: Full repertoire controls and controller workshop
 
 Implemented locally on `ue-replay-01-foundation`; not committed or published in this
 session. The user's explicit next task was “full controller scheme and tuning rig.”
@@ -585,7 +607,7 @@ hold the document set together, and the things most likely to trip you up.
     operator ever wants to spend real design time on it" (the old queue's own wording) — they do. Queue
     position is unchanged (still item 13, still behind the operator's own stated order); this note only
     upgrades the decision from conditional to confirmed so a future session does not have to re-ask.
-5. **Choctaw is the one real remaining "difficult-turn-adjacent" gap.** It is NOT the rocker/counter
+5. **(Closed 2026-09-21 — the choctaw is built; see the current checkpoint.)** Choctaw was the one real remaining "difficult-turn-adjacent" gap. It is NOT the rocker/counter
    fix applied elsewhere — rocker/counter change nothing about which foot lands the exit; choctaw needs
    a genuine edge-character change on a *new* foot, which `sim/types.ts`'s `TURN_KIND` comment still
    correctly describes as unbuilt. Do not assume this session's own rocker/counter insight
@@ -691,10 +713,9 @@ own; item 5 is the fifteenth's:
     forward since the thirteenth session and now applying to four elements instead of one.
 12. **`BEGINNER_PARAMS`'s blanket inheritance** (§0 item 7) — still open, still needs the operator
     watching a fresh player before assuming it is fine either way.
-13. **Choctaw — confirmed wanted, eventually** (§0 item 0.5); still not next, position unchanged. A
-    genuinely different, harder axis than rocker/counter turned out to be (§0 item 5); do not assume it
-    is "one more special case" the way rocker/counter were without checking first, the same discipline
-    that made rocker/counter tractable in the first place.
+13. ~~**Choctaw.**~~ **Done**, 2026-09-21 — see the current checkpoint. It turned out to be one more
+    special case after all, but not rocker/counter's: the missing mechanism was *not* flipping the lean
+    frame on a foot change, which the data's own `post` for a choctaw spells out.
 
 **The native track, in its report's order** (unchanged, still not touched): a strict native JSON
 importer from `native/reference/wire-manifest.json`; transcribe `createState`, the blade and

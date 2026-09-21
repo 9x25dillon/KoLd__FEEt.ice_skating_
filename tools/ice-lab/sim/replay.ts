@@ -171,7 +171,15 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       only `initial.params` grew the three new keys. A clip that has
 //       flowMode 1 and holds a real edge will diverge under /20 and must be
 //       re-recorded.
-export const REPLAY_SOLVER = "ice-lab-f64/20";
+//   /21 The choctaw (TURN_KIND.Choctaw, sim/moves.ts's turnPivot): Params
+//       gained choctawScrub, no SkaterState field. It changes what an
+//       existing input means: `turn` held through the cusp with the stick
+//       reversed AND the weight on the other foot was a mohawk under /20 and
+//       is a choctaw now. The fixture never does that — re-recorded by
+//       replay/rebase-fixture.ts with every digest unchanged; only
+//       `initial.params` grew the one key. A clip that made that exact
+//       gesture diverges under /21 and must be re-recorded.
+export const REPLAY_SOLVER = "ice-lab-f64/21";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
