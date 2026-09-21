@@ -25,8 +25,18 @@ going" — items 9, 11 and 12 need the operator, so the session went on to item 
   Settings → Costume picks one (saved). Godot's default Violet now wears the browser's Violet colours
   rather than the old authored midnight plum. Not honoured: `bun` (hair is one joined mesh). Verified
   by `--capture --costume=0..2` screenshots and a smoke-test surface count (negative-checked).
-- **PR #16** (items 8, 10, 13) is open with CI green; the merge was blocked by the session's permission
-  classifier, not by review — the operator merges it.
+- **PR #16** (items 8, 10, 13, Godot costumes) merged to `main` by the operator (`f56177e`).
+- **Jump combinations, new, after the queue ran out of solo items**: `sim/combo.ts` recognises a jump
+  taken straight off the last one's landing edge (data-defined: takeoff = `landing_edge`, link broken
+  by fall/step-out/foot change/move/stroke/going forward; no time limit). Physics already allowed it —
+  3T+2T, 3T+2Lo, three-jump chains. Browser toast, Godot `snapshot().combo` + HUD, a `combo` element
+  for the Composer (fixed routines untouched, item 11). Scoring unchanged (per-jump already sums base
+  values; no data for a combined GOE); jump sequences not recognised. Godot's saved-Composer check now
+  also accepts `spiral` (it silently dropped it). Not yet seen live from real play: a scripted keyboard
+  run could not land one (Cruise's pushes); tests and the Godot bridge drive it from real physics.
+- **Considered and not done**: an eleventh step type would have to be invented (the toe pick does
+  nothing outside a jump), and the native C++ track is pinned to `/5` against `/21` — re-pin or not is
+  the operator's architecture call.
 - **Still the operator's**: item 9 (real pad — now including the choctaw gesture), item 11 (career
   routine content), item 12 (watch a beginner).
 

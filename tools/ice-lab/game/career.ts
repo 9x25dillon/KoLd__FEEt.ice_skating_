@@ -5,6 +5,7 @@ import { SIM_HZ } from "../sim/params.ts";
 import { makeProfile, train, xpToRaise, STAT_NAMES, overall, TIERS } from "../sim/profile.ts";
 import type { SkaterProfile, StatName } from "../sim/profile.ts";
 import { scoreJump } from "../sim/score.ts";
+import { ComboTracker } from "../sim/combo.ts";
 import type { ScoreTables } from "../sim/score.ts";
 import { SpinLevelTracker, scoreSpinLevel } from "../sim/spinLevel.ts";
 import type { SpinFeatureThresholds } from "../sim/spinLevel.ts";
@@ -23,6 +24,7 @@ export const ELEMENTS = {
   spin: { title: "Spin phrase", hint: "Carve at speed, then hold Y for one new full rotation. Release to exit.", duration: 0 },
   step: { title: "Step sequence", hint: "Chain different footwork: three-turns, mohawks, brackets, loops and rockers (hold B through the cusp), counters (hold N), twizzles, crossovers, edge changes. Five distinct types, both feet, inside a rolling stretch of skating.", duration: 2 },
   spiral: { title: "Spiral", hint: "Carve with weight fully on one foot, then hold I / LB+RB. The free leg extends; works backward too. Hold for 2 seconds.", duration: 2 },
+  combo: { title: "Jump combination", hint: "Land a jump clean, stay on that back outside edge, and load again: a toe loop (tap the toe) or a loop. No push, turn or foot change between.", duration: 0 },
   pose: { title: "Closing pose", hint: "Glide above 2 m/s and hold U / D-pad down for 2 seconds.", duration: 2 },
 } as const;
 /** Seconds a step sequence's own variety must show up within — a real one spans a stretch of the program, not an instant. */
@@ -98,6 +100,7 @@ export class Choreography {
   private wasSpinning = false;
   private stepThresholds?: StepFeatureThresholds;
   private stepTracker = new StepSequenceTracker();
+  private comboTracker = new ComboTracker();
   private stepWindowTicks = Math.round(STEP_WINDOW_SECONDS * SIM_HZ);
   private lastMoveDoneTick = -1;
   private wasCrossover = false;
@@ -159,6 +162,9 @@ export class Choreography {
     const freshLanding = s.landed.tick >= 0 && s.landed.tick !== this.lastLanding;
     this.lastLanding = s.landed.tick;
     if (freshLanding && this.tables) this.technicalScore += scoreJump(this.tables, s.landed)?.score ?? 0;
+    // sim/combo.ts: scoring is untouched (each jump already scored above);
+    // this only recognises the element, the tick a landing links to the last.
+    const combined = this.comboTracker.sample(s) !== "";
     if (s.fallen && !this.wasFallen) this.falls++;
     this.wasFallen = s.fallen;
     // Every spin in the routine, not only one in the "spin" slot — a program
@@ -225,6 +231,7 @@ export class Choreography {
       spin: this.spinProgress >= Math.PI * 2,
       step: (stepWindow?.level ?? 0) >= 1,
       spiral: s.move === MOVE.Spiral,
+      combo: combined,
       pose: grounded && s.move === MOVE.None && low && speed >= 2,
     };
     this.held = active[this.current] ? this.held + dt : 0;

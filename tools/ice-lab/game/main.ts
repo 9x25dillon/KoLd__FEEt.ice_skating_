@@ -27,6 +27,7 @@ import type { EdgeEvent } from "../sim/types.ts";
 import { SAMPLE_PROFILES, applyProfile, TIERS } from "../sim/profile.ts";
 import { ReplayRecorder, ReplayPlayer, parseReplay, MAX_REPLAY_BYTES } from "../sim/replay.ts";
 import { loadTables, scoreJump } from "../sim/score.ts";
+import { ComboTracker } from "../sim/combo.ts";
 import type { ScoreTables } from "../sim/score.ts";
 import { SpinLevelTracker, loadSpinFeatureThresholds, scoreSpinLevel } from "../sim/spinLevel.ts";
 import type { SpinFeatureThresholds } from "../sim/spinLevel.ts";
@@ -122,6 +123,9 @@ let best = 0, accumulator = 0, last = 0, flash = 0;
 /** Foot-change mid-spin (sim/moves.ts spinTick), never surfaced anywhere before: a toast the moment
  *  SpinState.changeCompletedTick advances, the same decaying-flash idiom `flash` already uses. */
 let footChangeFlash = 0, lastChangeCompletedTick = -1;
+/** sim/combo.ts: a jump taken straight off the last one's landing edge is a combination. */
+const combo = new ComboTracker();
+let comboFlash = 0, comboLabel = "";
 let width = 0, height = 0;
 const trail: Array<Array<{ x: number; y: number; contact: boolean }>> = [[], []];
 function traceBlades() {
@@ -153,6 +157,7 @@ function start() {
   renderRoutine();
   spinTracker.reset(); lastSpinLabel = ""; wasSpinning = false;
   lastChangeCompletedTick = -1; footChangeFlash = 0;
+  combo.reset(); comboFlash = 0; comboLabel = "";
   trail.forEach(t => t.length = 0); accumulator = 0; flash = 0; pendingPush = false; mode = "playing";
   pendingToe = false; cantilever = false; elapsedSkate = 0;
   practice = new Practice(); scene.reset(skater);
@@ -350,7 +355,7 @@ function draw(_now: number) {
   el("stance").textContent = `${CONTROL_NAMES[scheme]} · ${codeToString(skater.blade[0].code)} / ${codeToString(skater.blade[1].code)} · ${Math.hypot(skater.vel.x, skater.vel.y).toFixed(1)} m/s`;
   el("landing").textContent = skater.landed.tick < 0 ? "" : `Last jump: ${JUMP_CODE[skater.landed.kind] ?? "hop"} · ${skater.landed.turned.toFixed(2)} rev · ${skater.landed.fall ? "fall" : skater.landed.stepOut ? "step-out" : "landed"}`;
   el("spin-level").textContent = lastSpinLabel;
-  el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : footChangeFlash > 0 ? "Foot change!" : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
+  el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : footChangeFlash > 0 ? "Foot change!" : comboFlash > 0 ? `Combination ${comboLabel}!` : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
   drawCareer();
 }
 function frame(now: number) {
@@ -406,6 +411,8 @@ function frame(now: number) {
         lastChangeCompletedTick = skater.spin.changeCompletedTick;
         footChangeFlash = 1.2;
       }
+      const linked = combo.sample(skater);
+      if (linked) { comboLabel = linked; comboFlash = 1.8; }
       // sim/spinLevel.ts: sample every tick a spin is live, score the moment
       // it ends (fallen or released — either way, s.move leaves MOVE.Spin).
       const spinning = skater.move === MOVE.Spin;
@@ -444,6 +451,7 @@ function frame(now: number) {
       }
       flash = Math.max(0, flash - SIM_DT);
       footChangeFlash = Math.max(0, footChangeFlash - SIM_DT);
+      comboFlash = Math.max(0, comboFlash - SIM_DT);
       traceBlades();
       accumulator -= SIM_DT;
       if (!freeSkate && run.done) finish();

@@ -19,6 +19,7 @@ import {Practice,LESSONS} from '../runtime/game/practice.js';
 import {IceRun,LIGHTS} from '../runtime/game/run.js';
 import {RookieCourse,ROOKIE_GATES} from '../runtime/game/rookie.js';
 import {SKINS} from '../runtime/game/appearance.js';
+import {ComboTracker} from '../runtime/sim/combo.js';
 import {Playground,SNOWFLAKES,TARGETS} from '../runtime/game/playground.js';
 import {resolveRinkCollision,RINK} from '../runtime/game/rink.js';
 import {readFileSync} from 'node:fs';
@@ -60,7 +61,7 @@ export class IceEngine {
   this.spinTracker=new SpinLevelTracker();this.wasSpinning=false;this.spinLevel=-1;
   // sim/moves.ts spinTick's foot change: never surfaced here before, the
   // same decaying-flash idiom game/main.ts's own `flash` uses.
-  this.lastChangeCompletedTick=-1;this.footChangeFlash=0;
+  this.lastChangeCompletedTick=-1;this.footChangeFlash=0;this.combo=new ComboTracker();this.comboFlash=0;this.comboLabel='';
   return this.snapshot();
  }
  configure(o) {
@@ -115,6 +116,8 @@ export class IceEngine {
    this.lastChangeCompletedTick=this.state.spin.changeCompletedTick;this.footChangeFlash=1.2;
   }
   this.footChangeFlash=Math.max(0,this.footChangeFlash-SIM_DT);
+  const linked=this.combo.sample(this.state);if(linked){this.comboLabel=linked;this.comboFlash=1.8;}
+  this.comboFlash=Math.max(0,this.comboFlash-SIM_DT);
   const spinning=this.state.move===MOVE.Spin;
   if(spinning)this.spinTracker.sample(this.state.spin);
   else if(this.wasSpinning){this.spinLevel=scoreSpinLevel(this.spinTracker.finish(),spinThresholds,this.spinTracker.footChanges).level;this.spinTracker.reset();}
@@ -140,7 +143,7 @@ export class IceEngine {
    :s.turn.kind===TURN_KIND.Loop?'Loop':s.turn.kind===TURN_KIND.Rocker?'Rocker'
    :'Three-turn';
   const move=s.fallen?'Recover · press Space / A':s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
-  return {controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+  return {controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    routine:r?{title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal,pcsScore:r.pcsScore}:null,
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},
