@@ -539,6 +539,8 @@ func update_hud() -> void:
 	# own #hint already uses for its equivalent toast.
 	if bool(frame.get("footChange",false)):
 		hud_move.text += "   ·   FOOT CHANGE!"
+	if str(frame.get("combo","")) != "":
+		hud_move.text += "   ·   COMBINATION %s" % str(frame.combo)
 	var spin_level := int(frame.get("spinLevel",-1))
 	hud_technical.text = "Jump TES %.2f" % float(frame.get("technical",0.0))
 	if spin_level >= 0:
@@ -802,7 +804,7 @@ func load_preferences() -> void:
 	if ids is Array and ids.size()>0 and ids.size()<=16:
 		var valid := true
 		for id in ids:
-			valid = valid and id in ["glide","edge","crossover","jump","spin","step","pose"]
+			valid = valid and id in ["glide","edge","crossover","jump","spin","step","pose","spiral","combo"]
 		if valid:
 			sequence = ids
 

@@ -5,6 +5,7 @@ import {createState,step} from '../runtime/sim/solver.js';
 import {IceGrid} from '../runtime/sim/ice.js';
 import {NEUTRAL_INPUT,MOVE,TURN_KIND} from '../runtime/sim/types.js';
 import {verifyReplay,parseReplay} from '../runtime/sim/replay.js';
+import {JUMP_PHASE} from '../runtime/sim/jump.js';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 
@@ -57,6 +58,22 @@ test("a turn's own kind reaches snapshot().move — the bridge used to say the b
  assert.equal(e.snapshot().move,'Rocker');
  e.state.turn.kind=TURN_KIND.Counter;e.state.turn.against=true;
  assert.equal(e.snapshot().move,'Counter');
+});
+
+test('a jump taken straight off the last landing edge reaches snapshot().combo, then decays',()=>{
+ // tools/ice-lab/test/combo.test.ts's recipe, at the toe loop's 6.8 m/s, through engine.tick().
+ const e=new IceEngine();
+ e.state=createState(e.params,-6.8);
+ let load=180,n=0,last=-1;const seen=new Set();
+ for(let i=0;i<900;i++){
+  const air=e.state.jump.phase===JUMP_PHASE.Air,k=i-load,loading=load>=0&&k>=0&&k<36;
+  e.tick({...NEUTRAL_INPUT,lean:-.25,weight:1,knee:loading?.95:load>=0&&k>=36&&k<39?0:n===0&&i<180?.35:.8,
+   carriage:!air&&(loading||k===36)?1:0,toe:load>=0&&k===34});
+  if(e.snapshot().combo)seen.add(e.snapshot().combo);
+  if(e.state.landed.tick!==last){last=e.state.landed.tick;load=n<1?i+90:-1;n++;}
+ }
+ assert.deepEqual([...seen],['4T+3T<'],'the game params rise higher than the lab preset: a quad, then an under-rotated triple');
+ assert.equal(e.snapshot().combo,'','the flash must decay rather than stick forever');
 });
 
 test('a foot change mid-spin reaches snapshot().footChange as a brief flash, then decays',()=>{

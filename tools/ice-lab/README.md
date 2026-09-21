@@ -1567,6 +1567,21 @@ grade 4's eleven-type count, needing one STEPS-category mechanic, is its only re
 `replay/rebase-fixture.ts [git-rev]` is the contract-bump recipe as a script: it re-records the
 fixture from `git-rev`'s inputs and refuses to write if frames, schemes or inputs moved.
 
+### Jump combinations — added 2026-09-21, sixteenth session
+
+The solver already let a skater land and reload straight off the landing edge; nothing recognised it.
+`sim/combo.ts`'s `ComboTracker` does, from the physics and the data: a second jump links when its own
+takeoff (`JUMP_DEFS` foot, edge, direction) is the first jump's landing edge (`landing_edge` in
+`data/jump-definitions.csv`, RBO for all six) and the skater never left it — no fall, step-out or
+two-foot landing, no change of support foot, no move, no stroke, not forward again. No time limit: the
+data has none. So only the toe loop (toe tapped) and the loop can follow, which is the bible's own §2.4
+point, found by skating it: 3T+2T, 3T+2Lo, and three-jump chains. Scoring is unchanged — each jump is
+still scored on its own landing, which already sums the base values; the data defines no single GOE for
+the combined element, and jump sequences (steps between, 80%) are not recognised for want of a data
+bound on "linked". Surfaced as a "Combination 3T+2T!" toast in the browser, `snapshot().combo` and
+the HUD line in Godot, and a new `combo` element ("Jump combination") the Composer can use; the fixed
+career routines are unchanged (an operator content call). Game layer only: no replay contract change.
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in
