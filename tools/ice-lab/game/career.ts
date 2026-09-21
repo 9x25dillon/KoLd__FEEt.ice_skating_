@@ -4,8 +4,8 @@ import { JUMP_PHASE } from "../sim/jump.ts";
 import { SIM_HZ } from "../sim/params.ts";
 import { makeProfile, train, xpToRaise, STAT_NAMES, overall, TIERS } from "../sim/profile.ts";
 import type { SkaterProfile, StatName } from "../sim/profile.ts";
-import { scoreJump } from "../sim/score.ts";
 import { ComboTracker } from "../sim/combo.ts";
+import { ProtocolSheet, segmentScore } from "../sim/sheet.ts";
 import type { ScoreTables } from "../sim/score.ts";
 import { SpinLevelTracker, scoreSpinLevel } from "../sim/spinLevel.ts";
 import type { SpinFeatureThresholds } from "../sim/spinLevel.ts";
@@ -94,13 +94,14 @@ export class Choreography {
   private hypeSum = 0;
   private flowSum = 0;
   private samples = 0;
-  private tables?: ScoreTables;
   private spinThresholds?: SpinFeatureThresholds;
   private spinTracker = new SpinLevelTracker();
   private wasSpinning = false;
   private stepThresholds?: StepFeatureThresholds;
   private stepTracker = new StepSequenceTracker();
   private comboTracker = new ComboTracker();
+  /** The program's jump protocol; absent without score tables, as technicalScore always was. */
+  readonly sheet?: ProtocolSheet;
   private stepWindowTicks = Math.round(STEP_WINDOW_SECONDS * SIM_HZ);
   private lastMoveDoneTick = -1;
   private wasCrossover = false;
@@ -135,13 +136,18 @@ export class Choreography {
     event: CareerEvent, tables?: ScoreTables, spinThresholds?: SpinFeatureThresholds,
     stepThresholds?: StepFeatureThresholds, segmentRules?: readonly SegmentRule[], ice?: IceGrid,
   ) {
-    this.event = event; this.tables = tables; this.spinThresholds = spinThresholds;
+    this.event = event; this.spinThresholds = spinThresholds;
     this.stepThresholds = stepThresholds; this.segmentRules = segmentRules; this.ice = ice;
+    this.sheet = tables ? new ProtocolSheet(tables) : undefined;
   }
   get complete() { return this.index === this.event.routine.length; }
   get done() { return this.complete || this.elapsed >= this.event.seconds; }
   get seconds() { return Math.max(0, this.event.seconds - this.elapsed); }
   get current() { return this.event.routine[this.index]; }
+  /** Fall deductions, by data/calls-and-deductions.csv's schedule; 0 without score tables. */
+  get deductions() { return this.sheet?.deductions(this.falls) ?? 0; }
+  /** TES + PCS - deductions, the protocol's total. PCS counts once finalised, at the end. */
+  get segmentScore() { return segmentScore(this.technicalScore, this.pcsScore?.total ?? 0, this.deductions); }
   get medal() { return !this.complete ? 0 : this.falls === 0 ? 3 : this.falls <= 2 ? 2 : 1; }
   get hypeMean() { return this.samples > 0 ? this.hypeSum / this.samples : 0; }
   get flowMean() { return this.samples > 0 ? this.flowSum / this.samples : 0; }
@@ -161,7 +167,10 @@ export class Choreography {
     this.pcsMeter.sample(s);
     const freshLanding = s.landed.tick >= 0 && s.landed.tick !== this.lastLanding;
     this.lastLanding = s.landed.tick;
-    if (freshLanding && this.tables) this.technicalScore += scoreJump(this.tables, s.landed)?.score ?? 0;
+    // The protocol sheet (sim/sheet.ts) scores each landing and applies the
+    // repetition rule across the whole program, so a later combination can
+    // clear an earlier repeat; technicalScore is its running total.
+    if (this.sheet?.sample(s)) this.technicalScore = this.sheet.tes;
     // sim/combo.ts: scoring is untouched (each jump already scored above);
     // this only recognises the element, the tick a landing links to the last.
     const combined = this.comboTracker.sample(s) !== "";

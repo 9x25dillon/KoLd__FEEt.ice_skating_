@@ -1582,6 +1582,20 @@ bound on "linked". Surfaced as a "Combination 3T+2T!" toast in the browser, `sna
 the HUD line in Godot, and a new `combo` element ("Jump combination") the Composer can use; the fixed
 career routines are unchanged (an operator content call). Game layer only: no replay contract change.
 
+### The protocol sheet — added 2026-09-21, sixteenth session
+
+A career program now keeps a jump protocol (`sim/sheet.ts`'s `ProtocolSheet`) instead of a bare running
+sum. Each landing is scored as before; one that links (`sim/combo.ts`) joins the previous element. The
+sheet applies design bible §2.7's repetition rule — no triple or quad attempted more than twice, a repeat
+only legal if one of the two is in a combination, a violation marked `*` and scoring zero (the data's
+`validity,*` row) — re-marked over the whole program on every landing, since a later combination can
+clear an earlier repeat. `Choreography.technicalScore` is the sheet's TES; `deductions` is the data's
+fall schedule (−1, −1, −2, −2, −3…, `fallDeduction`, never used by career before); `segmentScore` is
+TES + PCS − deductions. Both result screens print the sheet: jumps as called, TES, PCS, deductions,
+total. Medals stay fall-based and XP keeps its formula (its TES term now honours the rule). Not
+modelled: jump sequences, the segment's element-count limits, ISU's `+REP` refinement (the bible says
+`*`).
+
 ## What a session measures
 
 `sim/session.ts` computes five of the seven metrics in

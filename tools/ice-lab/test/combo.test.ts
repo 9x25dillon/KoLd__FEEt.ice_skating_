@@ -12,6 +12,7 @@ import type { SkatingInput, SkaterState } from "../sim/types.ts";
 import { JUMP, JUMP_CODE, JUMP_PHASE } from "../sim/jump.ts";
 import { ComboTracker, JUMP_LANDING, canFollow, MAX_COMBO_JUMPS } from "../sim/combo.ts";
 import { Choreography } from "../game/career.ts";
+import { loadTables } from "../sim/score.ts";
 
 interface Plan {
   /** Ticks after each landing before the next load; one entry per follow-up jump. */
@@ -130,4 +131,18 @@ test("a routine's combination element completes on the landing that links, and n
   const solo = program();
   skate({ waits: [], toes: [], routine: solo });
   assert.equal(solo.index, 0, "one clean triple is not a combination");
+});
+
+test("a routine's protocol sheet lists a combination as one element, and solo jumps as their own", () => {
+  const read = (f: string) => readFileSync(new URL(`../../../data/${f}`, import.meta.url), "utf8");
+  const tables = loadTables(read("scale-of-values.csv"), read("calls-and-deductions.csv"));
+  const program = () => new Choreography({ id: "test", title: "Test", venue: "Test", seconds: 30, routine: ["glide"] }, tables);
+  const linked = program();
+  skate({ waits: [40], toes: [true], routine: linked });
+  assert.deepEqual(linked.sheet!.lines, ["3T+2T"]);
+  assert.equal(linked.technicalScore, linked.sheet!.tes);
+  assert.ok(linked.technicalScore > 0);
+  const split = program();
+  const r = skate({ waits: [90], toes: [true], between: (j) => (j >= 10 && j < 40 ? { weight: 0 } : {}), routine: split });
+  assert.equal(split.sheet!.lines.length, r.landed.length, split.sheet!.lines.join(", "));
 });

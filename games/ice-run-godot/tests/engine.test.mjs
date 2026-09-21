@@ -103,6 +103,10 @@ test('bridge runs full physical choreography and persists earned progression',()
  // sim/pcs.ts's own score, never reached the bridge snapshot before this.
  assert.ok(e.snapshot().routine.pcsScore.total>0,'a finished career routine must carry a real PCS score');
  assert.match(e.result.detail,/PCS \d+\.\d\d/,"the finished routine's own result text must carry it too");
+ // sim/sheet.ts's protocol: TES, the fall deduction and the segment total, TES + PCS - deductions.
+ const m=/TES (\d+\.\d\d) · PCS (\d+\.\d\d) · −(\d+\.\d\d) falls · Total (-?\d+\.\d\d)/.exec(e.result.detail);
+ assert.ok(m,e.result.detail);
+ assert.ok(Math.abs(Number(m[1])+Number(m[2])-Number(m[3])-Number(m[4]))<0.011,e.result.detail);
  const restored=new IceEngine(e.career.serialize());assert.equal(restored.career.unlocked,1);
  restored.train('balance');assert.equal(restored.career.profile.stats.balance,51);
  assert.throws(()=>restored.start({mode:'career',event:3}),/previous/);

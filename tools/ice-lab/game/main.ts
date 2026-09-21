@@ -539,7 +539,9 @@ function finishCareer() {
   // sim/pcs.ts's own score, never shown anywhere before this — silently absent (rather than a
   // misleading "0.00") whenever finalizePcs left it null (no segmentRules/ice at construction).
   const pcs = c.pcsScore ? ` · PCS ${c.pcsScore.total.toFixed(2)} (Comp ${c.pcsScore.composition.toFixed(2)} / Pres ${c.pcsScore.presentation.toFixed(2)} / Skills ${c.pcsScore.skatingSkills.toFixed(2)})` : "";
-  el("description").textContent = `${c.index}/${c.event.routine.length} elements · ${c.falls} falls · +${xp} XP${pcs}. ${c.complete ? next : `Time ran out at ${ELEMENTS[c.current].title}. Follow the moves in order and try again.`} ${saveNotice}`;
+  // sim/sheet.ts's protocol: jump elements as called (a repeat marked *), then the segment total.
+  const sheet = c.sheet ? ` · Jumps ${c.sheet.lines.join(", ") || "none"} · TES ${c.technicalScore.toFixed(2)}${pcs} · −${c.deductions.toFixed(2)} falls · Total ${c.segmentScore.toFixed(2)}` : pcs;
+  el("description").textContent = `${c.index}/${c.event.routine.length} elements · ${c.falls} falls · +${xp} XP${sheet}. ${c.complete ? next : `Time ran out at ${ELEMENTS[c.current].title}. Follow the moves in order and try again.`} ${saveNotice}`;
   el("help").hidden = true; el("start").textContent = "Retry this program →";
   el("overlay").hidden = false; el("pause").hidden = true; el("start").focus();
 }

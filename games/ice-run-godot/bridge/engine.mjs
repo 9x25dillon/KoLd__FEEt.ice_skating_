@@ -128,7 +128,7 @@ export class IceEngine {
    // sim/pcs.ts's own score, never shown here before — silently absent (not a misleading "0.00")
    // whenever finalizePcs left it null, the same as game/main.ts's own equivalent line.
    const pcs=r.pcsScore?` · PCS ${r.pcsScore.total.toFixed(2)}`:'';
-   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls · ${this.technical.toFixed(2)} jump TES${pcs}`,xp,complete:r.complete};
+   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls`+(r.sheet?` · Jumps ${r.sheet.lines.join(', ')||'none'} · TES ${r.technicalScore.toFixed(2)}${pcs} · −${r.deductions.toFixed(2)} falls · Total ${r.segmentScore.toFixed(2)}`:` · ${this.technical.toFixed(2)} jump TES${pcs}`),xp,complete:r.complete};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
  }
  replay(json){const clip=parseReplay(json);this.start({mode:'free'});this.player=new ReplayPlayer(clip);this.state=this.player.state;this.params=this.player.params;return this.snapshot();}
