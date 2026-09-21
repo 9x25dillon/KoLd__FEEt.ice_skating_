@@ -128,6 +128,14 @@ the physics state — a bone it does not find is simply left in its rest pose,
 never an error — so both build scripts construct the identical skeleton
 `build_skater.py` originated, and a third character only needs to do the same.
 
+**Costumes** are the browser's own presets (`tools/ice-lab/game/appearance.ts`'s `SKINS`, sent in the
+bridge's catalog), not a Godot copy. Settings → Costume recolours Violet at runtime:
+`scripts/skater.gd` matches `build_skater.py`'s material names — bodice, skirt, sleeves, crystal trim,
+hair, skin and tights, each its own slot — and overrides their albedo. The choice is saved with the
+other preferences. The Berserker has no such slots and keeps its authored look. A costume's `bun`
+field is not honoured: the hair is one joined mesh, so every costume wears the sculpted bun. The
+smoke test fails if fewer than all seven slots take the costume; `--capture --costume=N` screenshots one.
+
 ## Design direction and current limits
 
 The requested roughly 75% design-bible adherence is a direction for this rebuild,

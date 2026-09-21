@@ -18,6 +18,7 @@ import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS} from '../runtime
 import {Practice,LESSONS} from '../runtime/game/practice.js';
 import {IceRun,LIGHTS} from '../runtime/game/run.js';
 import {RookieCourse,ROOKIE_GATES} from '../runtime/game/rookie.js';
+import {SKINS} from '../runtime/game/appearance.js';
 import {Playground,SNOWFLAKES,TARGETS} from '../runtime/game/playground.js';
 import {resolveRinkCollision,RINK} from '../runtime/game/rink.js';
 import {readFileSync} from 'node:fs';
@@ -35,7 +36,7 @@ export class IceEngine {
   this.profile=0; this.cruise=true; this.sequence=['glide','edge','jump','spin','pose'];
   this.start({mode:'free'});
  }
- catalog() {return {controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,flakes:SNOWFLAKES,targets:TARGETS};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer'].includes(mode)) throw Error('Unknown skating mode');

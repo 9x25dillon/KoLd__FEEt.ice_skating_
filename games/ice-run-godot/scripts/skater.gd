@@ -6,6 +6,14 @@ var pose_low := false
 var model: Node3D
 var initialized := false
 var model_path := "res://assets/generated/skater.glb"
+# The browser's costume presets (game/appearance.ts SKINS, via the bridge's
+# catalog) recolour tools/build_skater.py's material slots by name. A model
+# without these names — the Berserker — keeps its own authored materials.
+const SKIN_SLOTS := {
+	"Midnight plum satin": "bodice", "Flowing skirt satin": "skirt", "Illusion sleeve": "sleeve",
+	"Champagne crystals": "trim", "Espresso hair": "hair", "Warm porcelain": "skin", "Skin-tone tights": "tights",
+}
+var skin: Dictionary = {}
 
 func _ready() -> void:
 	load_model(model_path)
@@ -26,10 +34,33 @@ func load_model(path: String) -> void:
 	model_path = path
 	model = load(model_path).instantiate()
 	add_child(model)
+	recolour(model)
 	skeleton = find_skeleton(model)
 	if skeleton:
 		for i in skeleton.get_bone_count():
 			bone_ids[skeleton.get_bone_name(i)] = i
+
+func apply_skin(next: Dictionary) -> int:
+	skin = next
+	return recolour(model) if model else 0
+
+# Returns how many surfaces now wear the costume, for the smoke test.
+func recolour(node: Node) -> int:
+	var count := 0
+	if node is MeshInstance3D and node.mesh:
+		for i in node.mesh.get_surface_count():
+			var base := node.mesh.surface_get_material(i) as BaseMaterial3D
+			var slot: String = SKIN_SLOTS.get(base.resource_name, "") if base else ""
+			if slot == "" or not skin.has(slot):
+				node.set_surface_override_material(i, null)
+				continue
+			var worn := base.duplicate() as BaseMaterial3D
+			worn.albedo_color = Color.html(str(skin[slot]))
+			node.set_surface_override_material(i, worn)
+			count += 1
+	for child in node.get_children():
+		count += recolour(child)
+	return count
 
 func find_skeleton(node: Node) -> Skeleton3D:
 	if node is Skeleton3D:

@@ -103,6 +103,9 @@ test('a step sequence is a real, composer-authorable element (sim/stepLevel.ts)'
  const e=new IceEngine();
  const hello=e.catalog();
  assert.ok(Object.hasOwn(hello.elements,'step'),'ELEMENTS.step must reach the catalog the Composer picker reads');
+ // Costumes are the browser's own SKINS data, not a Godot copy: scripts/skater.gd recolours from these.
+ assert.deepEqual(hello.skins.map(k=>k.id),['violet','aurora','solstice']);
+ for(const k of hello.skins)for(const f of ['bodice','skirt','sleeve','trim','hair','skin','tights'])assert.match(k[f],/^#[0-9a-f]{6}$/,`${k.id}.${f}`);
  const snap=e.start({mode:'composer',sequence:['step']});
  assert.equal(snap.routine.sequence[0],'step');
  for(let i=0;i<50&&!e.finished;i++)e.advance({},2);

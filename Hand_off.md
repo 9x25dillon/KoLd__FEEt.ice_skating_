@@ -19,6 +19,14 @@ going" — items 9, 11 and 12 need the operator, so the session went on to item 
 - **Verified**: 483 tests (468 browser/sim + 15 Godot bridge), typecheck clean, fidelity report
   regenerated (solver line only), live Playwright run in Full repertoire showed CHOCTAW then BACKWARD
   GLIDE with no page errors, both Godot `--smoke-test` paths passed.
+- **Godot costume parity (§0 item 12) done**: `build_skater.py` gives the skirt and the legs their own
+  material slots (default colours unchanged; glb rebuilt with Blender 5.2.2, same nodes and vertex
+  count), the bridge catalog carries `SKINS`, `skater.gd` recolours seven slots by material name, and
+  Settings → Costume picks one (saved). Godot's default Violet now wears the browser's Violet colours
+  rather than the old authored midnight plum. Not honoured: `bun` (hair is one joined mesh). Verified
+  by `--capture --costume=0..2` screenshots and a smoke-test surface count (negative-checked).
+- **PR #16** (items 8, 10, 13) is open with CI green; the merge was blocked by the session's permission
+  classifier, not by review — the operator merges it.
 - **Still the operator's**: item 9 (real pad — now including the choctaw gesture), item 11 (career
   routine content), item 12 (watch a beginner).
 
@@ -651,7 +659,7 @@ hold the document set together, and the things most likely to trip you up.
     `tools/build_berserker.py` regenerates it; both build scripts must keep constructing the *identical*
     armature (`Hips, Spine, Head, Thigh/Shin/Foot L/R, Arm/Forearm L/R`) or `skater.gd` silently stops
     posing whatever changed. Unchanged this session, carried forward because it is still true.
-12. **Godot has no costume system at all** — the browser's three-costume `SKINS` wardrobe (fifteenth
+12. **(Closed 2026-09-21 — see the current checkpoint.)** **Godot has no costume system at all** — the browser's three-costume `SKINS` wardrobe (fifteenth
     session) has no Godot equivalent; the closest thing, the second-skater picker (item 11 above), is a
     whole separate rigged model, not a recolour, and does not read `SKINS` or anything like it. Giving
     Godot real costume parity needs either authored material variants in the `.blend` source or a

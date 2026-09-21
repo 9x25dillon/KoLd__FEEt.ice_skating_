@@ -49,6 +49,7 @@ var saved_controller_profile: Dictionary = {}
 var track := 0
 var profile := 0
 var character := 0
+var costume := 0
 var cruise := true
 var push_pending := false
 var toe_pending := false
@@ -64,6 +65,8 @@ var tick_debt := 0.0
 var test_stage := 0
 var test_wait := 0.0
 var settings_path := "user://preferences.json"
+# Every costume slot on Violet's model (skater.gd SKIN_SLOTS), each one surface.
+const SKIN_SURFACES := 7
 
 func _ready() -> void:
 	boot_test = "--smoke-test" in OS.get_cmdline_user_args()
@@ -72,6 +75,9 @@ func _ready() -> void:
 		scheme = 3
 	if not boot_test and not screenshot_test:
 		load_preferences()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--costume="):
+			costume = maxi(int(arg.trim_prefix("--costume=")),0)
 	arena = Arena.new()
 	add_child(arena)
 	skater = Skater.new()
@@ -349,8 +355,16 @@ func show_page(page: String) -> void:
 		for entry in CHARACTERS:
 			character_picker.add_item(str(entry.name))
 		character_picker.selected = character
-		character_picker.item_selected.connect(func(index: int):character=index)
+		character_picker.item_selected.connect(func(index: int):character=index;show_page("settings"))
 		menu.add_child(character_picker)
+		if not catalog.is_empty() and character == 0:
+			menu.add_child(label("Costume",16))
+			var costume_picker := OptionButton.new()
+			for entry in catalog.skins:
+				costume_picker.add_item("%s — %s" % [entry.name, entry.description])
+			costume_picker.selected = costume
+			costume_picker.item_selected.connect(func(index: int):costume=index;skater.apply_skin(catalog.skins[costume]))
+			menu.add_child(costume_picker)
 		if not catalog.is_empty():
 			menu.add_child(label("Soundtrack",16))
 			var track_picker := OptionButton.new()
@@ -429,6 +443,11 @@ func start_game(mode: String, index: int = 0) -> void:
 func on_engine(op: String, data: Dictionary) -> void:
 	if op == "hello":
 		catalog = data.catalog
+		costume = clampi(costume,0,catalog.skins.size()-1)
+		var worn: int = skater.apply_skin(catalog.skins[costume])
+		if boot_test and worn < SKIN_SURFACES:
+			push_error("Costume reached %d of %d surfaces" % [worn, SKIN_SURFACES])
+			get_tree().quit(1)
 		controller_profile = catalog.controller.profile.duplicate(true)
 		if not saved_controller_profile.is_empty():
 			link.send("controller",{"profile":saved_controller_profile})
@@ -776,6 +795,7 @@ func load_preferences() -> void:
 	track = clampi(int(saved.get("track",0)),0,4)
 	profile = clampi(int(saved.get("profile",0)),0,3)
 	character = clampi(int(saved.get("character",0)),0,CHARACTERS.size()-1)
+	costume = maxi(int(saved.get("costume",0)),0)
 	cruise = bool(saved.get("cruise",true))
 	music_enabled = bool(saved.get("music",true))
 	var ids = saved.get("sequence",[])
@@ -791,6 +811,6 @@ func save_preferences() -> void:
 		return
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"cruise":cruise,"music":music_enabled,"sequence":sequence}))
+		file.store_string(JSON.stringify({"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"sequence":sequence}))
 	else:
 		on_error("Preferences could not be saved.")
