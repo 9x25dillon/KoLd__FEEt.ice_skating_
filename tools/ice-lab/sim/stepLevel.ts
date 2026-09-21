@@ -41,10 +41,10 @@
 // 9), so it is out of reach on the type count alone regardless — choctaw or
 // a real STEPS-category mechanic (no data backing exists for any of the
 // seven STEPS types) would be needed. Its own `difficult_turns_in_both_
-// rotational_directions` requirement is a second, SEPARATE gap: StepGrade/
-// scoreStepLevel below do not parse or check it at all yet, so reaching 11
-// types would not be enough by itself — worth knowing before assuming
-// grade 4 is one mechanic away.
+// rotational_directions` requirement is checked: every turn and twizzle
+// already knows which way the body rotated (TurnState.dir, +1 anticlockwise,
+// -1 clockwise), so a StepEvent carries it and grade 4 needs difficult ones
+// in both senses. Only the type count still holds grade 4 out of reach.
 
 import type { Foot } from "./types.ts";
 
@@ -62,6 +62,8 @@ export interface StepEvent {
   foot: Foot;
   /** Sim ticks, for windowing a rolling pattern — see StepSequenceTracker.recent. */
   tick: number;
+  /** +1 anticlockwise, -1 clockwise (TurnState.dir); 0 or absent for footwork that does not rotate the body. */
+  dir?: number;
 }
 
 /** A small history of distinct footwork, the same shape sim/spinLevel.ts's SpinLevelTracker keeps for segments. */
@@ -70,7 +72,7 @@ export class StepSequenceTracker {
 
   reset(): void { this.events.length = 0; }
 
-  record(type: number, foot: Foot, tick: number): void { this.events.push({ type, foot, tick }); }
+  record(type: number, foot: Foot, tick: number, dir = 0): void { this.events.push({ type, foot, tick, dir }); }
 
   /** Events within `windowTicks` of `nowTick` — a sustained pattern, not the whole program's history. */
   recent(nowTick: number, windowTicks: number): StepEvent[] {
@@ -84,6 +86,7 @@ export interface StepGrade {
   distinctDifficult: number;
   bothFeet: boolean;
   difficultBothFeet: boolean;
+  difficultBothDirections: boolean;
 }
 
 export interface StepFeatureThresholds {
@@ -117,6 +120,7 @@ export function loadStepFeatureThresholds(json: string): StepFeatureThresholds {
         distinctDifficult: num(r.distinct_difficult_turn_types, `grade ${grade} distinct_difficult_turn_types`),
         bothFeet: Boolean(r.both_feet_used),
         difficultBothFeet: Boolean(r.difficult_turns_on_both_feet),
+        difficultBothDirections: Boolean(r.difficult_turns_in_both_rotational_directions),
       };
     }),
   };
@@ -128,21 +132,26 @@ export interface StepLevelResult {
   distinctTypes: number[];
   bothFeet: boolean;
   difficultBothFeet: boolean;
+  difficultBothDirections: boolean;
 }
 
 /** Pure: the same event list always scores the same result. */
 export function scoreStepLevel(events: readonly StepEvent[], t: StepFeatureThresholds): StepLevelResult {
   const types = new Set(events.map((e) => e.type));
   const feet = new Set(events.map((e) => e.foot));
-  const difficultFeet = new Set(events.filter((e) => DIFFICULT.has(e.type)).map((e) => e.foot));
+  const difficult = events.filter((e) => DIFFICULT.has(e.type));
+  const difficultFeet = new Set(difficult.map((e) => e.foot));
+  const difficultDirs = new Set(difficult.map((e) => Math.sign(e.dir ?? 0)).filter((d) => d !== 0));
   const difficultTypes = new Set([...types].filter((ty) => DIFFICULT.has(ty)));
   const bothFeet = feet.size >= 2;
   const difficultBothFeet = difficultFeet.size >= 2;
+  const difficultBothDirections = difficultDirs.size >= 2;
   let level = 0;
   for (const g of [...t.grades].sort((a, b) => a.grade - b.grade)) {
     const meets = types.size >= g.distinctTypes && difficultTypes.size >= g.distinctDifficult
-      && (!g.bothFeet || bothFeet) && (!g.difficultBothFeet || difficultBothFeet);
+      && (!g.bothFeet || bothFeet) && (!g.difficultBothFeet || difficultBothFeet)
+      && (!g.difficultBothDirections || difficultBothDirections);
     if (meets) level = g.grade;
   }
-  return { level, distinctTypes: [...types], bothFeet, difficultBothFeet };
+  return { level, distinctTypes: [...types], bothFeet, difficultBothFeet, difficultBothDirections };
 }

@@ -30,6 +30,8 @@ The previous 2026-09-18 checkpoint below describes the last merged work.
   performed a virtual-pad Rocker, saved a profile, selected Full repertoire, and
   observed a keyboard Loop on the game HUD with no page errors. Godot's regular and
   `--smoke-test --full-controls` paths both completed a three-element career routine.
+- **Queue item 10 done** (committed after item 8): grade 4's both-rotational-directions gate is
+  checked now; see the queue. 479 tests pass (464 browser/sim + 15 Godot bridge); typecheck clean.
 - **Still open:** human play on a real controller (queue item 9), tuning calibration,
   Choctaw and unsupported pose variants. Default lean sensitivity 0.7, modifier L3,
   retained-foot behavior and extra-move chord layout are authored design choices
@@ -678,8 +680,12 @@ own; item 5 is the fifteenth's:
    current checkpoint and `docs/controller-scheme.md`; physical-pad playtesting remains open.
 9. **Verify `rockerCounterStick` (and, while at it, every other reversal-style stick threshold) on a
    real gamepad**, not only keyboard (§0 item above).
-10. **`stepLevel.ts`'s grade-4 `difficult_turns_in_both_rotational_directions` requirement** is unparsed
-    and unchecked (§0 item above) — a real gap independent of the type-count shortfall.
+10. ~~**`stepLevel.ts`'s grade-4 `difficult_turns_in_both_rotational_directions` requirement.**~~
+    **Done**, 2026-09-21: parsed from `data/step-features.json`, checked in `scoreStepLevel`. Each
+    `StepEvent` carries `dir` (+1 anticlockwise, −1 clockwise), read by `game/career.ts` from
+    `s.turn.dir` on the tick the turn or twizzle finishes (no new solver state, replay still `/20`).
+    Grade 4 needs difficult turns in both senses; crossovers and changes of edge carry none. The
+    11-type count is now grade 4's only blocker (choctaw or a STEPS mechanic).
 11. **Decide whether `step`, `spiral`, `loop`/`rocker`/`counter` belong in any fixed `CAREER_EVENTS`
     routine**, and if so which and where — an operator content call, not a technical one, carried
     forward since the thirteenth session and now applying to four elements instead of one.

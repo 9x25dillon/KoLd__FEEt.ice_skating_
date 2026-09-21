@@ -247,6 +247,16 @@ test("weight at a bracket's cusp does not move it to the other foot: there is no
   assert.equal(codeToString(triedTransfer.turns[0].newCode), codeToString(stay.turns[0].newCode));
 });
 
+test("a turn's rotation sense survives in s.turn.dir after it ends: what the step ladder's both-directions gate reads", () => {
+  // Nothing starts a new pivot after these, so the state still holds each run's only turn.
+  const rfoThree = drive(moves(), 6.8, 1, -0.3), lfoThree = drive(moves(), 6.8, 0, 0.3);
+  const rfoBracket = drive(moves(), 6.8, 1, -0.3, { against: true });
+  for (const r of [rfoThree, lfoThree, rfoBracket]) assert.equal(r.turns.length, 1);
+  assert.equal(lfoThree.s.turn.dir, 1, "LFO three-turn: anticlockwise");
+  assert.equal(rfoThree.s.turn.dir, -1, "its mirror, RFO: clockwise");
+  assert.equal(rfoBracket.s.turn.dir, 1, "a bracket fights the same curve, so it rotates the other way");
+});
+
 test("with the moves off, the bracket button does nothing at all", () => {
   const r = drive({ ...PRESETS.responsive }, 6.8, 1, -0.3, { against: true });
   assert.equal(r.turns.length, 0);

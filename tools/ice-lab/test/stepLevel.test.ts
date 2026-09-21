@@ -1,7 +1,7 @@
 // A step sequence's ISU level, from the variety ladder sim/stepLevel.ts can
 // actually score. See that file's own header for why nine rig-observable
 // types reach grade 3, never grade 4 — this file does not re-litigate that,
-// only tests what remains.
+// only tests what remains, including grade 4's rotational-direction gate.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -16,17 +16,17 @@ import type { Foot } from "../sim/types.ts";
 
 const T: StepFeatureThresholds = {
   grades: [
-    { grade: 1, distinctTypes: 5, distinctDifficult: 0, bothFeet: true, difficultBothFeet: false },
-    { grade: 2, distinctTypes: 7, distinctDifficult: 2, bothFeet: true, difficultBothFeet: false },
-    { grade: 3, distinctTypes: 9, distinctDifficult: 4, bothFeet: true, difficultBothFeet: true },
-    { grade: 4, distinctTypes: 11, distinctDifficult: 5, bothFeet: true, difficultBothFeet: true },
+    { grade: 1, distinctTypes: 5, distinctDifficult: 0, bothFeet: true, difficultBothFeet: false, difficultBothDirections: false },
+    { grade: 2, distinctTypes: 7, distinctDifficult: 2, bothFeet: true, difficultBothFeet: false, difficultBothDirections: false },
+    { grade: 3, distinctTypes: 9, distinctDifficult: 4, bothFeet: true, difficultBothFeet: true, difficultBothDirections: false },
+    { grade: 4, distinctTypes: 11, distinctDifficult: 5, bothFeet: true, difficultBothFeet: true, difficultBothDirections: true },
   ],
 };
 
-const ev = (type: number, foot: Foot = FOOT.Right, tick = 0): StepEvent => ({ type, foot, tick });
+const ev = (type: number, foot: Foot = FOOT.Right, tick = 0, dir = 0): StepEvent => ({ type, foot, tick, dir });
 
 test("no events: level B, nothing earned", () => {
-  assert.deepEqual(scoreStepLevel([], T), { level: 0, distinctTypes: [], bothFeet: false, difficultBothFeet: false });
+  assert.deepEqual(scoreStepLevel([], T), { level: 0, distinctTypes: [], bothFeet: false, difficultBothFeet: false, difficultBothDirections: false });
 });
 
 test("five distinct types, both feet: grade 1 — a curated five, not the full seven this rig now has", () => {
@@ -76,6 +76,39 @@ test("difficult types on one foot only caps at grade 2, even with nine total typ
   assert.equal(r.level, 2, "grade 3 needs difficult_turns_on_both_feet; one foot only holds it at grade 2");
 });
 
+// Grade 4 is still out of reach on the type count, so these two use a
+// hypothetical ladder at this rig's own nine types to isolate the new gate.
+const T9: StepFeatureThresholds = {
+  grades: [...T.grades.slice(0, 3), { grade: 4, distinctTypes: 9, distinctDifficult: 5, bothFeet: true, difficultBothFeet: true, difficultBothDirections: true }],
+};
+const DIFFICULT_TYPES = new Set<number>([STEP_TYPE.Bracket, STEP_TYPE.Twizzle, STEP_TYPE.Loop, STEP_TYPE.Rocker, STEP_TYPE.Counter]);
+
+test("difficult turns all rotating one way hold grade 4 back: difficult_turns_in_both_rotational_directions is a real gate", () => {
+  const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left, 0,
+    DIFFICULT_TYPES.has(ty) ? 1 : 0));
+  const r = scoreStepLevel(events, T9);
+  assert.equal(r.difficultBothDirections, false, "every difficult turn rotated anticlockwise");
+  assert.equal(r.level, 3);
+});
+
+test("difficult turns in both rotational directions clear it; only a difficult turn's own direction counts", () => {
+  const events = Object.values(STEP_TYPE).map((ty, i) => ev(ty as number, i % 2 === 0 ? FOOT.Right : FOOT.Left, 0,
+    ty === STEP_TYPE.Rocker ? -1 : DIFFICULT_TYPES.has(ty) ? 1 : 0));
+  const r = scoreStepLevel(events, T9);
+  assert.equal(r.difficultBothDirections, true);
+  assert.equal(r.level, 4);
+  // A clockwise three-turn (not difficult) does not stand in for a clockwise difficult one.
+  const simpleOnly = events.map((e) => e.type === STEP_TYPE.Rocker ? { ...e, dir: 1 } : e.type === STEP_TYPE.ThreeTurn ? { ...e, dir: -1 } : e);
+  assert.equal(scoreStepLevel(simpleOnly, T9).difficultBothDirections, false);
+});
+
+test("StepSequenceTracker.record keeps a turn's direction, and defaults to none", () => {
+  const tracker = new StepSequenceTracker();
+  tracker.record(STEP_TYPE.Rocker, FOOT.Right, 0, -1);
+  tracker.record(STEP_TYPE.Crossover, FOOT.Left, 1);
+  assert.deepEqual(tracker.events.map((e) => e.dir), [-1, 0]);
+});
+
 test("repeating the same type does not inflate the distinct count", () => {
   const events = [ev(STEP_TYPE.ThreeTurn, FOOT.Right), ev(STEP_TYPE.ThreeTurn, FOOT.Left), ev(STEP_TYPE.ThreeTurn, FOOT.Right)];
   assert.equal(scoreStepLevel(events, T).distinctTypes.length, 1);
@@ -105,6 +138,8 @@ test("the thresholds are data/step-features.json's own variety_ladder, not hardc
   assert.equal(g2.distinctDifficult, 2);
   const g4 = t.grades.find((g) => g.grade === 4)!;
   assert.equal(g4.difficultBothFeet, true);
+  assert.equal(g4.difficultBothDirections, true);
+  assert.equal(t.grades.find((g) => g.grade === 3)!.difficultBothDirections, false);
 });
 
 test("a malformed features file is rejected, not silently defaulted", () => {
