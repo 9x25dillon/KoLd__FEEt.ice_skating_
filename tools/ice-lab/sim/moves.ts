@@ -446,6 +446,10 @@ export function turnPivot(
       s.supportFoot = other;
     } else if (reversing) {
       T.kind = T.against ? TURN_KIND.Counter : TURN_KIND.Rocker;
+      // Travel sense stays unchanged for these turns, while flipFrame above
+      // moves the lean onto the other side. Reverse the lobe as well so the
+      // path and its lateral load follow that exit lean through the pivot.
+      T.pathRate = -T.pathRate;
     } else if (!T.against && entryHeld) {
       // Still holding `turn`, weight not shifted, stick not reversed: a Loop
       // instead of checking out here — the same pivot, run to a second cusp

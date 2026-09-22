@@ -185,3 +185,31 @@ test('controller profiles validate before replacing settings and raw payloads ar
  assert.throws(()=>e.advance({hardware:{axes:[0,0,0,0],buttons:[],keys:Array(65).fill('x'),connected:true}},2));
  assert.throws(()=>e.advance({},2));
 });
+
+for(const setup of ['simulation','explorer','repertoire']) test(`${setup} raw controls match browser mapping in batched Godot ticks`,async()=>{
+ const {setupInput}=await import('../runtime/game/setups.js');
+ const {newSchemeState}=await import('../runtime/app/schemes.js');
+ const e=new IceEngine();e.configure({setup,assistance:.75,beginner:false,cruise:false});e.start({mode:'free'});
+ const s=createState(e.params,4.5),st=newSchemeState(),ice=new IceGrid(e.params.rinkHalfLength,e.params.rinkHalfWidth);
+ const hardware={connected:true,axes:[-.35,0,setup==='simulation'?-.35:0,0],buttons:Array(16).fill(0),keys:[]};hardware.buttons[7]=.38;
+ for(let batch=0;batch<120;batch++){
+  hardware.buttons[0]=batch===20?1:0;
+  hardware.buttons[10]=batch>=50&&batch<60?1:0;
+  hardware.axes[2]=batch>=50&&batch<60?.5:setup==='simulation'?-.35:0;
+  for(let i=0;i<2;i++){
+   const {input}=setupInput({...emptyControls(),hardware},s,setup,st,e.params,e.controllerProfile,.75);
+   step(s,input,e.params,1/120,[],ice);
+  }
+  e.advance({hardware},2);assert.deepEqual(e.state,s,`${setup}, batch ${batch}`);
+ }
+ assert.equal(e.snapshot().setup,setup);
+ assert.equal(verifyReplay(parseReplay(e.exportReplay())).divergence,null);
+});
+
+test('simulation rejects extra gameplay assistance and setup validation is nonmutating',()=>{
+ const e=new IceEngine();
+ e.configure({setup:'simulation',beginner:true,cruise:true});e.start();
+ assert.equal(e.beginner,false);assert.equal(e.cruise,false);assert.equal(e.params.jumpAssist,0);assert.equal(e.params.hypeMode,0);
+ assert.throws(()=>e.configure({setup:'explorer',assistance:NaN}));assert.equal(e.setup,'simulation');
+ assert.throws(()=>e.configure({setup:'unknown'}));assert.equal(e.setup,'simulation');
+});

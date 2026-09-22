@@ -1,6 +1,7 @@
 // Full repertoire is a game mapping, separate from the lab's blind A/B/C trial.
 // It emits ordinary solver inputs. Recorded clips never need the mapping state.
 import type { ControllerHardware, Controls } from "../app/pad.ts";
+import { relievedPitch } from "../app/pad.ts";
 import { schemeA, latchTurns, SCHEME } from "../app/schemes.ts";
 import type { SchemeState } from "../app/schemes.ts";
 import type { Params } from "../sim/params.ts";
@@ -105,12 +106,15 @@ export interface FullState {
   request: string;
   left: { x: number; y: number };
   right: { x: number; y: number };
+  bladeRight?: { x: number; y: number };
 }
 export type GameControlState = SchemeState & { full?: FullState };
 export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks: new Map(), feedbackUntil: -1, turn: null, turnStarted: false, foot: 1, request: "Glide", left: { x: 0, y: 0 }, right: { x: 0, y: 0 } });
 const TURNS: Action[] = ["three", "mohawk", "bracket", "loop", "rocker", "counter", "choctaw"];
+export const manualAction = (action: Action): boolean => !TURNS.includes(action) || action === "three" || action === "bracket";
 
-export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: Params, profile: ControllerProfile) {
+export interface MappingOptions { manual?: boolean; twoFoot?: boolean; leanAssist?: number; repeatPush?: boolean }
+export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: Params, profile: ControllerProfile, options: MappingOptions = {}) {
   const f = st.full ??= newFullState();
   const h = c.hardware;
   if (!validHardware(h)) throw Error("Full repertoire needs valid raw controller input");
@@ -124,6 +128,7 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     else if (!f.buttonBanks.has(b)) f.buttonBanks.set(b, modified);
   }
   const held = new Set<Action>(ACTIONS.filter(a => {
+    if (options.manual && !manualAction(a.id)) return false;
     const b = profile.bindings[a.id];
     return key(a.key) || (f.buttonBanks.get(b.button) === b.modified && down(b.button));
   }).map(a => a.id));
@@ -140,17 +145,31 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     pitch: Math.sign(l.y) * Math.max(0, Math.abs(l.y) - Math.tan(0.44) * Math.abs(l.x)), rx: r.x, ry: r.y,
     knee: key("shift") ? 0.95 : h.connected ? trigger(7) : 0.35, weight: f.foot,
     carriage: key("c") ? 1 : 0, windup: key(",") ? 1 : 0,
-    push: fresh("push") || (!s.fallen && ((held.has("push") && s.tick % 90 === 0) || c.autoPush === true)), brake: key("x") || trigger(6) > 0.1,
-    toe: fresh("toe"), turn: false, bracket: false, spin: held.has("spin"), twizzle: held.has("twizzle"), inaBauer: held.has("ina") || held.has("spiral") };
-  const input = latchTurns(SCHEME.A, schemeA(raw), st, s.flips);
-  if (input.spin || s.move === MOVE.Spin) input.pitch = Math.max(input.pitch, r.y);
+    push: fresh("push") || (!s.fallen && options.repeatPush !== false && ((held.has("push") && s.tick % 90 === 0) || c.autoPush === true)), brake: key("x") || trigger(6) > 0.1,
+    toe: fresh("toe"), turn: options.manual === true && (held.has("three") || held.has("mohawk")), bracket: options.manual === true && held.has("bracket"), spin: held.has("spin"), twizzle: held.has("twizzle"), inaBauer: held.has("ina") || held.has("spiral") };
+  const mapped = schemeA(raw);
+  if (options.twoFoot) {
+    // Hold the modifier for arms without dropping the right blade's last command.
+    const arms = modified || key("c");
+    if (!arms) f.bladeRight = { ...r };
+    const blade = f.bladeRight ?? { x: 0, y: 0 };
+    const leftX = key("a") || key("d") ? (Number(key("d")) - Number(key("a"))) * profile.keyboardLean : l.x * profile.leanGain;
+    const rightX = key("arrowleft") || key("arrowright") ? (Number(key("arrowright")) - Number(key("arrowleft"))) * profile.keyboardLean : blade.x * profile.leanGain;
+    mapped.lean = (leftX + rightX) / 2;
+    mapped.leanSplit = (rightX - leftX) / 2;
+    mapped.pitch = (Number(key("w")) - Number(key("s"))) || (relievedPitch(l.x, l.y) + relievedPitch(blade.x, blade.y)) / 2;
+    mapped.carriage = key("c") ? 1 : arms ? Math.min(1, Math.hypot(r.x, r.y)) : 0;
+    mapped.windup = key(",") ? 1 : arms ? r.x : 0;
+  }
+  const input = latchTurns(SCHEME.A, mapped, st, s.flips);
+  if ((input.spin || s.move === MOVE.Spin) && (!options.twoFoot || modified)) input.pitch = Math.max(input.pitch, r.y);
   f.request = ACTIONS.filter(a => held.has(a.id)).map(a => a.name).join(" + ") || "Glide";
 
   // A direct turn binding performs the existing hold/transfer/reversal gesture.
   // It never creates a turn, edge, speed, score or solver state itself.
   if (f.turnStarted && s.move !== MOVE.Turn) { f.turn = null; f.turnStarted = false; }
   if (s.fallen || s.jump.phase === JUMP_PHASE.Air) { f.turn = null; f.turnStarted = false; }
-  const requested = TURNS.find(a => fresh(a));
+  const requested = options.manual ? undefined : TURNS.find(a => fresh(a));
   if (requested && !s.fallen && s.move === MOVE.None && s.jump.phase !== JUMP_PHASE.Air) {
     f.feedbackUntil = -1;
     f.turn = requested;
@@ -187,6 +206,14 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     && Math.hypot(s.vel.x, s.vel.y) >= 1 && !input.turn && !input.bracket && !input.spin && !input.twizzle && !input.inaBauer;
   if (cantilever) Object.assign(input, { knee: 0.65, weight: 0.5, pitch: -0.25, push: false, toe: false, carriage: 1, windup: 0 });
   if (held.has("low")) input.windup = 0;
+  // Assistance scales edge demand with available speed, preserving the stick's
+  // side and analog depth. Do not rewrite turn gestures or airborne control.
+  if (options.leanAssist && s.move === MOVE.None && s.jump.phase === JUMP_PHASE.None && !input.turn && !input.bracket) {
+    const speed = Math.hypot(s.vel.x, s.vel.y);
+    const limit = 0.75 * Math.atan2(speed * speed * Math.sin(p.maxTilt) / p.rocker, p.gravity) / p.maxLean;
+    const safe = Math.max(-limit, Math.min(limit, input.lean));
+    input.lean += (safe - input.lean) * options.leanAssist;
+  }
   // A move request suppresses held auto-stroking; recovery still needs a fresh push.
   if (input.brake || [...held].some(a => a !== "push" && a !== "toe") || s.move !== MOVE.None) input.push = false;
   f.previous = held;
