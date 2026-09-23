@@ -227,7 +227,12 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       snowplow) the balance controller stands the body flat instead of
 //       digging one blade and catching the other. footMode 1 clips from /29
 //       must be re-recorded; the fixture was rebased, every digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/30";
+//   /31 SkatingInput gained optional pushFoot/pushPower (a push that names
+//       its leg and strength; the same leg's push mid-stroke can only
+//       strengthen it) and SkaterState optional strokeScale, absent unless a
+//       push gives a power. Absent, a push is exactly /30's. Fixture rebased,
+//       every digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/31";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
@@ -360,7 +365,10 @@ export function parseReplay(json: string): Replay {
     const frame = object(root.frames[i], path, ["input", "scheme", "digest"], ["params"]);
     const input = object(frame.input, `${path}.input`,
       ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"],
-      ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit"]);
+      ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit", "pushFoot", "pushPower"]);
+    if (Object.hasOwn(input, "pushFoot") && input.pushFoot !== 0 && input.pushFoot !== 1)
+      throw new Error(`${path}.input.pushFoot: expected 0 or 1`);
+    if (Object.hasOwn(input, "pushPower")) number(input.pushPower, `${path}.input.pushPower`, 0, 1);
     for (const key of ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit"])
       if (Object.hasOwn(input, key)) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["lean", "pitch", "leanSplit", "windup"]) number(input[key], `${path}.input.${key}`, -1, 1);

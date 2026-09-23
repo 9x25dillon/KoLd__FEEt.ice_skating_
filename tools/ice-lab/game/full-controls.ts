@@ -128,13 +128,24 @@ export interface FullState {
   bladeLeft?: { x: number; y: number };
   /** The feet where the nudging layouts left them: toeOut and toeOutSplit, -1..1. */
   feet?: { out: number; split: number };
+  /** Experimental: per leg, the tick each gesture was armed (trigger high, stick low) and completed (pump, stroke). */
+  gestures?: { high: number[]; low: number[]; pump: number[]; stroke: number[] };
 }
 export type GameControlState = SchemeState & { full?: FullState };
 export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks: new Map(), feedbackUntil: -1, turn: null, turnStarted: false, foot: 1, request: "Glide", left: { x: 0, y: 0 }, right: { x: 0, y: 0 } });
 const TURNS: Action[] = ["three", "mohawk", "bracket", "loop", "rocker", "counter", "choctaw"];
 export const manualAction = (action: Action): boolean => !TURNS.includes(action) || action === "three" || action === "bracket";
 
-export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; leanAssist?: number; repeatPush?: boolean }
+export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; pumps?: boolean; leanAssist?: number; repeatPush?: boolean }
+/**
+ * The Experimental setup's pushes, per leg [left, right]. A PUMP: that leg's
+ * trigger pulled past PUMP_HIGH then let back under PUMP_LOW within
+ * GESTURE_TICKS. A THUMB STROKE: that stick pulled down past -STROKE_EDGE then
+ * swept up past +STROKE_EDGE within GESTURE_TICKS. Either pushes that leg at
+ * SINGLE_PUSH; the other gesture of the same leg within PAIR_TICKS makes it a
+ * full push. Authored; the operator's experiment to tune on the pad.
+ */
+const PUMP_HIGH = 0.6, PUMP_LOW = 0.2, STROKE_EDGE = 0.6, GESTURE_TICKS = 30, PAIR_TICKS = 15, SINGLE_PUSH = 0.6;
 /** Full travel of a nudged foot axis, per second held. */
 const FEET_NUDGE_RATE = 1.5;
 /**
@@ -174,6 +185,32 @@ function feetInput(
     return { toeOut: clamp((lf + rf) / 2, -1, 1), toeOutSplit: clamp((rf - lf) / 2, -1, 1), pitch, pitchSplit: 0 };
   }
   return { toeOut: feet.out, toeOutSplit: feet.split };
+}
+
+/**
+ * The Experimental setup's legs: a trigger pump or a thumb stroke pushes that
+ * leg, and the two together push it harder. A trigger let go while a jump is
+ * loading is the jump's release, not a pump; in the air nothing pushes.
+ */
+function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: number[], connected: boolean): Partial<SkatingInput> {
+  const g = f.gestures ??= { high: [-1e9, -1e9], low: [-1e9, -1e9], pump: [-1e9, -1e9], stroke: [-1e9, -1e9] };
+  if (!connected) return {};
+  const now = s.tick;
+  let out: Partial<SkatingInput> = {};
+  for (let i = 0; i < 2; i++) {
+    let done = false;
+    if (triggers[i] >= PUMP_HIGH) g.high[i] = now;
+    else if (triggers[i] <= PUMP_LOW && now - g.high[i] <= GESTURE_TICKS && s.jump.phase === JUMP_PHASE.None) {
+      g.pump[i] = now; g.high[i] = -1e9; done = true;
+    }
+    if (sticks[i] <= -STROKE_EDGE) g.low[i] = now;
+    else if (sticks[i] >= STROKE_EDGE && now - g.low[i] <= GESTURE_TICKS && s.jump.phase === JUMP_PHASE.None) { g.stroke[i] = now; g.low[i] = -1e9; done = true; }
+    if (done) {
+      const paired = now - g.pump[i] <= PAIR_TICKS && now - g.stroke[i] <= PAIR_TICKS;
+      out = { push: true, pushFoot: i, pushPower: paired ? 1 : SINGLE_PUSH };
+    }
+  }
+  return out;
 }
 
 export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: Params, profile: ControllerProfile, options: MappingOptions = {}) {
@@ -230,6 +267,7 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     mapped.pitch = keyPitch || (leftPitch + rightPitch) / 2;
     // Each stick's fore–aft is its own blade's heel/toe. The keyboard's W/S stays shared.
     mapped.pitchSplit = keyPitch ? 0 : (rightPitch - leftPitch) / 2;
+    if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l.y, arms ? f.bladeRight!.y : r.y], h.connected));
     if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options));
     // A trigger per knee: LT the left leg, RT the right. The brake moves off LT
     // to D-pad ↑, free in this setup unless the profile has bound it, until

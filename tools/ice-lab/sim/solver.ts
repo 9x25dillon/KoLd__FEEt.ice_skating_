@@ -575,7 +575,9 @@ export function step(
   // ── 1b. begin a stroke, before any blade tilt is assigned ─────────────────
   if (alive && input.push && s.strokeTime <= 0 && !turning && !ina) {
     s.strokeTime = p.strokeDuration;
-    s.strokeFoot = (1 - s.strokeFoot) as Foot;   // two-beat alternation
+    // Two-beat alternation, unless the push names its leg.
+    s.strokeFoot = (input.pushFoot === 0 || input.pushFoot === 1 ? input.pushFoot : 1 - s.strokeFoot) as Foot;
+    s.strokeScale = input.pushPower === undefined ? undefined : clamp(axis(input.pushPower, 1), 0, 1);
     // Legs, once per push rather than per tick: SkateSolver.cpp's own
     // S.LegPool -= 0.011f * Knee, at the moment the push begins.
     if (staminaOn) s.legs = clamp(s.legs - p.staminaLegsPerPush * pushKnee(), 0, 1);
@@ -602,6 +604,11 @@ export function step(
       s.strokeMusicScale = 1;
     }
   }
+  // A push naming the leg already pushing adds to its stroke: a thumb stroke
+  // and a trigger pump of the same leg, one just after the other, are one
+  // stronger push. It never weakens one.
+  if (s.strokeTime > 0 && input.pushFoot === s.strokeFoot && input.pushPower !== undefined && s.strokeScale !== undefined)
+    s.strokeScale = Math.max(s.strokeScale, clamp(axis(input.pushPower, 1), 0, 1));
   const stroking = s.strokeTime > 0;
 
   // ── 1c. or a turn's pivot, in place of sections 2-5 ───────────────────────
@@ -713,7 +720,7 @@ export function step(
         pushMass = pb.normalLoad / g;
         if (s.crossover) {
           const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? p.backPushScale : 1;
-          crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * pushKnee() * p.mass * back,
+          crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * pushKnee() * p.mass * back * (s.strokeScale ?? 1),
             biteCapacity(pb.normalLoad, s.crossSide * p.strokeEdge, p, condAt(pb.contact)));
         }
       }
@@ -999,7 +1006,7 @@ export function step(
       // push drives backward: a C-cut rather than a stroke, and with the moves
       // on a slightly weaker one (backPushScale).
       const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? -1 : 1;
-      const wanted = p.strokePower * pushKnee() * p.mass * s.strokeMusicScale
+      const wanted = p.strokePower * pushKnee() * p.mass * s.strokeMusicScale * (s.strokeScale ?? 1)
         * (back < 0 && p.movesMode >= 1 ? p.backPushScale : 1);
       const force = Math.min(wanted, push.biteCapacity);
       if (s.crossover && crossLat > 0) {

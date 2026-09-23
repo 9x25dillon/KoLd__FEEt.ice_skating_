@@ -490,6 +490,8 @@ export interface SkaterState {
    * the way `crossover` and `crossSide` are.
    */
   strokeMusicScale: number;
+  /** The current stroke's pushPower, when its push gave one (absent otherwise). */
+  strokeScale?: number;
   /** The jump in progress, if any. sim/jump.ts owns every field. */
   jump: JumpState;
   /** The last jump that came down, as the technical panel would read it. */
@@ -657,6 +659,14 @@ export interface SkatingInput {
    */
   toeOut?: number;
   toeOutSplit?: number;
+  /**
+   * With `push`: which foot pushes (0 left, 1 right) instead of the two-beat
+   * alternation, and how hard, 0..1 of the athlete's stroke. Optional, for a
+   * setup that pushes a chosen leg (the Experimental setup's pumps and thumb
+   * strokes); absent, a push is exactly as it was.
+   */
+  pushFoot?: number;
+  pushPower?: number;
   push: boolean;
   brake: boolean;
   /**
