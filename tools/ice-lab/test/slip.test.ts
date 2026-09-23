@@ -3,8 +3,9 @@
 // With it off, every tick carries the travel round with the blades, so a
 // blade can never point across its path; the committed fixture's digests are
 // unchanged by its arrival (replay.ts, /23). With it on, an edge that holds
-// carves exactly as before, and a blade across its travel scrapes at the
-// bible's muSkid instead of sliding sideways for free.
+// carves exactly as before, and a blade across its travel scrapes along the
+// grip curve instead of sliding sideways for free: a skill, a hockey stop, or
+// on the wrong edge a trip.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -49,22 +50,71 @@ test("an edge that holds carves as it did: slip on and off agree to rounding", (
   }
 });
 
-test("a blade across its travel scrapes at muSkid·g with slip on, and slides almost free without it", () => {
-  // MEASURED at 90°, 5 m/s, knee 0.5, lean 0.3 into the scrape: slip off 4.80
-  // m/s after 0.5 s, still 90° across; slip on 3.22 m/s — 3.56 m/s², muSkid·g
-  // (3.43) plus glide and air.
-  const half = (slipMode: number) => {
-    const p = { ...SIM, slipMode }, s = across(p, 90), events: EdgeEvent[] = [];
-    for (let i = 0; i < 60; i++) step(s, { ...NEUTRAL_INPUT, lean: 0.3, knee: 0.5 }, p, SIM_DT, events);
-    return { s, events };
+/** Skate `s` until it stops, falls or `limit` seconds pass. */
+function stop(p: Params, s: SkaterState, lean: number, limit = 5) {
+  const events: EdgeEvent[] = [];
+  let t = 0, dist = 0;
+  while (t < limit && !s.fallen && len(s.vel) > 0.3) {
+    step(s, { ...NEUTRAL_INPUT, lean, knee: 0.5 }, p, SIM_DT, events);
+    t += SIM_DT; dist += len(s.vel) * SIM_DT;
+  }
+  return { t, dist, events };
+}
+
+test("a hockey stop: blades across the travel, leaning into it, scrape to a standstill on their feet", () => {
+  // MEASURED (Simulation params, knee 0.5, lean 0.3 into the scrape):
+  //   3 m/s 1.08 s / 2.42 m · 5 m/s 1.63 s / 5.26 m · 7 m/s 2.16 s / 9.02 m.
+  // Without slip the same blades slide sideways and keep 4.8 m/s of 5 after 0.5 s.
+  const p = { ...SIM, slipMode: 1 };
+  for (const [speed, time] of [[3, 1.08], [5, 1.63], [7, 2.16]]) {
+    const s = across(p, 90, speed), r = stop(p, s, 0.3);
+    assert.equal(s.fallen, false, `${speed} m/s`);
+    assert.ok(len(s.vel) <= 0.3 && Math.abs(r.t - time) < 0.05, `${speed} m/s: stopped in ${r.t.toFixed(2)} s`);
+    assert.ok(r.events.some(e => e.type === EVENT.SkidBegin), "the stop is a skid");
+  }
+  const off = { ...SIM, slipMode: 0 }, s0 = across(off, 90);
+  for (let i = 0; i < 60; i++) step(s0, { ...NEUTRAL_INPUT, lean: 0.3, knee: 0.5 }, off, SIM_DT, []);
+  assert.ok(len(s0.vel) > 4.6 && slipDeg(s0) > 89, "slip off: a crosswise blade slides almost free");
+});
+
+test("the scrape follows the edge: lean harder into it and the stop is harder, up to what the edge can give", () => {
+  // MEASURED at 5 m/s, 90°: about 0.5 s to lean in, then a steady stop set by
+  // the lean — 2.2 m/s² at lean 0.2, 3.6 at 0.3, 5.4 at 0.4, where the edge
+  // reaches maxTilt (the grip curve's ceiling, about 0.55 g). Lean 0.6 asks
+  // more than any edge gives, over-leans and falls.
+  const p = { ...SIM, slipMode: 1 };
+  const steady = (lean: number): number => {
+    const s = across(p, 90);
+    for (let i = 0; i < 108; i++) step(s, { ...NEUTRAL_INPUT, lean, knee: 0.5 }, p, SIM_DT, []);
+    const v0 = len(s.vel);
+    for (let i = 0; i < 36; i++) step(s, { ...NEUTRAL_INPUT, lean, knee: 0.5 }, p, SIM_DT, []);
+    assert.equal(s.fallen, false, `lean ${lean}`);
+    assert.ok(s.blade.every(b => b.regime === REGIME.Skid && b.latSlipAccel > 0 && Math.sign(b.tilt) === Math.sign(s.lean)),
+      `lean ${lean}: both blades skidding, dug in on the lean's side, throwing snow`);
+    return (v0 - len(s.vel)) / (36 * SIM_DT);
   };
-  const off = half(0), on = half(1);
-  const decel = (5 - len(on.s.vel)) / 0.5, muG = SIM.muSkid * SIM.gravity;
-  assert.ok(decel > 0.95 * muG && decel < 1.15 * muG, `on: ${decel.toFixed(2)} m/s² vs muSkid·g ${muG.toFixed(2)}`);
-  assert.ok(len(off.s.vel) > 4.6, "off: the old model lets a crosswise blade slide");
-  assert.ok(slipDeg(off.s) > 89);
-  assert.ok(on.events.some(e => e.type === EVENT.SkidBegin), "the scrape is a skid");
-  assert.ok(on.s.blade.every(b => b.regime === REGIME.Skid && b.latSlipAccel > 0), "and throws snow (ice.ts, audio.ts read latSlipAccel)");
+  const [soft, mid, hard] = [0.2, 0.3, 0.4].map(steady);
+  assert.ok(soft < mid && mid < hard && hard > 2 * soft, `${soft.toFixed(2)} < ${mid.toFixed(2)} < ${hard.toFixed(2)} m/s²`);
+  const over = across(p, 90);
+  stop(p, over, 0.6);
+  assert.equal(over.fallen, true, "past the edge's ceiling the lean cannot be held");
+});
+
+test("lean with the slide instead of against it and the downhill edge catches: a trip", () => {
+  // MEASURED: lean -0.3 at 3, 5 and 7 m/s falls in 0.94-0.95 s, still moving at 1.7-5.5 m/s.
+  const p = { ...SIM, slipMode: 1 };
+  for (const speed of [3, 5, 7]) {
+    const s = across(p, 90, speed), r = stop(p, s, -0.3);
+    assert.equal(s.fallen, true, `${speed} m/s`);
+    assert.ok(r.t < 1.2 && len(s.vel) > 1, `${speed} m/s: tripped at ${r.t.toFixed(2)} s, not stopped`);
+  }
+});
+
+test("flat blades across the travel drift: a flat scrape holds almost nothing", () => {
+  const p = { ...SIM, slipMode: 1 }, s = across(p, 90);
+  for (let i = 0; i < 240; i++) step(s, { ...NEUTRAL_INPUT, knee: 0.5 }, p, SIM_DT, []);
+  assert.equal(s.fallen, false);
+  assert.ok(len(s.vel) > 3 && slipDeg(s) > 85, `still drifting sideways at ${len(s.vel).toFixed(2)} m/s`);
 });
 
 test("part-way across, the scrape takes the sideways travel out and the edge grips again", () => {

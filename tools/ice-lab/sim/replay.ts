@@ -189,7 +189,14 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       expression the solver evaluates is the /22 one, so the fixture was
 //       re-recorded by replay/rebase-fixture.ts with every digest unchanged;
 //       only `initial.params` grew the one key.
-export const REPLAY_SOLVER = "ice-lab-f64/23";
+//   /24 The scrape follows the edge (`scrapeRefTilt`, solver.ts's
+//       scrapeForce): Params gained scrapeRefTilt. Only slipMode 1 reads it,
+//       and it changes that mode's arithmetic — a sliding blade scrapes
+//       along the grip curve, catches on the wrong edge, and the balance
+//       controller picks the scrape's edge. A slipMode 1 clip from /23 must
+//       be re-recorded; the fixture (slipMode 0) was rebased with every
+//       digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/24";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

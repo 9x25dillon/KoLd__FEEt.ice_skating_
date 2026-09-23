@@ -621,6 +621,15 @@ export interface Params {
    * is the velocity against the heading, both already there.
    */
   slipMode: number;
+  /**
+   * rad. The edge at which a scrape runs at exactly muSkid · N. A scrape
+   * follows the grip curve (biteCapacity): an edge dug in toward the travel
+   * scrapes harder the deeper it goes, a flat blade barely at all, so a skater
+   * controls a stop with the edge the way they control a carve. Authored —
+   * see docs/open-constants.md; fixed by the stopping distance of a hockey
+   * stop from a known speed and edge.
+   */
+  scrapeRefTilt: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -822,6 +831,7 @@ export const DEFAULT_PARAMS: Params = {
   iceBiteLossMax: 0.35,
 
   slipMode: 0,
+  scrapeRefTilt: 0.6,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -983,6 +993,7 @@ export function validate(p: Params): string[] {
   if (p.staminaBalanceNoiseBase < 0) errs.push("staminaBalanceNoiseBase cannot be negative");
   if (p.staminaBalanceNoiseMax < 1) errs.push("staminaBalanceNoiseMax is a multiplier at Legs 0, and fatigue cannot reduce noise");
   if (![0, 1].includes(p.iceGridMode)) errs.push("iceGridMode is 0 (off) or 1 (the sheet wears)");
+  if (!(p.scrapeRefTilt > 0 && p.scrapeRefTilt < Math.PI / 2)) errs.push("scrapeRefTilt must be an edge between 0 and 90 degrees");
   if (![0, 1].includes(p.slipMode)) errs.push("slipMode is 0 (travel carried with the blades) or 1 (blades can point across their travel)");
   if (p.iceDamagePerPass <= 0 || p.iceDamagePerPass > 1)
     errs.push("iceDamagePerPass is a per-pass saturating share, in (0, 1]");

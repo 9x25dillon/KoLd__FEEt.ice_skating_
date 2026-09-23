@@ -100,10 +100,29 @@ const legKnees = (input: SkatingInput, floor = 0): [number, number] => {
 const supportKnee = ([l, r]: [number, number], weightR: number): number => l + weightR * (r - l);
 
 /**
+ * The share of its grip a blade keeps once it slides: muSkid at scrapeRefTilt.
+ * Scaled on biteCapacity, so sharpness, ice and load move a scrape as they
+ * move a carve.
+ */
+const scrapeShare = (p: Params): number => p.muSkid / (p.biteC0 + p.biteC1 * sin(p.scrapeRefTilt));
+
+/**
+ * A SCRAPE FOLLOWS THE EDGE. Sliding sideways, a blade dug in toward the side
+ * the scrape pushes (`into`, left positive) cuts a groove and resists along
+ * the grip curve: deeper, harder; flat, hardly at all. A blade on the OTHER
+ * edge — leaning with the slide, not against it — catches: the downhill edge
+ * cannot slide, it grips with all its bite, and the body trips over it.
+ */
+function scrapeForce(b: SkaterState["blade"][number], into: number, p: Params): number {
+  if (Math.abs(b.tilt) >= p.flatThreshold && sign(b.tilt) !== into) return b.biteCapacity;
+  return b.biteCapacity * scrapeShare(p);
+}
+
+/**
  * STAGE B1, THE SLIP SOLVE (slipMode 1). What is left of the travel across
  * the blades after the carve: the edges take it out as far as they can hold
  * (biteCapacity, summed over the carrying blades), and past that they scrape
- * it out at the kinetic rate, muSkid · N, or a flat blade's own smaller bite.
+ * it out along the grip curve (scrapeForce) — or catch, on the wrong edge.
  * An impulse along the blades' normal, so a scrape costs speed the way a
  * scrape does. Returns the sideways force on the body, left positive, and
  * settles each carrying blade's skid regime and events.
@@ -113,12 +132,15 @@ function slipSolve(
 ): number {
   const n = perpLeft(s.heading);
   const vLat = dot(s.vel, n);
+  const into = -sign(vLat);   // the side the scrape pushes the body toward
+  const scrapes: number[] = [0, 0];
   let grip = 0, kinetic = 0;
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
     grip += b.biteCapacity;
-    kinetic += Math.min(p.muSkid * b.normalLoad, b.biteCapacity);
+    scrapes[i] = scrapeForce(b, into, p);
+    kinetic += scrapes[i];
   }
   const need = p.mass * Math.abs(vLat);
   const sliding = grip > 0 && need > grip * dt;
@@ -127,8 +149,7 @@ function slipSolve(
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
-    const scrape = Math.min(p.muSkid * b.normalLoad, b.biteCapacity);
-    b.latSlipAccel = sliding ? scrape / Math.max(b.normalLoad / p.gravity, 1e-6) : 0;
+    b.latSlipAccel = sliding ? scrapes[i] / Math.max(b.normalLoad / p.gravity, 1e-6) : 0;
     if (sliding && b.regime !== REGIME.Brake) b.regime = REGIME.Skid;
     const isSkid = b.regime === REGIME.Skid;
     if (isSkid && !wasSkid[i]) events.push({
@@ -447,6 +468,19 @@ export function step(
     const kappaMax = sin(pFatigue.maxTilt) / rhoSupport;
     const kappa = clamp(aCmd / v2sq, -kappaMax, kappaMax);
     let tiltTarget = asinClamped(kappa * rhoSupport);
+    // SCRAPING, the edge sets the scrape, not a curve: the skater digs in on
+    // the side the scrape pushes toward, as deep as the lean needs, and never
+    // offers it the other edge. Whether the body can get there is the
+    // angulation limit below — lean the wrong way and it cannot.
+    if (slipOn && s.blade[s.supportFoot].regime === REGIME.Skid) {
+      const into = -sign(dot(s.vel, perpLeft(s.heading)));
+      const perSin = scrapeShare(p) * p.biteC1 * p.sharpness * p.iceHardness * (nTotal / p.mass);
+      const base = scrapeShare(p) * p.biteC0 * p.sharpness * p.iceHardness * (nTotal / p.mass);
+      const want = aCmd * into;
+      tiltTarget = want > base && perSin > 1e-9
+        ? into * asinClamped(clamp((want - base) / perSin, 0, sin(pFatigue.maxTilt)))
+        : 0;
+    }
     // Angulation: the blade may run deeper than the body leans, but only so
     // far. This gap is most of what "edge quality" means to a judge.
     tiltTarget = clamp(tiltTarget, s.lean - pEff.angulationLimit, s.lean + pEff.angulationLimit);

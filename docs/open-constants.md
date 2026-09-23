@@ -97,11 +97,20 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
 
 - **`muSkid`** — friction once the edge has let go
   - Value: `0.35`
-  - Used: `blade.ts` `muLong`; `solver.ts` `step` (skid scrub, brake)
+  - Used: `blade.ts` `muLong`; `solver.ts` `step` (skid scrub, brake), and with `slipMode` 1 the scrape (`scrapeShare`)
   - Level: L2
   - Range: none recorded
   - Fixed by: stopping distance from a known speed in a hockey stop or snowplough (footage timing)
   - Source: the bible and `SkateSolver.cpp` (the engineering package said 0.03)
+
+- **`scrapeRefTilt`** — the edge at which a sideways scrape runs at exactly `muSkid`
+  - Value: `0.6` rad (34°)
+  - Used: `solver.ts` `scrapeShare`, `scrapeForce`, and the balance controller while scraping (`slipMode` 1 only)
+  - Level: L3, authored
+  - Range: none recorded
+  - Meaning: a sliding blade keeps `muSkid / (biteC0 + biteC1 sin scrapeRefTilt)` of its grip curve (0.17 at the defaults), so a deeper edge dug toward the travel scrapes harder, up to about 0.55 g at `maxTilt`; a flat blade barely scrapes; the other edge catches with all its bite (a trip)
+  - Measured (Simulation params, 90° across, lean 0.3 into it): 5 m/s stops in 1.63 s over 5.26 m; 7 m/s in 2.16 s over 9.02 m
+  - Fixed by: a hockey stop's stopping distance and body lean from a known speed (footage timing), with `muSkid`
 
 - **`biteC0`** — lateral holding capacity of a flat blade, per unit load
   - Value: `0.08`
