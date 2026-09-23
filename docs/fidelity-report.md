@@ -8,7 +8,7 @@ Preset under test **`responsive`** (the public build's boot preset); reference *
 
 ## Gate
 
-**Gate not met.** 6 pass, 0 fail, 26 unsourced, 0 unmodelled, of 32 cases.
+**Gate not met.** 7 pass, 0 fail, 25 unsourced, 0 unmodelled, of 32 cases.
 
 | §6.3 | Condition | State |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 | O1 carve relation | 6 | 4 | 0 | 2 | 0 | 0 / 3 |
 | O2 tracing curvature | 2 | 0 | 0 | 2 | 0 | 0 / 3 |
 | O3 edge transitions | 7 | 0 | 0 | 7 | 0 | 0 / 3 |
-| O4 speed decay | 5 | 0 | 0 | 5 | 0 | 0 / 3 |
+| O4 speed decay | 5 | 1 | 0 | 4 | 0 | 1 / 3 |
 | O5 jump rotation | 6 | 2 | 0 | 4 | 0 | 0 / 3 |
 | O6 moment of inertia | 3 | 0 | 0 | 3 | 0 | 0 / 3 |
 | O7 propulsion | 3 | 0 | 0 | 3 | 0 | 0 / 3 |
@@ -41,7 +41,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 | `carve_lean_deg` | 1 | 0 | 0 | 1 | 0 |
 | `carve_lean_residual_deg` | 4 | 4 | 0 | 0 | 0 |
 | `crossover_gain_ms` | 1 | 0 | 0 | 1 | 0 |
-| `glide_decel_ms2` | 4 | 0 | 0 | 4 | 0 |
+| `glide_decel_ms2` | 4 | 1 | 0 | 3 | 0 |
 | `ina_bauer_speed_loss_ms` | 1 | 0 | 0 | 1 | 0 |
 | `jump_reachable` | 1 | 0 | 0 | 1 | 0 |
 | `propulsion_reachable` | 1 | 0 | 0 | 1 | 0 |
@@ -67,8 +67,9 @@ External passing counts literature cases only once `primary_checked` is true (§
 | `carve-residual-two-foot` | derived | `carve_lean_residual_deg` | 0.0000 deg | 0.5000 | 0.0517 | 0.0517 | pass | fail (no steady window (fidelity-gate §4.4)) |
 | `flight-residual-full-jump-moves` | derived | `air_time_height_residual_m` | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
 | `flight-residual-hop` | derived | `air_time_height_residual_m` | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
+| `glide-hockey-sled-federolf2008` | literature | `glide_decel_ms2` | 0.0697 m/s^2 | 0.0181 | 0.0720 | 0.0024 | pass | pass 0.0720 |
 
-## Unsourced (26)
+## Unsourced (25)
 
 Stubs waiting for a measurement. A null expectation is correct; an invented number would be a defect.
 
@@ -78,7 +79,6 @@ Stubs waiting for a measurement. A null expectation is correct; an invented numb
 - `carve-lean-footage` — footage, `carve_lean_deg`
 - `counter-unmodelled` — footage, `turn_entry_angle_deg`
 - `crossover-gain-back-footage` — footage, `crossover_gain_ms`
-- `glide-hockey-sled-federolf2008` — literature, `glide_decel_ms2`
 - `glide-low-speed-rink-pair-a` — footage, `glide_decel_ms2`
 - `glide-low-speed-rink-pair-b` — footage, `glide_decel_ms2`
 - `glide-straight-speedskate-dekoning1992` — literature, `glide_decel_ms2`
