@@ -100,6 +100,50 @@ const legKnees = (input: SkatingInput, floor = 0): [number, number] => {
 const supportKnee = ([l, r]: [number, number], weightR: number): number => l + weightR * (r - l);
 
 /**
+ * STAGE B1, THE SLIP SOLVE (slipMode 1). What is left of the travel across
+ * the blades after the carve: the edges take it out as far as they can hold
+ * (biteCapacity, summed over the carrying blades), and past that they scrape
+ * it out at the kinetic rate, muSkid · N, or a flat blade's own smaller bite.
+ * An impulse along the blades' normal, so a scrape costs speed the way a
+ * scrape does. Returns the sideways force on the body, left positive, and
+ * settles each carrying blade's skid regime and events.
+ */
+function slipSolve(
+  s: SkaterState, p: Params, dt: number, stroking: boolean, wasSkid: boolean[], events: EdgeEvent[],
+): number {
+  const n = perpLeft(s.heading);
+  const vLat = dot(s.vel, n);
+  let grip = 0, kinetic = 0;
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
+    grip += b.biteCapacity;
+    kinetic += Math.min(p.muSkid * b.normalLoad, b.biteCapacity);
+  }
+  const need = p.mass * Math.abs(vLat);
+  const sliding = grip > 0 && need > grip * dt;
+  const J = Math.min(need, (sliding ? kinetic : grip) * dt);
+  if (J > 0) s.vel = add(s.vel, mul(n, -sign(vLat) * J / p.mass));
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
+    const scrape = Math.min(p.muSkid * b.normalLoad, b.biteCapacity);
+    b.latSlipAccel = sliding ? scrape / Math.max(b.normalLoad / p.gravity, 1e-6) : 0;
+    if (sliding && b.regime !== REGIME.Brake) b.regime = REGIME.Skid;
+    const isSkid = b.regime === REGIME.Skid;
+    if (isSkid && !wasSkid[i]) events.push({
+      tick: s.tick, type: EVENT.SkidBegin, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: b.latSlipAccel,
+    });
+    if (!isSkid && wasSkid[i]) events.push({
+      tick: s.tick, type: EVENT.SkidEnd, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: 0,
+    });
+  }
+  return -sign(vLat) * J / dt;
+}
+
+/**
  * The jump reads the knee it loads, lands and absorbs on: the standing leg's.
  * Without a split this is the input itself, untouched.
  */
@@ -159,6 +203,7 @@ export function step(
   // caller's own p. `staminaMode` 0 makes pFatigue identical to p, field for
   // field, the same inertness guarantee iceOn/condAt give the ice grid.
   const staminaOn = p.staminaMode >= 1;
+  const slipOn = p.slipMode >= 1;
   const legsMul = staminaOn ? clamp(s.legs, 0, 1) : 1;
   const pFatigue: Params = staminaOn ? {
     ...p,
@@ -460,6 +505,9 @@ export function step(
     }
   }
 
+  // slipMode: skid events are decided after the slip solve, against these.
+  const wasSkidAll = slipOn ? s.blade.map((b) => b.regime === REGIME.Skid) : undefined;
+  let carveLost = false;
   if (!turning) for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     // The pushing blade rolls onto its own INSIDE edge for the length of the
@@ -511,14 +559,15 @@ export function step(
       const capFlat = biteCapacity(b.normalLoad, b.tilt, p, condAt(b.contact));
       const wanted = Math.abs(vLatFlat) * (b.normalLoad / g);
       const allowed = Math.min(wanted, capFlat * dt);
-      flatImpulse = add(flatImpulse, mul(nFlat, -sign(vLatFlat) * allowed));
+      // With slip on, the body-level slip solve in section 4 does this.
+      if (!slipOn) flatImpulse = add(flatImpulse, mul(nFlat, -sign(vLatFlat) * allowed));
 
       b.turnRadius = Infinity; b.latForce = -sign(vLatFlat) * allowed / dt;
       b.latSlipAccel = 0;
       b.demandRatio = capFlat > 1e-6 ? wanted / (capFlat * dt) : 0;
       b.biteCapacity = capFlat;
       b.regime = REGIME.Glide;
-      if (wasSkid) events.push({
+      if (wasSkid && !slipOn) events.push({
         tick: s.tick, type: EVENT.SkidEnd, foot: i as Foot,
         prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: 0,
       });
@@ -544,8 +593,11 @@ export function step(
     // `excess` is an ACCELERATION (m/s^2): the part of the demand the edge
     // could not answer. It is what gets scrubbed off as speed below.
     let radius: number, excess: number, fLat: number;
-    if (fNeed <= fBite) {
-      radius = rGeo; excess = 0; fLat = fNeed;
+    // With slip on the blade steers along its own arc whatever the edge can
+    // hold; whether the travel follows is section 4's slip solve.
+    if (slipOn && fNeed > fBite && !(stroking && i === s.strokeFoot)) carveLost = true;
+    if (slipOn || fNeed <= fBite) {
+      radius = rGeo; excess = 0; fLat = Math.min(fNeed, fBite);
     } else if (inCross) {
       // Letting go mid-crossover: the arc opens to what the push and the bite
       // hold between them.
@@ -590,6 +642,7 @@ export function step(
     if (input.brake && Math.abs(vLong) > 0.2) b.regime = REGIME.Brake;
 
     const isSkid = b.regime === REGIME.Skid;
+    if (slipOn) continue;
     if (isSkid && !wasSkid) events.push({
       tick: s.tick, type: EVENT.SkidBegin, foot: i as Foot,
       prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: excess,
@@ -623,11 +676,18 @@ export function step(
         const b = s.blade[i];
         if (b.inContact) b.tangent = normalizeOr(rotate(b.tangent, dPsi), b.tangent);
       }
-      s.vel = rotate(s.vel, dPsi);
+      // An edge that holds carries the travel round with it. With slip on,
+      // one that cannot leaves the travel behind for the slip solve.
+      if (!slipOn || !carveLost) s.vel = rotate(s.vel, dPsi);
     }
     s.heading = s.blade[s.supportFoot].inContact
       ? s.blade[s.supportFoot].tangent
       : s.heading;
+    if (slipOn) {
+      const slip = slipSolve(s, p, dt, stroking, wasSkidAll!, events);
+      // A lost carve holds nothing toward its centre; the scrape is the force.
+      latForceTotal = carveLost ? slip : latForceTotal + slip;
+    }
   }
 
   // ── 5. losses ─────────────────────────────────────────────────────────────
@@ -644,7 +704,8 @@ export function step(
     for (let i = 0; i < 2; i++) {
       const b = s.blade[i];
       if (!b.inContact) continue;
-      dv += muLong(b.tilt, b.latSlipAccel > 0, p, condAt(b.contact)) * b.normalLoad / p.mass * dt;
+      // With slip on, the scrape is already the slip solve's sideways force.
+      dv += muLong(b.tilt, !slipOn && b.latSlipAccel > 0, p, condAt(b.contact)) * b.normalLoad / p.mass * dt;
     }
     if (input.brake) dv += p.muSkid * nTotal / p.mass * dt;
     // An Ina Bauer's trailing foot is never turned out quite square to the lead.

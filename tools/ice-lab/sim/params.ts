@@ -607,6 +607,20 @@ export interface Params {
   // changes. 0 in every preset, the way jumps, moves and music are.
   /** 0 the sheet never wears; 1 every blade pass writes it and reads it back. */
   iceGridMode: number;
+
+  // ── slip ──────────────────────────────────────────────────────────────────
+  /**
+   * 0: the travel is carried round with the blades every tick, so a blade
+   * can never point across its path (every measurement before stage B).
+   * 1: the travel and the blades are separate. The rocker still steers the
+   * blades along their arc, at the along-blade speed over the arc's radius;
+   * the travel follows only as far as the edges can hold (biteCapacity),
+   * and past that the blades scrape sideways at muSkid · N — bible §2.2's
+   * "the edge lets go... speed bleeds off through μ_skid". A flat blade
+   * scrapes at no more than its own small bite. No new state: the slip angle
+   * is the velocity against the heading, both already there.
+   */
+  slipMode: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -807,6 +821,8 @@ export const DEFAULT_PARAMS: Params = {
   iceMuChewed: 0.015,        // bible §3.2
   iceBiteLossMax: 0.35,
 
+  slipMode: 0,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -967,6 +983,7 @@ export function validate(p: Params): string[] {
   if (p.staminaBalanceNoiseBase < 0) errs.push("staminaBalanceNoiseBase cannot be negative");
   if (p.staminaBalanceNoiseMax < 1) errs.push("staminaBalanceNoiseMax is a multiplier at Legs 0, and fatigue cannot reduce noise");
   if (![0, 1].includes(p.iceGridMode)) errs.push("iceGridMode is 0 (off) or 1 (the sheet wears)");
+  if (![0, 1].includes(p.slipMode)) errs.push("slipMode is 0 (travel carried with the blades) or 1 (blades can point across their travel)");
   if (p.iceDamagePerPass <= 0 || p.iceDamagePerPass > 1)
     errs.push("iceDamagePerPass is a per-pass saturating share, in (0, 1]");
   if (p.iceSnowPerScrub < 0) errs.push("iceSnowPerScrub cannot be negative");

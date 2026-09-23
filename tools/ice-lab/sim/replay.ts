@@ -183,7 +183,13 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       lean and unchanged travel sense. Previously the second-half lateral
 //       load opposed the lean. Clips containing these turns must be
 //       re-recorded; the moves-off fixture retains every digest.
-export const REPLAY_SOLVER = "ice-lab-f64/22";
+//   /23 Stage B1, slip (`slipMode`, solver.ts's slipSolve): Params gained
+//       slipMode, 0 by default, no SkaterState field — the slip angle is
+//       the velocity against the heading, both already there. At 0 every
+//       expression the solver evaluates is the /22 one, so the fixture was
+//       re-recorded by replay/rebase-fixture.ts with every digest unchanged;
+//       only `initial.params` grew the one key.
+export const REPLAY_SOLVER = "ice-lab-f64/23";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
