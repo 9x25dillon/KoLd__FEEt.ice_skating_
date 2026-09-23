@@ -803,3 +803,212 @@ The README's test count is 452.
 
 ---
 
+
+## Recovered checkpoint — 2026-09-13, tenth session (fidelity track), from `fidelity-00-repo-correction`
+
+Its code reached `main` in PR #5, but its closing hand-off (`b4c06fc`) was committed only on
+`fidelity-00-repo-correction` and never reached `main`'s `Hand_off.md`. Added here on 2026-09-22 so it
+lives on `main`. The blocks below are that commit's new text, copied verbatim from
+`git show b4c06fc:Hand_off.md`; only heading levels were lowered by one to nest under this section.
+Paths, counts, replay versions and "open" items are as of 2026-09-13 — history, not current state.
+
+**Last session: Sunday 2026-09-13 (tenth, the third session that day). Repo state: complete
+specification, a running Ice Lab (moves, jumps, profiles, replay), and — new today — the fidelity
+track: a written fidelity gate, an open-constants register, a rink-ice literature digest, a validation
+case corpus, a headless validator run in CI on every push, and a generated fidelity report. Also new in
+the engine: rink surface shape and the wind-up jump assist.**
+
+### 0 · Start here (written 2026-09-13, tenth session)
+
+**Two checkouts. Check which one you are in first.**
+
+| Path | Branch | What is there |
+| --- | --- | --- |
+| `/home/kill/KoLd__FEEt.fidelity` | `fidelity-00-repo-correction`, **pushed**, 14 commits ahead of `origin/main`, CI green (run 34799870011, Node 24 and 26) | All of today's work. **This file.** No PR opened yet. |
+| `/home/kill/KoLd__FEEt.ice_skating_` | `ue-replay-01-foundation` | Another session's branch. Its `Hand_off.md` has **uncommitted edits from that session**: do not overwrite them. It also holds the operator's play data (`E_W_replays_sessions_eng_bld/`, untracked) and a saved-page HTML, both not to be committed. |
+
+Run `git worktree list` and `git status --short --branch` before editing anything. **Local `main` in
+the main checkout is behind `origin/main`**, so branch from `origin/main`, never from local `main`.
+This file is uncommitted in the worktree. Commit it with the next piece of work, or on its own if the
+operator asks.
+
+**What the session was.** The operator handed over **"Edgework — Fidelity Track Brief"**. The project is
+built by one person with no funding. The near-term gate is **fidelity**, not fun: does the blade–ice model
+reproduce measurable skating within stated tolerances? UE5 is deferred indefinitely, and the $11.9M phase
+plans are kept as a funded long-horizon scenario. The brief's non-goals are:
+- no UE5 work;
+- no making `src/reference/` compile;
+- no progression, scoring loops or game wrapper;
+- no Steam or Tauri;
+- no revising the phase plans.
+
+Its working agreement is small commits, one task per commit, and stopping to ask on licensing, scope or
+public framing.
+
+**Brief tasks, with status:**
+
+| Task | Commit | State |
+| --- | --- | --- |
+| 0.1 Licence `tools/` | `bd68a80` | **Apache-2.0**, operator's choice (option A); recorded as **D7** because D6 was taken. `tools/ice-lab/LICENSE`. |
+| 0.2 README status | `93ac92c` | Rewritten against the repo. It had said 97 tests, never mentioned the live Pages build or `native/`, and still framed the "is carving fun" gate as near-term. |
+| 0.3 `docs/fidelity-gate.md` | `472ec39` | The specification: evidence levels L0–L3, source types, configuration under test, observables O1–O7, bands, verdicts, pass condition, what a failure obligates. |
+| 1.1 `docs/open-constants.md` | `9a6f191` | Every chosen number in `sim/`, each with value, where used, level, range and what would measure it. |
+| 1.2 `data/validation/` | `c926f39` | Case format with the **rink record**. 32 cases: 6 derived, 2 literature stubs, 21 footage/protocol stubs, 3 unmodelled turns. |
+| 1.3 `tools/ice-lab/validate.mjs` | `c8312e4` | Headless, zero dependencies, `--json`, `--cases`, `--clips`, `--report`. |
+| 1.4 CI | `316de0b` | `ice-lab-checks.yml` on every push to any branch: tests, build, fixture, validator, report freshness. |
+| 1.5 `docs/fidelity-report.md` | `5e6308e` | Generated and deterministic. CI fails if the committed report is stale. |
+| 2.1 Pages | — | **Already existed** before the brief (`pages.yml`, deploys `main`). |
+| 2.2, 2.3 | — | Not started. The brief gates Phase 2 on "a non-trivial number of passing sourced cases". Today there are **zero** external ones. |
+
+**Beyond the brief, on the operator's direction:**
+
+- **`docs/ice-literature.md`** (`2e50485`, `6ca236f`) covers Lever et al. 2022 (J. Glaciology,
+  doi:10.1017/jog.2021.97) and Hutchins, Wang & Impellizzeri 2026 (Sports Eng., doi:10.1007/s12283-025-00538-z).
+  Both were read in full. Every number is marked measured, modelled or secondary.
+  - **Kinetic skate friction:** 0.0046–0.0071, via de Koning 1992 and Federolf 2008. `muGlide` 0.006 sits
+    inside that range, and the range is now recorded.
+  - **Hutchins's friction figure is a static index** (about 3× kinetic), so only its relative trends transfer.
+  - **The sign of the temperature–friction relation is contested** between the sources. Do not add it yet.
+  - **IIHF air temperature (9–11 °C) implies about 1.25 kg/m³.** The model's `airDensity` of 1.29 is 0 °C
+    air. Recorded, **not changed**.
+  - **Lever's pressure-melting point at −5 °C reads 60 MPa on p. 342 and 90 MPa in the conclusions.**
+    Neither is used.
+- **Rink surface shape** (`1778d8f`, replay `/7`). `rinkRelief` is centre ice minus the boards: a crown on
+  a public rink, a bowl in an old thin-slab barn. **O** cycles flat, public (+4.5 mm) and barn (−9 mm).
+  All of it is L3, sized to be "barely perceivable". It is applied along the travel only, and every preset
+  is flat.
+- **Gate §4.4 settle time** (`72df915`, operator's decision). The first validator run failed
+  `carve-residual-fast-deep` at −0.63°. Measurement was checked first: the validator's lateral
+  acceleration matched `latAccel` to 0.03%. The cause was the arms' authority still washing out
+  (τ 1.5 s) inside a window that began at 2 s. The steady window now settles for **5 s where
+  `internalWashout` > 0** (`responsive`, `assisted`) and 2 s where it is 0 (`spec`). The operator: *"i like
+  that we get emerging mechanics from the physics interactions thats intended"*.
+- **The wind-up jump assist** (`c98fea7`, replay `/8`).
+  - **Input:** `SkatingInput.windup`. **U**, or the right stick thrown right in schemes A and B.
+  - **Arming:** a flick against the rotation within 0.6 s of the release. A flick the other way cancels it.
+  - **Effect:** scaled by `jumpAssist` (spec 0.25, responsive 0.5, assisted 0.8). The whip gets a floor, and
+    in the air `assistedCarriage` bisects over `rotationToLand`, a tick-for-tick rollout of the rest of the
+    flight, to land the nearest reachable revolution.
+  - **Bound:** it moves only I. Angular momentum is conserved and air time is untouched.
+  - **Measured:** responsive 3T 3.041 → 3.000 rev; assisted half-whip 2T< and a fall → clean 2T.
+- **Watching scripted play:** `node tools/ice-lab/demo.mjs` writes `build/demos/`. Each demo is a replay
+  clip plus a `.txt` input timeline: a carve figure, and the toe loop manual, wound, wound the wrong way,
+  and flick-only on assisted. The operator asked to study bot inputs; this is the answer. Open a clip with
+  **import replay**.
+
+**Validator today:** 6 pass, 0 fail, 23 unsourced, 3 unmodelled. **The gate is not met.** No observable
+class has external evidence.
+
+**Open, in the operator's hands:**
+
+1. **Measurements.** Fill stubs from footage or papers. The two literature stubs need their **primaries**
+   read (Federolf 2008; de Koning 1992) before they count.
+2. **Whether to open a PR / merge** `fidelity-00-repo-correction`. Merging moves the public Pages build to
+   replay `/8`; older clips then verify only against older commits.
+3. **`airDensity` 1.29 → about 1.25.** Physically sourced, but it changes solver arithmetic, so it needs its
+   own commit and replay bump.
+4. **The spec baseline.** `spec`'s `jumpAssist` is 0.25 on the operator's word, which departs from "spec =
+   the package". Only relevant with jumps on and a wind-up.
+5. **Earlier asks still open** (see 0.1 below): the carve as a feature (ghost line: a replay's tracing or a
+   designed curve?), the career module, stat balance tied to scoring, stamina pools.
+
+**Toolchain reminders.**
+- **Typecheck:** there is no tsc on the box. Scratch-install `typescript @types/node` and run
+  `tsc --noEmit -p . --typeRoots <scratch>/node_modules/@types` from `tools/ice-lab/`. It was clean at
+  every commit today.
+- **Replay bumps:** snapshot the old `sim/` with `git archive HEAD tools/ice-lab/sim | tar -x -C <scratch>`.
+  Compare old and new on the fixture plus the operator's clips in
+  `/home/kill/KoLd__FEEt.ice_skating_/E_W_replays_sessions_eng_bld/` (`d0dfddc5` is `/6` with two jumps;
+  `4b7568b7`, `6f5c711f` and `a5a66c98` are `/4`), every state field and event every tick. Then re-record
+  the fixture from its own inputs, keeping **exactly** the current `DEFAULT_PARAMS` keys.
+- **Report:** after changing any case or anything the validator reads, regenerate with
+  `node tools/ice-lab/validate.mjs --report docs/fidelity-report.md` or CI fails.
+- **Tests:** 272.
+
+---
+
+### From §5 · Things that will trip you up (items 29–35)
+
+29. **The fidelity gate forbids moving its own goalposts silently.** A tolerance or window may change
+   after a result is seen only in a commit that changes nothing else and cites a reason
+   (`fidelity-gate.md` §5). §4.4's settle time was changed that way, on the operator's decision. Do not
+   widen a band, edit a case, or retune a constant to turn a validator failure green. Follow §7: first
+   the measurement, then permitted L2/L3 moves, and structural failures are never tuned away.
+
+30. **A derived case checks the implementation, not reality.** The 6 passing cases are all derived, so
+   the gate stays unmet until footage, protocol or **primary-checked** literature cases pass. Never
+   invent an `expected` value. A null stub is correct.
+
+31. **The validator reads `BOOT_PRESET` from `sim/params.ts`** (moved there from `app/lab.ts` today). Its
+   `BANDS` table must match `fidelity-gate.md` §5.1. A case whose band or √(u_m² + b²) tolerance disagrees
+   fails as invalid.
+
+32. **A flat lean is not a balanced body.** On `responsive` and `assisted` the arms' authority holds a
+   lean for several seconds after it looks settled (`internalWashout` 1.5 s). Any new steady-state
+   measurement has to wait it out, which is why §4.4 settles for 5 s there.
+
+33. **Replay `/8` input has `windup`**, and `parseReplay` requires every input key. Any hand-built
+   `SkatingInput` must spread `NEUTRAL_INPUT`. A flick arms only within `windupWindow` of the release and
+   only with `jumpMode` 2. Cases never wind up, so the assist cannot move a gate observable.
+
+34. **Rink shape needs a start position, and replays have none.** `rinkRelief` is 0 at centre ice, and
+   clips always start at the origin, so a shaped-rink glide case cannot yet place the skater away from
+   centre. A replay `initial.pos` would be a contract change (`/9`).
+
+35. **`python3` edit batches that assert before writing leave nothing half-applied**, but a batch that
+   fails part-way skips every later file. Re-grep version strings (`git grep "f64/"`) after every replay
+   bump: the Ice Lab README's contract paragraph sat at `/6` through `/7` until it was caught.
+
+---
+
+### From §6 · Where to go next
+
+In descending order of value, **for the fidelity track** (the operator's current plan, 2026-09-13):
+
+1. **Get external evidence into the corpus.** Fill the stubs in `data/validation/cases/`, one observable
+   at a time, starting where effort does not enter the measurement: `spin_decay_per_s`, `pull_in_ratio`
+   and `air_time_s` from broadcast frame counts; `glide_decel_ms2` from paired opposite-direction runs.
+   Read Federolf 2008 and de Koning 1992 in the primary before their stubs get values. Regenerate the
+   report after each.
+2. **Decide the PR / merge** of `fidelity-00-repo-correction` with the operator. It moves the public
+   build to replay `/8`.
+3. **Phase 2 (2.2 landing copy for skaters, 2.3 `wrong-edge.yml` intake)** once the report shows
+   non-trivial sourced passes. Phase 3 stays gated.
+4. **The `airDensity` correction** (about 1.25), as its own replay-bumping commit.
+
+
+### From §7 · The one thing that matters most
+
+**Near term (since 2026-09-13): whether the model is *right*.** The fidelity gate in
+[docs/fidelity-gate.md](docs/fidelity-gate.md) asks whether the blade–ice model reproduces measurable
+skating within tolerances stated in advance. It can be answered by one person, offline, for nothing.
+Today it is not met: every passing case is derived, and every external case is a stub.
+
+If a future session is asked to make it pass by editing a case, widening a band after seeing a result,
+or retuning a constant without the §7 procedure, **push back**. The gate is only evidence if its
+goalposts move in the open, with a reason, in a commit of their own. A validator failure is information:
+diagnose the measurement first, as §7.1 says, then put the choice to the operator.
+
+**Long term, for the funded scenario:** everything is still downstream of one unproven claim, **that analog
+lean plus analog knee pressure is a good primary verb.** No shipped game has used it. The studio plan's
+week-16 kill gate — *"is carving fun with no jumps, no score and no art?"* — keeps its pre-committed
+thresholds, a decision-maker who is **not** the scheme's inventor, and the authority to stop the project.
+The same push-back applies to softening it.
+
+### From §8 · Session log
+
+| date | what happened |
+| --- | --- |
+| 2026-09-13 (tenth, worktree `/home/kill/KoLd__FEEt.fidelity`) | The **Fidelity Track Brief**, Tasks 0.1–1.5: `tools/` Apache-2.0 as D7; README reframed to the fidelity gate; `docs/fidelity-gate.md`; `docs/open-constants.md`; `data/validation/` with rink records (32 cases); `validate.mjs`; CI on every push; generated `docs/fidelity-report.md`. Also `docs/ice-literature.md` (Lever 2022, Hutchins 2026, read in full); rink surface shape (replay `/7`); gate §4.4 settle 5 s on washout presets after the first validator run caught the arms' transient; the wind-up jump assist with a flight-rollout controller (replay `/8`); `demo.mjs` clips to watch. Both replay bumps proven identical on the fixture and four operator clips, 49,539 ticks. 272 tests, tsc 7.0.2 clean, pushed, CI green on Node 24 and 26. Validator: 6 pass, 0 fail, 23 unsourced, 3 unmodelled; gate not met. |
+
+The tenth session's shape: **specify, then implement, then let the first run argue back.** A brief with
+numbered tasks and an explicit stop point ran cleanly as one task per commit. The licence was put as a
+tradeoff and not picked, and stale facts in the brief (D6 taken, 97 tests, Pages already live) were
+flagged in one line each. The most useful moment was a failure: the validator's first run failed a case
+that the spec's own window definition had been written to pass. Tracing it — measurement verified first,
+then the arms' washout — turned a red build into a decision the operator made. What cost time: §4.4's
+"chosen so the controller has settled" was written without measuring it. The first wind-up assist was
+built through five files before a probe showed it made clean jumps worse, which meant a rewrite and a
+second fixture re-record that briefly kept a deleted parameter key. The rule is the ninth session's
+again: **measure, then write.**
+
