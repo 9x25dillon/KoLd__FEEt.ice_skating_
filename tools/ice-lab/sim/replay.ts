@@ -214,7 +214,11 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       clockwise-positive as SkatingInput documents, and the takeoff counts
 //       each body's own spin. slipMode/torqueMode 1 clips from /26 must be
 //       re-recorded; the fixture was rebased with every digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/27";
+//   /28 Stage B2, the feet (`footMode`, slipSolveFeet): Params gained
+//       footMode, turnout, hipInternal, footTurnRate; SkatingInput gained
+//       optional toeOut/toeOutSplit; SkaterState optional footAngle, absent
+//       unless footMode 1. Fixture rebased, every digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/28";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
@@ -347,8 +351,8 @@ export function parseReplay(json: string): Replay {
     const frame = object(root.frames[i], path, ["input", "scheme", "digest"], ["params"]);
     const input = object(frame.input, `${path}.input`,
       ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"],
-      ["pitchSplit", "kneeSplit"]);
-    for (const key of ["pitchSplit", "kneeSplit"])
+      ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit"]);
+    for (const key of ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit"])
       if (Object.hasOwn(input, key)) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["lean", "pitch", "leanSplit", "windup"]) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["knee", "weight", "carriage"]) number(input[key], `${path}.input.${key}`, 0, 1);

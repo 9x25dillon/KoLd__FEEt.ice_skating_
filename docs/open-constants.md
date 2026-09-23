@@ -131,6 +131,15 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
   - Model limit: the carve's own turning is the legs' (not charged to the pivot grip) — a momentum-true version where all turning comes through the ice cannot carve at any contact depth up to 2 mm (measured)
   - Stage C2: the legs steer only a weighted foot — engagement is smoothstep(0.3 g, 0.8 g) of the support blade's load (authored; tying it to edge depth made the balance loop's own counter-steer into carried spin and the skater fell, measured). Under an unweighted foot the body keeps its spin. The trunk's PD is solved implicitly (explicit damping overshot with the feet free). Measured: carve at lean 0.5, shoulders led then released on a 0.15 s rise — blades 34° across, back in line on the sink; a smooth 0.2 s wind-up release on a lean-0.5 edge takes the jump's L from 4.61 to 8.57, a snapped one drops it to 2.38. A full 90° hockey stop needs hip rotation of the feet (stage B2)
 
+- **Stage B2, the feet** (`footMode` 1, with `slipMode` 1; `solver.ts` `legTurns`, `footTangent`, `slipSolveFeet`)
+  - `turnout` `0.5` — external hip rotation as a fraction of 90° per foot; the bible's §4.3 body setting, and `data/motion-primitives.json`'s spread eagle asks 0.75. 0.5 for the reference skater is authored
+  - `hipInternal` `0.6` rad (~35°) — how far a foot turns in. Authored
+  - `footTurnRate` `6` rad/s — how fast the legs turn a foot. Authored
+  - Level: L3
+  - Measured (Simulation params, 5 m/s): snowplow, full toe-in on inside edges 0.6 — stops in 5.42 s over 14.1 m, straight; T-stop at turnout 1, drag on a full outside edge with 30% of the weight — 3.54 s over 10.1 m; spread eagle body sideways — turnout 1 glides clean, 0.75 scrapes to 3.68 m/s, 0.5 to 3.46 after 6 s
+  - Fixed by: turnout from the skater (goniometry, or the spread eagle's foot angle on video); stopping distances from footage of the three stops
+  - Model limit: no fore-aft pendulum — a snowplow on outside edges catches both and stops dead in 1 s without pitching the skater forward
+
 - **`biteC0`** — lateral holding capacity of a flat blade, per unit load
   - Value: `0.08`
   - Used: `blade.ts` `biteCapacity`, `skidOnsetSpeed`

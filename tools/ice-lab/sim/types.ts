@@ -531,6 +531,12 @@ export interface SkaterState {
   /** torqueMode 1 only: last tick's carve rate, rad/s, against which yawDev keeps the body's spin. */
   yawSteer?: number;
   /**
+   * footMode 1 only: each foot's angle in its hip, rad, [left, right], toe out
+   * positive. The blades point off the body's heading by these; s.heading is
+   * then the body's own, not the support blade's.
+   */
+  footAngle?: [number, number];
+  /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
    * Tracked and replay-safe; not yet spent by sim/score.ts.
@@ -643,6 +649,14 @@ export interface SkatingInput {
    * jump; the pushing leg's sets the push. Optional like `pitchSplit`.
    */
   kneeSplit?: number;
+  /**
+   * -1..1, both feet turned in the hips: +1 toe out as far as turnout allows,
+   * -1 toe in as far as hipInternal allows (footMode 1). toeOutSplit sets them
+   * apart, left at toeOut - split and right at toeOut + split. Optional,
+   * absent reads as 0.
+   */
+  toeOut?: number;
+  toeOutSplit?: number;
   push: boolean;
   brake: boolean;
   /**

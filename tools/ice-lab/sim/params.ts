@@ -665,6 +665,27 @@ export interface Params {
    * measured rut depth of a hockey blade (docs/ice-literature.md, LEVER 2022).
    */
   contactDepth: number;
+
+  // ── feet (stage B2) ───────────────────────────────────────────────────────
+  /**
+   * 0: both blades point along the body. 1, with slipMode 1: each foot turns
+   * in its hip (SkatingInput.toeOut, toeOutSplit) — out as far as `turnout`
+   * allows, in as far as `hipInternal` — and each blade grips or scrapes
+   * against its own sideways travel. Snowplow, T-stop, spread eagle and a
+   * hockey stop's feet come out of that and the edges.
+   */
+  footMode: number;
+  /**
+   * 0..1. The skater's external hip rotation, as a fraction of 90° per foot:
+   * 1 is a flat 180° line between the feet. design-bible.md §4.3 puts turnout
+   * on the body; data/motion-primitives.json's spread eagle asks 0.75. 0.5
+   * (45° a foot) is the reference skater, authored.
+   */
+  turnout: number;
+  /** rad. How far a foot turns in (internal hip rotation). Authored (~35°). */
+  hipInternal: number;
+  /** rad/s. How fast the legs turn a foot in its hip. Authored. */
+  footTurnRate: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -877,6 +898,11 @@ export const DEFAULT_PARAMS: Params = {
   twistDamping: 60,
   contactDepth: 0.00018,
 
+  footMode: 0,
+  turnout: 0.5,
+  hipInternal: 0.6,
+  footTurnRate: 6,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -1042,6 +1068,11 @@ export function validate(p: Params): string[] {
   if (!(p.lowerBodyInertia > 0 && p.lowerBodyInertia < p.inertiaTucked)) errs.push("lowerBodyInertia must be positive and below inertiaTucked");
   if (!(p.twistMax > 0 && p.twistMax < 1.6)) errs.push("twistMax must be 0-1.6 rad");
   if (!(p.twistTorqueMax > 0 && p.twistStiffness > 0 && p.twistDamping >= 0)) errs.push("the trunk's torque, stiffness and damping must be positive");
+  if (![0, 1].includes(p.footMode)) errs.push("footMode is 0 (blades along the body) or 1 (each foot turns in its hip)");
+  if (p.footMode === 1 && p.slipMode !== 1) errs.push("footMode 1 needs slipMode 1: a turned blade must be able to scrape");
+  if (!(p.turnout >= 0 && p.turnout <= 1)) errs.push("turnout is 0..1 of 90° per foot");
+  if (!(p.hipInternal >= 0 && p.hipInternal < 1.2)) errs.push("hipInternal must be 0-1.2 rad");
+  if (!(p.footTurnRate > 0)) errs.push("footTurnRate must be positive");
   if (!(p.contactDepth > 0 && p.contactDepth < 0.005)) errs.push("contactDepth must be 0-5 mm");
   if (!(p.bladeLength > 0.15 && p.bladeLength < 0.4)) errs.push("bladeLength is a figure blade, 0.15-0.4 m");
   if (!(p.scrapeRefTilt > 0 && p.scrapeRefTilt < Math.PI / 2)) errs.push("scrapeRefTilt must be an edge between 0 and 90 degrees");

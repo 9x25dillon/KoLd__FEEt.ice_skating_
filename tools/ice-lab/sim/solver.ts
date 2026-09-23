@@ -119,6 +119,71 @@ function scrapeForce(b: SkaterState["blade"][number], into: number, p: Params): 
 }
 
 /**
+ * Each foot's asked angle in its hip, rad, [left, right], toe out positive:
+ * out as far as turnout (x 90°), in as far as hipInternal.
+ */
+function legTurns(input: SkatingInput, p: Params): [number, number] {
+  const mean = clamp(axis(input.toeOut ?? 0, 0), -1, 1), split = clamp(axis(input.toeOutSplit ?? 0, 0), -1, 1);
+  return [mean - split, mean + split].map((t) => {
+    const u = clamp(t, -1, 1);
+    return u >= 0 ? u * p.turnout * Math.PI / 2 : u * p.hipInternal;
+  }) as [number, number];
+}
+
+/** A blade's direction: the body's heading, the toe turned out by `angle` — left foot anticlockwise, right clockwise. */
+const footTangent = (heading: Vec2, foot: number, angle: number): Vec2 =>
+  angle === 0 ? heading : rotate(heading, foot === FOOT.Left ? angle : -angle);
+
+/**
+ * STAGE B2, THE SLIP SOLVE PER BLADE (footMode 1). Turned in the hips, the
+ * blades no longer share a line, so each answers for its own share of the
+ * body (its weight) against its own sideways travel: grips while its bite can,
+ * scrapes along the grip curve past that, catches on the wrong edge
+ * (scrapeForce). A snowplow's two scrapes point back and in and their sideways
+ * halves cancel; a T-stop's one drags. Each blade's force, applied where it
+ * meets the ice, winds the body (the dig), with the stance's width as well as
+ * the heel/toe for its lever. Returns the sideways force on the body, left
+ * positive in the body's frame.
+ */
+function slipSolveFeet(
+  s: SkaterState, p: Params, dt: number, stroking: boolean, wasSkid: boolean[], events: EdgeEvent[],
+): number {
+  const bodyLeft = perpLeft(s.heading);
+  let dv = v2(0, 0), force = v2(0, 0), dL = 0;
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
+    const n = perpLeft(b.tangent), vLat = dot(s.vel, n), into = -sign(vLat);
+    const need = p.mass * b.weight * Math.abs(vLat);
+    const sliding = b.biteCapacity > 0 && need > b.biteCapacity * dt;
+    const scrape = scrapeForce(b, into, p);
+    const J = Math.min(need, (sliding ? scrape : b.biteCapacity) * dt);
+    const f = mul(n, into * J / dt);
+    dv = add(dv, mul(f, dt / p.mass));
+    force = add(force, f);
+    if (sliding) {
+      const side = s.supportMode === 2 ? (i === FOOT.Left ? p.stanceHalfWidth : -p.stanceHalfWidth) : 0;
+      const r = add(mul(b.tangent, (b.contactS - 0.5) * p.bladeLength), mul(bodyLeft, side));
+      dL += (r.x * f.y - r.y * f.x) * dt;
+    }
+    b.latSlipAccel = sliding ? scrape / Math.max(b.normalLoad / p.gravity, 1e-6) : 0;
+    if (sliding && b.regime !== REGIME.Brake) b.regime = REGIME.Skid;
+    const isSkid = b.regime === REGIME.Skid;
+    if (isSkid && !wasSkid[i]) events.push({
+      tick: s.tick, type: EVENT.SkidBegin, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: b.latSlipAccel,
+    });
+    if (!isSkid && wasSkid[i]) events.push({
+      tick: s.tick, type: EVENT.SkidEnd, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: 0,
+    });
+  }
+  s.vel = add(s.vel, dv);
+  s.spinCarry += dL / p.inertiaOpen;
+  return dot(force, bodyLeft);
+}
+
+/**
  * STAGE B1, THE SLIP SOLVE (slipMode 1). What is left of the travel across
  * the blades after the carve: the edges take it out as far as they can hold
  * (biteCapacity, summed over the carrying blades), and past that they scrape
@@ -325,6 +390,7 @@ export function step(
   const staminaOn = p.staminaMode >= 1;
   const slipOn = p.slipMode >= 1;
   const torqueOn = slipOn && p.torqueMode >= 1;
+  const footOn = slipOn && p.footMode >= 1;
   const legsMul = staminaOn ? clamp(s.legs, 0, 1) : 1;
   const pFatigue: Params = staminaOn ? {
     ...p,
@@ -573,7 +639,7 @@ export function step(
     // offers it the other edge. Whether the body can get there is the
     // angulation limit below — lean the wrong way and it cannot.
     if (slipOn && s.blade[s.supportFoot].regime === REGIME.Skid) {
-      const into = -sign(dot(s.vel, perpLeft(s.heading)));
+      const into = -sign(dot(s.vel, perpLeft(footOn ? s.blade[s.supportFoot].tangent : s.heading)));
       const perSin = scrapeShare(p) * p.biteC1 * p.sharpness * p.iceHardness * (nTotal / p.mass);
       const base = scrapeShare(p) * p.biteC0 * p.sharpness * p.iceHardness * (nTotal / p.mass);
       const want = aCmd * into;
@@ -641,6 +707,14 @@ export function step(
 
   // slipMode: skid events are decided after the slip solve, against these.
   const wasSkidAll = slipOn ? s.blade.map((b) => b.regime === REGIME.Skid) : undefined;
+  // STAGE B2: each foot turns in its hip toward what is asked, at the legs'
+  // rate, and its blade points that far off the body's heading.
+  if (footOn && !turning && !ina) {
+    const ask = legTurns(input, p);
+    const now = s.footAngle ?? [0, 0];
+    s.footAngle = [0, 1].map((i) => moveToward(now[i], ask[i], p.footTurnRate * dt)) as [number, number];
+    for (let i = 0; i < 2; i++) s.blade[i].tangent = footTangent(s.heading, i, s.footAngle[i]);
+  }
   let carveLost = false;
   if (!turning) for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
@@ -827,11 +901,19 @@ export function step(
       // foot the trunk pivots off its carve carries only the carve's share.
       if (!slipOn || !carveLost) s.vel = rotate(s.vel, torqueOn ? steer * dt : dPsi);
     }
-    s.heading = s.blade[s.supportFoot].inContact
-      ? s.blade[s.supportFoot].tangent
-      : s.heading;
+    if (footOn) {
+      // The body turns; the blades follow it at their own angles in the hips.
+      if (dPsi !== 0) s.heading = normalizeOr(rotate(s.heading, dPsi), s.heading);
+      const angles = s.footAngle ?? [0, 0];
+      for (let i = 0; i < 2; i++) s.blade[i].tangent = footTangent(s.heading, i, angles[i]);
+    } else {
+      s.heading = s.blade[s.supportFoot].inContact
+        ? s.blade[s.supportFoot].tangent
+        : s.heading;
+    }
     if (slipOn) {
-      const slip = slipSolve(s, p, dt, stroking, wasSkidAll!, events);
+      const slip = footOn ? slipSolveFeet(s, p, dt, stroking, wasSkidAll!, events)
+        : slipSolve(s, p, dt, stroking, wasSkidAll!, events);
       // A lost carve holds nothing toward its centre; the scrape is the force.
       latForceTotal = carveLost ? slip : latForceTotal + slip;
     }
