@@ -124,11 +124,20 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
   - `twistMax` `0.8` rad — shoulders against hips at full wind-up (~45°). Authored
   - `twistTorqueMax` `60` N m — the trunk rotators' ceiling for a small skater. Authored
   - `twistStiffness` `600` N m/rad, `twistDamping` `60` N m s/rad — the trunk's PD toward the asked wind-up. Authored
-  - `contactDepth` `0.00018` m — a gliding blade's depth in the ice; with the rocker it sets the contact chord 2√(2ρ·depth), and pivot grip = biteCapacity × chord / 4. Source: the measured hockey rut depth (LEVER 2022, [ice-literature](ice-literature.md)); a figure blade on a loaded edge likely sits deeper
+  - `contactDepth` `0.00018` m, `rutWidth` `0.00416` m, `rutLoad` `755.4` N — the measured hockey rut (LEVER 2022, [ice-literature](ice-literature.md): 0.18 mm deep, 4.16 mm wide, 77 kg). Since /34 the rut's cross-section scales with this blade's load, spread flat across the width or cut as a wedge on an edge, depth √(2·area·tan tilt), whichever is deeper; the chord 2√(2ρ·depth), pivot grip = biteCapacity × chord / 4. Constant indentation pressure is a simplification the paper cautions on (p. 340)
   - Level: L3 except `contactDepth` (L2, hockey transfer)
   - Measured (Simulation params, 6 m/s): a slow wind-up on a lean-0.4 edge winds 0.80 rad with the feet held; a flick on a flat blade pivots the feet ~25° the opposite way; on an edge the toe pivots further than the heel (lean 0.2: 22° vs 19°)
   - Fixed by: shoulder-hip separation and skid onset from video of wind-ups and three-turn preparations
   - Model limit: the carve's own turning is the legs' (not charged to the pivot grip) — a momentum-true version where all turning comes through the ice cannot carve at any contact depth up to 2 mm (measured)
+
+- **The free leg** (`freeLegMode` 1, with `torqueMode` 1; `solver.ts` `freeLegTorque`; on in Experimental only)
+  - `freeLegMass` `0.161` — one leg's share of body mass: thigh 0.100 + shank 0.0465 + foot 0.0145 (Dempster, via Winter). Level L1 (anthropometry)
+  - `freeLegReach` `0.4` m — the leg's centre from the body's axis, swung out. Authored
+  - `freeLegArc` `1.2` rad — half its arc round the body. Authored
+  - `freeLegStiffness` `150`, `freeLegDamping` `20`, `freeLegTorqueMax` `100` — the hip's PD (damping on the difference from the asked swing speed) and ceiling. Authored
+  - When the foot pivots, the leg's reaction turns the braced torso with the hips (lower + upper as one body); a light lower body alone was kicked into a skid by a gentle swing
+  - Measured (7 m/s, lean 0.9, eased 0.5 s swing): salchow (right leg free) L 10.58 → 12.08; loop (left leg free, swings clockwise) 10.58 → 9.08; the same swing over 0.3 s twists the blade loose and falls; over a shallow edge (lean 0.5) any swing skids it
+  - Fixed by: free-leg angular velocity at takeoff from motion capture, against the takeoff edge's depth
   - Stage C2: the legs steer only a weighted foot — engagement is smoothstep(0.3 g, 0.8 g) of the support blade's load (authored; tying it to edge depth made the balance loop's own counter-steer into carried spin and the skater fell, measured). Under an unweighted foot the body keeps its spin. The trunk's PD is solved implicitly (explicit damping overshot with the feet free). Measured: carve at lean 0.5, shoulders led then released on a 0.15 s rise — blades 34° across, back in line on the sink; a smooth 0.2 s wind-up release on a lean-0.5 edge takes the jump's L from 4.61 to 8.57, a snapped one drops it to 2.38. A full 90° hockey stop needs hip rotation of the feet (stage B2)
 
 - **Stage B2, the feet** (`footMode` 1, with `slipMode` 1; `solver.ts` `legTurns`, `footTangent`, `slipSolveFeet`)

@@ -665,6 +665,17 @@ export interface Params {
    * measured rut depth of a hockey blade (docs/ice-literature.md, LEVER 2022).
    */
   contactDepth: number;
+  /**
+   * The same rut's width, m, and the load that made it, N (LEVER 2022: 4.16 mm
+   * under a 77 kg hockey skater). The rut's cross-section, depth x width, is
+   * taken to scale with load (constant indentation pressure — a
+   * simplification the paper itself cautions on, p. 340). A flat blade
+   * spreads it across the rut's width; an edge at tilt t cuts a wedge, so the
+   * same area goes sqrt(2 area tan t) deep. A loaded deep edge therefore has
+   * far more blade in the ice, and resists twisting far more, than a glide.
+   */
+  rutWidth: number;
+  rutLoad: number;
 
   // ── feet (stage B2) ───────────────────────────────────────────────────────
   /**
@@ -697,6 +708,28 @@ export interface Params {
    * spin; the geometry sets its direction. No new constant.
    */
   speedSpinMode: number;
+
+  // ── the free leg (torqueMode) ─────────────────────────────────────────────
+  /**
+   * 0: no free leg. 1, with torqueMode: the unweighted leg is a third body,
+   * swung round the body's axis by the hip toward SkatingInput.freeLeg (0
+   * behind, 1 forward and round). Its reaction lands on the lower body, so —
+   * like the shoulders — it makes net spin only while the edge holds the foot,
+   * and the takeoff carries its swing. A right free leg swinging forward turns
+   * counter-clockwise, a left one clockwise. With both feet down there is no
+   * free leg.
+   */
+  freeLegMode: number;
+  /** Share of body mass in one leg: thigh 0.100 + shank 0.0465 + foot 0.0145 (Dempster, via Winter's tables). */
+  freeLegMass: number;
+  /** m. The free leg's centre from the body's axis, swung out. Authored. */
+  freeLegReach: number;
+  /** rad. Half the free leg's arc round the body, behind to in front. Authored (~70°). */
+  freeLegArc: number;
+  /** The hip's PD toward the asked swing (N m/rad, N m s/rad) and its ceiling (N m). Authored. */
+  freeLegStiffness: number;
+  freeLegDamping: number;
+  freeLegTorqueMax: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -908,6 +941,8 @@ export const DEFAULT_PARAMS: Params = {
   twistStiffness: 600,
   twistDamping: 60,
   contactDepth: 0.00018,
+  rutWidth: 0.00416,
+  rutLoad: 755.4,            // 77 kg x 9.81
 
   footMode: 0,
   turnout: 0.5,
@@ -915,6 +950,14 @@ export const DEFAULT_PARAMS: Params = {
   footTurnRate: 6,
 
   speedSpinMode: 0,
+
+  freeLegMode: 0,
+  freeLegMass: 0.161,
+  freeLegReach: 0.4,
+  freeLegArc: 1.2,
+  freeLegStiffness: 150,
+  freeLegDamping: 20,
+  freeLegTorqueMax: 100,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -1081,12 +1124,18 @@ export function validate(p: Params): string[] {
   if (!(p.lowerBodyInertia > 0 && p.lowerBodyInertia < p.inertiaTucked)) errs.push("lowerBodyInertia must be positive and below inertiaTucked");
   if (!(p.twistMax > 0 && p.twistMax < 1.6)) errs.push("twistMax must be 0-1.6 rad");
   if (!(p.twistTorqueMax > 0 && p.twistStiffness > 0 && p.twistDamping >= 0)) errs.push("the trunk's torque, stiffness and damping must be positive");
+  if (![0, 1].includes(p.freeLegMode)) errs.push("freeLegMode is 0 (none) or 1 (the unweighted leg swings)");
+  if (p.freeLegMode === 1 && p.torqueMode !== 1) errs.push("freeLegMode 1 needs torqueMode 1: the leg swings against the lower body");
+  if (!(p.freeLegMass > 0 && p.freeLegMass < 0.3 && p.freeLegReach > 0 && p.freeLegReach < 1 && p.freeLegArc > 0 && p.freeLegArc < Math.PI))
+    errs.push("free leg mass share 0-0.3, reach 0-1 m, arc 0-π");
+  if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
   if (![0, 1].includes(p.speedSpinMode)) errs.push("speedSpinMode is 0 (the block lifts) or 1 (it also turns the body)");
   if (![0, 1].includes(p.footMode)) errs.push("footMode is 0 (blades along the body) or 1 (each foot turns in its hip)");
   if (p.footMode === 1 && p.slipMode !== 1) errs.push("footMode 1 needs slipMode 1: a turned blade must be able to scrape");
   if (!(p.turnout >= 0 && p.turnout <= 1)) errs.push("turnout is 0..1 of 90° per foot");
   if (!(p.hipInternal >= 0 && p.hipInternal < 1.2)) errs.push("hipInternal must be 0-1.2 rad");
   if (!(p.footTurnRate > 0)) errs.push("footTurnRate must be positive");
+  if (!(p.rutWidth > 0 && p.rutWidth < 0.02 && p.rutLoad > 0)) errs.push("rutWidth 0-20 mm and rutLoad positive");
   if (!(p.contactDepth > 0 && p.contactDepth < 0.005)) errs.push("contactDepth must be 0-5 mm");
   if (!(p.bladeLength > 0.15 && p.bladeLength < 0.4)) errs.push("bladeLength is a figure blade, 0.15-0.4 m");
   if (!(p.scrapeRefTilt > 0 && p.scrapeRefTilt < Math.PI / 2)) errs.push("scrapeRefTilt must be an edge between 0 and 90 degrees");

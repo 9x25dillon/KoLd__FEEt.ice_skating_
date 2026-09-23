@@ -31,6 +31,7 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   // parallel. Repertoire keeps its dedicated moves on the carve as it was.
   if (setup !== "repertoire") { p.slipMode = 1; p.torqueMode = 1; }
   if (setup === "simulation" || setup === "experimental") p.footMode = 1;
+  if (setup === "experimental") p.freeLegMode = 1;
   return p;
 }
 export function setupInput(c: Controls, s: SkaterState, setup: Setup, st: GameControlState, p: Params, profile: ControllerProfile, assistance = 0.75) {

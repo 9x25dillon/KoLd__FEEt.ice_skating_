@@ -35,11 +35,11 @@ test("speedSpinMode is 0 by default and in every setup", () => {
 
 test("the block turns the body against its curve: it eats a loop's rotation and feeds a lutz's", () => {
   // MEASURED, no arms: loop off RBO at 5 m/s, L 3.01 -> 0.00 with the rule;
-  // lutz off LBO with the pick at 8 m/s, 0.00 -> 1.94.
+  // lutz off LBO with the pick at 8 m/s, 0.00 -> 2.26 (since /34: load- and edge-dependent contact; Experimental has a free leg).
   const loopOff = takeoff(0, -5, 1, -0.3, false), loopOn = takeoff(1, -5, 1, -0.3, false);
   assert.equal(loopOn.kind, JUMP.Loop);
   assert.ok(Math.abs(loopOff.L - 3.01) < 0.01 && loopOn.L === 0, `loop ${loopOff.L.toFixed(2)} -> ${loopOn.L.toFixed(2)}`);
   const lutzOff = takeoff(0, -8, 0, 0.3, true), lutzOn = takeoff(1, -8, 0, 0.3, true);
   assert.equal(lutzOn.kind, JUMP.Lutz);
-  assert.ok(lutzOff.L === 0 && Math.abs(lutzOn.L - 1.94) < 0.01, `lutz ${lutzOff.L.toFixed(2)} -> ${lutzOn.L.toFixed(2)}`);
+  assert.ok(lutzOff.L === 0 && Math.abs(lutzOn.L - 2.258) < 0.01, `lutz ${lutzOff.L.toFixed(2)} -> ${lutzOn.L.toFixed(2)}`);
 });

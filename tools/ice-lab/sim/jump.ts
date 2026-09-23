@@ -298,6 +298,11 @@ export function jumpGround(
   if (s.twistRate !== undefined) {
     const dev = s.yawDev ?? 0, Iu = upperInertia(p, finite(input.carriage, 0));
     rate = p.jumpRotBias * (s.yawRate - dev) + ((p.lowerBodyInertia + Iu) * dev + Iu * s.twistRate) / p.inertiaOpen;
+    // The free leg (freeLegMode) leaves with its own swing too.
+    if (s.freeSwingRate !== undefined) {
+      const If = p.freeLegMass * p.mass * p.freeLegReach * p.freeLegReach;
+      rate += If * (dev + s.freeSwingRate) / p.inertiaOpen;
+    }
   }
   J.angMomentum = p.jumpMode >= JUMP_MODE.Full
     ? p.inertiaOpen * Math.max(0, rate + s.spinCarry + vaultSpin / p.inertiaOpen + p.jumpWhip * whip) * (0.80 + 0.20 * q)

@@ -39,22 +39,22 @@ function backJump(checkAt: number) {
 }
 
 test("from backward speed: wind up, load, release, check — a double loop, landed", () => {
-  // MEASURED: takeoff L 37.0 (mostly the arms' whip at takeoff; the heel dig
-  // adds about 1.5), air 0.58 s; checked 0.40 s into the air: 1.98
-  // revolutions, called clean, standing.
+  // MEASURED (since /34: load- and edge-dependent contact; Experimental has a free leg): takeoff L 38.7 (mostly the arms' whip
+  // at takeoff; the heel dig adds a little), air 0.58 s; checked 0.40 s into
+  // the air: 2.07 revolutions, called clean, standing. (Before: 37.0, 1.98.)
   const r = backJump(0.4);
-  assert.ok(Math.abs(r.L - 37.0) < 0.1, `L ${r.L.toFixed(1)}`);
+  assert.ok(Math.abs(r.L - 38.7) < 0.1, `L ${r.L.toFixed(1)}`);
   assert.equal(r.landed, true);
   assert.equal(r.s.fallen, false);
   assert.equal(r.s.landed.kind, JUMP.Loop);
   assert.equal(r.s.landed.revolutions, 2);
-  assert.ok(Math.abs(r.s.landed.turned - 1.98) < 0.01 && r.s.landed.rotationCall === 0, `turned ${r.s.landed.turned.toFixed(2)}`);
+  assert.ok(Math.abs(r.s.landed.turned - 2.07) < 0.01 && r.s.landed.rotationCall === 0, `turned ${r.s.landed.turned.toFixed(2)}`);
 });
 
 test("the check's timing is the skill: early is short, late over-turns into a triple that falls", () => {
-  // MEASURED: at 0.35 s, 1.78 revolutions — a quarter short, landed; at
-  // 0.45 s, 2.16 — called an under-rotated triple, a fall.
+  // MEASURED (since /34: load- and edge-dependent contact; Experimental has a free leg): at 0.35 s, 1.87 revolutions — a quarter
+  // short, landed; at 0.45 s, 2.26 — called an under-rotated triple, a fall.
   const early = backJump(0.35), late = backJump(0.45);
-  assert.ok(!early.s.fallen && Math.abs(early.s.landed.turned - 1.78) < 0.01 && early.s.landed.rotationCall === 1);
+  assert.ok(!early.s.fallen && Math.abs(early.s.landed.turned - 1.87) < 0.01 && early.s.landed.rotationCall === 1, `early ${early.s.landed.turned.toFixed(2)}`);
   assert.ok(late.s.fallen && late.s.landed.revolutions === 3, `late: ${late.s.landed.turned.toFixed(2)} turned`);
 });

@@ -256,16 +256,20 @@ function slipSolve(
 /**
  * N m. How hard the loaded blades resist being pivoted: a blade's grip
  * (biteCapacity, per unit length of contact) acting over the length in the
- * ice about its middle, grip x chord / 4. The chord is the rocker's at
- * contactDepth, so on the toe (shorter rocker) and flat (small grip) a
- * blade turns easily — turns are made on the ball of the foot — and on a
- * deep edge it holds.
+ * ice about its middle, grip x chord / 4. The chord is the rocker's at the
+ * blade's depth in the ice: the measured rut's cross-section (contactDepth x
+ * rutWidth at rutLoad) scaled by this blade's load, spread flat or cut as a
+ * wedge on an edge, whichever is deeper. On the toe (shorter rocker) and flat
+ * (little depth, small grip) a blade turns easily — turns are made on the
+ * ball of the foot — and on a loaded deep edge it holds.
  */
 function pivotCapacity(s: SkaterState, p: Params): number {
   let cap = 0;
   for (const b of s.blade) {
     if (!b.inContact) continue;
-    const chord = 2 * Math.sqrt(2 * effectiveRocker(b.contactS, p) * p.contactDepth);
+    const area = p.contactDepth * p.rutWidth * (b.normalLoad / p.rutLoad);
+    const depth = Math.max(area / p.rutWidth, Math.sqrt(2 * area * Math.abs(tan(b.tilt))));
+    const chord = 2 * Math.sqrt(2 * effectiveRocker(b.contactS, p) * depth);
     cap += b.biteCapacity * chord / 4;
   }
   return cap;
@@ -317,23 +321,63 @@ function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input
   };
   // Feet held on the carve: only the upper body moves; the ice answers the
   // reaction and takes out any spin the lower body carried, up to its grip.
+  // The free leg (freeLegMode): its hip torque, whose reaction the lower body takes too.
+  const leg = freeLegTorque(s, p, input, dt);
   const [heldRate, heldTau] = trunk(dt / Iu, twistRate + dev0);
-  const need = heldTau - Il * dev0 / dt;
+  const need = heldTau + leg - Il * dev0 / dt;
   const cap = pivotCapacity(s, p);
-  let dev: number, rate: number;
+  let dev: number, rate: number, pivoting = false;
   if (Math.abs(need) <= cap) {
     dev = 0; rate = heldRate;
   } else {
-    // The feet pivot, resisted only by the scrape's share of that grip.
+    // The feet pivot, resisted only by the scrape's share of that grip. The
+    // free leg's reaction turns the braced torso with the hips — lower and
+    // upper as one body — not the hips alone: a light lower body kicked round
+    // by a leg is what set blades skidding on a gentle swing.
     const ice = sign(need) * cap * scrapeShare(p);
     const [freeRate, freeTau] = trunk(dt * (1 / Iu + 1 / Il), twistRate - ice / Il * dt);
-    dev = dev0 + (ice - freeTau) / Il * dt;
+    dev = dev0 + (ice - freeTau) / Il * dt - leg / (Il + Iu) * dt;
     rate = freeRate;
+    pivoting = true;
+  }
+  // The leg's own rate, against the hips: its torque — and, when the body
+  // pivots, the body's turn back under it, so angular momentum adds up.
+  if (s.freeSwingRate !== undefined) {
+    s.freeSwingRate += leg * (1 / freeLegInertia(p) + (pivoting ? 1 / (Il + Iu) : 0)) * dt;
+    s.freeSwing = (s.freeSwing ?? 0) + s.freeSwingRate * dt;
   }
   s.yawDev = dev;
   s.twistRate = rate;
   s.twist = twist + rate * dt;
   return steer + dev;
+}
+
+/** kg m². The free leg about the body's axis, swung out. */
+const freeLegInertia = (p: Params): number => p.freeLegMass * p.mass * p.freeLegReach * p.freeLegReach;
+
+/**
+ * THE FREE LEG (freeLegMode). The unweighted leg, swung round the body by the
+ * hip toward SkatingInput.freeLeg: 0 behind, 1 forward and round, over
+ * freeLegArc either side of the hip. A right free leg swinging forward turns
+ * counter-clockwise, a left one clockwise. With both feet down there is no
+ * free leg: its state rests at zero. Returns the hip's torque on the leg (N m,
+ * counter-clockwise positive); the lower body takes it back.
+ */
+function freeLegTorque(s: SkaterState, p: Params, input: SkatingInput, dt: number): number {
+  if (p.freeLegMode < 1) return 0;
+  const weightR = clamp(axis(input.weight, 0.5), 0, 1);
+  const free = weightR >= 0.95 ? FOOT.Left : weightR <= 0.05 ? FOOT.Right : -1;
+  if (free < 0) { s.freeSwing = 0; s.freeSwingRate = 0; s.freeSwingTarget = 0; return 0; }
+  const around = free === FOOT.Right ? 1 : -1;
+  const target = around * p.freeLegArc * (2 * clamp(axis(input.freeLeg ?? 0.5, 0.5), 0, 1) - 1);
+  s.freeSwing ??= 0; s.freeSwingRate ??= 0;
+  // The hip tracks the swing it is asked for, speed included: damping acts on
+  // the difference from the asked speed, not on the leg's speed itself, or
+  // merely following a moving target would drag the foot round.
+  const wanted = (target - (s.freeSwingTarget ?? target)) / dt;
+  s.freeSwingTarget = target;
+  return clamp(p.freeLegStiffness * (target - s.freeSwing) + p.freeLegDamping * (wanted - s.freeSwingRate),
+    -p.freeLegTorqueMax, p.freeLegTorqueMax);
 }
 
 /**

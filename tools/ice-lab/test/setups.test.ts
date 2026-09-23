@@ -343,3 +343,14 @@ test("experimental: no automatic crossovers forward, straight, or too slow", () 
   assert.equal(crossing(-3, 0, 0.6).crossovers, 0, "straight");
   assert.equal(crossing(-1, 0.65, 0.6).crossovers, 0, "under 1.5 m/s");
 });
+
+test("experimental: the free leg's trigger swings it — released it rests — and it does not pump", () => {
+  // B puts the weight on the right foot: the left leg is free.
+  const r = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 30 ? 1 : 0; }, 40);
+  assert.equal(r.st.full!.foot, 1);
+  assert.equal(r.inputs[10].freeLeg, 0.5, "released: at rest");
+  assert.equal(r.inputs[25].freeLeg, 1, "LT pulled: swung forward");
+  assert.deepEqual(r.pushes, [], "a free leg's pump is a swing, not a push");
+  const shared = experiment(() => {}, 5);
+  assert.equal(shared.inputs[4].freeLeg, undefined, "both feet down: no free leg");
+});

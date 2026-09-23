@@ -152,7 +152,7 @@ godot4 --headless --path games/ice-run-godot -- --smoke-test --full-controls
 ```
 
 First-time Godot setup still requires the full preparation command to generate audio.
-Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/33`. The three setups record final mapped
+Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/34`. The three setups record final mapped
 inputs and parameters under label D; they add no solver arithmetic changes. Older
 builds reject D-labelled clips; current builds continue accepting A/B/C clips.
 
@@ -196,6 +196,7 @@ The other three setups are unchanged.
 | Left / right stick | that foot and blade: side to side the edge, up/down heel/toe. A **thumb stroke** — down past 60% then up past 60% within 0.25 s — is that foot pushing, as strong as it was full, straight and quick |
 | Pump + thumb stroke, same leg, within 0.125 s | add, up to a full push |
 | X / B | weight to the left / right foot (it stays), arms swing left / right (eased, not a flick); both: shared weight |
+| Free leg's trigger | with the weight on one foot the other leg is free: its trigger swings it forward (released, it rests) and it does not pump. Smooth and over a deep edge it adds spin its own way round (a right free leg with the jump); snapped, it twists the blade loose |
 | L3 / R3 | toe pick |
 | A | turn: the three-turn gesture; LB + A bracket; RB + A cantilever |
 | Y | rotation: spin; LB + Y twizzle; RB + Y spiral; LB + RB + Y Ina Bauer |

@@ -55,14 +55,15 @@ function hockeyStop(entry: number, stopLean = 0.3) {
 }
 
 test("a hockey stop from play: rise, turn the blades square, scrape to a standstill, stand", () => {
-  // MEASURED: entry lean 0.4, stop lean 0.3 — standstill 2.99 s after the rise,
-  // 14.1 m from the start of the carve, the blades held 72° or more across
-  // until 2 m/s, and standing (lean 0.02) 1.5 s later.
+  // MEASURED (since /34: load- and edge-dependent contact; Experimental has a free leg): entry lean 0.4, stop lean 0.3 —
+  // standstill 3.18 s after the rise, 14.5 m from the start of the carve, the
+  // blades held 67.5° or more across until 2 m/s, and standing (lean 0.01)
+  // 1.5 s later. (Before: 2.99 s, 14.1 m, 72°.)
   const r = hockeyStop(0.4);
   assert.equal(r.s.fallen, false, "standing");
-  assert.ok(Math.abs(r.stopped - 2.99) < 0.05, `stopped ${r.stopped.toFixed(2)} s after the rise`);
-  assert.ok(Math.abs(r.dist - 14.1) < 0.2, `${r.dist.toFixed(1)} m`);
-  assert.ok(Math.abs(r.squareFrom2 - 72) < 2, `blades held across: ${r.squareFrom2.toFixed(0)}° at the least above 2 m/s`);
+  assert.ok(Math.abs(r.stopped - 3.18) < 0.05, `stopped ${r.stopped.toFixed(2)} s after the rise`);
+  assert.ok(Math.abs(r.dist - 14.5) < 0.2, `${r.dist.toFixed(1)} m`);
+  assert.ok(Math.abs(r.squareFrom2 - 67.5) < 2, `blades held across: ${r.squareFrom2.toFixed(0)}° at the least above 2 m/s`);
   assert.ok(Math.abs(r.s.lean) < 0.1, `upright after (${r.s.lean.toFixed(2)})`);
   assert.ok(r.events.some(e => e.type === EVENT.SkidBegin), "and it was a skid all the way");
 });

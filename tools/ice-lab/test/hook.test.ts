@@ -29,11 +29,12 @@ function loop(v: number, base: number, hook = base) {
 const near = (x: number, y: number) => Math.abs(x - y) < 0.01;
 
 test("speed buys a deeper edge, and the deepest held edge takes off with the most spin", () => {
-  // MEASURED at 7 m/s: lean 0.3 L 2.39, 0.5 4.19, 0.7 6.65, 0.9 10.24 (a loop).
+  // MEASURED at 7 m/s (since /34: load- and edge-dependent contact; Experimental has a free leg): lean 0.3 L 2.40, 0.5 4.20,
+  // 0.7 6.66, 0.9 10.58 (a loop).
   // Lean 0.9 falls at 5 and 6 m/s; 0.7 falls at 5.
   const at7 = [-0.3, -0.5, -0.7, -0.9].map(lean => loop(7, lean));
   assert.ok(at7.every(r => r.kind === JUMP.Loop));
-  assert.deepEqual(at7.map(r => r.L.toFixed(2)), ["2.39", "4.19", "6.65", "10.24"]);
+  assert.deepEqual(at7.map(r => r.L.toFixed(2)), ["2.40", "4.20", "6.66", "10.58"]);
   assert.equal(loop(6, -0.9).fell, true);
   assert.equal(loop(5, -0.7).fell, true);
   // One lean, faster turns slower: g tan(lean) / v.
@@ -46,6 +47,6 @@ test("a late hook — deepening the edge during the load — takes spin away", (
 });
 
 test("near 8 m/s the edge starts to let go, and a skidding blade does not steer: less curve spin", () => {
-  // MEASURED at lean 0.9: 7 m/s L 10.24, 8 m/s 6.16 (skid onset ~8.4 m/s).
-  assert.ok(near(loop(8, -0.9).L, 6.16));
+  // MEASURED at lean 0.9: 7 m/s L 10.58, 8 m/s 6.48 (skid onset ~8.4 m/s).
+  assert.ok(near(loop(8, -0.9).L, 6.475));
 });

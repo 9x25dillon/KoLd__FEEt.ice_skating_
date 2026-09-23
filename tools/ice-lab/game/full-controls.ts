@@ -239,7 +239,7 @@ function feetInput(
  * go while a jump is loading is the jump's release, not a pump; in the air
  * nothing pushes.
  */
-function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x: number; y: number }[], connected: boolean): Partial<SkatingInput> {
+function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x: number; y: number }[], connected: boolean, freeLeg = -1): Partial<SkatingInput> {
   const none = () => [-1e9, -1e9];
   const g = f.gestures ??= { high: none(), peak: [0, 0], pump: none(), pumpPower: [0, 0],
     low: none(), lowY: [0, 0], sideSum: [0, 0], samples: [0, 0], stroke: none(), strokePower: [0, 0],
@@ -250,6 +250,7 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
   let out: Partial<SkatingInput> = {};
   for (let i = 0; i < 2; i++) {
     let done = false;
+    if (i === freeLeg) continue;   // off the ice: a swing, not a push
     // The pump.
     if (triggers[i] >= PUMP_HIGH) {
       if (now - g.high[i] > 1) g.peak[i] = 0;
@@ -354,7 +355,11 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     mapped.pitch = keyPitch || (leftPitch + rightPitch) / 2;
     // Each stick's fore–aft is its own blade's heel/toe. The keyboard's W/S stays shared.
     mapped.pitchSplit = keyPitch ? 0 : (rightPitch - leftPitch) / 2;
-    if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l, arms ? f.bladeRight! : r], h.connected));
+    // Experimental: with the weight on one foot the other leg is free — its
+    // trigger swings it forward (released, it rests), and it does not pump.
+    const freeLegIndex = options.pumps && f.foot !== 0.5 ? (f.foot === 1 ? 0 : 1) : -1;
+    if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l, arms ? f.bladeRight! : r], h.connected, freeLegIndex));
+    if (freeLegIndex >= 0 && h.connected) mapped.freeLeg = 0.5 + 0.5 * trigger(freeLegIndex === 0 ? 6 : 7);
     if (options.pumps && !mapped.push) {
       const auto = autoCrossover(f, s, p);
       if (auto) Object.assign(mapped, auto);

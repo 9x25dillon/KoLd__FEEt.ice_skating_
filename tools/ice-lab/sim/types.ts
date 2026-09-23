@@ -540,6 +540,11 @@ export interface SkaterState {
    * then the body's own, not the support blade's.
    */
   footAngle?: [number, number];
+  /** freeLegMode 1 only: the free leg's angle round the body against the hips, rad, counter-clockwise positive, and its rate. */
+  freeSwing?: number;
+  freeSwingRate?: number;
+  /** freeLegMode 1 only: last tick's asked swing, rad, so the hip knows how fast it is being asked to move. */
+  freeSwingTarget?: number;
   /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
@@ -676,6 +681,11 @@ export interface SkatingInput {
    * stroke reads the pushing leg's knee as it always has.
    */
   pushKnee?: number;
+  /**
+   * 0..1, the free leg's swing (freeLegMode): 0 behind, 1 forward and round.
+   * Optional; absent the leg rests midway.
+   */
+  freeLeg?: number;
   push: boolean;
   brake: boolean;
   /**
