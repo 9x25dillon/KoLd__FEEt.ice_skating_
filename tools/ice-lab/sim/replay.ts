@@ -201,7 +201,13 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       the body into spinCarry, which the takeoff carries. A slipMode 1 clip
 //       from /24 must be re-recorded; the fixture was rebased with every
 //       digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/25";
+//   /26 Stage C1, the trunk (`torqueMode`, trunkTorque): Params gained
+//       torqueMode, lowerBodyInertia, twistMax, twistTorqueMax,
+//       twistStiffness, twistDamping, contactDepth; SkaterState gained
+//       optional twist/twistRate/yawDev, written only in torqueMode 1 and
+//       otherwise absent, so no digest moves. Fixture rebased, every digest
+//       unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/26";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

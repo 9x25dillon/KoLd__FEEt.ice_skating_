@@ -519,6 +519,16 @@ export interface SkaterState {
    */
   spinCarry: number;
   /**
+   * torqueMode 1 only (absent otherwise, so no digest before stage C moves):
+   * the upper body's angle against the lower, rad, counter-clockwise
+   * positive, and its rate; and how far the lower body's yaw rate has been
+   * twisted off what its edges carve (yawDev, rad/s). s.yawRate is then the
+   * carve's rate plus yawDev.
+   */
+  twist?: number;
+  twistRate?: number;
+  yawDev?: number;
+  /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
    * Tracked and replay-safe; not yet spent by sim/score.ts.

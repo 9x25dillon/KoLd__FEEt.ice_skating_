@@ -119,6 +119,17 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
   - Measured (Simulation params, leaned in, 90°, 5 m/s, 0.3 s on the toe): +1.28 rad/s wound; 6 m/s, 100°, 0.1 s dig then 0.3 s load, no arms: takeoff L 5.0 (full arms give 38)
   - Fixed by: a skater's measured takeoff angular momentum off a skidded or toe-dug entry, against the same entry held clean
 
+- **Stage C1, the trunk** (`torqueMode` 1, with `slipMode` 1; `solver.ts` `trunkTorque`, `pivotCapacity`)
+  - `lowerBodyInertia` `0.4` kg m² — hips, legs, skates about the long axis. Authored; the upper body is the rest of `inertiaTucked`…`inertiaOpen` by carriage
+  - `twistMax` `0.8` rad — shoulders against hips at full wind-up (~45°). Authored
+  - `twistTorqueMax` `60` N m — the trunk rotators' ceiling for a small skater. Authored
+  - `twistStiffness` `600` N m/rad, `twistDamping` `60` N m s/rad — the trunk's PD toward the asked wind-up. Authored
+  - `contactDepth` `0.00018` m — a gliding blade's depth in the ice; with the rocker it sets the contact chord 2√(2ρ·depth), and pivot grip = biteCapacity × chord / 4. Source: the measured hockey rut depth (LEVER 2022, [ice-literature](ice-literature.md)); a figure blade on a loaded edge likely sits deeper
+  - Level: L3 except `contactDepth` (L2, hockey transfer)
+  - Measured (Simulation params, 6 m/s): a slow wind-up on a lean-0.4 edge winds 0.80 rad with the feet held; a flick on a flat blade pivots the feet ~25° the opposite way; on an edge the toe pivots further than the heel (lean 0.2: 22° vs 19°)
+  - Fixed by: shoulder-hip separation and skid onset from video of wind-ups and three-turn preparations
+  - Model limit: the carve's own turning is the legs' (not charged to the pivot grip) — a momentum-true version where all turning comes through the ice cannot carve at any contact depth up to 2 mm (measured)
+
 - **`biteC0`** — lateral holding capacity of a flat blade, per unit load
   - Value: `0.08`
   - Used: `blade.ts` `biteCapacity`, `skidOnsetSpeed`

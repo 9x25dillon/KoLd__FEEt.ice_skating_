@@ -638,6 +638,33 @@ export interface Params {
    * toe and a dig on the heel wind the body opposite ways.
    */
   bladeLength: number;
+
+  // ── torque (stage C) ──────────────────────────────────────────────────────
+  /**
+   * 0: the body turns only as the edges carve it (every measurement before
+   * stage C). 1, with slipMode 1: the body is two — the upper body (torso and
+   * arms) and the lower (hips, legs, blades) — and the arms' wind-up is a
+   * muscle torque between them. While the edges can hold the lower body on
+   * its carve the twist only winds the shoulders; past what the blades can
+   * resist (pivot capacity: grip x contact length / 4) the feet pivot, and
+   * the slip solve makes what they pivot into a skid.
+   */
+  torqueMode: number;
+  /** kg m². Hips, legs and skates about the long axis. Authored. */
+  lowerBodyInertia: number;
+  /** rad. Shoulders against hips at full wind-up. Authored (~45°). */
+  twistMax: number;
+  /** N m. The most the trunk's rotators give. Authored for a small skater. */
+  twistTorqueMax: number;
+  /** N m / rad and N m s / rad: the trunk's PD toward the wind-up asked for. Authored. */
+  twistStiffness: number;
+  twistDamping: number;
+  /**
+   * m. How deep a gliding blade sits in the ice, which with the rocker sets
+   * how much of it is in contact: chord = 2 sqrt(2 rho depth). 0.18 mm is the
+   * measured rut depth of a hockey blade (docs/ice-literature.md, LEVER 2022).
+   */
+  contactDepth: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -842,6 +869,14 @@ export const DEFAULT_PARAMS: Params = {
   scrapeRefTilt: 0.6,
   bladeLength: 0.28,
 
+  torqueMode: 0,
+  lowerBodyInertia: 0.4,
+  twistMax: 0.8,
+  twistTorqueMax: 60,
+  twistStiffness: 600,
+  twistDamping: 60,
+  contactDepth: 0.00018,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -1002,6 +1037,12 @@ export function validate(p: Params): string[] {
   if (p.staminaBalanceNoiseBase < 0) errs.push("staminaBalanceNoiseBase cannot be negative");
   if (p.staminaBalanceNoiseMax < 1) errs.push("staminaBalanceNoiseMax is a multiplier at Legs 0, and fatigue cannot reduce noise");
   if (![0, 1].includes(p.iceGridMode)) errs.push("iceGridMode is 0 (off) or 1 (the sheet wears)");
+  if (![0, 1].includes(p.torqueMode)) errs.push("torqueMode is 0 (the edges turn the body) or 1 (the trunk's torque does too)");
+  if (p.torqueMode === 1 && p.slipMode !== 1) errs.push("torqueMode 1 needs slipMode 1: a pivoting foot must be able to skid");
+  if (!(p.lowerBodyInertia > 0 && p.lowerBodyInertia < p.inertiaTucked)) errs.push("lowerBodyInertia must be positive and below inertiaTucked");
+  if (!(p.twistMax > 0 && p.twistMax < 1.6)) errs.push("twistMax must be 0-1.6 rad");
+  if (!(p.twistTorqueMax > 0 && p.twistStiffness > 0 && p.twistDamping >= 0)) errs.push("the trunk's torque, stiffness and damping must be positive");
+  if (!(p.contactDepth > 0 && p.contactDepth < 0.005)) errs.push("contactDepth must be 0-5 mm");
   if (!(p.bladeLength > 0.15 && p.bladeLength < 0.4)) errs.push("bladeLength is a figure blade, 0.15-0.4 m");
   if (!(p.scrapeRefTilt > 0 && p.scrapeRefTilt < Math.PI / 2)) errs.push("scrapeRefTilt must be an edge between 0 and 90 degrees");
   if (![0, 1].includes(p.slipMode)) errs.push("slipMode is 0 (travel carried with the blades) or 1 (blades can point across their travel)");

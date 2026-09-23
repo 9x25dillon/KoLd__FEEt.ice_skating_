@@ -181,6 +181,57 @@ function slipSolve(
 }
 
 /**
+ * N m. How hard the loaded blades resist being pivoted: a blade's grip
+ * (biteCapacity, per unit length of contact) acting over the length in the
+ * ice about its middle, grip x chord / 4. The chord is the rocker's at
+ * contactDepth, so on the toe (shorter rocker) and flat (small grip) a
+ * blade turns easily — turns are made on the ball of the foot — and on a
+ * deep edge it holds.
+ */
+function pivotCapacity(s: SkaterState, p: Params): number {
+  let cap = 0;
+  for (const b of s.blade) {
+    if (!b.inContact) continue;
+    const chord = 2 * Math.sqrt(2 * effectiveRocker(b.contactS, p) * p.contactDepth);
+    cap += b.biteCapacity * chord / 4;
+  }
+  return cap;
+}
+
+/**
+ * STAGE C, THE TRUNK. Two bodies: upper (torso and arms, heavier with the arms
+ * out) and lower (hips, legs, blades), twisted apart by the trunk's muscles
+ * toward the wind-up asked for.
+ *
+ * The carve itself is not charged to the ice's pivot grip: a tilted rocker
+ * rolling in its own groove turns at `steer` the way a tilted coin rolls in a
+ * circle, and both bodies are carried round with it. What the pivot grip
+ * resists is the trunk twisting the feet OFF that carve: rates here are
+ * relative to the carve. The lower body holds while the ice can answer the
+ * trunk's reaction and take out any deviation, up to pivotCapacity; past that
+ * it pivots (yawDev), resisted only by the scrape's share of the capacity.
+ * Returns the lower body's yaw rate.
+ */
+function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input: SkatingInput): number {
+  const Il = p.lowerBodyInertia;
+  const Iu = Math.max(0.1, lerp(p.inertiaTucked, p.inertiaOpen, clamp(axis(input.carriage, 0), 0, 1)) - Il);
+  const twist = s.twist ?? 0, twistRate = s.twistRate ?? 0, dev0 = s.yawDev ?? 0;
+  const target = clamp(axis(input.windup, 0), -1, 1) * p.twistMax;
+  // On the upper body; the lower takes it back.
+  const tauM = clamp(p.twistStiffness * (target - twist) - p.twistDamping * twistRate,
+    -p.twistTorqueMax, p.twistTorqueMax);
+  // The ice torque that would hold the lower body on its carve this tick.
+  const need = tauM - Il * dev0 / dt;
+  const cap = pivotCapacity(s, p);
+  const dev = Math.abs(need) <= cap ? 0 : dev0 + (sign(need) * cap * scrapeShare(p) - tauM) / Il * dt;
+  const upper = dev0 + twistRate + tauM / Iu * dt;
+  s.yawDev = dev;
+  s.twistRate = upper - dev;
+  s.twist = twist + s.twistRate * dt;
+  return steer + dev;
+}
+
+/**
  * The jump reads the knee it loads, lands and absorbs on: the standing leg's.
  * Without a split this is the input itself, untouched.
  */
@@ -241,6 +292,7 @@ export function step(
   // field, the same inertness guarantee iceOn/condAt give the ice grid.
   const staminaOn = p.staminaMode >= 1;
   const slipOn = p.slipMode >= 1;
+  const torqueOn = slipOn && p.torqueMode >= 1;
   const legsMul = staminaOn ? clamp(s.legs, 0, 1) : 1;
   const pFatigue: Params = staminaOn ? {
     ...p,
@@ -718,7 +770,8 @@ export function step(
   }
 
   if (!turning) {
-    const yawRate = yawDenom > 1e-6 ? yawNumer / yawDenom : 0;
+    const steer = yawDenom > 1e-6 ? yawNumer / yawDenom : 0;
+    const yawRate = torqueOn ? trunkTorque(s, p, dt, steer, input) : steer;
     s.yawRate = yawRate;
     const dPsi = yawRate * dt;
     if (dPsi !== 0) {
@@ -727,8 +780,9 @@ export function step(
         if (b.inContact) b.tangent = normalizeOr(rotate(b.tangent, dPsi), b.tangent);
       }
       // An edge that holds carries the travel round with it. With slip on,
-      // one that cannot leaves the travel behind for the slip solve.
-      if (!slipOn || !carveLost) s.vel = rotate(s.vel, dPsi);
+      // one that cannot leaves the travel behind for the slip solve — and a
+      // foot the trunk pivots off its carve carries only the carve's share.
+      if (!slipOn || !carveLost) s.vel = rotate(s.vel, torqueOn ? steer * dt : dPsi);
     }
     s.heading = s.blade[s.supportFoot].inContact
       ? s.blade[s.supportFoot].tangent
