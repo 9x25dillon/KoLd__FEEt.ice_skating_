@@ -35,10 +35,12 @@ export const FALL = {
   None: 0, LeanExceeded: 1, BalanceTimeout: 2, ToePickTrip: 3, Landing: 4,
   /** The boards (game/rink.ts): a hard enough hit to fall, rather than bounce off. Game-only. */
   Collision: 5,
+  /** pitchMode 1: the body pitched past what the blade could catch, toward toe or heel. */
+  Pitched: 6,
 } as const;
-export type Fall = 0 | 1 | 2 | 3 | 4 | 5;
+export type Fall = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
-export const FALL_NAME = ["", "LEAN EXCEEDED", "BALANCE LOST", "TOE PICK", "LANDING", "BOARDS"] as const;
+export const FALL_NAME = ["", "LEAN EXCEEDED", "BALANCE LOST", "TOE PICK", "LANDING", "BOARDS", "PITCHED"] as const;
 
 // ── the edge code ───────────────────────────────────────────────────────────
 
@@ -545,6 +547,16 @@ export interface SkaterState {
   freeSwingRate?: number;
   /** freeLegMode 1 only: last tick's asked swing, rad, so the hip knows how fast it is being asked to move. */
   freeSwingTarget?: number;
+  /**
+   * pitchMode 1 only: the body's fore-aft lean, rad, + toward the support
+   * blade's toe, and its rate; the contact's offset along the blade from its
+   * centre, m, + toward the toe; and how long the pendulum's capture point
+   * has sat off the blade, s.
+   */
+  pitch?: number;
+  pitchRate?: number;
+  pitchContact?: number;
+  pitchOffTime?: number;
   /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.

@@ -205,7 +205,8 @@ test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad
   // with the sticks pushed apart — each blade on its inside edge, in the
   // model's frame — 2.71 m/s after 3 s; sticks centred, 4.25. Pushed toward
   // each other the blades sit on their outside edges, which catch: a dead
-  // stop, upright only because there is no fore-aft pendulum yet.
+  // stop, upright because the fore-aft pendulum is off (pitchMode 0 here;
+  // with it on the catch pitches the skater forward — test/pitch.test.ts).
   const plow = (lx: number, rx: number) => {
     const r = rig("simulation", 5); r.h.buttons[7] = 0.5;
     for (let i = 0; i < 360 && !r.s.fallen; i++) {
