@@ -117,9 +117,9 @@ test("rise off the edge and the body keeps turning while the travel does not: a 
   assert.ok(Math.abs(bare.peak - 14) < 3, `bare ${bare.peak.toFixed(1)}°`);
   assert.ok(Math.abs(slipDeg(led.s)) < 1, "and the edge takes hold again");
   // Without the trunk only the rise acts: the grip left on the edge cannot turn
-  // the whole body's mass, and the travel runs on a little (4.2°).
+  // the whole body's mass, and the travel runs on a little (0.52°).
   const slipOnly = riseAndRelease({ ...ON, torqueMode: 0 }, true);
-  assert.ok(Math.abs(slipOnly.peak - 4.2) < 1, `without the trunk, the rise alone: ${slipOnly.peak.toFixed(2)}°`);
+  assert.ok(Math.abs(slipOnly.peak - 0.52) < 0.2, `without the trunk, the rise alone: ${slipOnly.peak.toFixed(2)}°`);
 });
 
 /** On the right foot at 6 m/s, lean 0.5, load at 0.6 s, release at 0.9 s, the wind-up by `plan`. The takeoff's L. */

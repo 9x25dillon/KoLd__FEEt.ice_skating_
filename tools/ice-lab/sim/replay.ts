@@ -218,7 +218,12 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       footMode, turnout, hipInternal, footTurnRate; SkatingInput gained
 //       optional toeOut/toeOutSplit; SkaterState optional footAngle, absent
 //       unless footMode 1. Fixture rebased, every digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/28";
+//   /29 With slipMode 1 a scraping blade no longer steers the carve; with
+//       footMode and torqueMode 1 the scraping feet check the body's extra
+//       spin (friction at their offsets) and the dig acts on the body rather
+//       than spinCarry. slipMode 1 clips from /28 must be re-recorded; the
+//       fixture was rebased with every digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/29";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

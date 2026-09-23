@@ -116,7 +116,7 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
   - Value: `0.28` m
   - Used: `solver.ts` `slipSolve` (`slipMode` 1 only): a scraping blade's sideways force acts `(contactS - 0.5) x bladeLength` ahead of the boot's centre, and r x F winds the body into `spinCarry`, which the takeoff carries (`jump.ts`)
   - Level: L2 — figure blades run 270–300 mm by boot size; the boot centre as the body's axis is the model's simplification
-  - Measured (Simulation params, leaned in, 90°, 5 m/s, 0.3 s on the toe): +1.28 rad/s wound; 6 m/s, 100°, 0.1 s dig then 0.3 s load, no arms: takeoff L 5.0 (full arms give 38)
+  - Measured (Simulation params, leaned in, 90°, 5 m/s, 0.3 s on the toe): +1.28 rad/s wound; 6 m/s, 100°, 0.1 s dig then 0.3 s load, no arms: takeoff L 6.5 since /29 (5.0 before a scraping blade stopped steering; full arms give 38)
   - Fixed by: a skater's measured takeoff angular momentum off a skidded or toe-dug entry, against the same entry held clean
 
 - **Stage C1, the trunk** (`torqueMode` 1, with `slipMode` 1; `solver.ts` `trunkTorque`, `pivotCapacity`)
@@ -139,6 +139,7 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
   - Measured (Simulation params, 5 m/s): snowplow, full toe-in on inside edges 0.6 — stops in 5.42 s over 14.1 m, straight; T-stop at turnout 1, drag on a full outside edge with 30% of the weight — 3.54 s over 10.1 m; spread eagle body sideways — turnout 1 glides clean, 0.75 scrapes to 3.68 m/s, 0.5 to 3.46 after 6 s
   - Fixed by: turnout from the skater (goniometry, or the spread eagle's foot angle on video); stopping distances from footage of the three stops
   - Model limit: no fore-aft pendulum — a snowplow on outside edges catches both and stops dead in 1 s without pitching the skater forward
+  - Since /29: a scraping blade does not steer (it is not rolling along its arc), and with the trunk the scraping feet check the body's extra spin through friction at their offsets (stance width, heel/toe). Rising off a carve with the feet turned brings the blades 84° across and scrapes 6 → ~1 m/s; the skater still falls as the stop runs out — the lean outlasts the scrape — which is the open problem for a finished hockey stop
 
 - **`biteC0`** — lateral holding capacity of a flat blade, per unit load
   - Value: `0.08`

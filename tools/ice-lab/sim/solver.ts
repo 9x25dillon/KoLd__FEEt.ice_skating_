@@ -144,16 +144,27 @@ const footTangent = (heading: Vec2, foot: number, angle: number): Vec2 =>
  * meets the ice, winds the body (the dig), with the stance's width as well as
  * the heel/toe for its lever. Returns the sideways force on the body, left
  * positive in the body's frame.
+ *
+ * With the trunk (torqueMode), a body turning faster than its carve (yawDev)
+ * drags each foot sideways by that spin times the foot's offset, and the
+ * blade's friction against it turns the body back: the scraping feet check
+ * the rotation. The winding then acts on the body itself, both halves
+ * together, rather than being carried to a takeoff.
  */
 function slipSolveFeet(
   s: SkaterState, p: Params, dt: number, stroking: boolean, wasSkid: boolean[], events: EdgeEvent[],
+  torqueOn: boolean, carriage: number,
 ): number {
   const bodyLeft = perpLeft(s.heading);
+  const spin = torqueOn ? s.yawDev ?? 0 : 0;
   let dv = v2(0, 0), force = v2(0, 0), dL = 0;
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
-    const n = perpLeft(b.tangent), vLat = dot(s.vel, n), into = -sign(vLat);
+    const side = s.supportMode === 2 ? (i === FOOT.Left ? p.stanceHalfWidth : -p.stanceHalfWidth) : 0;
+    const r = add(mul(b.tangent, (b.contactS - 0.5) * p.bladeLength), mul(bodyLeft, side));
+    const n = perpLeft(b.tangent);
+    const vLat = dot(add(s.vel, mul(perpLeft(r), spin)), n), into = -sign(vLat);
     const need = p.mass * b.weight * Math.abs(vLat);
     const sliding = b.biteCapacity > 0 && need > b.biteCapacity * dt;
     const scrape = scrapeForce(b, into, p);
@@ -161,11 +172,7 @@ function slipSolveFeet(
     const f = mul(n, into * J / dt);
     dv = add(dv, mul(f, dt / p.mass));
     force = add(force, f);
-    if (sliding) {
-      const side = s.supportMode === 2 ? (i === FOOT.Left ? p.stanceHalfWidth : -p.stanceHalfWidth) : 0;
-      const r = add(mul(b.tangent, (b.contactS - 0.5) * p.bladeLength), mul(bodyLeft, side));
-      dL += (r.x * f.y - r.y * f.x) * dt;
-    }
+    if (sliding || spin !== 0) dL += (r.x * f.y - r.y * f.x) * dt;
     b.latSlipAccel = sliding ? scrape / Math.max(b.normalLoad / p.gravity, 1e-6) : 0;
     if (sliding && b.regime !== REGIME.Brake) b.regime = REGIME.Skid;
     const isSkid = b.regime === REGIME.Skid;
@@ -179,7 +186,8 @@ function slipSolveFeet(
     });
   }
   s.vel = add(s.vel, dv);
-  s.spinCarry += dL / p.inertiaOpen;
+  if (torqueOn) s.yawDev = (s.yawDev ?? 0) + dL / (p.lowerBodyInertia + upperInertia(p, carriage));
+  else s.spinCarry += dL / p.inertiaOpen;
   return dot(force, bodyLeft);
 }
 
@@ -840,7 +848,10 @@ export function step(
       latForceTotal += reversed ? -b.latForce : b.latForce;
       excessWeighted += excess * b.weight;
       const yawRate = sign(b.tilt) * vLong / Math.max(radius, 0.35);
-      yawNumer += yawRate * b.normalLoad;
+      // A blade scraping sideways is not rolling along its arc, so it does
+      // not steer (slipMode): it still carries its load, which the carve's
+      // rate is shared over.
+      if (!(slipOn && wasSkidAll![i])) yawNumer += yawRate * b.normalLoad;
       yawDenom += b.normalLoad;
     }
 
@@ -912,7 +923,7 @@ export function step(
         : s.heading;
     }
     if (slipOn) {
-      const slip = footOn ? slipSolveFeet(s, p, dt, stroking, wasSkidAll!, events)
+      const slip = footOn ? slipSolveFeet(s, p, dt, stroking, wasSkidAll!, events, torqueOn, axis(input.carriage, 0))
         : slipSolve(s, p, dt, stroking, wasSkidAll!, events);
       // A lost carve holds nothing toward its centre; the scrape is the force.
       latForceTotal = carveLost ? slip : latForceTotal + slip;

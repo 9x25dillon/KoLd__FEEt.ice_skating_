@@ -99,13 +99,14 @@ test("a T-stop: glide on one foot, drag the other at right angles on its outside
 test("with the feet turned in the hips, rising off a carve brings the blades most of the way across", () => {
   // MEASURED (torqueMode too, 6 m/s, lean 0.5, shoulders led then released on
   // a 0.15 s rise): feet straight 34° across; feet turned (left out, right in)
-  // 79°. The rotation is not yet checked once the blades are across — the
-  // skater spins on and falls — so this pins only how far across they come.
+  // 84°, the scraping feet checking the body's spin. The skater still falls
+  // as the stop runs out (the lean outlasts the scrape), so this pins only how
+  // far across the blades come.
   const T = { ...FEET, torqueMode: 1 };
   const play = (feet: boolean) => skate(T, (t) => t < 1.5
     ? { lean: 0.5, knee: 0.6, weight: 0.5, windup: -Math.min(1, Math.max(0, (t - 0.8) / 0.6)) }
     : { lean: 0.5, knee: t < 1.65 ? 0 : 0.7, weight: 0.5, windup: t < 1.65 ? 1 : 0, toeOutSplit: feet ? -1 : 0 }, 6);
   const straight = play(false), turned = play(true);
   assert.ok(Math.abs(straight.across - 34) < 2, `straight ${straight.across.toFixed(0)}°`);
-  assert.ok(Math.abs(turned.across - 79) < 2, `turned ${turned.across.toFixed(0)}°`);
+  assert.ok(Math.abs(turned.across - 84) < 2, `turned ${turned.across.toFixed(0)}°`);
 });
