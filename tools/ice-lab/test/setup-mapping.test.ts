@@ -22,6 +22,10 @@
 //
 // Re-recorded (2026-09-23, solver /36): the contract bump alone (pitchMode,
 // 0 everywhere); every mapped input is unchanged.
+//
+// Re-recorded (2026-09-23, solver /36), operator-directed: the fore-aft
+// pendulum on in Simulation and Experimental. Every mapped input unchanged;
+// Simulation's scripted fall comes a tick later (709 -> 710).
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";

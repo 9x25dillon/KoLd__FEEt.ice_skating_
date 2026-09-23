@@ -2,7 +2,8 @@
 // the support blade, and the ankle's one authority is where along the blade
 // the ice pushes back. Braking pitches the body forward; a braking that builds
 // is ridden by leaning back, a sudden one past what half a blade can catch
-// puts the skater down. Off in every setup until the operator switches it on.
+// puts the skater down. On in Simulation and Experimental (the operator's
+// choice, 2026-09-23), off in Blade Explorer and Full Repertoire.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -15,8 +16,8 @@ import type { SkatingInput } from "../sim/types.ts";
 import { len } from "../sim/math.ts";
 import { setupParams, SETUPS } from "../game/setups.ts";
 
-// The Simulation athlete with stages B/C off, as test/feet.test.ts has it; the feet on for the stops.
-const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0 };
+// The Simulation athlete with stages B/C and the pendulum off, as test/feet.test.ts has it; the feet on for the stops.
+const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 0 };
 const FEET = { ...SIM, slipMode: 1, footMode: 1 };
 const on = (p: Params): Params => ({ ...p, pitchMode: 1 });
 
@@ -33,10 +34,11 @@ function skate(p: Params, at: (t: number) => Partial<SkatingInput>, speed = 5, T
   return { s, t, pitchMin, pitchMax, cMin, cMax };
 }
 
-test("pitchMode is 0 by default and in every setup, and validates", () => {
+test("pitchMode is 0 by default, on in Simulation and Experimental only, and validates", () => {
   assert.equal(DEFAULT_PARAMS.pitchMode, 0);
   assert.equal(DEFAULT_PARAMS.pitchGain, 1);
-  for (const { id } of SETUPS) assert.equal(setupParams(id).pitchMode, 0, id);
+  for (const { id } of SETUPS)
+    assert.equal(setupParams(id).pitchMode, id === "simulation" || id === "experimental" ? 1 : 0, id);
   assert.deepEqual(validate(on(FEET)), []);
   assert.ok(validate({ ...FEET, pitchMode: 2 }).some(e => /pitchMode/.test(e)));
   assert.ok(validate({ ...on(FEET), pitchGain: 0 }).some(e => /pitchGain/.test(e)));

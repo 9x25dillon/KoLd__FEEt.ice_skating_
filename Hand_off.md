@@ -35,6 +35,7 @@ arithmetic, proven by the fixture digests at each bump.
 | B2 · feet | `footMode` | feet turn in the hips (`turnout`, `hipInternal`); per-blade slip solve: snowplow, T-stop, spread eagle | Simulation, Experimental |
 | C1/C2 · trunk | `torqueMode` | upper/lower body; wind-up twists the trunk; pivot grip from the rut (load- and edge-dependent since /34); momentum carried when unweighted; wind-up and free leg feed the takeoff | Simulation, Explorer, Experimental |
 | free leg | `freeLegMode` | the unweighted leg as a third body (16.1% mass, Dempster/Winter) | Experimental |
+| fore-aft pendulum | `pitchMode` | the body tips toward toe/heel over the support blade; the ankle's contact (half a blade) is its only authority; a sudden stop past it pitches the skater down (`FALL.Pitched`) — PR #27, switched on in PR #28 | Simulation, Experimental |
 | speed→spin | `speedSpinMode` | the takeoff block as r × Δp — **measured, left OFF everywhere** (it opposes the curve except for the lutz) | none |
 
 **Setups** (`game/setups.ts`): Simulation, Blade Explorer, **Experimental** (the operator's — keep it;

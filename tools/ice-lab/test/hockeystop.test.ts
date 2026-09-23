@@ -29,11 +29,14 @@ const P = { ...setupParams("simulation"), slipMode: 1, footMode: 1, torqueMode: 
  * (left out, right in); then sink and stop, leaning `stopLean` into it and
  * easing off as the speed goes (full at 3 m/s and above), while holding the
  * blades square — feet by integral feedback, hips by proportional. Once below
- * 0.3 m/s, stand (knee 0.5, no lean) for 1.5 s.
+ * 0.3 m/s, stand (knee 0.5, no lean) for 1.5 s. `scraped` is the stop proper,
+ * down to 1 m/s: below it the bot no longer holds the blades square and what
+ * is left is its glide (with the fore-aft pendulum, blades in line; without,
+ * a few degrees across and scraping), so `stopped` is the bot's, not the stop's.
  */
 function hockeyStop(entry: number, stopLean = 0.3) {
   const s = createState(P, 6), events: EdgeEvent[] = [];
-  let t = 0, dist = 0, split = -1, stopped = -1, squareFrom2 = 90;
+  let t = 0, dist = 0, split = -1, stopped = -1, scraped = -1, squareFrom2 = 90;
   while (t < 8 && !s.fallen && (stopped < 0 || t < stopped + 1.5)) {
     const v = len(s.vel), b = s.blade[0].tangent;
     const across = Math.atan2(s.vel.x * b.y - s.vel.y * b.x, s.vel.x * b.x + s.vel.y * b.y) * 180 / Math.PI;
@@ -49,32 +52,37 @@ function hockeyStop(entry: number, stopLean = 0.3) {
     }
     step(s, { ...NEUTRAL_INPUT, ...input }, P, SIM_DT, events);
     t += SIM_DT; dist += len(s.vel) * SIM_DT;
+    if (scraped < 0 && t > 1.65 && len(s.vel) < 1) scraped = t;
     if (stopped < 0 && t > 1.65 && len(s.vel) < 0.3) stopped = t;
   }
-  return { s, stopped: stopped < 0 ? -1 : stopped - 1.5, dist, squareFrom2, events };
+  return { s, stopped: stopped < 0 ? -1 : stopped - 1.5, scraped: scraped < 0 ? -1 : scraped - 1.5, dist, squareFrom2, events };
 }
 
 test("a hockey stop from play: rise, turn the blades square, scrape to a standstill, stand", () => {
-  // MEASURED (since /34: load- and edge-dependent contact, engagement from the
-  // whole load on the ice): entry lean 0.4, stop lean 0.3 — standstill 4.31 s
-  // after the rise, 15.4 m from the start of the carve, the blades held 63° or
-  // more across until 2 m/s, and standing (lean 0.02) 1.5 s later. (Before:
-  // 2.99 s, 14.1 m, 72°.)
+  // MEASURED (since the fore-aft pendulum is on in Simulation, 2026-09-23):
+  // entry lean 0.4, stop lean 0.3 — scraped to 1 m/s 1.47 s after the rise,
+  // standstill 6.30 s after it (the bot's glide, blades in line), 15.8 m from
+  // the start of the carve, the blades held 65° or more across until 2 m/s,
+  // and standing 1.5 s later. (Without the pendulum: 1.60 s, 4.31 s, 15.4 m,
+  // 63°; before /34: standstill 2.99 s, 14.1 m, 72°.)
   const r = hockeyStop(0.4);
   assert.equal(r.s.fallen, false, "standing");
-  assert.ok(Math.abs(r.stopped - 4.31) < 0.05, `stopped ${r.stopped.toFixed(2)} s after the rise`);
-  assert.ok(Math.abs(r.dist - 15.4) < 0.2, `${r.dist.toFixed(1)} m`);
-  assert.ok(Math.abs(r.squareFrom2 - 62.6) < 2, `blades held across: ${r.squareFrom2.toFixed(0)}° at the least above 2 m/s`);
+  assert.ok(Math.abs(r.scraped - 1.47) < 0.05, `scraped to 1 m/s ${r.scraped.toFixed(2)} s after the rise`);
+  assert.ok(Math.abs(r.stopped - 6.30) < 0.05, `stopped ${r.stopped.toFixed(2)} s after the rise`);
+  assert.ok(Math.abs(r.dist - 15.8) < 0.2, `${r.dist.toFixed(1)} m`);
+  assert.ok(Math.abs(r.squareFrom2 - 65.4) < 2, `blades held across: ${r.squareFrom2.toFixed(0)}° at the least above 2 m/s`);
   assert.ok(Math.abs(r.s.lean) < 0.1, `upright after (${r.s.lean.toFixed(2)})`);
   assert.ok(r.events.some(e => e.type === EVENT.SkidBegin), "and it was a skid all the way");
 });
 
 test("from any entry lean up to 0.5 the stop holds: a forgiving stop, slower the deeper the entry", () => {
-  // MEASURED (since /34): entry 0.3 3.82 s, 0.35 4.00, 0.45 4.81, 0.5 3.88 —
-  // all standing. Before engagement read the whole load on the ice, a skater on
-  // two feet counted as half-unweighted and entry 0.5 fell every time.
-  for (const [entry, time] of [[0.3, 3.82], [0.35, 4.0], [0.45, 4.81], [0.5, 3.88]]) {
+  // MEASURED (with the fore-aft pendulum): scraped to 1 m/s — entry 0.3
+  // 1.47 s, 0.35 1.47, 0.45 1.50, 0.5 1.18 — all standing; the glide after
+  // is the bot's (0.45 is still creeping at 8 s). Without the pendulum 1.52,
+  // 1.56, 1.64, 1.37. Before engagement read the whole load on the ice, a
+  // skater on two feet counted as half-unweighted and entry 0.5 fell every time.
+  for (const [entry, time] of [[0.3, 1.47], [0.35, 1.47], [0.45, 1.50], [0.5, 1.18]]) {
     const r = hockeyStop(entry);
-    assert.ok(!r.s.fallen && Math.abs(r.stopped - time) < 0.05, `entry ${entry}: ${r.stopped.toFixed(2)} s, fallen ${r.s.fallen}`);
+    assert.ok(!r.s.fallen && Math.abs(r.scraped - time) < 0.05, `entry ${entry}: ${r.scraped.toFixed(2)} s, fallen ${r.s.fallen}`);
   }
 });
