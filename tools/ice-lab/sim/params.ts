@@ -607,6 +607,129 @@ export interface Params {
   // changes. 0 in every preset, the way jumps, moves and music are.
   /** 0 the sheet never wears; 1 every blade pass writes it and reads it back. */
   iceGridMode: number;
+
+  // ── slip ──────────────────────────────────────────────────────────────────
+  /**
+   * 0: the travel is carried round with the blades every tick, so a blade
+   * can never point across its path (every measurement before stage B).
+   * 1: the travel and the blades are separate. The rocker still steers the
+   * blades along their arc, at the along-blade speed over the arc's radius;
+   * the travel follows only as far as the edges can hold (biteCapacity),
+   * and past that the blades scrape sideways at muSkid · N — bible §2.2's
+   * "the edge lets go... speed bleeds off through μ_skid". A flat blade
+   * scrapes at no more than its own small bite. No new state: the slip angle
+   * is the velocity against the heading, both already there.
+   */
+  slipMode: number;
+  /**
+   * rad. The edge at which a scrape runs at exactly muSkid · N. A scrape
+   * follows the grip curve (biteCapacity): an edge dug in toward the travel
+   * scrapes harder the deeper it goes, a flat blade barely at all, so a skater
+   * controls a stop with the edge the way they control a carve. Authored —
+   * see docs/open-constants.md; fixed by the stopping distance of a hockey
+   * stop from a known speed and edge.
+   */
+  scrapeRefTilt: number;
+  /**
+   * m. A figure blade's length, 270-300 mm by boot size. The heel/toe contact
+   * (contactS) sits (contactS - 0.5) of it ahead of the boot's centre, and a
+   * scrape pushing there twists the body: THE DIG. With slipMode 1 that
+   * angular impulse is carried into the takeoff (spinCarry), so a dig on the
+   * toe and a dig on the heel wind the body opposite ways.
+   */
+  bladeLength: number;
+
+  // ── torque (stage C) ──────────────────────────────────────────────────────
+  /**
+   * 0: the body turns only as the edges carve it (every measurement before
+   * stage C). 1, with slipMode 1: the body is two — the upper body (torso and
+   * arms) and the lower (hips, legs, blades) — and the arms' wind-up is a
+   * muscle torque between them. While the edges can hold the lower body on
+   * its carve the twist only winds the shoulders; past what the blades can
+   * resist (pivot capacity: grip x contact length / 4) the feet pivot, and
+   * the slip solve makes what they pivot into a skid.
+   */
+  torqueMode: number;
+  /** kg m². Hips, legs and skates about the long axis. Authored. */
+  lowerBodyInertia: number;
+  /** rad. Shoulders against hips at full wind-up. Authored (~45°). */
+  twistMax: number;
+  /** N m. The most the trunk's rotators give. Authored for a small skater. */
+  twistTorqueMax: number;
+  /** N m / rad and N m s / rad: the trunk's PD toward the wind-up asked for. Authored. */
+  twistStiffness: number;
+  twistDamping: number;
+  /**
+   * m. How deep a gliding blade sits in the ice, which with the rocker sets
+   * how much of it is in contact: chord = 2 sqrt(2 rho depth). 0.18 mm is the
+   * measured rut depth of a hockey blade (docs/ice-literature.md, LEVER 2022).
+   */
+  contactDepth: number;
+  /**
+   * The same rut's width, m, and the load that made it, N (LEVER 2022: 4.16 mm
+   * under a 77 kg hockey skater). The rut's cross-section, depth x width, is
+   * taken to scale with load (constant indentation pressure — a
+   * simplification the paper itself cautions on, p. 340). A flat blade
+   * spreads it across the rut's width; an edge at tilt t cuts a wedge, so the
+   * same area goes sqrt(2 area tan t) deep. A loaded deep edge therefore has
+   * far more blade in the ice, and resists twisting far more, than a glide.
+   */
+  rutWidth: number;
+  rutLoad: number;
+
+  // ── feet (stage B2) ───────────────────────────────────────────────────────
+  /**
+   * 0: both blades point along the body. 1, with slipMode 1: each foot turns
+   * in its hip (SkatingInput.toeOut, toeOutSplit) — out as far as `turnout`
+   * allows, in as far as `hipInternal` — and each blade grips or scrapes
+   * against its own sideways travel. Snowplow, T-stop, spread eagle and a
+   * hockey stop's feet come out of that and the edges.
+   */
+  footMode: number;
+  /**
+   * 0..1. The skater's external hip rotation, as a fraction of 90° per foot:
+   * 1 is a flat 180° line between the feet. design-bible.md §4.3 puts turnout
+   * on the body; data/motion-primitives.json's spread eagle asks 0.75. 0.5
+   * (45° a foot) is the reference skater, authored.
+   */
+  turnout: number;
+  /** rad. How far a foot turns in (internal hip rotation). Authored (~35°). */
+  hipInternal: number;
+  /** rad/s. How fast the legs turn a foot in its hip. Authored. */
+  footTurnRate: number;
+
+  // ── speed into spin ───────────────────────────────────────────────────────
+  /**
+   * 0: the takeoff's block turns approach speed into height only. 1: the
+   * block is an impulse where the blade meets the ice, and a leaning skater's
+   * blade is not under the centre of mass — it is leg length x sin(lean) to
+   * the side — so the block also turns the body: dL = r x dp, carried into
+   * the takeoff's angular momentum. Faster entries and deeper edges, more
+   * spin; the geometry sets its direction. No new constant.
+   */
+  speedSpinMode: number;
+
+  // ── the free leg (torqueMode) ─────────────────────────────────────────────
+  /**
+   * 0: no free leg. 1, with torqueMode: the unweighted leg is a third body,
+   * swung round the body's axis by the hip toward SkatingInput.freeLeg (0
+   * behind, 1 forward and round). Its reaction lands on the lower body, so —
+   * like the shoulders — it makes net spin only while the edge holds the foot,
+   * and the takeoff carries its swing. A right free leg swinging forward turns
+   * counter-clockwise, a left one clockwise. With both feet down there is no
+   * free leg.
+   */
+  freeLegMode: number;
+  /** Share of body mass in one leg: thigh 0.100 + shank 0.0465 + foot 0.0145 (Dempster, via Winter's tables). */
+  freeLegMass: number;
+  /** m. The free leg's centre from the body's axis, swung out. Authored. */
+  freeLegReach: number;
+  /** rad. Half the free leg's arc round the body, behind to in front. Authored (~70°). */
+  freeLegArc: number;
+  /** The hip's PD toward the asked swing (N m/rad, N m s/rad) and its ceiling (N m). Authored. */
+  freeLegStiffness: number;
+  freeLegDamping: number;
+  freeLegTorqueMax: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -807,6 +930,35 @@ export const DEFAULT_PARAMS: Params = {
   iceMuChewed: 0.015,        // bible §3.2
   iceBiteLossMax: 0.35,
 
+  slipMode: 0,
+  scrapeRefTilt: 0.6,
+  bladeLength: 0.28,
+
+  torqueMode: 0,
+  lowerBodyInertia: 0.4,
+  twistMax: 0.8,
+  twistTorqueMax: 60,
+  twistStiffness: 600,
+  twistDamping: 60,
+  contactDepth: 0.00018,
+  rutWidth: 0.00416,
+  rutLoad: 755.4,            // 77 kg x 9.81
+
+  footMode: 0,
+  turnout: 0.5,
+  hipInternal: 0.6,
+  footTurnRate: 6,
+
+  speedSpinMode: 0,
+
+  freeLegMode: 0,
+  freeLegMass: 0.161,
+  freeLegReach: 0.4,
+  freeLegArc: 1.2,
+  freeLegStiffness: 150,
+  freeLegDamping: 20,
+  freeLegTorqueMax: 100,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -967,6 +1119,27 @@ export function validate(p: Params): string[] {
   if (p.staminaBalanceNoiseBase < 0) errs.push("staminaBalanceNoiseBase cannot be negative");
   if (p.staminaBalanceNoiseMax < 1) errs.push("staminaBalanceNoiseMax is a multiplier at Legs 0, and fatigue cannot reduce noise");
   if (![0, 1].includes(p.iceGridMode)) errs.push("iceGridMode is 0 (off) or 1 (the sheet wears)");
+  if (![0, 1].includes(p.torqueMode)) errs.push("torqueMode is 0 (the edges turn the body) or 1 (the trunk's torque does too)");
+  if (p.torqueMode === 1 && p.slipMode !== 1) errs.push("torqueMode 1 needs slipMode 1: a pivoting foot must be able to skid");
+  if (!(p.lowerBodyInertia > 0 && p.lowerBodyInertia < p.inertiaTucked)) errs.push("lowerBodyInertia must be positive and below inertiaTucked");
+  if (!(p.twistMax > 0 && p.twistMax < 1.6)) errs.push("twistMax must be 0-1.6 rad");
+  if (!(p.twistTorqueMax > 0 && p.twistStiffness > 0 && p.twistDamping >= 0)) errs.push("the trunk's torque, stiffness and damping must be positive");
+  if (![0, 1].includes(p.freeLegMode)) errs.push("freeLegMode is 0 (none) or 1 (the unweighted leg swings)");
+  if (p.freeLegMode === 1 && p.torqueMode !== 1) errs.push("freeLegMode 1 needs torqueMode 1: the leg swings against the lower body");
+  if (!(p.freeLegMass > 0 && p.freeLegMass < 0.3 && p.freeLegReach > 0 && p.freeLegReach < 1 && p.freeLegArc > 0 && p.freeLegArc < Math.PI))
+    errs.push("free leg mass share 0-0.3, reach 0-1 m, arc 0-π");
+  if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
+  if (![0, 1].includes(p.speedSpinMode)) errs.push("speedSpinMode is 0 (the block lifts) or 1 (it also turns the body)");
+  if (![0, 1].includes(p.footMode)) errs.push("footMode is 0 (blades along the body) or 1 (each foot turns in its hip)");
+  if (p.footMode === 1 && p.slipMode !== 1) errs.push("footMode 1 needs slipMode 1: a turned blade must be able to scrape");
+  if (!(p.turnout >= 0 && p.turnout <= 1)) errs.push("turnout is 0..1 of 90° per foot");
+  if (!(p.hipInternal >= 0 && p.hipInternal < 1.2)) errs.push("hipInternal must be 0-1.2 rad");
+  if (!(p.footTurnRate > 0)) errs.push("footTurnRate must be positive");
+  if (!(p.rutWidth > 0 && p.rutWidth < 0.02 && p.rutLoad > 0)) errs.push("rutWidth 0-20 mm and rutLoad positive");
+  if (!(p.contactDepth > 0 && p.contactDepth < 0.005)) errs.push("contactDepth must be 0-5 mm");
+  if (!(p.bladeLength > 0.15 && p.bladeLength < 0.4)) errs.push("bladeLength is a figure blade, 0.15-0.4 m");
+  if (!(p.scrapeRefTilt > 0 && p.scrapeRefTilt < Math.PI / 2)) errs.push("scrapeRefTilt must be an edge between 0 and 90 degrees");
+  if (![0, 1].includes(p.slipMode)) errs.push("slipMode is 0 (travel carried with the blades) or 1 (blades can point across their travel)");
   if (p.iceDamagePerPass <= 0 || p.iceDamagePerPass > 1)
     errs.push("iceDamagePerPass is a per-pass saturating share, in (0, 1]");
   if (p.iceSnowPerScrub < 0) errs.push("iceSnowPerScrub cannot be negative");

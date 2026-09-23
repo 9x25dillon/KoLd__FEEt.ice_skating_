@@ -8,13 +8,13 @@ experiment remains unchanged.
 
 | Setup | Continuous control | Assistance and move access |
 | --- | --- | --- |
-| Simulation | Left/right sticks control the corresponding blades via mean lean and differential tilt; average fore–aft pressure controls the rocker. Hold the profile's modifier (L3 by default) for right-stick arms and wind-up; the right blade retains its last command until release. | Responsive athlete balance model, no jump assist, no landing coach, no Cruise or held-repeat strokes. Manual turn gestures. |
-| Blade Explorer | Left stick directly controls lean and rocker pressure; right stick controls arms. Bumpers retain the chosen foot. | 50–100% assistance, default 75%: blends balance damping/recovery and latency toward the assisted preset, and blends excessive lean toward a speed-dependent blade-support limit. Manual jump landings and turn gestures. |
+| Simulation | Left/right sticks control the corresponding blades: each stick's side-to-side is its blade's tilt and its fore–aft is that blade's heel/toe. LT bends the left knee, RT the right; the standing leg's knee sets load and jump, the pushing leg's sets the push. The feet turn in the hips (feet layout below). Blades scrape, dig and catch (slip), the arms twist the trunk (torque), and stops — snowplow, T-stop, hockey stop — come from the feet and edges: there is no pad brake (keyboard X still brakes). Through a turn each held stick keeps its side of the ice until that stick is released. Hold the profile's modifier (L3 by default) for right-stick arms and wind-up; the right blade retains its last command until release. | Responsive athlete balance model, no jump assist, no landing coach, no Cruise or held-repeat strokes. Manual turn gestures. |
+| Blade Explorer | Left stick directly controls lean and rocker pressure; right stick controls arms, which twist the trunk. Blades stay parallel but scrape, dig and catch. Bumpers retain the chosen foot. | 50–100% assistance, default 75%: blends balance damping/recovery and latency toward the assisted preset, and blends excessive lean toward a speed-dependent blade-support limit. Manual jump landings and turn gestures. |
 | Full Repertoire | Left-stick lean/pressure, right-stick arms, retained foot selection. | Assisted balance, wind-up jump assistance, dedicated turn/glide commands, optional landing coach in the game. Covers implemented moves; entries must still be physically available. |
 
 All three start with Cruise off. Explorer and Repertoire can enable it and repeat
 strokes while A is held. Simulation requires each press. RT loads/releases, LT
-brakes, R3 plants the toe or changes spin foot, X twizzles and Y spins. Modifier
+brakes (in Simulation: LT/RT are the left/right knees and D-pad ↑ brakes), R3 plants the toe or changes spin foot, X twizzles and Y spins. Modifier
 + X/Y/A selects Ina Bauer/spiral/cantilever. Start a spin before engaging the
 modifier to adjust arms/camel in Simulation; the button bank stays latched.
 
@@ -23,7 +23,8 @@ a loop, or reverse lean during the first half for a rocker. Transfer plus revers
 produces a choctaw. D-pad down requests a bracket; hold it and reverse lean for
 a counter. Dedicated loop/rocker/counter/mohawk/choctaw shortcuts apply only in
 Repertoire. The corresponding keyboard controls are B/N plus Q/E and lean inputs.
-Simulation keyboard: A/D left blade, left/right arrows right blade, W/S pressure,
+Simulation keyboard: A/D left blade, left/right arrows right blade, W/S pressure
+(shared by both blades), Shift both knees, X brake,
 C arms, comma wind-up. Explorer keeps A/D or arrows for lean.
 
 These are authored tuning starting points, not external physics validation.
@@ -151,10 +152,61 @@ godot4 --headless --path games/ice-run-godot -- --smoke-test --full-controls
 ```
 
 First-time Godot setup still requires the full preparation command to generate audio.
-Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/22`. The three setups record final mapped
+Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/35`. The three setups record final mapped
 inputs and parameters under label D; they add no solver arithmetic changes. Older
 builds reject D-labelled clips; current builds continue accepting A/B/C clips.
 
 Defaults are authored starting points. Virtual-pad and automated checks establish
 reachability and consistency; a human session on a physical controller is still
 needed to assess comfort, stick noise, and suitable sensitivity.
+
+
+## Feet (Simulation)
+
+Each foot turns in its hip — out as far as the skater's turnout, in about 35° — and the
+blades point off the body by those angles. Three layouts, chosen in the controller workshop
+(`/game/controller.html`, "Feet (Simulation)") and saved with the profile; default D-pad.
+
+| Layout | Pad | Holds when released? |
+| --- | --- | --- |
+| **D-pad nudges** | D-pad ← / → turn both feet together (anticlockwise / clockwise); modifier + ← / → toes in / out; ↑ straightens | yes |
+| **Stick up/down** | each stick's up/down turns its own foot (up toe out, down toe in); hold the modifier for heel/toe on the left stick | no — the stick is the angle |
+| **Modifier + left stick** | hold the modifier: left stick x turns both feet, y toes in / out; the left blade keeps its last edge and the right stick is the arms | yes |
+
+Keyboard, every layout: `[` / `]` turn both feet, `-` / `=` toes in / out, `\` straightens.
+
+Snowplow: both bumpers (shared weight), toes in, blades on their inside edges. T-stop: weight
+on one foot, the other turned out behind on its outside edge. Hockey stop: rise off a carve,
+release the shoulders into the turn with the feet turned, sink and hold the blades square to
+the travel (feet, then hips). Which stick direction reads as "knees in" on screen is still to be
+checked on the pad: in the model's frame, sticks pushed apart put both blades on their inside
+edges; pushed together, on their outside edges, which catch.
+
+
+## Experimental (the operator's)
+
+The legs on the triggers, the feet and blades on the thumbs, weight and arms on X / B, the
+toe picks on the stick clicks, and A / Y asking for moves that the physics then performs or
+refuses. Everything through the blades (slip, trunk, feet), minimal assistance, no Cruise.
+The other three setups are unchanged.
+
+| Input | Does |
+| --- | --- |
+| LT / RT | left / right knee: pull to bend. **Pump** — past 60% then back under 20% within 0.25 s — is that leg pushing, as strong as the bend was deep and the snap quick; the push extends the leg from that bend. Load the standing leg and let go: the jump |
+| Left / right stick | that foot and blade: side to side the edge, up/down heel/toe. A **thumb stroke** — down past 60% then up past 60% within 0.25 s — is that foot pushing, as strong as it was full, straight and quick |
+| Pump + thumb stroke, same leg, within 0.125 s | add, up to a full push |
+| X / B | weight to the left / right foot (it stays), arms swing left / right (eased, not a flick); both: shared weight |
+| Free leg's trigger | with the weight on one foot the other leg is free: its trigger swings it forward (released, it rests) and it does not pump. Smooth and over a deep edge it adds spin its own way round (a right free leg with the jump); snapped, it twists the blade loose |
+| L3 / R3 | toe pick |
+| A | turn: the three-turn gesture; LB + A bracket; RB + A cantilever |
+| Y | rotation: spin; LB + Y twizzle; RB + Y spiral; LB + RB + Y Ina Bauer |
+| D-pad | the feet (D-pad layout): ← / → turn both, LB or RB + ← / → toes in / out, ↑ straightens |
+| (automatic) | **back crossovers**: skating backward at 1.5 m/s or more, leaning at least `crossoverLean` (12°), the skater strokes a crossover on every beat of the music — on the beat, so never the chopped off-beat push — as an ordinary stroke from the knee, both blades down for the push. Bent knees stroke harder. Holding both knees deep past the jump's load (0.7 on the standing leg; with shared weight, the average) loads a jump instead |
+
+Measured from 3 m/s over 1 s: glide 2.891; one deep snapped pump 3.175; one lazy pump 2.931;
+one clean thumb stroke 2.987. Alternating full pumps every 0.25 s for 2 s: 3 → 4.061 m/s, with
+no takeoff. Backward on a curve (sticks 0.65, knees 0.6), the automatic crossovers take 3 → 6.13 m/s
+in 8 s with no pumping (knees 0.3: 4.59). Pumps on a curve are crossover pushes and follow the bible's beat rule:
+off the beat they are chopped to 45%. The thresholds and weights are authored starting points for tuning on the pad
+(`game/full-controls.ts`: `PUMP_*`, `STROKE_EDGE`, `GESTURE_TICKS`, `PAIR_TICKS`, `SNAP_TICKS`,
+`ARMS_*`).

@@ -49,7 +49,7 @@
 // residual slip velocity, which is the same idea one derivative apart, but the
 // bible's version is the project's own and reads more directly on screen.
 
-import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos, lerp, rng } from "./math.ts";
+import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos, lerp, rng, smoothstep } from "./math.ts";
 import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT, MOVE, HELD } from "./types.ts";
 import type {
   SkaterState, BladeState, SkatingInput, EdgeEvent, Foot, Fall,
@@ -61,7 +61,7 @@ import type { IceGrid } from "./ice.ts";
 import type { Vec2 } from "./math.ts";
 import { onBeat, accentCredit } from "./music.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
-import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
+import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE, upperInertia } from "./jump.ts";
 import {
   newTurn, newSpin, newInaBauer, newSpiral, noMove, turnStart, twizzleStart, spinStart, inaBauerStart, inaBauerEnd,
   spiralStart, spiralEnd,
@@ -83,6 +83,312 @@ import type { PivotTick } from "./moves.ts";
  * the compiler deletes the check.
  */
 const axis = (v: number, fallback: number): number => (Number.isFinite(v) ? v : fallback);
+
+/**
+ * Each leg's knee command, [left, right]: the shared knee, split apart by
+ * `kneeSplit` as `leanSplit` splits tilt. With no split both are the knee.
+ */
+const legKnees = (input: SkatingInput, floor = 0): [number, number] => {
+  const knee = axis(input.knee, 0.35), split = clamp(axis(input.kneeSplit ?? 0, 0), -1, 1);
+  return [Math.max(knee - split, floor), Math.max(knee + split, floor)];
+};
+
+/**
+ * The knee the body stands on: each leg's, by how much of the weight it takes.
+ * Exactly the shared knee when there is no split (a + w * 0 is a).
+ */
+const supportKnee = ([l, r]: [number, number], weightR: number): number => l + weightR * (r - l);
+
+/**
+ * The share of its grip a blade keeps once it slides: muSkid at scrapeRefTilt.
+ * Scaled on biteCapacity, so sharpness, ice and load move a scrape as they
+ * move a carve.
+ */
+const scrapeShare = (p: Params): number => p.muSkid / (p.biteC0 + p.biteC1 * sin(p.scrapeRefTilt));
+
+/**
+ * A SCRAPE FOLLOWS THE EDGE. Sliding sideways, a blade dug in toward the side
+ * the scrape pushes (`into`, left positive) cuts a groove and resists along
+ * the grip curve: deeper, harder; flat, hardly at all. A blade on the OTHER
+ * edge — leaning with the slide, not against it — catches: the downhill edge
+ * cannot slide, it grips with all its bite, and the body trips over it.
+ */
+function scrapeForce(b: SkaterState["blade"][number], into: number, p: Params): number {
+  if (Math.abs(b.tilt) >= p.flatThreshold && sign(b.tilt) !== into) return b.biteCapacity;
+  return b.biteCapacity * scrapeShare(p);
+}
+
+/**
+ * Each foot's asked angle in its hip, rad, [left, right], toe out positive:
+ * out as far as turnout (x 90°), in as far as hipInternal.
+ */
+function legTurns(input: SkatingInput, p: Params): [number, number] {
+  const mean = clamp(axis(input.toeOut ?? 0, 0), -1, 1), split = clamp(axis(input.toeOutSplit ?? 0, 0), -1, 1);
+  return [mean - split, mean + split].map((t) => {
+    const u = clamp(t, -1, 1);
+    return u >= 0 ? u * p.turnout * Math.PI / 2 : u * p.hipInternal;
+  }) as [number, number];
+}
+
+/** A blade's direction: the body's heading, the toe turned out by `angle` — left foot anticlockwise, right clockwise. */
+const footTangent = (heading: Vec2, foot: number, angle: number): Vec2 =>
+  angle === 0 ? heading : rotate(heading, foot === FOOT.Left ? angle : -angle);
+
+/**
+ * STAGE B2, THE SLIP SOLVE PER BLADE (footMode 1). Turned in the hips, the
+ * blades no longer share a line, so each answers for its own share of the
+ * body (its weight) against its own sideways travel: grips while its bite can,
+ * scrapes along the grip curve past that, catches on the wrong edge
+ * (scrapeForce). A snowplow's two scrapes point back and in and their sideways
+ * halves cancel; a T-stop's one drags. Each blade's force, applied where it
+ * meets the ice, winds the body (the dig), with the stance's width as well as
+ * the heel/toe for its lever. Returns the sideways force on the body, left
+ * positive in the body's frame.
+ *
+ * With the trunk (torqueMode), a body turning faster than its carve (yawDev)
+ * drags each foot sideways by that spin times the foot's offset, and the
+ * blade's friction against it turns the body back: the scraping feet check
+ * the rotation. The winding then acts on the body itself, both halves
+ * together, rather than being carried to a takeoff.
+ */
+function slipSolveFeet(
+  s: SkaterState, p: Params, dt: number, stroking: boolean, wasSkid: boolean[], events: EdgeEvent[],
+  torqueOn: boolean, carriage: number,
+): number {
+  const bodyLeft = perpLeft(s.heading);
+  const spin = torqueOn ? s.yawDev ?? 0 : 0;
+  let dv = v2(0, 0), force = v2(0, 0), dL = 0;
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
+    const side = s.supportMode === 2 ? (i === FOOT.Left ? p.stanceHalfWidth : -p.stanceHalfWidth) : 0;
+    const r = add(mul(b.tangent, (b.contactS - 0.5) * p.bladeLength), mul(bodyLeft, side));
+    const n = perpLeft(b.tangent);
+    const vLat = dot(add(s.vel, mul(perpLeft(r), spin)), n), into = -sign(vLat);
+    const need = p.mass * b.weight * Math.abs(vLat);
+    const sliding = b.biteCapacity > 0 && need > b.biteCapacity * dt;
+    const scrape = scrapeForce(b, into, p);
+    const J = Math.min(need, (sliding ? scrape : b.biteCapacity) * dt);
+    const f = mul(n, into * J / dt);
+    dv = add(dv, mul(f, dt / p.mass));
+    force = add(force, f);
+    if (sliding || spin !== 0) dL += (r.x * f.y - r.y * f.x) * dt;
+    b.latSlipAccel = sliding ? scrape / Math.max(b.normalLoad / p.gravity, 1e-6) : 0;
+    if (sliding && b.regime !== REGIME.Brake) b.regime = REGIME.Skid;
+    const isSkid = b.regime === REGIME.Skid;
+    if (isSkid && !wasSkid[i]) events.push({
+      tick: s.tick, type: EVENT.SkidBegin, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: b.latSlipAccel,
+    });
+    if (!isSkid && wasSkid[i]) events.push({
+      tick: s.tick, type: EVENT.SkidEnd, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: 0,
+    });
+  }
+  s.vel = add(s.vel, dv);
+  if (torqueOn) s.yawDev = (s.yawDev ?? 0) + dL / (p.lowerBodyInertia + upperInertia(p, carriage));
+  else s.spinCarry += dL / p.inertiaOpen;
+  return dot(force, bodyLeft);
+}
+
+/**
+ * STAGE B1, THE SLIP SOLVE (slipMode 1). What is left of the travel across
+ * the blades after the carve: the edges take it out as far as they can hold
+ * (biteCapacity, summed over the carrying blades), and past that they scrape
+ * it out along the grip curve (scrapeForce) — or catch, on the wrong edge.
+ * An impulse along the blades' normal, so a scrape costs speed the way a
+ * scrape does. Returns the sideways force on the body, left positive, and
+ * settles each carrying blade's skid regime and events.
+ */
+function slipSolve(
+  s: SkaterState, p: Params, dt: number, stroking: boolean, wasSkid: boolean[], events: EdgeEvent[],
+): number {
+  const n = perpLeft(s.heading);
+  const vLat = dot(s.vel, n);
+  const into = -sign(vLat);   // the side the scrape pushes the body toward
+  const scrapes: number[] = [0, 0];
+  let grip = 0, kinetic = 0;
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
+    grip += b.biteCapacity;
+    scrapes[i] = scrapeForce(b, into, p);
+    kinetic += scrapes[i];
+  }
+  const need = p.mass * Math.abs(vLat);
+  const sliding = grip > 0 && need > grip * dt;
+  const J = Math.min(need, (sliding ? kinetic : grip) * dt);
+  if (J > 0) s.vel = add(s.vel, mul(n, -sign(vLat) * J / p.mass));
+  // THE DIG. Each scraping blade pushes where it meets the ice, which the
+  // heel/toe puts ahead of or behind the boot: r x F about the body's axis.
+  // The angular impulse winds the body — carried, like a turn's, into the
+  // takeoff (spinCarry), counter-clockwise positive.
+  if (sliding && kinetic > 0) {
+    const used = J / (kinetic * dt);
+    let dL = 0;
+    for (let i = 0; i < 2; i++) {
+      const b = s.blade[i];
+      if (scrapes[i] === 0) continue;
+      const r = mul(b.tangent, (b.contactS - 0.5) * p.bladeLength);
+      const f = mul(n, into * scrapes[i] * used);
+      dL += (r.x * f.y - r.y * f.x) * dt;
+    }
+    s.spinCarry += dL / p.inertiaOpen;
+  }
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
+    b.latSlipAccel = sliding ? scrapes[i] / Math.max(b.normalLoad / p.gravity, 1e-6) : 0;
+    if (sliding && b.regime !== REGIME.Brake) b.regime = REGIME.Skid;
+    const isSkid = b.regime === REGIME.Skid;
+    if (isSkid && !wasSkid[i]) events.push({
+      tick: s.tick, type: EVENT.SkidBegin, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: b.latSlipAccel,
+    });
+    if (!isSkid && wasSkid[i]) events.push({
+      tick: s.tick, type: EVENT.SkidEnd, foot: i as Foot,
+      prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: 0,
+    });
+  }
+  return -sign(vLat) * J / dt;
+}
+
+/**
+ * N m. How hard the loaded blades resist being pivoted: a blade's grip
+ * (biteCapacity, per unit length of contact) acting over the length in the
+ * ice about its middle, grip x chord / 4. The chord is the rocker's at the
+ * blade's depth in the ice: the measured rut's cross-section (contactDepth x
+ * rutWidth at rutLoad) scaled by this blade's load, spread flat or cut as a
+ * wedge on an edge, whichever is deeper. On the toe (shorter rocker) and flat
+ * (little depth, small grip) a blade turns easily — turns are made on the
+ * ball of the foot — and on a loaded deep edge it holds.
+ */
+function pivotCapacity(s: SkaterState, p: Params): number {
+  let cap = 0;
+  for (const b of s.blade) {
+    if (!b.inContact) continue;
+    const area = p.contactDepth * p.rutWidth * (b.normalLoad / p.rutLoad);
+    const depth = Math.max(area / p.rutWidth, Math.sqrt(2 * area * Math.abs(tan(b.tilt))));
+    const chord = 2 * Math.sqrt(2 * effectiveRocker(b.contactS, p) * depth);
+    cap += b.biteCapacity * chord / 4;
+  }
+  return cap;
+}
+
+/**
+ * STAGE C, THE TRUNK. Two bodies: upper (torso and arms, heavier with the arms
+ * out) and lower (hips, legs, blades), twisted apart by the trunk's muscles
+ * toward the wind-up asked for.
+ *
+ * The carve itself is not charged to the ice's pivot grip: a tilted rocker
+ * rolling in its own groove turns at `steer` the way a tilted coin rolls in a
+ * circle, and both bodies are carried round with it. What the pivot grip
+ * resists is the trunk twisting the feet OFF that carve: rates here are
+ * relative to the carve. The lower body holds while the ice can answer the
+ * trunk's reaction and take out any deviation, up to pivotCapacity; past that
+ * it pivots (yawDev), resisted only by the scrape's share of the capacity.
+ * Returns the lower body's yaw rate.
+ *
+ * STAGE C2: the legs steer only feet with weight on them (engagement, 0..1:
+ * none below 0.3 g on the ice, all above 0.8 g). Where the carve's
+ * rate changes under an unweighted foot, the body keeps the spin it had — the
+ * change goes into yawDev for both bodies — so a three-turn's rise spins
+ * through and an unweighted skater keeps turning while the travel does not.
+ * (Engagement by edge depth was measured first: the balance loop's own
+ * counter-steer from upright then became carried spin and the skater fell.)
+ */
+function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input: SkatingInput): number {
+  const Il = p.lowerBodyInertia;
+  const Iu = upperInertia(p, axis(input.carriage, 0));
+  const twist = s.twist ?? 0, twistRate = s.twistRate ?? 0;
+  // The legs steer both feet: engagement is the whole load on the ice, not
+  // the support blade's share (on two feet each carries half, and read alone
+  // that looked like rising off the ice).
+  const engaged = smoothstep(0.3, 0.8, (s.blade[0].normalLoad + s.blade[1].normalLoad) / (p.mass * p.gravity));
+  // What the legs could not carry of the carve's change stays as the body's own spin.
+  const dev0 = (s.yawDev ?? 0) + ((s.yawSteer ?? steer) - steer) * (1 - engaged);
+  s.yawSteer = steer;
+  // SkatingInput.windup is clockwise-positive; twist is counter-clockwise.
+  const target = -clamp(axis(input.windup, 0), -1, 1) * p.twistMax;
+  // The trunk's PD is solved implicitly: with the feet free the two bodies are
+  // light (reduced inertia ~0.36 kg m²) and an explicit step of this damping
+  // overshoots every tick. `a` is how much one N m changes the twist rate this
+  // tick, `base` the twist rate it would have without the trunk's torque.
+  const e = target - twist;
+  const trunk = (a: number, base: number): [number, number] => {
+    let rate = (base + a * p.twistStiffness * e) / (1 + a * (p.twistStiffness * dt + p.twistDamping));
+    let tau = p.twistStiffness * (e - rate * dt) - p.twistDamping * rate;
+    if (Math.abs(tau) > p.twistTorqueMax) { tau = sign(tau) * p.twistTorqueMax; rate = base + a * tau; }
+    return [rate, tau];
+  };
+  // Feet held on the carve: only the upper body moves; the ice answers the
+  // reaction and takes out any spin the lower body carried, up to its grip.
+  // The free leg (freeLegMode): its hip torque, whose reaction the lower body takes too.
+  const leg = freeLegTorque(s, p, input, dt);
+  const [heldRate, heldTau] = trunk(dt / Iu, twistRate + dev0);
+  const need = heldTau + leg - Il * dev0 / dt;
+  const cap = pivotCapacity(s, p);
+  let dev: number, rate: number, pivoting = false;
+  if (Math.abs(need) <= cap) {
+    dev = 0; rate = heldRate;
+  } else {
+    // The feet pivot, resisted only by the scrape's share of that grip. The
+    // free leg's reaction turns the braced torso with the hips — lower and
+    // upper as one body — not the hips alone: a light lower body kicked round
+    // by a leg is what set blades skidding on a gentle swing.
+    const ice = sign(need) * cap * scrapeShare(p);
+    const [freeRate, freeTau] = trunk(dt * (1 / Iu + 1 / Il), twistRate - ice / Il * dt);
+    dev = dev0 + (ice - freeTau) / Il * dt - leg / (Il + Iu) * dt;
+    rate = freeRate;
+    pivoting = true;
+  }
+  // The leg's own rate, against the hips: its torque — and, when the body
+  // pivots, the body's turn back under it, so angular momentum adds up.
+  if (s.freeSwingRate !== undefined) {
+    s.freeSwingRate += leg * (1 / freeLegInertia(p) + (pivoting ? 1 / (Il + Iu) : 0)) * dt;
+    s.freeSwing = (s.freeSwing ?? 0) + s.freeSwingRate * dt;
+  }
+  s.yawDev = dev;
+  s.twistRate = rate;
+  s.twist = twist + rate * dt;
+  return steer + dev;
+}
+
+/** kg m². The free leg about the body's axis, swung out. */
+const freeLegInertia = (p: Params): number => p.freeLegMass * p.mass * p.freeLegReach * p.freeLegReach;
+
+/**
+ * THE FREE LEG (freeLegMode). The unweighted leg, swung round the body by the
+ * hip toward SkatingInput.freeLeg: 0 behind, 1 forward and round, over
+ * freeLegArc either side of the hip. A right free leg swinging forward turns
+ * counter-clockwise, a left one clockwise. With both feet down there is no
+ * free leg: its state rests at zero. Returns the hip's torque on the leg (N m,
+ * counter-clockwise positive); the lower body takes it back.
+ */
+function freeLegTorque(s: SkaterState, p: Params, input: SkatingInput, dt: number): number {
+  if (p.freeLegMode < 1) return 0;
+  const weightR = clamp(axis(input.weight, 0.5), 0, 1);
+  const free = weightR >= 0.95 ? FOOT.Left : weightR <= 0.05 ? FOOT.Right : -1;
+  if (free < 0) { s.freeSwing = 0; s.freeSwingRate = 0; s.freeSwingTarget = 0; return 0; }
+  const around = free === FOOT.Right ? 1 : -1;
+  const target = around * p.freeLegArc * (2 * clamp(axis(input.freeLeg ?? 0.5, 0.5), 0, 1) - 1);
+  s.freeSwing ??= 0; s.freeSwingRate ??= 0;
+  // The hip tracks the swing it is asked for, speed included: damping acts on
+  // the difference from the asked speed, not on the leg's speed itself, or
+  // merely following a moving target would drag the foot round.
+  const wanted = (target - (s.freeSwingTarget ?? target)) / dt;
+  s.freeSwingTarget = target;
+  return clamp(p.freeLegStiffness * (target - s.freeSwing) + p.freeLegDamping * (wanted - s.freeSwingRate),
+    -p.freeLegTorqueMax, p.freeLegTorqueMax);
+}
+
+/**
+ * The jump reads the knee it loads, lands and absorbs on: the standing leg's.
+ * Without a split this is the input itself, untouched.
+ */
+const legInput = (input: SkatingInput): SkatingInput =>
+  (input.kneeSplit ?? 0) === 0 ? input
+    : { ...input, knee: supportKnee(legKnees(input), clamp(axis(input.weight, 0.5), 0, 1)) };
 
 /** Metres each foot of an Ina Bauer sits from the body along the track, lead ahead. */
 const INA_BAUER_STRIDE = 0.3;
@@ -136,6 +442,9 @@ export function step(
   // caller's own p. `staminaMode` 0 makes pFatigue identical to p, field for
   // field, the same inertness guarantee iceOn/condAt give the ice grid.
   const staminaOn = p.staminaMode >= 1;
+  const slipOn = p.slipMode >= 1;
+  const torqueOn = slipOn && p.torqueMode >= 1;
+  const footOn = slipOn && p.footMode >= 1;
   const legsMul = staminaOn ? clamp(s.legs, 0, 1) : 1;
   const pFatigue: Params = staminaOn ? {
     ...p,
@@ -209,7 +518,7 @@ export function step(
   // bite, no stroke, no balance loop to fall out of. sim/jump.ts flies the
   // body and lands it. Unreachable while jumpMode is 0.
   if (s.jump.phase === JUMP_PHASE.Air) {
-    jumpAir(s, input, pFatigue, dt, events);
+    jumpAir(s, legInput(input), pFatigue, dt, events);
     // A landing resolves INSIDE jumpAir, on this early-return path — the only
     // one there is, every landing goes through it — so this is the one place
     // music credit and hype can ever see EVENT.Landing.
@@ -230,13 +539,25 @@ export function step(
   // speed. Before this, a released trigger read as a straight leg, the push
   // force (strokePower * knee) was zero, and a pad could not get moving at
   // all. Deeper RT is still a stronger push; the floor only sets where zero is.
-  const kneeTarget = Math.max(axis(input.knee, 0.35),
-    alive && (input.push || s.strokeTime > 0) ? 0.35 : 0);
-  s.knee = moveToward(s.knee, clamp(kneeTarget, 0, 1), p.kneeRate * dt);
-  const knee = s.knee;
+  //
+  // Each leg has its own command (kneeSplit); the body's knee, the one that
+  // sets the load, bite and jump, is the standing leg's. The pushing leg's
+  // bend sets the push (pushKnee). Floored per leg, so either leg can push.
   const weightR = clamp(axis(input.weight, 0.5), 0, 1);
+  const legTargets = legKnees(input, alive && (input.push || s.strokeTime > 0) ? 0.35 : 0);
+  const kneeTarget = clamp(supportKnee(legTargets, weightR), 0, 1);
+  s.knee = moveToward(s.knee, kneeTarget, p.kneeRate * dt);
+  const knee = s.knee;
+  // The same bend rate, offset by how far the pushing leg's command sits from
+  // the standing leg's. Zero offset without a split: exactly the body's knee.
+  const pushKnee = (): number => s.strokeKnee !== undefined
+    // A push that named its bend extends from it: the leg straightening over the stroke.
+    ? s.strokeKnee * clamp(s.strokeTime / p.strokeDuration, 0, 1)
+    : clamp(knee + (clamp(legTargets[s.strokeFoot], 0, 1) - kneeTarget), 0, 1);
   const split = clamp(axis(input.leanSplit, 0), -1, 1);
-  const contactS = clamp(0.5 + 0.5 * clamp(axis(input.pitch, 0), -1, 1), 0, 1);
+  const pitch = axis(input.pitch, 0), pitchSplit = clamp(axis(input.pitchSplit ?? 0, 0), -1, 1);
+  // Each blade's own point on the rocker: the shared pitch, split apart.
+  const contactS = [pitch - pitchSplit, pitch + pitchSplit].map((c) => clamp(0.5 + 0.5 * clamp(c, -1, 1), 0, 1));
 
   // ── 0c. a turn, a twizzle or a spin begins ────────────────────────────────
   // sim/moves.ts: on a fresh press, if the ice permits one. From here until it
@@ -291,7 +612,7 @@ export function step(
     const b = s.blade[i];
     b.weight = weights[i];
     b.normalLoad = nTotal * weights[i];
-    b.contactS = contactS;
+    b.contactS = contactS[i];
     b.inContact = b.normalLoad > 1e-3;
     if (b.inContact) loaded++;
   }
@@ -303,10 +624,13 @@ export function step(
   // ── 1b. begin a stroke, before any blade tilt is assigned ─────────────────
   if (alive && input.push && s.strokeTime <= 0 && !turning && !ina) {
     s.strokeTime = p.strokeDuration;
-    s.strokeFoot = (1 - s.strokeFoot) as Foot;   // two-beat alternation
+    // Two-beat alternation, unless the push names its leg.
+    s.strokeFoot = (input.pushFoot === 0 || input.pushFoot === 1 ? input.pushFoot : 1 - s.strokeFoot) as Foot;
+    s.strokeScale = input.pushPower === undefined ? undefined : clamp(axis(input.pushPower, 1), 0, 1);
+    s.strokeKnee = input.pushKnee === undefined ? undefined : clamp(axis(input.pushKnee, 0), 0, 1);
     // Legs, once per push rather than per tick: SkateSolver.cpp's own
     // S.LegPool -= 0.011f * Knee, at the moment the push begins.
-    if (staminaOn) s.legs = clamp(s.legs - p.staminaLegsPerPush * knee, 0, 1);
+    if (staminaOn) s.legs = clamp(s.legs - p.staminaLegsPerPush * pushKnee(), 0, 1);
     // "A straight stroke on a flat, a crossover on a curve" (bible §2.1). Read
     // off the BODY's lean, not the blade's: at speed a wide arc needs little
     // blade and a lot of lean — 7 m/s round 13 m is 9 degrees of blade and 21
@@ -330,6 +654,13 @@ export function step(
       s.strokeMusicScale = 1;
     }
   }
+  // A push naming the leg already pushing adds to its stroke: a thumb stroke
+  // and a trigger pump of the same leg, one just after the other, are one
+  // stronger push. It never weakens one.
+  if (s.strokeTime > 0 && input.pushFoot === s.strokeFoot && input.pushPower !== undefined && s.strokeScale !== undefined)
+    s.strokeScale = Math.max(s.strokeScale, clamp(axis(input.pushPower, 1), 0, 1));
+  if (s.strokeTime > 0 && input.pushFoot === s.strokeFoot && input.pushKnee !== undefined && s.strokeKnee !== undefined)
+    s.strokeKnee = Math.max(s.strokeKnee, clamp(axis(input.pushKnee, 0), 0, 1));
   const stroking = s.strokeTime > 0;
 
   // ── 1c. or a turn's pivot, in place of sections 2-5 ───────────────────────
@@ -370,6 +701,26 @@ export function step(
     const kappaMax = sin(pFatigue.maxTilt) / rhoSupport;
     const kappa = clamp(aCmd / v2sq, -kappaMax, kappaMax);
     let tiltTarget = asinClamped(kappa * rhoSupport);
+    // SCRAPING, the edge sets the scrape, not a curve: the skater digs in on
+    // the side the scrape pushes toward, as deep as the lean needs, and never
+    // offers it the other edge. Whether the body can get there is the
+    // angulation limit below — lean the wrong way and it cannot.
+    // With the feet splayed (a snowplow) the loaded blades can scrape toward
+    // opposite sides: their sideways forces cancel, there is nothing to lean
+    // on, and one common edge would dig one blade and catch the other — so the
+    // body stands flat and the edge split sets each blade's edge.
+    const sides = s.blade.filter((b) => b.inContact).map((b) => -sign(dot(s.vel, perpLeft(footOn ? b.tangent : s.heading))));
+    const splayed = footOn && sides.length === 2 && sides[0] !== sides[1];
+    if (splayed && s.blade[s.supportFoot].regime === REGIME.Skid) tiltTarget = 0;
+    else if (slipOn && s.blade[s.supportFoot].regime === REGIME.Skid) {
+      const into = -sign(dot(s.vel, perpLeft(footOn ? s.blade[s.supportFoot].tangent : s.heading)));
+      const perSin = scrapeShare(p) * p.biteC1 * p.sharpness * p.iceHardness * (nTotal / p.mass);
+      const base = scrapeShare(p) * p.biteC0 * p.sharpness * p.iceHardness * (nTotal / p.mass);
+      const want = aCmd * into;
+      tiltTarget = want > base && perSin > 1e-9
+        ? into * asinClamped(clamp((want - base) / perSin, 0, sin(pFatigue.maxTilt)))
+        : 0;
+    }
     // Angulation: the blade may run deeper than the body leans, but only so
     // far. This gap is most of what "edge quality" means to a judge.
     tiltTarget = clamp(tiltTarget, s.lean - pEff.angulationLimit, s.lean + pEff.angulationLimit);
@@ -421,13 +772,24 @@ export function step(
         pushMass = pb.normalLoad / g;
         if (s.crossover) {
           const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? p.backPushScale : 1;
-          crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * knee * p.mass * back,
+          crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * pushKnee() * p.mass * back * (s.strokeScale ?? 1),
             biteCapacity(pb.normalLoad, s.crossSide * p.strokeEdge, p, condAt(pb.contact)));
         }
       }
     }
   }
 
+  // slipMode: skid events are decided after the slip solve, against these.
+  const wasSkidAll = slipOn ? s.blade.map((b) => b.regime === REGIME.Skid) : undefined;
+  // STAGE B2: each foot turns in its hip toward what is asked, at the legs'
+  // rate, and its blade points that far off the body's heading.
+  if (footOn && !turning && !ina) {
+    const ask = legTurns(input, p);
+    const now = s.footAngle ?? [0, 0];
+    s.footAngle = [0, 1].map((i) => moveToward(now[i], ask[i], p.footTurnRate * dt)) as [number, number];
+    for (let i = 0; i < 2; i++) s.blade[i].tangent = footTangent(s.heading, i, s.footAngle[i]);
+  }
+  let carveLost = false;
   if (!turning) for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     // The pushing blade rolls onto its own INSIDE edge for the length of the
@@ -479,14 +841,15 @@ export function step(
       const capFlat = biteCapacity(b.normalLoad, b.tilt, p, condAt(b.contact));
       const wanted = Math.abs(vLatFlat) * (b.normalLoad / g);
       const allowed = Math.min(wanted, capFlat * dt);
-      flatImpulse = add(flatImpulse, mul(nFlat, -sign(vLatFlat) * allowed));
+      // With slip on, the body-level slip solve in section 4 does this.
+      if (!slipOn) flatImpulse = add(flatImpulse, mul(nFlat, -sign(vLatFlat) * allowed));
 
       b.turnRadius = Infinity; b.latForce = -sign(vLatFlat) * allowed / dt;
       b.latSlipAccel = 0;
       b.demandRatio = capFlat > 1e-6 ? wanted / (capFlat * dt) : 0;
       b.biteCapacity = capFlat;
       b.regime = REGIME.Glide;
-      if (wasSkid) events.push({
+      if (wasSkid && !slipOn) events.push({
         tick: s.tick, type: EVENT.SkidEnd, foot: i as Foot,
         prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: 0,
       });
@@ -512,8 +875,11 @@ export function step(
     // `excess` is an ACCELERATION (m/s^2): the part of the demand the edge
     // could not answer. It is what gets scrubbed off as speed below.
     let radius: number, excess: number, fLat: number;
-    if (fNeed <= fBite) {
-      radius = rGeo; excess = 0; fLat = fNeed;
+    // With slip on the blade steers along its own arc whatever the edge can
+    // hold; whether the travel follows is section 4's slip solve.
+    if (slipOn && fNeed > fBite && !(stroking && i === s.strokeFoot)) carveLost = true;
+    if (slipOn || fNeed <= fBite) {
+      radius = rGeo; excess = 0; fLat = Math.min(fNeed, fBite);
     } else if (inCross) {
       // Letting go mid-crossover: the arc opens to what the push and the bite
       // hold between them.
@@ -548,7 +914,10 @@ export function step(
       latForceTotal += reversed ? -b.latForce : b.latForce;
       excessWeighted += excess * b.weight;
       const yawRate = sign(b.tilt) * vLong / Math.max(radius, 0.35);
-      yawNumer += yawRate * b.normalLoad;
+      // A blade scraping sideways is not rolling along its arc, so it does
+      // not steer (slipMode): it still carries its load, which the carve's
+      // rate is shared over.
+      if (!(slipOn && wasSkidAll![i])) yawNumer += yawRate * b.normalLoad;
       yawDenom += b.normalLoad;
     }
 
@@ -558,6 +927,7 @@ export function step(
     if (input.brake && Math.abs(vLong) > 0.2) b.regime = REGIME.Brake;
 
     const isSkid = b.regime === REGIME.Skid;
+    if (slipOn) continue;
     if (isSkid && !wasSkid) events.push({
       tick: s.tick, type: EVENT.SkidBegin, foot: i as Foot,
       prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: excess,
@@ -583,7 +953,19 @@ export function step(
   }
 
   if (!turning) {
-    const yawRate = yawDenom > 1e-6 ? yawNumer / yawDenom : 0;
+    const steer = yawDenom > 1e-6 ? yawNumer / yawDenom : 0;
+    // The whole body's mass has to be turned, not only what the blades carry:
+    // rising off the edge leaves the grip too small for the curve, and the
+    // travel runs straight on while the body keeps turning.
+    if (slipOn && !carveLost) {
+      let grip = 0;
+      for (let i = 0; i < 2; i++) {
+        const b = s.blade[i];
+        if (b.inContact && !(stroking && i === s.strokeFoot)) grip += b.biteCapacity;
+      }
+      if (p.mass * Math.abs(steer) * len(s.vel) > grip) carveLost = true;
+    }
+    const yawRate = torqueOn ? trunkTorque(s, p, dt, steer, input) : steer;
     s.yawRate = yawRate;
     const dPsi = yawRate * dt;
     if (dPsi !== 0) {
@@ -591,11 +973,31 @@ export function step(
         const b = s.blade[i];
         if (b.inContact) b.tangent = normalizeOr(rotate(b.tangent, dPsi), b.tangent);
       }
-      s.vel = rotate(s.vel, dPsi);
+      // An edge that holds carries the travel round with it. With slip on,
+      // one that cannot leaves the travel behind for the slip solve — and a
+      // foot the trunk pivots off its carve carries only the carve's share.
+      if (!slipOn || !carveLost) s.vel = rotate(s.vel, torqueOn ? steer * dt : dPsi);
     }
-    s.heading = s.blade[s.supportFoot].inContact
-      ? s.blade[s.supportFoot].tangent
-      : s.heading;
+    if (footOn) {
+      // The body turns; the blades follow it at their own angles in the hips.
+      if (dPsi !== 0) s.heading = normalizeOr(rotate(s.heading, dPsi), s.heading);
+      const angles = s.footAngle ?? [0, 0];
+      for (let i = 0; i < 2; i++) s.blade[i].tangent = footTangent(s.heading, i, angles[i]);
+    } else {
+      s.heading = s.blade[s.supportFoot].inContact
+        ? s.blade[s.supportFoot].tangent
+        : s.heading;
+      // With slip on, a blade off the ice points along the body: left where
+      // it lifted, it would touch down across the travel and skid (measured:
+      // a weight change mid-curve on Blade Explorer, the lean ran away).
+      if (slipOn) for (const b of s.blade) if (!b.inContact) b.tangent = s.heading;
+    }
+    if (slipOn) {
+      const slip = footOn ? slipSolveFeet(s, p, dt, stroking, wasSkidAll!, events, torqueOn, axis(input.carriage, 0))
+        : slipSolve(s, p, dt, stroking, wasSkidAll!, events);
+      // A lost carve holds nothing toward its centre; the scrape is the force.
+      latForceTotal = carveLost ? slip : latForceTotal + slip;
+    }
   }
 
   // ── 5. losses ─────────────────────────────────────────────────────────────
@@ -612,7 +1014,8 @@ export function step(
     for (let i = 0; i < 2; i++) {
       const b = s.blade[i];
       if (!b.inContact) continue;
-      dv += muLong(b.tilt, b.latSlipAccel > 0, p, condAt(b.contact)) * b.normalLoad / p.mass * dt;
+      // With slip on, the scrape is already the slip solve's sideways force.
+      dv += muLong(b.tilt, !slipOn && b.latSlipAccel > 0, p, condAt(b.contact)) * b.normalLoad / p.mass * dt;
     }
     if (input.brake) dv += p.muSkid * nTotal / p.mass * dt;
     // An Ina Bauer's trailing foot is never turned out quite square to the lead.
@@ -659,7 +1062,7 @@ export function step(
       // push drives backward: a C-cut rather than a stroke, and with the moves
       // on a slightly weaker one (backPushScale).
       const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? -1 : 1;
-      const wanted = p.strokePower * knee * p.mass * s.strokeMusicScale
+      const wanted = p.strokePower * pushKnee() * p.mass * s.strokeMusicScale * (s.strokeScale ?? 1)
         * (back < 0 && p.movesMode >= 1 ? p.backPushScale : 1);
       const force = Math.min(wanted, push.biteCapacity);
       if (s.crossover && crossLat > 0) {
@@ -843,7 +1246,7 @@ export function step(
   // ── 10. is the knee loading a jump, or releasing one? ─────────────────────
   if (!turning) carryDecay(s, p, dt);
   const wasGrounded = s.jump.phase !== JUMP_PHASE.Air;
-  jumpGround(s, input, pFatigue, dt, events);
+  jumpGround(s, legInput(input), pFatigue, dt, events);
   if (staminaOn && wasGrounded && s.jump.phase === JUMP_PHASE.Air)
     s.legs = clamp(s.legs - p.staminaLegsPerJump, 0, 1);
 

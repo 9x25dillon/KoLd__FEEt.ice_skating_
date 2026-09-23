@@ -11,6 +11,14 @@
 // where Explorer and Repertoire, with the same thumb and the same -0.176 blade
 // command, keep it. Whether Simulation should latch per blade is the
 // operator's call; the fixture pins the mapping as it is.
+//
+// Re-recorded (2026-09-23, solver /35), all intended, operator-directed: the
+// operator chose per-blade latching for Simulation (app/schemes.ts
+// latchBlades); Simulation gained per-blade heel/toe and knees (LT/RT), the
+// feet in the hips (D-pad layout by default), and lost the pad brake; Blade
+// Explorer and Simulation gained slip and the trunk; a fourth setup,
+// Experimental, maps pumps, thumb strokes, X/B weight and arms, L3/R3 toe
+// picks, A/Y move families, automatic back crossovers and the free leg.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -53,8 +61,9 @@ test("the setups differ where they are meant to", () => {
   // A held from 180: Simulation needs a fresh press for every push; the others repeat every 90 ticks.
   assert.deepEqual(pushes("simulation"), [120, 180]);
   for (const id of ["explorer", "repertoire"]) assert.deepEqual(pushes(id), [120, 180, 270], id);
-  // Dedicated turn bindings (D-pad rocker, L3+B mohawk) are Repertoire's alone; B's three-turn and the bracket work everywhere.
-  for (const id of ["simulation", "explorer"]) assert.deepEqual(story(id).filter((e) => e !== "takeoff" && e !== "fall"), ["three-turn", "bracket"], id);
+  // Dedicated turn bindings (D-pad rocker, L3+B mohawk) are Repertoire's alone; B's three-turn works everywhere.
+  // Since /34 Simulation and Explorer carry the trunk: the script's arm flick (L3 + right stick 0.8 at tick 600) skids the edge and the skater falls before the bracket.
+  for (const id of ["simulation", "explorer"]) assert.deepEqual(story(id).filter((e) => e !== "takeoff"), ["three-turn", "fall"], id);
   assert.deepEqual(story("repertoire").filter((e) => e !== "takeoff" && e !== "fall"), ["three-turn", "rocker", "bracket", "mohawk"]);
   // Only Simulation splits the blades.
   const splits = (id: string): boolean => decode(fixture.setups[id].inputs, SCRIPT_TICKS).some((it) => it.leanSplit !== 0);

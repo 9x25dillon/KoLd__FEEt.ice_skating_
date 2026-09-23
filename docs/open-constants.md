@@ -97,11 +97,60 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
 
 - **`muSkid`** — friction once the edge has let go
   - Value: `0.35`
-  - Used: `blade.ts` `muLong`; `solver.ts` `step` (skid scrub, brake)
+  - Used: `blade.ts` `muLong`; `solver.ts` `step` (skid scrub, brake), and with `slipMode` 1 the scrape (`scrapeShare`)
   - Level: L2
   - Range: none recorded
   - Fixed by: stopping distance from a known speed in a hockey stop or snowplough (footage timing)
   - Source: the bible and `SkateSolver.cpp` (the engineering package said 0.03)
+
+- **`scrapeRefTilt`** — the edge at which a sideways scrape runs at exactly `muSkid`
+  - Value: `0.6` rad (34°)
+  - Used: `solver.ts` `scrapeShare`, `scrapeForce`, and the balance controller while scraping (`slipMode` 1 only)
+  - Level: L3, authored
+  - Range: none recorded
+  - Meaning: a sliding blade keeps `muSkid / (biteC0 + biteC1 sin scrapeRefTilt)` of its grip curve (0.17 at the defaults), so a deeper edge dug toward the travel scrapes harder, up to about 0.55 g at `maxTilt`; a flat blade barely scrapes; the other edge catches with all its bite (a trip)
+  - Measured (Simulation params, 90° across, lean 0.3 into it): 5 m/s stops in 1.63 s over 5.26 m; 7 m/s in 2.16 s over 9.02 m
+  - Fixed by: a hockey stop's stopping distance and body lean from a known speed (footage timing), with `muSkid`
+
+- **`bladeLength`** — a figure blade's length; the lever of THE DIG
+  - Value: `0.28` m
+  - Used: `solver.ts` `slipSolve` (`slipMode` 1 only): a scraping blade's sideways force acts `(contactS - 0.5) x bladeLength` ahead of the boot's centre, and r x F winds the body into `spinCarry`, which the takeoff carries (`jump.ts`)
+  - Level: L2 — figure blades run 270–300 mm by boot size; the boot centre as the body's axis is the model's simplification
+  - Measured (Simulation params, leaned in, 90°, 5 m/s, 0.3 s on the toe): +1.28 rad/s wound; 6 m/s, 100°, 0.1 s dig then 0.3 s load, no arms: takeoff L 6.5 since /29 (5.0 before a scraping blade stopped steering; full arms give 38)
+  - Fixed by: a skater's measured takeoff angular momentum off a skidded or toe-dug entry, against the same entry held clean
+
+- **Stage C1, the trunk** (`torqueMode` 1, with `slipMode` 1; `solver.ts` `trunkTorque`, `pivotCapacity`)
+  - `lowerBodyInertia` `0.4` kg m² — hips, legs, skates about the long axis. Authored; the upper body is the rest of `inertiaTucked`…`inertiaOpen` by carriage
+  - `twistMax` `0.8` rad — shoulders against hips at full wind-up (~45°). Authored
+  - `twistTorqueMax` `60` N m — the trunk rotators' ceiling for a small skater. Authored
+  - `twistStiffness` `600` N m/rad, `twistDamping` `60` N m s/rad — the trunk's PD toward the asked wind-up. Authored
+  - `contactDepth` `0.00018` m, `rutWidth` `0.00416` m, `rutLoad` `755.4` N — the measured hockey rut (LEVER 2022, [ice-literature](ice-literature.md): 0.18 mm deep, 4.16 mm wide, 77 kg). Since /34 the rut's cross-section scales with this blade's load, spread flat across the width or cut as a wedge on an edge, depth √(2·area·tan tilt), whichever is deeper; the chord 2√(2ρ·depth), pivot grip = biteCapacity × chord / 4. Constant indentation pressure is a simplification the paper cautions on (p. 340)
+  - Level: L3 except `contactDepth` (L2, hockey transfer)
+  - Measured (Simulation params, 6 m/s): a slow wind-up on a lean-0.4 edge winds 0.80 rad with the feet held; a flick on a flat blade pivots the feet ~25° the opposite way; on an edge the toe pivots further than the heel (lean 0.2: 22° vs 19°)
+  - Fixed by: shoulder-hip separation and skid onset from video of wind-ups and three-turn preparations
+  - Model limit: the carve's own turning is the legs' (not charged to the pivot grip) — a momentum-true version where all turning comes through the ice cannot carve at any contact depth up to 2 mm (measured)
+
+- **The free leg** (`freeLegMode` 1, with `torqueMode` 1; `solver.ts` `freeLegTorque`; on in Experimental only)
+  - `freeLegMass` `0.161` — one leg's share of body mass: thigh 0.100 + shank 0.0465 + foot 0.0145 (Dempster, via Winter). Level L1 (anthropometry)
+  - `freeLegReach` `0.4` m — the leg's centre from the body's axis, swung out. Authored
+  - `freeLegArc` `1.2` rad — half its arc round the body. Authored
+  - `freeLegStiffness` `150`, `freeLegDamping` `20`, `freeLegTorqueMax` `100` — the hip's PD (damping on the difference from the asked swing speed) and ceiling. Authored
+  - When the foot pivots, the leg's reaction turns the braced torso with the hips (lower + upper as one body); a light lower body alone was kicked into a skid by a gentle swing
+  - Measured (7 m/s, lean 0.9, eased 0.5 s swing): salchow (right leg free) L 10.58 → 12.08; loop (left leg free, swings clockwise) 10.58 → 9.08; the same swing over 0.3 s twists the blade loose and falls; over a shallow edge (lean 0.5) any swing skids it
+  - Fixed by: free-leg angular velocity at takeoff from motion capture, against the takeoff edge's depth
+  - Stage C2: the legs steer only a weighted foot — engagement is smoothstep(0.3 g, 0.8 g) of the support blade's load (authored; tying it to edge depth made the balance loop's own counter-steer into carried spin and the skater fell, measured). Under an unweighted foot the body keeps its spin. The trunk's PD is solved implicitly (explicit damping overshot with the feet free). Measured: carve at lean 0.5, shoulders led then released on a 0.15 s rise — blades 34° across, back in line on the sink; a smooth 0.2 s wind-up release on a lean-0.5 edge takes the jump's L from 4.61 to 8.57, a snapped one drops it to 2.38. A full 90° hockey stop needs hip rotation of the feet (stage B2)
+
+- **Stage B2, the feet** (`footMode` 1, with `slipMode` 1; `solver.ts` `legTurns`, `footTangent`, `slipSolveFeet`)
+  - `turnout` `0.5` — external hip rotation as a fraction of 90° per foot; the bible's §4.3 body setting, and `data/motion-primitives.json`'s spread eagle asks 0.75. 0.5 for the reference skater is authored
+  - `hipInternal` `0.6` rad (~35°) — how far a foot turns in. Authored
+  - `footTurnRate` `6` rad/s — how fast the legs turn a foot. Authored
+  - Level: L3
+  - Measured (Simulation params, 5 m/s): snowplow, full toe-in on inside edges 0.6 — stops in 5.42 s over 14.1 m, straight; T-stop at turnout 1, drag on a full outside edge with 30% of the weight — 3.54 s over 10.1 m; spread eagle body sideways — turnout 1 glides clean, 0.75 scrapes to 3.68 m/s, 0.5 to 3.46 after 6 s
+  - Fixed by: turnout from the skater (goniometry, or the spread eagle's foot angle on video); stopping distances from footage of the three stops
+  - Model limit: no fore-aft pendulum — a snowplow on outside edges catches both and stops dead in 1 s without pitching the skater forward
+
+- **`speedSpinMode`** — the takeoff's block as a torque (r × Δp, r = leg length × sin(lean) to the side). No new constant. **0 in every setup**, by measurement: on a curve the body is inside and the blade outside, so the block swings the body *against* the curve — it cancels a loop's, salchow's, toe loop's, flip's and axel's curve rotation at 5–7 m/s (loop off RBO at 5 m/s: L 3.01 → 0) and feeds only the counter-rotated lutz (8 m/s: 0 → 1.94). Turning approach speed into rotation *with* the curve needs another mechanism — the free leg and arms swinging through, or a pick planted to the other side — not yet modelled
+  - Since /29: a scraping blade does not steer (it is not rolling along its arc), and with the trunk the scraping feet check the body's extra spin through friction at their offsets (stance width, heel/toe). Rising off a carve with the feet turned brings the blades 84° across and scrapes 6 → ~1 m/s; with fixed inputs the skater still falls as the stop runs out. Finished in `test/hockeystop.test.ts` with no further solver change: the blades must be held square (a scrape short of square lets the travel slide along the blade and swing into line), feet first then hips, and the entry lean kept inside the scrape's ceiling (~0.5 rad). Entry 0.4 stops from 6 m/s 2.99 s after the rise and stands; entry 0.5 falls
 
 - **`biteC0`** — lateral holding capacity of a flat blade, per unit load
   - Value: `0.08`

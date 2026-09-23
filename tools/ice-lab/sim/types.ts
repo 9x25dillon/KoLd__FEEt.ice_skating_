@@ -490,6 +490,10 @@ export interface SkaterState {
    * the way `crossover` and `crossSide` are.
    */
   strokeMusicScale: number;
+  /** The current stroke's pushPower, when its push gave one (absent otherwise). */
+  strokeScale?: number;
+  /** The current stroke's pushKnee, when its push gave one (absent otherwise). */
+  strokeKnee?: number;
   /** The jump in progress, if any. sim/jump.ts owns every field. */
   jump: JumpState;
   /** The last jump that came down, as the technical panel would read it. */
@@ -518,6 +522,29 @@ export interface SkaterState {
    * inherits it: why a salchow is entered off a three-turn.
    */
   spinCarry: number;
+  /**
+   * torqueMode 1 only (absent otherwise, so no digest before stage C moves):
+   * the upper body's angle against the lower, rad, counter-clockwise
+   * positive, and its rate; and how far the lower body's yaw rate has been
+   * twisted off what its edges carve (yawDev, rad/s). s.yawRate is then the
+   * carve's rate plus yawDev.
+   */
+  twist?: number;
+  twistRate?: number;
+  yawDev?: number;
+  /** torqueMode 1 only: last tick's carve rate, rad/s, against which yawDev keeps the body's spin. */
+  yawSteer?: number;
+  /**
+   * footMode 1 only: each foot's angle in its hip, rad, [left, right], toe out
+   * positive. The blades point off the body's heading by these; s.heading is
+   * then the body's own, not the support blade's.
+   */
+  footAngle?: [number, number];
+  /** freeLegMode 1 only: the free leg's angle round the body against the hips, rad, counter-clockwise positive, and its rate. */
+  freeSwing?: number;
+  freeSwingRate?: number;
+  /** freeLegMode 1 only: last tick's asked swing, rad, so the hip knows how fast it is being asked to move. */
+  freeSwingTarget?: number;
   /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
@@ -616,6 +643,49 @@ export interface SkatingInput {
    * the input the element vocabulary was always going to want.
    */
   leanSplit: number;
+  /**
+   * -1..1, how far the two blades' heel/toe contact is set APART, as
+   * `leanSplit` does for tilt: left blade at pitch - pitchSplit, right at
+   * pitch + pitchSplit. Rock one foot onto its toe while the other holds.
+   *
+   * Optional and absent unless a two-blade mapping drives it, so every input
+   * and replay recorded without it is unchanged; absent reads as 0.
+   */
+  pitchSplit?: number;
+  /**
+   * -1..1, the two knees' commands set apart: left leg at knee - kneeSplit,
+   * right at knee + kneeSplit. The standing leg's bend sets the load and the
+   * jump; the pushing leg's sets the push. Optional like `pitchSplit`.
+   */
+  kneeSplit?: number;
+  /**
+   * -1..1, both feet turned in the hips: +1 toe out as far as turnout allows,
+   * -1 toe in as far as hipInternal allows (footMode 1). toeOutSplit sets them
+   * apart, left at toeOut - split and right at toeOut + split. Optional,
+   * absent reads as 0.
+   */
+  toeOut?: number;
+  toeOutSplit?: number;
+  /**
+   * With `push`: which foot pushes (0 left, 1 right) instead of the two-beat
+   * alternation, and how hard, 0..1 of the athlete's stroke. Optional, for a
+   * setup that pushes a chosen leg (the Experimental setup's pumps and thumb
+   * strokes); absent, a push is exactly as it was.
+   */
+  pushFoot?: number;
+  pushPower?: number;
+  /**
+   * With `push`: the bend the pushing leg extends from, 0..1. The push is the
+   * leg straightening, so its force follows this bend easing to nothing over
+   * the stroke, instead of the knee as it now stands. Optional; absent, the
+   * stroke reads the pushing leg's knee as it always has.
+   */
+  pushKnee?: number;
+  /**
+   * 0..1, the free leg's swing (freeLegMode): 0 behind, 1 forward and round.
+   * Optional; absent the leg rests midway.
+   */
+  freeLeg?: number;
   push: boolean;
   brake: boolean;
   /**

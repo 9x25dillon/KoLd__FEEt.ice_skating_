@@ -267,7 +267,7 @@ function renderSetup() {
   el("assistance-value").textContent = `${Math.round(assistance * 100)}%`;
   (el("difficulty") as HTMLSelectElement).disabled = setup !== null && setup !== "repertoire";
   (el("difficulty") as HTMLSelectElement).value = beginner ? "beginner" : "simulation";
-  (el("cruise") as HTMLButtonElement).disabled = setup === "simulation";
+  (el("cruise") as HTMLButtonElement).disabled = setup === "simulation" || setup === "experimental";
   renderFullBindings();
 }
 setupSelect.addEventListener("change", () => {

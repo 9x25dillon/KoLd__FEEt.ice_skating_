@@ -183,7 +183,75 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       lean and unchanged travel sense. Previously the second-half lateral
 //       load opposed the lean. Clips containing these turns must be
 //       re-recorded; the moves-off fixture retains every digest.
-export const REPLAY_SOLVER = "ice-lab-f64/22";
+//   /23 Stage B1, slip (`slipMode`, solver.ts's slipSolve): Params gained
+//       slipMode, 0 by default, no SkaterState field — the slip angle is
+//       the velocity against the heading, both already there. At 0 every
+//       expression the solver evaluates is the /22 one, so the fixture was
+//       re-recorded by replay/rebase-fixture.ts with every digest unchanged;
+//       only `initial.params` grew the one key.
+//   /24 The scrape follows the edge (`scrapeRefTilt`, solver.ts's
+//       scrapeForce): Params gained scrapeRefTilt. Only slipMode 1 reads it,
+//       and it changes that mode's arithmetic — a sliding blade scrapes
+//       along the grip curve, catches on the wrong edge, and the balance
+//       controller picks the scrape's edge. A slipMode 1 clip from /23 must
+//       be re-recorded; the fixture (slipMode 0) was rebased with every
+//       digest unchanged.
+//   /25 The dig (`bladeLength`, slipSolve): Params gained bladeLength. Only
+//       slipMode 1 reads it: a scraping blade's force at its heel/toe winds
+//       the body into spinCarry, which the takeoff carries. A slipMode 1 clip
+//       from /24 must be re-recorded; the fixture was rebased with every
+//       digest unchanged.
+//   /26 Stage C1, the trunk (`torqueMode`, trunkTorque): Params gained
+//       torqueMode, lowerBodyInertia, twistMax, twistTorqueMax,
+//       twistStiffness, twistDamping, contactDepth; SkaterState gained
+//       optional twist/twistRate/yawDev, written only in torqueMode 1 and
+//       otherwise absent, so no digest moves. Fixture rebased, every digest
+//       unchanged.
+//   /27 Stage C2: with slipMode 1 the carve also fails when the whole body's
+//       mass cannot be turned on the grip left (rising off the edge); with
+//       torqueMode 1 the legs steer only a weighted foot (yawSteer, optional
+//       state, absent otherwise), the trunk's PD is implicit, windup is read
+//       clockwise-positive as SkatingInput documents, and the takeoff counts
+//       each body's own spin. slipMode/torqueMode 1 clips from /26 must be
+//       re-recorded; the fixture was rebased with every digest unchanged.
+//   /28 Stage B2, the feet (`footMode`, slipSolveFeet): Params gained
+//       footMode, turnout, hipInternal, footTurnRate; SkatingInput gained
+//       optional toeOut/toeOutSplit; SkaterState optional footAngle, absent
+//       unless footMode 1. Fixture rebased, every digest unchanged.
+//   /29 With slipMode 1 a scraping blade no longer steers the carve; with
+//       footMode and torqueMode 1 the scraping feet check the body's extra
+//       spin (friction at their offsets) and the dig acts on the body rather
+//       than spinCarry. slipMode 1 clips from /28 must be re-recorded; the
+//       fixture was rebased with every digest unchanged.
+//   /30 footMode 1: with the loaded blades scraping toward opposite sides (a
+//       snowplow) the balance controller stands the body flat instead of
+//       digging one blade and catching the other. footMode 1 clips from /29
+//       must be re-recorded; the fixture was rebased, every digest unchanged.
+//   /31 SkatingInput gained optional pushFoot/pushPower (a push that names
+//       its leg and strength; the same leg's push mid-stroke can only
+//       strengthen it) and SkaterState optional strokeScale, absent unless a
+//       push gives a power. Absent, a push is exactly /30's. Fixture rebased,
+//       every digest unchanged.
+//   /32 SkatingInput gained optional pushKnee (the bend a push extends from:
+//       its force follows that bend easing to nothing over the stroke) and
+//       SkaterState optional strokeKnee. Absent, pushes are /31's. Fixture
+//       rebased, every digest unchanged.
+//   /33 Params gained speedSpinMode (0 everywhere): the takeoff's block as a
+//       torque about the body. Fixture rebased, every digest unchanged.
+//   /34 The free leg (freeLegMode, Experimental only) and a load- and
+//       edge-dependent contact depth for the pivot grip (rutWidth, rutLoad):
+//       Params gained freeLegMode, freeLegMass, freeLegReach, freeLegArc,
+//       freeLegStiffness, freeLegDamping, freeLegTorqueMax, rutWidth,
+//       rutLoad; SkatingInput optional freeLeg; SkaterState optional
+//       freeSwing/freeSwingRate/freeSwingTarget. torqueMode 1 clips from /33
+//       must be re-recorded; the fixture was rebased, every digest unchanged.
+//   /35 Two fixes found by the merged Phase 17 mapping script: with slipMode
+//       1 a blade off the ice points along the body (left where it lifted,
+//       it touched down across the travel and skidded); with torqueMode 1
+//       the legs' engagement reads the whole load on the ice (on two feet
+//       each blade's half had read as rising off it). slip/torque clips from
+//       /34 must be re-recorded; the fixture was rebased, digests unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/35";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
@@ -315,7 +383,15 @@ export function parseReplay(json: string): Replay {
     const path = `frames[${i}]`;
     const frame = object(root.frames[i], path, ["input", "scheme", "digest"], ["params"]);
     const input = object(frame.input, `${path}.input`,
-      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]);
+      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"],
+      ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit", "pushFoot", "pushPower", "pushKnee", "freeLeg"]);
+    if (Object.hasOwn(input, "pushFoot") && input.pushFoot !== 0 && input.pushFoot !== 1)
+      throw new Error(`${path}.input.pushFoot: expected 0 or 1`);
+    if (Object.hasOwn(input, "pushPower")) number(input.pushPower, `${path}.input.pushPower`, 0, 1);
+    if (Object.hasOwn(input, "pushKnee")) number(input.pushKnee, `${path}.input.pushKnee`, 0, 1);
+    if (Object.hasOwn(input, "freeLeg")) number(input.freeLeg, `${path}.input.freeLeg`, 0, 1);
+    for (const key of ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit"])
+      if (Object.hasOwn(input, key)) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["lean", "pitch", "leanSplit", "windup"]) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["knee", "weight", "carriage"]) number(input[key], `${path}.input.${key}`, 0, 1);
     for (const key of ["push", "brake", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]) {

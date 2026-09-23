@@ -10,7 +10,8 @@ import { IceGrid } from "../sim/ice.ts";
 import { ReplayRecorder } from "../sim/replay.ts";
 import { SETUPS, SETUP_KEY, setupParams, setupInput } from "./setups.ts";
 import type { Setup } from "./setups.ts";
-import { manualAction, ACTIONS, BUTTON_NAMES, BINDABLE_BUTTONS, TUNING, PROFILE_KEY, defaultControllerProfile, loadControllerProfile, parseControllerProfile } from "./full-controls.ts";
+import { manualAction, ACTIONS, BUTTON_NAMES, BINDABLE_BUTTONS, TUNING, PROFILE_KEY, FEET_LAYOUTS, defaultControllerProfile, loadControllerProfile, parseControllerProfile } from "./full-controls.ts";
+import type { FeetLayout } from "./full-controls.ts";
 import type { GameControlState } from "./full-controls.ts";
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const pad = new Pad();
@@ -36,6 +37,7 @@ function download(name: string, value: string) {
 }
 function renderBindings() {
   el<HTMLSelectElement>("modifier").value = String(profile.modifier);
+  el<HTMLSelectElement>("feet").value = profile.feet ?? "dpad";
   el("bindings").replaceChildren();
   for (const action of ACTIONS) {
     const row = document.createElement("tr"), name = document.createElement("td"), cell = document.createElement("td"), select = document.createElement("select");
@@ -109,6 +111,10 @@ el("modifier").onchange = () => {
   const before = profile.modifier, after = Number(el<HTMLSelectElement>("modifier").value);
   for (const a of ACTIONS) if (profile.bindings[a.id].button === after) profile.bindings[a.id].button = before;
   profile.modifier = after; virtual.buttons.fill(0); st = newSchemeState(); renderBindings();
+};
+el("feet").onchange = () => {
+  const value = el<HTMLSelectElement>("feet").value;
+  if (FEET_LAYOUTS.includes(value as FeetLayout)) { profile.feet = value as FeetLayout; st = newSchemeState(); status("Feet layout changed for preview. Save to keep it."); }
 };
 el("run").onclick = () => { running = !running; el("run").textContent = running ? "Pause" : "Resume"; el("run").setAttribute("aria-pressed", String(running)); accumulator = 0; };
 el("reset").onclick = () => reset(); el("backward").onclick = () => reset(-6.8);
