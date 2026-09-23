@@ -146,6 +146,22 @@ function slipSolve(
   const sliding = grip > 0 && need > grip * dt;
   const J = Math.min(need, (sliding ? kinetic : grip) * dt);
   if (J > 0) s.vel = add(s.vel, mul(n, -sign(vLat) * J / p.mass));
+  // THE DIG. Each scraping blade pushes where it meets the ice, which the
+  // heel/toe puts ahead of or behind the boot: r x F about the body's axis.
+  // The angular impulse winds the body — carried, like a turn's, into the
+  // takeoff (spinCarry), counter-clockwise positive.
+  if (sliding && kinetic > 0) {
+    const used = J / (kinetic * dt);
+    let dL = 0;
+    for (let i = 0; i < 2; i++) {
+      const b = s.blade[i];
+      if (scrapes[i] === 0) continue;
+      const r = mul(b.tangent, (b.contactS - 0.5) * p.bladeLength);
+      const f = mul(n, into * scrapes[i] * used);
+      dL += (r.x * f.y - r.y * f.x) * dt;
+    }
+    s.spinCarry += dL / p.inertiaOpen;
+  }
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     if (!b.inContact || (stroking && i === s.strokeFoot)) continue;

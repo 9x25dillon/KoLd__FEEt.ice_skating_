@@ -196,7 +196,12 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       controller picks the scrape's edge. A slipMode 1 clip from /23 must
 //       be re-recorded; the fixture (slipMode 0) was rebased with every
 //       digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/24";
+//   /25 The dig (`bladeLength`, slipSolve): Params gained bladeLength. Only
+//       slipMode 1 reads it: a scraping blade's force at its heel/toe winds
+//       the body into spinCarry, which the takeoff carries. A slipMode 1 clip
+//       from /24 must be re-recorded; the fixture was rebased with every
+//       digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/25";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

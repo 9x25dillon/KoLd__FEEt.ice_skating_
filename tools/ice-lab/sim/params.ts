@@ -630,6 +630,14 @@ export interface Params {
    * stop from a known speed and edge.
    */
   scrapeRefTilt: number;
+  /**
+   * m. A figure blade's length, 270-300 mm by boot size. The heel/toe contact
+   * (contactS) sits (contactS - 0.5) of it ahead of the boot's centre, and a
+   * scrape pushing there twists the body: THE DIG. With slipMode 1 that
+   * angular impulse is carried into the takeoff (spinCarry), so a dig on the
+   * toe and a dig on the heel wind the body opposite ways.
+   */
+  bladeLength: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -832,6 +840,7 @@ export const DEFAULT_PARAMS: Params = {
 
   slipMode: 0,
   scrapeRefTilt: 0.6,
+  bladeLength: 0.28,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -993,6 +1002,7 @@ export function validate(p: Params): string[] {
   if (p.staminaBalanceNoiseBase < 0) errs.push("staminaBalanceNoiseBase cannot be negative");
   if (p.staminaBalanceNoiseMax < 1) errs.push("staminaBalanceNoiseMax is a multiplier at Legs 0, and fatigue cannot reduce noise");
   if (![0, 1].includes(p.iceGridMode)) errs.push("iceGridMode is 0 (off) or 1 (the sheet wears)");
+  if (!(p.bladeLength > 0.15 && p.bladeLength < 0.4)) errs.push("bladeLength is a figure blade, 0.15-0.4 m");
   if (!(p.scrapeRefTilt > 0 && p.scrapeRefTilt < Math.PI / 2)) errs.push("scrapeRefTilt must be an edge between 0 and 90 degrees");
   if (![0, 1].includes(p.slipMode)) errs.push("slipMode is 0 (travel carried with the blades) or 1 (blades can point across their travel)");
   if (p.iceDamagePerPass <= 0 || p.iceDamagePerPass > 1)

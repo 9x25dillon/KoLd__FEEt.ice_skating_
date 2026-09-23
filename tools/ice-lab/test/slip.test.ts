@@ -17,14 +17,15 @@ import { NEUTRAL_INPUT, EVENT, REGIME } from "../sim/types.ts";
 import type { SkaterState, EdgeEvent } from "../sim/types.ts";
 import { rotate, len, dot } from "../sim/math.ts";
 import { setupParams } from "../game/setups.ts";
+import { JUMP, JUMP_NONE } from "../sim/jump.ts";
 
 const SIM = setupParams("simulation");
 const slipDeg = (s: SkaterState): number =>
   Math.acos(Math.min(1, Math.abs(dot(s.vel, s.heading)) / Math.max(len(s.vel), 1e-9))) * 180 / Math.PI;
 
 /** A skater whose blades meet the ice `deg` across their travel, as off an unaligned landing. */
-function across(p: Params, deg: number, speed = 5): SkaterState {
-  const s = createState(p, speed), a = deg * Math.PI / 180;
+function across(p: Params, deg: number, speed = 5, lean = 0): SkaterState {
+  const s = createState(p, speed, lean), a = deg * Math.PI / 180;
   s.heading = rotate(s.heading, a);
   for (const b of s.blade) b.tangent = rotate(b.tangent, a);
   return s;
@@ -127,4 +128,65 @@ test("part-way across, the scrape takes the sideways travel out and the edge gri
     assert.ok(events.some(e => e.type === EVENT.SkidEnd), `${deg}°: the edge took hold again`);
     assert.ok(len(s.vel) < 4.5, `${deg}°: and the scrape cost speed`);
   }
+});
+
+// ── the dig ─────────────────────────────────────────────────────────────────
+// A scraping blade pushes where it meets the ice; the heel/toe puts that ahead
+// of or behind the boot (bladeLength), and r x F winds the body. That winding
+// is carried into the takeoff (spinCarry), so a dig is rotation for a jump.
+// These start already leaned into the scrape, as a skater arriving off a carve
+// does: on one foot there is no way to lean in once the blade is across.
+
+test("the dig: on the toe it winds the body counter-clockwise, on the heel clockwise, centred not at all", () => {
+  // MEASURED at 90°, 5 m/s, leaned in, 0.3 s: toe +1.276, heel -1.278 rad/s
+  // (the rocker differs toe to heel, so the paths are not exact mirrors).
+  const p = { ...SIM, slipMode: 1 };
+  const wind = (pitch: number): number => {
+    const s = across(p, 90, 5, 0.34);
+    for (let i = 0; i < 36; i++) step(s, { ...NEUTRAL_INPUT, lean: 0.3, knee: 0.5, pitch }, p, SIM_DT, []);
+    assert.equal(s.fallen, false);
+    return s.spinCarry;
+  };
+  const toe = wind(0.8), flat = wind(0), heel = wind(-0.8);
+  assert.ok(Math.abs(toe - 1.276) < 0.01, `toe ${toe.toFixed(3)}`);
+  assert.ok(Math.abs(heel + 1.278) < 0.01, `heel ${heel.toFixed(3)}`);
+  assert.equal(flat, 0);
+  const off = { ...SIM, slipMode: 0 }, s0 = across(off, 90, 5, 0.34);
+  for (let i = 0; i < 36; i++) step(s0, { ...NEUTRAL_INPUT, lean: 0.3, knee: 0.5, pitch: 0.8 }, off, SIM_DT, []);
+  assert.equal(s0.spinCarry, 0, "no slip, no dig");
+});
+
+/** Arrive leaned in, `deg` across, dig for `digT` s, load 0.3 s, release. The takeoff's jump state. */
+function digJump(deg: number, pitch: number, weight: number, toe: boolean) {
+  const p = { ...SIM, slipMode: 1 }, s = across(p, deg, 6, 0.34);
+  let took = false;
+  for (let i = 0; i < 240 && !took && !s.fallen; i++) {
+    const knee = i < 12 ? 0.5 : i < 48 ? 0.9 : 0.2;
+    const events: EdgeEvent[] = [];
+    step(s, { ...NEUTRAL_INPUT, lean: 0.3, knee, pitch, weight, toe: toe && i === 44 }, p, SIM_DT, events);
+    took = events.some(e => e.type === EVENT.Takeoff);
+  }
+  assert.ok(took, `took off (${deg}°, pitch ${pitch})`);
+  return s.jump;
+}
+
+test("a dig is rotation for the jump: the toe dig's winding leaves the ice with the skater", () => {
+  // MEASURED, 6 m/s, 100°, 0.1 s dig then a 0.3 s load, no arms: toe dig L 5.02
+  // (full arms alone give inertiaOpen x jumpWhip = 38); flat 0; heel 0 — a
+  // counter-clockwise skater cannot use a clockwise winding. A 150° dig lines
+  // up sooner and gives 0.
+  const toe = digJump(100, 0.8, 0, false), flat = digJump(100, 0, 0, false), heel = digJump(100, -0.8, 0, false);
+  assert.ok(Math.abs(toe.angMomentum - 5.02) < 0.05, `toe dig L ${toe.angMomentum.toFixed(2)}`);
+  assert.equal(flat.angMomentum, 0);
+  assert.equal(heel.angMomentum, 0);
+  assert.ok(digJump(150, 0.8, 0, false).angMomentum < toe.angMomentum, "the angle of the dig matters");
+});
+
+test("which jump is read off the dig's takeoff: foot, blade direction, edge and pick", () => {
+  // Past 90° the blade leaves backward. On the left foot leaning left that is
+  // LBO: with a toe tap in the window a lutz, without one no listed jump.
+  const lutz = digJump(100, 0.8, 0, true), bare = digJump(100, 0.8, 0, false);
+  assert.equal(lutz.kind, JUMP.Lutz);
+  assert.equal(bare.kind, JUMP_NONE);
+  assert.ok(lutz.angMomentum > 0, "and the lutz carries the dig");
 });
