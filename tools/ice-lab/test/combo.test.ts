@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { PRESETS, SIM_DT } from "../sim/params.ts";
 import { createState, step } from "../sim/solver.ts";
-import { NEUTRAL_INPUT, codeToString } from "../sim/types.ts";
+import { NEUTRAL_INPUT, codeFoot, codeToString } from "../sim/types.ts";
 import type { SkatingInput, SkaterState } from "../sim/types.ts";
 import { JUMP, JUMP_CODE, JUMP_PHASE } from "../sim/jump.ts";
 import { ComboTracker, JUMP_LANDING, canFollow, MAX_COMBO_JUMPS } from "../sim/combo.ts";
@@ -27,6 +27,8 @@ interface Plan {
   speed?: number;
   /** A routine to feed every tick, as the game does. */
   routine?: Choreography;
+  /** Called after every tick's sample; setting it also holds the tracker to never writing the state. */
+  watch?: (i: number, s: SkaterState) => void;
 }
 
 function skate(plan: Plan): { s: SkaterState; c: ComboTracker; seen: string[]; landed: string[] } {
@@ -47,7 +49,12 @@ function skate(plan: Plan): { s: SkaterState; c: ComboTracker; seen: string[]; l
     if (plan.between && afterFirst >= 0 && n === 1 && i < load) input = { ...input, ...plan.between(i - afterFirst, s) };
     step(s, input, p, SIM_DT, []);
     plan.routine?.sample(s, false, SIM_DT);
+    const before = plan.watch ? JSON.stringify(s) : "";
     const label = c.sample(s);
+    if (plan.watch) {
+      assert.equal(JSON.stringify(s), before, `tick ${i}: the tracker wrote to the skater's state`);
+      plan.watch(i, s);
+    }
     if (label) seen.push(label);
     if (s.landed.tick !== lastLand) {
       lastLand = s.landed.tick;
@@ -145,4 +152,36 @@ test("a routine's protocol sheet lists a combination as one element, and solo ju
   const split = program();
   const r = skate({ waits: [90], toes: [true], between: (j) => (j >= 10 && j < 40 ? { weight: 0 } : {}), routine: split });
   assert.equal(split.sheet!.lines.length, r.landed.length, split.sheet!.lines.join(", "));
+});
+
+test("the tracker only watches, and a three-jump chain never leaves its edge: each jump takes off from the landing before it", () => {
+  // Every jump lands RBO (data/jump-definitions.csv), and the toe loop and
+  // loop take off from it. On the landing tick itself the blade reads "---"
+  // for one tick, before the edge under it is classified; from the next tick
+  // it is the landing edge, on the landing foot.
+  const takeoffs: string[] = [], afterLanding: string[] = [];
+  let air = false, lastLand = -1, landAt = -2;
+  const r = skate({
+    waits: [40, 40], toes: [true, false],
+    watch: (i, s) => {
+      const now = s.jump.phase === JUMP_PHASE.Air;
+      if (now && !air) takeoffs.push(codeToString(s.jump.takeoffCode));
+      air = now;
+      if (s.landed.tick !== lastLand) { lastLand = s.landed.tick; landAt = i; }
+      else if (i === landAt + 1) {
+        const code = s.blade[s.supportFoot].code;
+        afterLanding.push(codeFoot(code) === s.supportFoot ? codeToString(code) : `${codeToString(code)} on foot ${s.supportFoot}`);
+      }
+    },
+  });
+  assert.deepEqual(r.c.combos.map((combo) => combo.length), [3], r.landed.join(","));
+  const edge = codeToString(JUMP_LANDING[JUMP.Toeloop]);
+  assert.deepEqual(takeoffs, [edge, edge, edge], "every takeoff from the landing edge");
+  assert.deepEqual(afterLanding, [edge, edge, edge], "every landing back on it, on the landing foot");
+});
+
+test("a broken link is the tracker's call alone: the skater's state is untouched by it either way", () => {
+  const r = skate({ waits: [90], toes: [true], between: (j) => (j >= 10 && j < 40 ? { weight: 0 } : {}), watch: () => {} });
+  assert.equal(r.landed.length, 2, r.landed.join(","));
+  assert.deepEqual(r.c.combos, []);
 });
