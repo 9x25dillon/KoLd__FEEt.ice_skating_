@@ -4,11 +4,11 @@ import { SETUPS, setupParams, setupInput } from "../game/setups.ts";
 import type { Setup } from "../game/setups.ts";
 import { defaultControllerProfile } from "../game/full-controls.ts";
 import type { GameControlState } from "../game/full-controls.ts";
-import { newSchemeState } from "../app/schemes.ts";
+import { latchTurns, newSchemeState, SCHEME } from "../app/schemes.ts";
 import type { Controls, ControllerHardware } from "../app/pad.ts";
 import { createState, step } from "../sim/solver.ts";
 import { SIM_DT, validate } from "../sim/params.ts";
-import { MOVE, TURN_KIND } from "../sim/types.ts";
+import { MOVE, NEUTRAL_INPUT, TURN_KIND } from "../sim/types.ts";
 import { ReplayRecorder, parseReplay, verifyReplay } from "../sim/replay.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import { IceGrid } from "../sim/ice.ts";
@@ -80,5 +80,53 @@ for (const id of ["simulation", "explorer"] as const) test(`${id}: manual turn r
     if (!held) r.h.buttons[1] = 0;
     r.skate(100); assert.equal(r.s.moveDone.detail, held ? TURN_KIND.Loop : TURN_KIND.ThreeTurn);
     assert.equal(r.s.fallen, false);
+  }
+});
+
+test("per-blade latch: a cusp mirrors each blade's stick, and each lets go on its own", () => {
+  const st = newSchemeState();
+  const blades = (left: number, right: number, flips: number) => {
+    const it = latchTurns(SCHEME.A, { ...NEUTRAL_INPUT, lean: (left + right) / 2, leanSplit: (right - left) / 2 }, st, flips, true);
+    return [it.lean - it.leanSplit, it.lean + it.leanSplit].map(v => Math.round(v * 1e12) / 1e12);
+  };
+  assert.deepEqual(blades(0.6, 0.4, 0), [0.6, 0.4]);
+  assert.deepEqual(blades(0.6, 0.4, 1), [-0.6, -0.4], "the cusp mirrors both held blades");
+  assert.deepEqual(blades(0.6, 0.05, 1), [-0.6, 0.05], "the right stick lets go of its mirror alone");
+  assert.deepEqual(blades(0.6, -0.5, 1), [-0.6, -0.5], "the right's next edge is the new frame's; the left still holds its side");
+  assert.deepEqual(blades(0, -0.5, 1), [0, -0.5]);
+  assert.deepEqual(blades(0.6, -0.5, 1), [0.6, -0.5], "and the left, let go, reads the new frame too");
+  assert.equal(st.mirror, false);
+  // The shared latch is unchanged: one stick let go does not end the other's mirror.
+  const shared = newSchemeState(), it = (lean: number, leanSplit: number) => ({ ...NEUTRAL_INPUT, lean, leanSplit });
+  latchTurns(SCHEME.A, it(0.5, 0.1), shared, 1);
+  assert.equal(latchTurns(SCHEME.A, it(0.3, -0.3), shared, 1).lean, -0.3, "shared: left held, right released, both still mirrored");
+});
+
+test("simulation: holding the left blade through a turn keeps its edge while the right re-chooses", () => {
+  const r = rig("simulation"); r.h.axes = [-0.6, 0, -0.6, 0];
+  const before = r.map().input;
+  assert.ok(before.lean < 0 && before.leanSplit === 0);
+  r.s.flips++; // a cusp
+  const cusp = r.map().input;
+  assert.equal(cusp.lean, -before.lean, "both held blades mirrored at the cusp");
+  r.h.axes[2] = 0; r.map();
+  r.h.axes[2] = 0.6;
+  const after = r.map().input;
+  assert.ok(Math.abs(after.lean + before.lean) < 1e-12 && Math.abs(after.leanSplit) < 1e-12,
+    "left still mirrored, right pushed the other way in the new frame: the same edges on both blades");
+});
+
+test("simulation: each stick's fore–aft is its own blade's heel/toe; the other setups share one", () => {
+  const r = rig("simulation"); r.h.axes = [0, 0, 0, -0.9]; // right stick forward (y is inverted)
+  const toe = r.map().input;
+  assert.ok(toe.pitchSplit! > 0 && Math.abs(toe.pitch - toe.pitchSplit!) < 1e-12, "left blade flat, right on its toe");
+  r.h.axes = [0, 0.9, 0, 0]; // left stick back
+  const heel = r.map().input;
+  assert.ok(heel.pitchSplit! > 0 && Math.abs(heel.pitch + heel.pitchSplit!) < 1e-12, "left blade on its heel, right flat");
+  r.h.keys = ["w"];
+  assert.equal(r.map().input.pitchSplit, 0, "the keyboard's W/S stays shared");
+  for (const id of ["explorer", "repertoire"] as const) {
+    const o = rig(id); o.h.axes = [0, -0.9, 0, 0];
+    assert.equal(o.map().input.pitchSplit, undefined, `${id} never drives the split`);
   }
 });

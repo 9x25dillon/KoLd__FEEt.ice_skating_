@@ -616,6 +616,15 @@ export interface SkatingInput {
    * the input the element vocabulary was always going to want.
    */
   leanSplit: number;
+  /**
+   * -1..1, how far the two blades' heel/toe contact is set APART, as
+   * `leanSplit` does for tilt: left blade at pitch - pitchSplit, right at
+   * pitch + pitchSplit. Rock one foot onto its toe while the other holds.
+   *
+   * Optional and absent unless a two-blade mapping drives it, so every input
+   * and replay recorded without it is unchanged; absent reads as 0.
+   */
+  pitchSplit?: number;
   push: boolean;
   brake: boolean;
   /**

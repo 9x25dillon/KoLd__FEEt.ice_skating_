@@ -315,7 +315,9 @@ export function parseReplay(json: string): Replay {
     const path = `frames[${i}]`;
     const frame = object(root.frames[i], path, ["input", "scheme", "digest"], ["params"]);
     const input = object(frame.input, `${path}.input`,
-      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]);
+      ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"],
+      ["pitchSplit"]);
+    if (Object.hasOwn(input, "pitchSplit")) number(input.pitchSplit, `${path}.input.pitchSplit`, -1, 1);
     for (const key of ["lean", "pitch", "leanSplit", "windup"]) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["knee", "weight", "carriage"]) number(input[key], `${path}.input.${key}`, 0, 1);
     for (const key of ["push", "brake", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"]) {

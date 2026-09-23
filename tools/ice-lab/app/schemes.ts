@@ -115,9 +115,14 @@ export interface SchemeState {
   flips: number;
   /** A held stick is being read mirrored, because a turn reversed the body under it. */
   mirror: boolean;
+  /**
+   * The same, per blade [left, right], for a setup that gives each blade its
+   * own stick (`latchTurns`' perBlade). Toggled by every cusp like `mirror`.
+   */
+  bladeMirror: [boolean, boolean];
 }
 
-export const newSchemeState = (): SchemeState => ({ commit: 0, flips: 0, mirror: false });
+export const newSchemeState = (): SchemeState => ({ commit: 0, flips: 0, mirror: false, bladeMirror: [false, false] });
 
 /**
  * How far back toward centre a stick must come before a turn's mirror lets go.
@@ -307,9 +312,29 @@ export function applyScheme(
  * B steers toward a direction on the ice, which a turn does not move, so B is
  * never mirrored.
  */
-export function latchTurns(scheme: Scheme, it: SkatingInput, st: SchemeState, flips: number): SkatingInput {
-  if (flips !== st.flips) { st.flips = flips; st.mirror = !st.mirror; }
-  if (scheme === SCHEME.B) { st.mirror = false; return it; }
+export function latchTurns(scheme: Scheme, it: SkatingInput, st: SchemeState, flips: number, perBlade = false): SkatingInput {
+  if (flips !== st.flips) { st.flips = flips; st.mirror = !st.mirror; st.bladeMirror = [!st.bladeMirror[0], !st.bladeMirror[1]]; }
+  if (scheme === SCHEME.B) { st.mirror = false; st.bladeMirror = [false, false]; return it; }
+  if (perBlade) return latchBlades(it, st);
   if (st.mirror && Math.abs(it.lean) < LATCH_RELEASE && Math.abs(it.leanSplit) < LATCH_RELEASE) st.mirror = false;
+  st.bladeMirror = [st.mirror, st.mirror];
   return st.mirror ? { ...it, lean: -it.lean, leanSplit: -it.leanSplit } : it;
+}
+
+/**
+ * ONE STICK PER BLADE, ONE MIRROR PER STICK.
+ *
+ * (lean, leanSplit) is the mean and half-difference of the two blade commands,
+ * so each blade's own command is lean ∓ leanSplit. A cusp mirrors both; each
+ * lets go when its own stick comes back toward centre. Hold the left blade's
+ * edge through a turn while re-choosing the right's, and the left keeps its
+ * side of the ice. Both held, or both let go, it reads as the shared latch does.
+ */
+function latchBlades(it: SkatingInput, st: SchemeState): SkatingInput {
+  const cmd = [it.lean - it.leanSplit, it.lean + it.leanSplit];
+  for (let i = 0; i < 2; i++) if (st.bladeMirror[i] && Math.abs(cmd[i]) < LATCH_RELEASE) st.bladeMirror[i] = false;
+  st.mirror = st.bladeMirror[0] || st.bladeMirror[1];
+  if (!st.mirror) return it;
+  const [l, r] = cmd.map((c, i) => st.bladeMirror[i] ? -c : c);
+  return { ...it, lean: (l + r) / 2, leanSplit: (r - l) / 2 };
 }

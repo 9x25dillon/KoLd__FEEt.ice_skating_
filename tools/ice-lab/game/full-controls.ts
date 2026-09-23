@@ -157,11 +157,15 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     const rightX = key("arrowleft") || key("arrowright") ? (Number(key("arrowright")) - Number(key("arrowleft"))) * profile.keyboardLean : blade.x * profile.leanGain;
     mapped.lean = (leftX + rightX) / 2;
     mapped.leanSplit = (rightX - leftX) / 2;
-    mapped.pitch = (Number(key("w")) - Number(key("s"))) || (relievedPitch(l.x, l.y) + relievedPitch(blade.x, blade.y)) / 2;
+    const keyPitch = Number(key("w")) - Number(key("s"));
+    const leftPitch = relievedPitch(l.x, l.y), rightPitch = relievedPitch(blade.x, blade.y);
+    mapped.pitch = keyPitch || (leftPitch + rightPitch) / 2;
+    // Each stick's fore–aft is its own blade's heel/toe. The keyboard's W/S stays shared.
+    mapped.pitchSplit = keyPitch ? 0 : (rightPitch - leftPitch) / 2;
     mapped.carriage = key("c") ? 1 : arms ? Math.min(1, Math.hypot(r.x, r.y)) : 0;
     mapped.windup = key(",") ? 1 : arms ? r.x : 0;
   }
-  const input = latchTurns(SCHEME.A, mapped, st, s.flips);
+  const input = latchTurns(SCHEME.A, mapped, st, s.flips, options.twoFoot === true);
   if ((input.spin || s.move === MOVE.Spin) && (!options.twoFoot || modified)) input.pitch = Math.max(input.pitch, r.y);
   f.request = ACTIONS.filter(a => held.has(a.id)).map(a => a.name).join(" + ") || "Glide";
 
@@ -204,7 +208,7 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   else if (held.has("spiral")) input.weight = f.foot === 0.5 ? s.supportFoot : f.foot;
   const cantilever = held.has("low") && !s.fallen && s.move === MOVE.None && s.jump.phase === JUMP_PHASE.None
     && Math.hypot(s.vel.x, s.vel.y) >= 1 && !input.turn && !input.bracket && !input.spin && !input.twizzle && !input.inaBauer;
-  if (cantilever) Object.assign(input, { knee: 0.65, weight: 0.5, pitch: -0.25, push: false, toe: false, carriage: 1, windup: 0 });
+  if (cantilever) Object.assign(input, { knee: 0.65, weight: 0.5, pitch: -0.25, pitchSplit: 0, push: false, toe: false, carriage: 1, windup: 0 });
   if (held.has("low")) input.windup = 0;
   // Assistance scales edge demand with available speed, preserving the stick's
   // side and analog depth. Do not rewrite turn gestures or airborne control.

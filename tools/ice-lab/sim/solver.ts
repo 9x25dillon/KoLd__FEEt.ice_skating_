@@ -236,7 +236,9 @@ export function step(
   const knee = s.knee;
   const weightR = clamp(axis(input.weight, 0.5), 0, 1);
   const split = clamp(axis(input.leanSplit, 0), -1, 1);
-  const contactS = clamp(0.5 + 0.5 * clamp(axis(input.pitch, 0), -1, 1), 0, 1);
+  const pitch = axis(input.pitch, 0), pitchSplit = clamp(axis(input.pitchSplit ?? 0, 0), -1, 1);
+  // Each blade's own point on the rocker: the shared pitch, split apart.
+  const contactS = [pitch - pitchSplit, pitch + pitchSplit].map((c) => clamp(0.5 + 0.5 * clamp(c, -1, 1), 0, 1));
 
   // ── 0c. a turn, a twizzle or a spin begins ────────────────────────────────
   // sim/moves.ts: on a fresh press, if the ice permits one. From here until it
@@ -291,7 +293,7 @@ export function step(
     const b = s.blade[i];
     b.weight = weights[i];
     b.normalLoad = nTotal * weights[i];
-    b.contactS = contactS;
+    b.contactS = contactS[i];
     b.inContact = b.normalLoad > 1e-3;
     if (b.inContact) loaded++;
   }
