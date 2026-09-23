@@ -293,6 +293,12 @@ are **not** to be entered as `expected` until checked.
 - **`glide-speedskate-straight-dekoning1992`** — O4, straight-line μ 0.0046 ± 0.0004 at 8 m/s.
   Caveats: speed-skate blade, a stride average rather than a glide, drag dominant at 8 m/s. Likely
   `unmodelled` for a figure-skate blade. Recorded so it is not re-derived.
+- **`air-time-isolated-jumps-bruening2018`** — O5 `air_time_s`, *added 2026-09-22*. Bruening et al. 2018
+  (PLoS One, open access, read in full): video flight time 0.44 ± 0.060 s over 59 isolated jumps, mostly
+  axels and doubles, 7 skaters Juvenile to Senior. One-sided, `at_least`. The model flies 0.592 s on the
+  corpus's existing jump script: a pass, and about 2.5 SD above this population's mean, which only
+  footage of specific jumps can judge. The same paper's in-air peak rotation (1,273 deg/s doubles,
+  1,465 triples, no spread) has no gate observable yet.
 - **`glide-curve-ratio-dekoning1992`** — curve against straight μ, about 1.28. An L2 directional check
   on `muEdgeGain`. Likely stays unsourced for figure skates.
 - **`rut-depth-hockey-lever2022`** — rut depth 0.18 ± 0.08 mm, width 4.16 ± 0.47 mm, primary

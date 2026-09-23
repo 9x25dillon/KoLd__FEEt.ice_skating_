@@ -1,0 +1,63 @@
+{
+  "id": "air-time-isolated-jumps-bruening2018",
+  "kind": "jump",
+  "role": "validation",
+  "source": {
+    "type": "literature",
+    "citation": "Bruening DA, Reynolds RE, Adair CW, Zapalo P, Ridge ST (2018). A sport-specific wearable jump monitor for figure skating. PLoS One 13(11), e0206162. doi:10.1371/journal.pone.0206162. Table 1, 'Video', all isolated jumps.",
+    "primary_checked": true,
+    "notes": "Open access; read in the full text (PMC6248918), so primary outright. Flight time from high-speed video, take-off = the frame the take-off toe first lifted, landing = the frame the landing toe first touched: 0.44 +/- 0.060 s (mean +/- SD) over 59 isolated multi-revolution jumps, mostly single axels and doubles with a few triples, by 7 competitive skaters aged 12-27 (6 F, 1 M), Juvenile to Senior. Successfully landed jumps only: 0.44 +/- 0.058. u_m is the reported SD of the jumps. One-sided (fidelity-gate §4.3 O5): the model has no effort input, so the case asks only that the model can fly at least this long. Script copied unchanged from flight-residual-full-jump-moves, written in an earlier session, so no input was chosen for this case. Reference skater: the paper gives no masses. A pooled mixed-level population standing in for the reference skater: L1. Also in the paper, not cased: peak in-air rotation 1,273 deg/s for doubles and 1,465 for triples, means with no spread, and no gate observable for in-air rate yet. First run, 2026-09-22: 0.592 s, a pass. Noted, not acted on: that is about 2.5 SD above this population's mean, which a one-sided case cannot judge; a two-sided check needs footage of specific jumps."
+  },
+  "requires": [
+    "jumps"
+  ],
+  "skater": null,
+  "venue": null,
+  "inputs": {
+    "initial": {
+      "speed_ms": 6.5,
+      "lean_rad": 0.0
+    },
+    "modes": {
+      "jumpMode": 2,
+      "movesMode": 1
+    },
+    "script": [
+      {
+        "seconds": 1.0,
+        "input": {
+          "weight": 1.0
+        }
+      },
+      {
+        "seconds": 0.3,
+        "input": {
+          "weight": 1.0,
+          "knee": 0.9
+        }
+      },
+      {
+        "seconds": 2.5,
+        "input": {
+          "weight": 1.0,
+          "knee": 0.2
+        }
+      }
+    ],
+    "clip": null
+  },
+  "observable": {
+    "name": "air_time_s",
+    "window": "flight",
+    "radius": null
+  },
+  "expected": {
+    "comparison": "at_least",
+    "value": 0.44,
+    "unit": "s",
+    "measurement_uncertainty": 0.06,
+    "band": 0.05,
+    "tolerance": 0.07810249675906655,
+    "confidence": "L1"
+  }
+}
