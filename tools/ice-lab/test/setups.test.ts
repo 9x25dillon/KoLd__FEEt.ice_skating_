@@ -8,7 +8,7 @@ import { latchTurns, newSchemeState, SCHEME } from "../app/schemes.ts";
 import type { Controls, ControllerHardware } from "../app/pad.ts";
 import { createState, step } from "../sim/solver.ts";
 import { SIM_DT, validate } from "../sim/params.ts";
-import { MOVE, NEUTRAL_INPUT, TURN_KIND } from "../sim/types.ts";
+import { FALL, MOVE, NEUTRAL_INPUT, TURN_KIND } from "../sim/types.ts";
 import { ReplayRecorder, parseReplay, verifyReplay } from "../sim/replay.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import { beatOffset } from "../sim/music.ts";
@@ -204,9 +204,10 @@ test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad
   // modifier + D-pad left for 1 s toes both feet in (34°, hipInternal); then
   // with the sticks pushed apart — each blade on its inside edge, in the
   // model's frame — 2.71 m/s after 3 s; sticks centred, 4.25. Pushed toward
-  // each other the blades sit on their outside edges, which catch: a dead
-  // stop, upright because the fore-aft pendulum is off (pitchMode 0 here;
-  // with it on the catch pitches the skater forward — test/pitch.test.ts).
+  // each other the blades sit on their outside edges, which catch: the stop
+  // is sudden and the fore-aft pendulum (on in Simulation) pitches the skater
+  // forward, down 0.35 s after the sticks set the edges, at 2.9 m/s. (With
+  // pitchMode 0 it was a dead stop, upright.)
   const plow = (lx: number, rx: number) => {
     const r = rig("simulation", 5); r.h.buttons[7] = 0.5;
     for (let i = 0; i < 360 && !r.s.fallen; i++) {
@@ -218,11 +219,12 @@ test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad
     return r.s;
   };
   const inside = plow(-1, 1), flat = plow(0, 0), caught = plow(1, -1);
-  for (const s of [inside, flat, caught]) assert.equal(s.fallen, false);
+  for (const s of [inside, flat]) assert.equal(s.fallen, false);
   assert.deepEqual(inside.footAngle!.map(a => Math.round(a * 180 / Math.PI)), [-34, -34], "both toes in");
   const v = (s: typeof inside) => Math.hypot(s.vel.x, s.vel.y);
   assert.ok(Math.abs(v(inside) - 2.71) < 0.05 && Math.abs(v(flat) - 4.25) < 0.05, `inside ${v(inside).toFixed(2)}, flat ${v(flat).toFixed(2)}`);
-  assert.ok(v(caught) < 0.1, `caught edges stop dead (${v(caught).toFixed(2)})`);
+  assert.equal(caught.fallReason, FALL.Pitched, "caught edges pitch the skater forward");
+  assert.equal(caught.tick, 162, "0.35 s after the sticks set the edges");
 });
 
 // ── Experimental: the legs on the triggers, pumps and thumb strokes ─────────

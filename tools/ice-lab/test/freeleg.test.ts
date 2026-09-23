@@ -36,12 +36,13 @@ test("freeLegMode is 0 by default, needs torqueMode, and is on in Experimental o
 });
 
 test("swung smoothly over a deep edge, the free leg adds spin its own way round", () => {
-  // MEASURED (7 m/s, lean 0.9, eased 0.5 s swing): salchow LBI, right leg
-  // free, 10.58 -> 12.08; loop RBO, left leg free (clockwise), 10.58 -> 9.08.
+  // MEASURED (7 m/s, lean 0.9, eased 0.5 s swing; the fore-aft pendulum on
+  // in Experimental): salchow LBI, right leg free, 10.51 -> 12.01; loop RBO,
+  // left leg free (clockwise), 10.51 -> 9.01. (Without it: 10.58 -> 12.08, -> 9.08.)
   const near = (x: number, y: number) => Math.abs(x - y) < 0.02;
   const salchow = [takeoff(0, -0.9, null), takeoff(0, -0.9, 0.5)], loop = [takeoff(1, -0.9, null), takeoff(1, -0.9, 0.5)];
-  assert.ok(near(salchow[0].L, 10.58) && near(salchow[1].L, 12.08), `salchow ${salchow.map(r => r.L.toFixed(2)).join(" -> ")}`);
-  assert.ok(near(loop[0].L, 10.58) && near(loop[1].L, 9.08), `loop ${loop.map(r => r.L.toFixed(2)).join(" -> ")}`);
+  assert.ok(near(salchow[0].L, 10.51) && near(salchow[1].L, 12.01), `salchow ${salchow.map(r => r.L.toFixed(2)).join(" -> ")}`);
+  assert.ok(near(loop[0].L, 10.51) && near(loop[1].L, 9.01), `loop ${loop.map(r => r.L.toFixed(2)).join(" -> ")}`);
 });
 
 test("snapped, the free leg twists the blade loose: a fall", () => {

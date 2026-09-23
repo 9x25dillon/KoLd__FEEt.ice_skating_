@@ -30,7 +30,8 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   // the trunk, the feet in the hips. Explorer: the same with the blades kept
   // parallel. Repertoire keeps its dedicated moves on the carve as it was.
   if (setup !== "repertoire") { p.slipMode = 1; p.torqueMode = 1; }
-  if (setup === "simulation" || setup === "experimental") p.footMode = 1;
+  // The fore-aft pendulum (pitchMode) with the feet: the operator's choice, 2026-09-23.
+  if (setup === "simulation" || setup === "experimental") { p.footMode = 1; p.pitchMode = 1; }
   if (setup === "experimental") p.freeLegMode = 1;
   return p;
 }
