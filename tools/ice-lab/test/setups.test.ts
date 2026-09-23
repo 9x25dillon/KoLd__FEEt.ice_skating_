@@ -11,6 +11,7 @@ import { SIM_DT, validate } from "../sim/params.ts";
 import { MOVE, NEUTRAL_INPUT, TURN_KIND } from "../sim/types.ts";
 import { ReplayRecorder, parseReplay, verifyReplay } from "../sim/replay.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
+import { beatOffset } from "../sim/music.ts";
 import { IceGrid } from "../sim/ice.ts";
 
 function rig(setup: Setup, speed = 6.8, assist = 0.75) {
@@ -303,4 +304,42 @@ test("experimental: A asks for a turn and Y for rotation; held bumpers choose wh
   assert.equal(ask([4, 5, 3]).inaBauer, true, "both + Y: Ina Bauer");
   assert.equal(ask([4, 5, 3]).weight, 0.5, "the Ina Bauer is two-footed");
   assert.equal(ask([0]).push, false, "A is not the push here");
+});
+
+// ── Experimental: automatic back crossovers, on the beat ────────────────────
+
+
+/** 8 s from `v0` m/s (negative is backward), both knees at `knees`, both sticks at `lean`. */
+function crossing(v0: number, lean: number, knees: number) {
+  const r = rig("experimental", v0);
+  let crossovers = 0, offBeat = 0;
+  for (let i = 0; i < 960 && !r.s.fallen; i++) {
+    r.h.buttons.fill(0); if (i < 2) r.h.buttons[1] = r.h.buttons[2] = 1;
+    r.h.buttons[6] = r.h.buttons[7] = knees; r.h.axes = [lean, 0, lean, 0];
+    const tick = r.s.tick, { input } = r.tick();
+    if (input.push && r.s.crossover) {
+      crossovers++;
+      const b = beatOffset(r.p, tick);
+      if (b < 0 || b >= SIM_DT) offBeat++;
+    }
+  }
+  return { v: Math.hypot(r.s.vel.x, r.s.vel.y), crossovers, offBeat, fallen: r.s.fallen };
+}
+
+test("experimental: skating backward on a deep enough curve, the crossovers come by themselves, on the beat", () => {
+  // MEASURED from 3 m/s backward, sticks 0.65, knees 0.6: 20 crossovers in 8 s,
+  // every one on the beat (128 bpm), 3 -> 6.133 m/s, no pumping. Knees 0.3:
+  // 4.590 — the bend is the push. Before the pushes were on the beat, a
+  // player's own crossover pumps were chopped to 45% (bible §2.6) and a curve
+  // built 5.7 m/s where the straight built 8.55.
+  const deep = crossing(-3, 0.65, 0.6), light = crossing(-3, 0.65, 0.3);
+  assert.equal(deep.fallen, false);
+  assert.ok(deep.crossovers === 20 && deep.offBeat === 0, `${deep.crossovers} crossovers, ${deep.offBeat} off the beat`);
+  assert.ok(near(deep.v, 6.133) && near(light.v, 4.590), `${deep.v.toFixed(2)} / ${light.v.toFixed(2)} m/s`);
+});
+
+test("experimental: no automatic crossovers forward, straight, or too slow", () => {
+  assert.equal(crossing(3, 0.65, 0.6).crossovers, 0, "forward");
+  assert.equal(crossing(-3, 0, 0.6).crossovers, 0, "straight");
+  assert.equal(crossing(-1, 0.65, 0.6).crossovers, 0, "under 1.5 m/s");
 });

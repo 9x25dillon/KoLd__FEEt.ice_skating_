@@ -10,6 +10,8 @@ import { clamp, moveToward } from "../sim/math.ts";
 import { MOVE } from "../sim/types.ts";
 import type { SkaterState, SkatingInput } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
+import { beatOffset } from "../sim/music.ts";
+import { dot } from "../sim/math.ts";
 
 export const FULL_SCHEME = 3;
 export const PROFILE_KEY = "edgework-controller-v1";
@@ -136,6 +138,8 @@ export interface FullState {
   };
   /** Experimental: the arms' swing, -1 (left, X) .. +1 (right, B), eased toward what is held. */
   arms?: number;
+  /** Experimental: the tick an automatic crossover's push ends; both blades stay down until then. */
+  crossUntil?: number;
 }
 export type GameControlState = SchemeState & { full?: FullState };
 export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks: new Map(), feedbackUntil: -1, turn: null, turnStarted: false, foot: 1, request: "Glide", left: { x: 0, y: 0 }, right: { x: 0, y: 0 } });
@@ -162,6 +166,15 @@ export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: bo
  * push at most. Authored starting points; the operator's experiment.
  */
 const PUMP_HIGH = 0.6, PUMP_LOW = 0.2, STROKE_EDGE = 0.6, GESTURE_TICKS = 30, PAIR_TICKS = 15, SNAP_TICKS = 6;
+/**
+ * Experimental's automatic back crossovers: skating backward at AUTO_CROSS_SPEED
+ * or more, leaning at least the solver's crossoverLean, on the ice and in no
+ * move, the skater strokes a crossover on every beat of the music (sim/music.ts)
+ * — on the beat, so never the chopped off-beat push (bible §2.6) — as an
+ * ordinary stroke from the pushing leg's knee (the triggers bent deeper push
+ * harder), both blades down for the push. Pumps add on top.
+ */
+const AUTO_CROSS_SPEED = 1.5;
 /** Experimental arms, X left / B right: how far they swing (wind-up) and how fast they get there, per second. */
 const ARMS_SWING = 0.7, ARMS_RATE = 3;
 /**
@@ -273,6 +286,17 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
   return out;
 }
 
+/** Experimental: a crossover stroke on the beat, when skating backward on a deep enough curve. */
+function autoCrossover(f: FullState, s: SkaterState, p: Params): Partial<SkatingInput> | null {
+  if (s.fallen || s.move !== MOVE.None || s.jump.phase !== JUMP_PHASE.None) return null;
+  const back = dot(s.vel, s.heading) < -p.dirSpeedEps;
+  if (!back || Math.hypot(s.vel.x, s.vel.y) < AUTO_CROSS_SPEED || Math.abs(s.lean) < p.crossoverLean) return null;
+  const beat = beatOffset(p, s.tick);
+  if (beat < 0 || beat >= SIM_DT) return null;
+  f.crossUntil = s.tick + Math.round(p.strokeDuration / SIM_DT);
+  return { push: true, weight: 0.5 };
+}
+
 export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: Params, profile: ControllerProfile, options: MappingOptions = {}) {
   const f = st.full ??= newFullState();
   const h = c.hardware;
@@ -331,6 +355,13 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     // Each stick's fore–aft is its own blade's heel/toe. The keyboard's W/S stays shared.
     mapped.pitchSplit = keyPitch ? 0 : (rightPitch - leftPitch) / 2;
     if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l, arms ? f.bladeRight! : r], h.connected));
+    if (options.pumps && !mapped.push) {
+      const auto = autoCrossover(f, s, p);
+      if (auto) Object.assign(mapped, auto);
+    }
+    // An automatic crossover keeps both blades down through its push, unless
+    // X / B asks for a foot this tick.
+    if (options.pumps && s.tick < (f.crossUntil ?? -1) && !down(1) && !down(2)) mapped.weight = 0.5;
     if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options));
     // A trigger per knee: LT the left leg, RT the right. The brake moves off LT
     // to D-pad ↑, free in this setup unless the profile has bound it, until

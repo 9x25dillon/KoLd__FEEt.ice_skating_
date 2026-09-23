@@ -200,9 +200,12 @@ The other three setups are unchanged.
 | A | turn: the three-turn gesture; LB + A bracket; RB + A cantilever |
 | Y | rotation: spin; LB + Y twizzle; RB + Y spiral; LB + RB + Y Ina Bauer |
 | D-pad | the feet (D-pad layout): ← / → turn both, LB or RB + ← / → toes in / out, ↑ straightens |
+| (automatic) | **back crossovers**: skating backward at 1.5 m/s or more, leaning at least `crossoverLean` (12°), the skater strokes a crossover on every beat of the music — on the beat, so never the chopped off-beat push — as an ordinary stroke from the knee, both blades down for the push. Bent knees stroke harder. Holding both knees deep past the jump's load (0.7 on the standing leg; with shared weight, the average) loads a jump instead |
 
 Measured from 3 m/s over 1 s: glide 2.891; one deep snapped pump 3.175; one lazy pump 2.931;
 one clean thumb stroke 2.987. Alternating full pumps every 0.25 s for 2 s: 3 → 4.061 m/s, with
-no takeoff. The thresholds and weights are authored starting points for tuning on the pad
+no takeoff. Backward on a curve (sticks 0.65, knees 0.6), the automatic crossovers take 3 → 6.13 m/s
+in 8 s with no pumping (knees 0.3: 4.59). Pumps on a curve are crossover pushes and follow the bible's beat rule:
+off the beat they are chopped to 45%. The thresholds and weights are authored starting points for tuning on the pad
 (`game/full-controls.ts`: `PUMP_*`, `STROKE_EDGE`, `GESTURE_TICKS`, `PAIR_TICKS`, `SNAP_TICKS`,
 `ARMS_*`).
