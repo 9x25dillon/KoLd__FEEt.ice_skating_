@@ -61,7 +61,8 @@ must still pass, but never count toward coverage ([gate §7.2](../../docs/fideli
 - `citation` — enough for someone else to find the exact table, figure, protocol page or video
   timestamp. For `derived`, the relation.
 - `primary_checked` — for `literature`: `true` once the value has been read in the primary source,
-  `false` while it is quoted second-hand. A secondary case never counts toward coverage.
+  `false` while it is quoted second-hand. The authors' own abstract counts as the primary source for
+  the values it states ([gate §2.2](../../docs/fidelity-gate.md#22--source-types)). A secondary case never counts toward coverage.
   `null` for other types.
 - `notes` — the measurement method, and anything a reviewer needs.
 
