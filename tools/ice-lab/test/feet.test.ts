@@ -99,8 +99,9 @@ test("a T-stop: glide on one foot, drag the other at right angles on its outside
 
 test("with the feet turned in the hips, rising off a carve brings the blades most of the way across", () => {
   // MEASURED (torqueMode too, 6 m/s, lean 0.5, shoulders led then released on
-  // a 0.15 s rise): feet straight 34° across; feet turned (left out, right in)
-  // 82° (since /34: load- and edge-dependent contact; Experimental has a free leg), the scraping feet checking the body's spin. The skater still falls
+  // a 0.15 s rise): feet straight 32° across; feet turned (left out, right in)
+  // 77° (since /34: load- and edge-dependent contact; engagement from the whole
+  // load on the ice), the scraping feet checking the body's spin. The skater still falls
   // as the stop runs out (the lean outlasts the scrape), so this pins only how
   // far across the blades come.
   const T = { ...FEET, torqueMode: 1 };
@@ -108,6 +109,6 @@ test("with the feet turned in the hips, rising off a carve brings the blades mos
     ? { lean: 0.5, knee: 0.6, weight: 0.5, windup: -Math.min(1, Math.max(0, (t - 0.8) / 0.6)) }
     : { lean: 0.5, knee: t < 1.65 ? 0 : 0.7, weight: 0.5, windup: t < 1.65 ? 1 : 0, toeOutSplit: feet ? -1 : 0 }, 6);
   const straight = play(false), turned = play(true);
-  assert.ok(Math.abs(straight.across - 34) < 2, `straight ${straight.across.toFixed(0)}°`);
-  assert.ok(Math.abs(turned.across - 82) < 2, `turned ${turned.across.toFixed(0)}°`);
+  assert.ok(Math.abs(straight.across - 32) < 2, `straight ${straight.across.toFixed(0)}°`);
+  assert.ok(Math.abs(turned.across - 77) < 2, `turned ${turned.across.toFixed(0)}°`);
 });

@@ -8,8 +8,8 @@
 // travel slide along it and swing into line (the scrape resists across the
 // blade, only glide along it), so the blades must be HELD square — the feet
 // first, the hips (the trunk) when the feet reach the end of their turnout.
-// And the lean going in must stay inside what a scrape can hold (about 0.5
-// rad at the deepest edge), or there is nothing left to stand back up with.
+// (Until /34 the entry lean also had to stay inside what a scrape can hold; with
+// engagement read from the whole load, entries to 0.5 now stop and stand.)
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -55,25 +55,26 @@ function hockeyStop(entry: number, stopLean = 0.3) {
 }
 
 test("a hockey stop from play: rise, turn the blades square, scrape to a standstill, stand", () => {
-  // MEASURED (since /34: load- and edge-dependent contact; Experimental has a free leg): entry lean 0.4, stop lean 0.3 —
-  // standstill 3.18 s after the rise, 14.5 m from the start of the carve, the
-  // blades held 67.5° or more across until 2 m/s, and standing (lean 0.01)
-  // 1.5 s later. (Before: 2.99 s, 14.1 m, 72°.)
+  // MEASURED (since /34: load- and edge-dependent contact, engagement from the
+  // whole load on the ice): entry lean 0.4, stop lean 0.3 — standstill 4.31 s
+  // after the rise, 15.4 m from the start of the carve, the blades held 63° or
+  // more across until 2 m/s, and standing (lean 0.02) 1.5 s later. (Before:
+  // 2.99 s, 14.1 m, 72°.)
   const r = hockeyStop(0.4);
   assert.equal(r.s.fallen, false, "standing");
-  assert.ok(Math.abs(r.stopped - 3.18) < 0.05, `stopped ${r.stopped.toFixed(2)} s after the rise`);
-  assert.ok(Math.abs(r.dist - 14.5) < 0.2, `${r.dist.toFixed(1)} m`);
-  assert.ok(Math.abs(r.squareFrom2 - 67.5) < 2, `blades held across: ${r.squareFrom2.toFixed(0)}° at the least above 2 m/s`);
+  assert.ok(Math.abs(r.stopped - 4.31) < 0.05, `stopped ${r.stopped.toFixed(2)} s after the rise`);
+  assert.ok(Math.abs(r.dist - 15.4) < 0.2, `${r.dist.toFixed(1)} m`);
+  assert.ok(Math.abs(r.squareFrom2 - 62.6) < 2, `blades held across: ${r.squareFrom2.toFixed(0)}° at the least above 2 m/s`);
   assert.ok(Math.abs(r.s.lean) < 0.1, `upright after (${r.s.lean.toFixed(2)})`);
   assert.ok(r.events.some(e => e.type === EVENT.SkidBegin), "and it was a skid all the way");
 });
 
-test("go into it leaning harder than a scrape can hold and it is a fall, whatever the stop", () => {
-  // MEASURED: entry lean 0.5 falls 1.92 s after the rise for every stop lean
-  // tried (0.2-0.3); 0.3-0.4 stop and stand.
-  for (const stopLean of [0.2, 0.3]) assert.equal(hockeyStop(0.5, stopLean).s.fallen, true, `stop lean ${stopLean}`);
-  for (const entry of [0.3, 0.35]) {
+test("from any entry lean up to 0.5 the stop holds: a forgiving stop, slower the deeper the entry", () => {
+  // MEASURED (since /34): entry 0.3 3.82 s, 0.35 4.00, 0.45 4.81, 0.5 3.88 —
+  // all standing. Before engagement read the whole load on the ice, a skater on
+  // two feet counted as half-unweighted and entry 0.5 fell every time.
+  for (const [entry, time] of [[0.3, 3.82], [0.35, 4.0], [0.45, 4.81], [0.5, 3.88]]) {
     const r = hockeyStop(entry);
-    assert.ok(!r.s.fallen && r.stopped > 0, `entry ${entry}: stopped ${r.stopped.toFixed(2)} s after the rise, standing`);
+    assert.ok(!r.s.fallen && Math.abs(r.stopped - time) < 0.05, `entry ${entry}: ${r.stopped.toFixed(2)} s, fallen ${r.s.fallen}`);
   }
 });

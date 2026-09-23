@@ -109,13 +109,15 @@ function riseAndRelease(params: typeof ON, lead: boolean) {
 }
 
 test("rise off the edge and the body keeps turning while the travel does not: a skidded entry from play", () => {
-  // MEASURED: shoulders led then released on the rise, 34°; released without
-  // the lead, 14°; both on their feet, the edge lining back up on the sink. A
-  // full 90° hockey stop needs the feet turned in the hips too (stage B2).
+  // MEASURED (since /34, engagement from the whole load on the ice): shoulders
+  // led then released on the rise, 32°, on their feet, the edge lining back up
+  // on the sink; released without the lead, 12° — and a fall. A full 90°
+  // hockey stop needs the feet turned in the hips too (stage B2).
   const led = riseAndRelease(ON, true), bare = riseAndRelease(ON, false);
-  assert.equal(led.s.fallen || bare.s.fallen, false);
-  assert.ok(Math.abs(led.peak - 34) < 3, `led ${led.peak.toFixed(1)}°`);
-  assert.ok(Math.abs(bare.peak - 14) < 3, `bare ${bare.peak.toFixed(1)}°`);
+  assert.equal(led.s.fallen, false);
+  assert.equal(bare.s.fallen, true, "without the lead the release unbalances the skater");
+  assert.ok(Math.abs(led.peak - 32) < 3, `led ${led.peak.toFixed(1)}°`);
+  assert.ok(Math.abs(bare.peak - 12) < 3, `bare ${bare.peak.toFixed(1)}°`);
   assert.ok(Math.abs(slipDeg(led.s)) < 1, "and the edge takes hold again");
   // Without the trunk only the rise acts: the grip left on the edge cannot turn
   // the whole body's mass, and the travel runs on a little (0.52°).

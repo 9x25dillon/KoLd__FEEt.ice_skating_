@@ -245,7 +245,13 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       rutLoad; SkatingInput optional freeLeg; SkaterState optional
 //       freeSwing/freeSwingRate/freeSwingTarget. torqueMode 1 clips from /33
 //       must be re-recorded; the fixture was rebased, every digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/34";
+//   /35 Two fixes found by the merged Phase 17 mapping script: with slipMode
+//       1 a blade off the ice points along the body (left where it lifted,
+//       it touched down across the travel and skidded); with torqueMode 1
+//       the legs' engagement reads the whole load on the ice (on two feet
+//       each blade's half had read as rising off it). slip/torque clips from
+//       /34 must be re-recorded; the fixture was rebased, digests unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/35";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

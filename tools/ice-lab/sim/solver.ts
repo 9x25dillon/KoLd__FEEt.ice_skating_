@@ -289,8 +289,8 @@ function pivotCapacity(s: SkaterState, p: Params): number {
  * it pivots (yawDev), resisted only by the scrape's share of the capacity.
  * Returns the lower body's yaw rate.
  *
- * STAGE C2: the legs steer only a foot with weight on it (engagement, 0..1:
- * none below 0.3 g on the support blade, all above 0.8 g). Where the carve's
+ * STAGE C2: the legs steer only feet with weight on them (engagement, 0..1:
+ * none below 0.3 g on the ice, all above 0.8 g). Where the carve's
  * rate changes under an unweighted foot, the body keeps the spin it had — the
  * change goes into yawDev for both bodies — so a three-turn's rise spins
  * through and an unweighted skater keeps turning while the travel does not.
@@ -301,8 +301,10 @@ function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input
   const Il = p.lowerBodyInertia;
   const Iu = upperInertia(p, axis(input.carriage, 0));
   const twist = s.twist ?? 0, twistRate = s.twistRate ?? 0;
-  const b = s.blade[s.supportFoot];
-  const engaged = smoothstep(0.3, 0.8, b.normalLoad / (p.mass * p.gravity));
+  // The legs steer both feet: engagement is the whole load on the ice, not
+  // the support blade's share (on two feet each carries half, and read alone
+  // that looked like rising off the ice).
+  const engaged = smoothstep(0.3, 0.8, (s.blade[0].normalLoad + s.blade[1].normalLoad) / (p.mass * p.gravity));
   // What the legs could not carry of the carve's change stays as the body's own spin.
   const dev0 = (s.yawDev ?? 0) + ((s.yawSteer ?? steer) - steer) * (1 - engaged);
   s.yawSteer = steer;
@@ -985,6 +987,10 @@ export function step(
       s.heading = s.blade[s.supportFoot].inContact
         ? s.blade[s.supportFoot].tangent
         : s.heading;
+      // With slip on, a blade off the ice points along the body: left where
+      // it lifted, it would touch down across the travel and skid (measured:
+      // a weight change mid-curve on Blade Explorer, the lean ran away).
+      if (slipOn) for (const b of s.blade) if (!b.inContact) b.tangent = s.heading;
     }
     if (slipOn) {
       const slip = footOn ? slipSolveFeet(s, p, dt, stroking, wasSkidAll!, events, torqueOn, axis(input.carriage, 0))
