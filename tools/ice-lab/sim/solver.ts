@@ -646,7 +646,14 @@ export function step(
     // the side the scrape pushes toward, as deep as the lean needs, and never
     // offers it the other edge. Whether the body can get there is the
     // angulation limit below — lean the wrong way and it cannot.
-    if (slipOn && s.blade[s.supportFoot].regime === REGIME.Skid) {
+    // With the feet splayed (a snowplow) the loaded blades can scrape toward
+    // opposite sides: their sideways forces cancel, there is nothing to lean
+    // on, and one common edge would dig one blade and catch the other — so the
+    // body stands flat and the edge split sets each blade's edge.
+    const sides = s.blade.filter((b) => b.inContact).map((b) => -sign(dot(s.vel, perpLeft(footOn ? b.tangent : s.heading))));
+    const splayed = footOn && sides.length === 2 && sides[0] !== sides[1];
+    if (splayed && s.blade[s.supportFoot].regime === REGIME.Skid) tiltTarget = 0;
+    else if (slipOn && s.blade[s.supportFoot].regime === REGIME.Skid) {
       const into = -sign(dot(s.vel, perpLeft(footOn ? s.blade[s.supportFoot].tangent : s.heading)));
       const perSin = scrapeShare(p) * p.biteC1 * p.sharpness * p.iceHardness * (nTotal / p.mass);
       const base = scrapeShare(p) * p.biteC0 * p.sharpness * p.iceHardness * (nTotal / p.mass);

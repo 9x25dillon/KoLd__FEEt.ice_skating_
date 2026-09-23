@@ -223,7 +223,11 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       spin (friction at their offsets) and the dig acts on the body rather
 //       than spinCarry. slipMode 1 clips from /28 must be re-recorded; the
 //       fixture was rebased with every digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/29";
+//   /30 footMode 1: with the loaded blades scraping toward opposite sides (a
+//       snowplow) the balance controller stands the body flat instead of
+//       digging one blade and catching the other. footMode 1 clips from /29
+//       must be re-recorded; the fixture was rebased, every digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/30";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

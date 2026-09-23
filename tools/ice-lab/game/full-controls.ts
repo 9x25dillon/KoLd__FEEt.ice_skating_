@@ -5,8 +5,10 @@ import { relievedPitch } from "../app/pad.ts";
 import { schemeA, latchTurns, SCHEME } from "../app/schemes.ts";
 import type { SchemeState } from "../app/schemes.ts";
 import type { Params } from "../sim/params.ts";
+import { SIM_DT } from "../sim/params.ts";
+import { clamp } from "../sim/math.ts";
 import { MOVE } from "../sim/types.ts";
-import type { SkaterState } from "../sim/types.ts";
+import type { SkaterState, SkatingInput } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 
 export const FULL_SCHEME = 3;
@@ -33,8 +35,21 @@ export const ACTIONS = [
 const LATER_ACTIONS: readonly string[] = ["choctaw"];
 export type Action = typeof ACTIONS[number]["id"];
 export interface Binding { button: number; modified: boolean }
+/**
+ * Where the feet (each turned in its hip, footMode) live on the pad, in a setup
+ * that has them. dpad: nudged and left — D-pad left/right turn both feet
+ * together, modifier + left/right toe them in/out, up straightens. stickY:
+ * each stick's up/down turns its own foot (heel/toe moves under the modifier,
+ * shared, on the left stick). modifier: hold the modifier and the left stick
+ * nudges the feet (x turns both, y toes in/out) while the right stick is the
+ * arms; the left blade keeps its last edge meanwhile.
+ */
+export const FEET_LAYOUTS = ["dpad", "stickY", "modifier"] as const;
+export type FeetLayout = typeof FEET_LAYOUTS[number];
 export interface ControllerProfile {
   version: 1;
+  /** Absent in profiles saved before the feet existed: reads as "dpad". */
+  feet?: FeetLayout;
   deadzone: number;
   curve: number;
   leanGain: number;
@@ -72,8 +87,10 @@ export function parseControllerProfile(value: unknown): ControllerProfile {
     if (seen.has(key)) throw Error(`Two actions share ${b.modified ? "modifier + " : ""}${BUTTON_NAMES[b.button]}`);
     seen.add(key); bindings[a.id] = { button: b.button, modified: b.modified };
   }
+  if (p.feet !== undefined && !FEET_LAYOUTS.includes(p.feet)) throw Error("Choose a feet layout: dpad, stickY or modifier");
   return { version: 1, deadzone: p.deadzone, curve: p.curve, leanGain: p.leanGain,
-    keyboardLean: p.keyboardLean, triggerDeadzone: p.triggerDeadzone, modifier: p.modifier, bindings };
+    keyboardLean: p.keyboardLean, triggerDeadzone: p.triggerDeadzone, modifier: p.modifier, bindings,
+    ...(p.feet !== undefined ? { feet: p.feet } : {}) };
 }
 export function loadControllerProfile(): ControllerProfile {
   try { const saved = localStorage.getItem(PROFILE_KEY); if (saved) return parseControllerProfile(JSON.parse(saved)); } catch { /* A corrupt or unavailable save uses defaults. */ }
@@ -107,13 +124,58 @@ export interface FullState {
   left: { x: number; y: number };
   right: { x: number; y: number };
   bladeRight?: { x: number; y: number };
+  /** The modifier feet layout: the left blade's last command while the left stick is on the feet. */
+  bladeLeft?: { x: number; y: number };
+  /** The feet where the nudging layouts left them: toeOut and toeOutSplit, -1..1. */
+  feet?: { out: number; split: number };
 }
 export type GameControlState = SchemeState & { full?: FullState };
 export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks: new Map(), feedbackUntil: -1, turn: null, turnStarted: false, foot: 1, request: "Glide", left: { x: 0, y: 0 }, right: { x: 0, y: 0 } });
 const TURNS: Action[] = ["three", "mohawk", "bracket", "loop", "rocker", "counter", "choctaw"];
 export const manualAction = (action: Action): boolean => !TURNS.includes(action) || action === "three" || action === "bracket";
 
-export interface MappingOptions { manual?: boolean; twoFoot?: boolean; leanAssist?: number; repeatPush?: boolean }
+export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; leanAssist?: number; repeatPush?: boolean }
+/** Full travel of a nudged foot axis, per second held. */
+const FEET_NUDGE_RATE = 1.5;
+/**
+ * The feet for a setup that has them (footMode), by the profile's layout.
+ * Returns toeOut / toeOutSplit, and for stickY the heel/toe it displaces.
+ * A binding the setup actually uses on a D-pad direction keeps that direction.
+ */
+function feetInput(
+  f: FullState, layout: FeetLayout, h: ControllerHardware, key: (k: string) => boolean, down: (b: number) => boolean,
+  modified: boolean, left: { x: number; y: number }, right: { x: number; y: number }, stick: { x: number; y: number },
+  profile: ControllerProfile, options: MappingOptions,
+): Partial<SkatingInput> {
+  const feet = f.feet ??= { out: 0, split: 0 };
+  const step = FEET_NUDGE_RATE * SIM_DT;
+  const bound = (button: number) => ACTIONS.some(a => (!options.manual || manualAction(a.id))
+    && profile.bindings[a.id].button === button && profile.bindings[a.id].modified === modified);
+  const nudge = (axis: "out" | "split", by: number) => { feet[axis] = Math.max(-1, Math.min(1, feet[axis] + by * step)); };
+  // Keyboard, every layout: [ ] turn both feet, - = toe in/out, backslash straightens.
+  if (key("[")) nudge("split", -1);
+  if (key("]")) nudge("split", 1);
+  if (key("-")) nudge("out", -1);
+  if (key("=")) nudge("out", 1);
+  if (key("\\")) { feet.out = 0; feet.split = 0; }
+  if (layout === "dpad" && h.connected) {
+    const l = down(14) && !bound(14), r = down(15) && !bound(15);
+    // Left is anticlockwise (split) or toes in (out); right the reverse.
+    if (l !== r) nudge(modified ? "out" : "split", l ? -1 : 1);
+    if (down(12) && !bound(12)) { feet.out = 0; feet.split = 0; }
+  } else if (layout === "modifier" && h.connected && modified) {
+    nudge("split", stick.x);
+    nudge("out", stick.y);
+  } else if (layout === "stickY" && h.connected) {
+    // Up turns the toe out. The modifier puts heel/toe back on the left stick.
+    const lf = modified ? feet.out - feet.split : left.y, rf = right.y;
+    if (!modified) { feet.out = (lf + rf) / 2; feet.split = (rf - lf) / 2; }
+    const pitch = modified ? relievedPitch(stick.x, stick.y) : 0;
+    return { toeOut: clamp((lf + rf) / 2, -1, 1), toeOutSplit: clamp((rf - lf) / 2, -1, 1), pitch, pitchSplit: 0 };
+  }
+  return { toeOut: feet.out, toeOutSplit: feet.split };
+}
+
 export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: Params, profile: ControllerProfile, options: MappingOptions = {}) {
   const f = st.full ??= newFullState();
   const h = c.hardware;
@@ -153,15 +215,22 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     const arms = modified || key("c");
     if (!arms) f.bladeRight = { ...r };
     const blade = f.bladeRight ?? { x: 0, y: 0 };
-    const leftX = key("a") || key("d") ? (Number(key("d")) - Number(key("a"))) * profile.keyboardLean : l.x * profile.leanGain;
+    // The modifier feet layout puts the left stick on the feet while held: the
+    // left blade keeps its last command, as the right does for the arms.
+    const layout: FeetLayout = profile.feet ?? "dpad";
+    const leftOnFeet = options.feet === true && layout === "modifier" && modified;
+    if (!leftOnFeet) f.bladeLeft = { ...l };
+    const left = f.bladeLeft ?? { x: 0, y: 0 };
+    const leftX = key("a") || key("d") ? (Number(key("d")) - Number(key("a"))) * profile.keyboardLean : left.x * profile.leanGain;
     const rightX = key("arrowleft") || key("arrowright") ? (Number(key("arrowright")) - Number(key("arrowleft"))) * profile.keyboardLean : blade.x * profile.leanGain;
     mapped.lean = (leftX + rightX) / 2;
     mapped.leanSplit = (rightX - leftX) / 2;
     const keyPitch = Number(key("w")) - Number(key("s"));
-    const leftPitch = relievedPitch(l.x, l.y), rightPitch = relievedPitch(blade.x, blade.y);
+    const leftPitch = relievedPitch(left.x, left.y), rightPitch = relievedPitch(blade.x, blade.y);
     mapped.pitch = keyPitch || (leftPitch + rightPitch) / 2;
     // Each stick's fore–aft is its own blade's heel/toe. The keyboard's W/S stays shared.
     mapped.pitchSplit = keyPitch ? 0 : (rightPitch - leftPitch) / 2;
+    if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options));
     // A trigger per knee: LT the left leg, RT the right. The brake moves off LT
     // to D-pad ↑, free in this setup unless the profile has bound it, until
     // stops come from the blades themselves.
@@ -170,9 +239,11 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
       mapped.knee = (kneeL + kneeR) / 2;
       mapped.kneeSplit = (kneeR - kneeL) / 2;
     }
+    // With the feet, stops come from the blades: D-pad up is the feet's, and
+    // only the keyboard's X still brakes.
     const dpadUpBound = ACTIONS.some(a => (!options.manual || manualAction(a.id))
       && profile.bindings[a.id].button === 12 && profile.bindings[a.id].modified === modified);
-    mapped.brake = key("x") || (down(12) && !dpadUpBound);
+    mapped.brake = key("x") || (!options.feet && down(12) && !dpadUpBound);
     mapped.carriage = key("c") ? 1 : arms ? Math.min(1, Math.hypot(r.x, r.y)) : 0;
     mapped.windup = key(",") ? 1 : arms ? r.x : 0;
   }

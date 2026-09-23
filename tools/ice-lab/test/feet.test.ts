@@ -14,7 +14,8 @@ import type { SkatingInput, SkaterState } from "../sim/types.ts";
 import { len, rotate, dot } from "../sim/math.ts";
 import { setupParams } from "../game/setups.ts";
 
-const SIM = setupParams("simulation");
+// The Simulation athlete with stages B/C switched off: each test switches on what it measures.
+const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0 };
 const FEET = { ...SIM, slipMode: 1, footMode: 1 };
 
 /** Skate from `speed` until stopped (0.3 m/s), fallen or 6 s. */

@@ -131,7 +131,7 @@ test("simulation: each stick's fore–aft is its own blade's heel/toe; the other
   }
 });
 
-test("simulation: LT and RT are the left and right knees; the brake is D-pad ↑", () => {
+test("simulation: LT and RT are the left and right knees; stops come from the blades, the keyboard's X still brakes", () => {
   const r = rig("simulation"); r.h.buttons[6] = 0.9; r.h.buttons[7] = 0;
   const left = r.map().input;
   const lt = (0.9 - r.profile.triggerDeadzone) / (1 - r.profile.triggerDeadzone);
@@ -139,9 +139,86 @@ test("simulation: LT and RT are the left and right knees; the brake is D-pad ↑
   assert.ok(Math.abs(left.knee + left.kneeSplit!) < 1e-12, "right leg straight");
   assert.equal(left.brake, false, "LT is no longer the brake here");
   r.h.buttons[6] = 0; r.h.buttons[12] = 1;
+  assert.equal(r.map().input.brake, false, "D-pad up is the feet's now");
+  r.h.buttons[12] = 0; r.h.keys = ["x"];
   assert.equal(r.map().input.brake, true);
   const other = rig("explorer"); other.h.buttons[6] = 0.9;
   const o = other.map().input;
   assert.equal(o.brake, true, "the other setups keep LT as the brake");
   assert.equal(o.kneeSplit, undefined);
+});
+
+// ── stages B/C by setup, and the feet on the pad ────────────────────────────
+
+test("the new physics by setup: Simulation everything, Explorer parallel blades, Repertoire unchanged", () => {
+  const sim = setupParams("simulation"), exp = setupParams("explorer"), rep = setupParams("repertoire");
+  assert.deepEqual([sim.slipMode, sim.torqueMode, sim.footMode], [1, 1, 1]);
+  assert.deepEqual([exp.slipMode, exp.torqueMode, exp.footMode], [1, 1, 0]);
+  assert.deepEqual([rep.slipMode, rep.torqueMode, rep.footMode], [0, 0, 0]);
+  for (const id of ["explorer", "repertoire"] as const) assert.equal(rig(id).map().input.toeOut, undefined, `${id} has no feet`);
+});
+
+const withFeet = (feet: "dpad" | "stickY" | "modifier") => { const r = rig("simulation"); r.profile.feet = feet; return r; };
+
+test("feet, D-pad layout: left/right turn both feet and they stay; with the modifier, toes in/out; up straightens", () => {
+  const r = withFeet("dpad");
+  r.h.buttons[14] = 1; for (let i = 0; i < 60; i++) r.map();   // half a second of D-pad left
+  r.h.buttons[14] = 0;
+  const turned = r.map().input;
+  assert.ok(Math.abs(turned.toeOutSplit! + 0.75) < 1e-9 && turned.toeOut === 0, `both feet anticlockwise (${turned.toeOutSplit})`);
+  assert.equal(r.map().input.toeOutSplit, turned.toeOutSplit, "and they stay where they were left");
+  r.h.buttons[10] = 1; r.h.buttons[15] = 1; for (let i = 0; i < 120; i++) r.map();
+  r.h.buttons[10] = 0; r.h.buttons[15] = 0;
+  assert.equal(r.map().input.toeOut, 1, "modifier + right: toes out, to the end of the turnout");
+  r.h.buttons[12] = 1;
+  const straight = r.map().input;
+  assert.deepEqual([straight.toeOut, straight.toeOutSplit], [0, 0], "up straightens");
+});
+
+test("feet, stick layout: each stick's up/down turns its own foot; heel/toe moves under the modifier", () => {
+  const r = withFeet("stickY"); r.h.axes = [0, -1, 0, 1];   // left stick up, right stick down
+  const it = r.map().input;
+  assert.ok(it.toeOut! - it.toeOutSplit! > 0.9 && it.toeOut! + it.toeOutSplit! < -0.9, "left toe out, right toe in");
+  assert.equal(it.pitch, 0, "no heel/toe from the sticks");
+  r.h.buttons[10] = 1;
+  const mod = r.map().input;
+  assert.ok(mod.pitch > 0.9, "modifier: the left stick's up is the toe");
+  assert.ok(Math.abs(mod.toeOut! - it.toeOut!) < 1e-9 && Math.abs(mod.toeOutSplit! - it.toeOutSplit!) < 1e-9, "and the feet hold");
+});
+
+test("feet, modifier layout: hold the modifier and the left stick nudges the feet while the left blade keeps its edge", () => {
+  const r = withFeet("modifier"); r.h.axes = [-0.8, 0, 0, 0];
+  const edge = r.map().input.lean;
+  r.h.buttons[10] = 1; r.h.axes = [1, 0, 0, 0];
+  for (let i = 0; i < 30; i++) r.map();
+  const held = r.map().input;
+  assert.equal(held.lean, edge, "left blade's last edge held");
+  assert.ok(held.toeOutSplit! > 0.3, `feet turned clockwise (${held.toeOutSplit!.toFixed(2)})`);
+  r.h.buttons[10] = 0; r.h.axes = [0, 0, 0, 0];
+  assert.equal(r.map().input.toeOutSplit, held.toeOutSplit, "let go: the feet stay, the stick is the edge again");
+});
+
+test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad left toes in, then the sticks set the edges", () => {
+  // MEASURED from 5 m/s (right trigger 0.5): both bumpers share the weight;
+  // modifier + D-pad left for 1 s toes both feet in (34°, hipInternal); then
+  // with the sticks pushed apart — each blade on its inside edge, in the
+  // model's frame — 2.71 m/s after 3 s; sticks centred, 4.25. Pushed toward
+  // each other the blades sit on their outside edges, which catch: a dead
+  // stop, upright only because there is no fore-aft pendulum yet.
+  const plow = (lx: number, rx: number) => {
+    const r = rig("simulation", 5); r.h.buttons[7] = 0.5;
+    for (let i = 0; i < 360 && !r.s.fallen; i++) {
+      r.h.buttons[4] = r.h.buttons[5] = i < 2 ? 1 : 0;
+      r.h.buttons[10] = r.h.buttons[14] = i < 120 ? 1 : 0;
+      r.h.axes = i < 120 ? [0, 0, 0, 0] : [lx, 0, rx, 0];
+      r.tick();
+    }
+    return r.s;
+  };
+  const inside = plow(-1, 1), flat = plow(0, 0), caught = plow(1, -1);
+  for (const s of [inside, flat, caught]) assert.equal(s.fallen, false);
+  assert.deepEqual(inside.footAngle!.map(a => Math.round(a * 180 / Math.PI)), [-34, -34], "both toes in");
+  const v = (s: typeof inside) => Math.hypot(s.vel.x, s.vel.y);
+  assert.ok(Math.abs(v(inside) - 2.71) < 0.05 && Math.abs(v(flat) - 4.25) < 0.05, `inside ${v(inside).toFixed(2)}, flat ${v(flat).toFixed(2)}`);
+  assert.ok(v(caught) < 0.1, `caught edges stop dead (${v(caught).toFixed(2)})`);
 });

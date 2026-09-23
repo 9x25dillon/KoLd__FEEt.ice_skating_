@@ -8,8 +8,8 @@ experiment remains unchanged.
 
 | Setup | Continuous control | Assistance and move access |
 | --- | --- | --- |
-| Simulation | Left/right sticks control the corresponding blades: each stick's side-to-side is its blade's tilt and its fore–aft is that blade's heel/toe. LT bends the left knee, RT the right; the standing leg's knee sets load and jump, the pushing leg's sets the push. Brake is D-pad ↑ for now. Through a turn each held stick keeps its side of the ice until that stick is released. Hold the profile's modifier (L3 by default) for right-stick arms and wind-up; the right blade retains its last command until release. | Responsive athlete balance model, no jump assist, no landing coach, no Cruise or held-repeat strokes. Manual turn gestures. |
-| Blade Explorer | Left stick directly controls lean and rocker pressure; right stick controls arms. Bumpers retain the chosen foot. | 50–100% assistance, default 75%: blends balance damping/recovery and latency toward the assisted preset, and blends excessive lean toward a speed-dependent blade-support limit. Manual jump landings and turn gestures. |
+| Simulation | Left/right sticks control the corresponding blades: each stick's side-to-side is its blade's tilt and its fore–aft is that blade's heel/toe. LT bends the left knee, RT the right; the standing leg's knee sets load and jump, the pushing leg's sets the push. The feet turn in the hips (feet layout below). Blades scrape, dig and catch (slip), the arms twist the trunk (torque), and stops — snowplow, T-stop, hockey stop — come from the feet and edges: there is no pad brake (keyboard X still brakes). Through a turn each held stick keeps its side of the ice until that stick is released. Hold the profile's modifier (L3 by default) for right-stick arms and wind-up; the right blade retains its last command until release. | Responsive athlete balance model, no jump assist, no landing coach, no Cruise or held-repeat strokes. Manual turn gestures. |
+| Blade Explorer | Left stick directly controls lean and rocker pressure; right stick controls arms, which twist the trunk. Blades stay parallel but scrape, dig and catch. Bumpers retain the chosen foot. | 50–100% assistance, default 75%: blends balance damping/recovery and latency toward the assisted preset, and blends excessive lean toward a speed-dependent blade-support limit. Manual jump landings and turn gestures. |
 | Full Repertoire | Left-stick lean/pressure, right-stick arms, retained foot selection. | Assisted balance, wind-up jump assistance, dedicated turn/glide commands, optional landing coach in the game. Covers implemented moves; entries must still be physically available. |
 
 All three start with Cruise off. Explorer and Repertoire can enable it and repeat
@@ -152,10 +152,32 @@ godot4 --headless --path games/ice-run-godot -- --smoke-test --full-controls
 ```
 
 First-time Godot setup still requires the full preparation command to generate audio.
-Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/29`. The three setups record final mapped
+Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/30`. The three setups record final mapped
 inputs and parameters under label D; they add no solver arithmetic changes. Older
 builds reject D-labelled clips; current builds continue accepting A/B/C clips.
 
 Defaults are authored starting points. Virtual-pad and automated checks establish
 reachability and consistency; a human session on a physical controller is still
 needed to assess comfort, stick noise, and suitable sensitivity.
+
+
+## Feet (Simulation)
+
+Each foot turns in its hip — out as far as the skater's turnout, in about 35° — and the
+blades point off the body by those angles. Three layouts, chosen in the controller workshop
+(`/game/controller.html`, "Feet (Simulation)") and saved with the profile; default D-pad.
+
+| Layout | Pad | Holds when released? |
+| --- | --- | --- |
+| **D-pad nudges** | D-pad ← / → turn both feet together (anticlockwise / clockwise); modifier + ← / → toes in / out; ↑ straightens | yes |
+| **Stick up/down** | each stick's up/down turns its own foot (up toe out, down toe in); hold the modifier for heel/toe on the left stick | no — the stick is the angle |
+| **Modifier + left stick** | hold the modifier: left stick x turns both feet, y toes in / out; the left blade keeps its last edge and the right stick is the arms | yes |
+
+Keyboard, every layout: `[` / `]` turn both feet, `-` / `=` toes in / out, `\` straightens.
+
+Snowplow: both bumpers (shared weight), toes in, blades on their inside edges. T-stop: weight
+on one foot, the other turned out behind on its outside edge. Hockey stop: rise off a carve,
+release the shoulders into the turn with the feet turned, sink and hold the blades square to
+the travel (feet, then hips). Which stick direction reads as "knees in" on screen is still to be
+checked on the pad: in the model's frame, sticks pushed apart put both blades on their inside
+edges; pushed together, on their outside edges, which catch.

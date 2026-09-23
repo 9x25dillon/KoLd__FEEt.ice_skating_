@@ -19,7 +19,8 @@ import { rotate, len, dot } from "../sim/math.ts";
 import { setupParams } from "../game/setups.ts";
 import { JUMP, JUMP_NONE } from "../sim/jump.ts";
 
-const SIM = setupParams("simulation");
+// The Simulation athlete with stages B/C switched off: each test switches on what it measures.
+const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0 };
 const slipDeg = (s: SkaterState): number =>
   Math.acos(Math.min(1, Math.abs(dot(s.vel, s.heading)) / Math.max(len(s.vel), 1e-9))) * 180 / Math.PI;
 
