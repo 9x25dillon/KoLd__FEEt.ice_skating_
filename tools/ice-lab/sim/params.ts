@@ -686,6 +686,17 @@ export interface Params {
   hipInternal: number;
   /** rad/s. How fast the legs turn a foot in its hip. Authored. */
   footTurnRate: number;
+
+  // ── speed into spin ───────────────────────────────────────────────────────
+  /**
+   * 0: the takeoff's block turns approach speed into height only. 1: the
+   * block is an impulse where the blade meets the ice, and a leaning skater's
+   * blade is not under the centre of mass — it is leg length x sin(lean) to
+   * the side — so the block also turns the body: dL = r x dp, carried into
+   * the takeoff's angular momentum. Faster entries and deeper edges, more
+   * spin; the geometry sets its direction. No new constant.
+   */
+  speedSpinMode: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -903,6 +914,8 @@ export const DEFAULT_PARAMS: Params = {
   hipInternal: 0.6,
   footTurnRate: 6,
 
+  speedSpinMode: 0,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -1068,6 +1081,7 @@ export function validate(p: Params): string[] {
   if (!(p.lowerBodyInertia > 0 && p.lowerBodyInertia < p.inertiaTucked)) errs.push("lowerBodyInertia must be positive and below inertiaTucked");
   if (!(p.twistMax > 0 && p.twistMax < 1.6)) errs.push("twistMax must be 0-1.6 rad");
   if (!(p.twistTorqueMax > 0 && p.twistStiffness > 0 && p.twistDamping >= 0)) errs.push("the trunk's torque, stiffness and damping must be positive");
+  if (![0, 1].includes(p.speedSpinMode)) errs.push("speedSpinMode is 0 (the block lifts) or 1 (it also turns the body)");
   if (![0, 1].includes(p.footMode)) errs.push("footMode is 0 (blades along the body) or 1 (each foot turns in its hip)");
   if (p.footMode === 1 && p.slipMode !== 1) errs.push("footMode 1 needs slipMode 1: a turned blade must be able to scrape");
   if (!(p.turnout >= 0 && p.turnout <= 1)) errs.push("turnout is 0..1 of 90° per foot");

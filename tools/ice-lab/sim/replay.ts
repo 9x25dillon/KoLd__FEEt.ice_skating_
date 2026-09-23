@@ -236,7 +236,9 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       its force follows that bend easing to nothing over the stroke) and
 //       SkaterState optional strokeKnee. Absent, pushes are /31's. Fixture
 //       rebased, every digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/32";
+//   /33 Params gained speedSpinMode (0 everywhere): the takeoff's block as a
+//       torque about the body. Fixture rebased, every digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/33";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

@@ -31,7 +31,7 @@
 import { EDGE, DIR, FOOT, EDGE_CODE_NONE, REGIME, EVENT, FALL, MOVE, makeCode, codeDir } from "./types.ts";
 import type { SkaterState, SkatingInput, EdgeEvent, JumpState, JumpResult, Foot, Edge, Dir } from "./types.ts";
 import type { Params } from "./params.ts";
-import { clamp, saturate, lerp, moveToward, rotate, normalizeOr, wrapPi, dot, mul, len, add } from "./math.ts";
+import { clamp, saturate, lerp, moveToward, rotate, normalizeOr, wrapPi, dot, mul, len, add, perpLeft, sin } from "./math.ts";
 
 export const JUMP_MODE = { Off: 0, Hop: 1, Full: 2 } as const;
 
@@ -259,13 +259,21 @@ export function jumpGround(
   // With the moves on, part of the lift is the approach turned upward: blocked
   // by the takeoff edge, or vaulted over the pick — so a toe jump that missed
   // its pick has nothing to vault over. What goes up comes out of the travel.
+  let vaultSpin = 0;
   if (p.movesMode >= 1 && J.kind !== JUMP_NONE) {
-    const vh = len(s.vel);
+    const vh = len(s.vel), before = s.vel;
     const vault = !JUMP_DEFS[J.kind].toe || struck ? vh / ENTRY_SPEED[J.kind] : 0;
     const legs = J.vz * (1 - p.jumpSpeedShare);
     J.vz = legs + J.vz * p.jumpSpeedShare * vault;
     const left = vh * vh - (J.vz * J.vz - legs * legs);
     if (vh > 1e-6) s.vel = mul(s.vel, Math.sqrt(Math.max(0, left)) / vh);
+    // Speed into spin (speedSpinMode): the block acts at the blade, which the
+    // lean holds leg length x sin(lean) to the side of the centre of mass.
+    if (p.speedSpinMode >= 1) {
+      const r = mul(perpLeft(s.heading), -s.legLength * sin(s.lean));
+      const dp = mul(add(s.vel, mul(before, -1)), p.mass);
+      vaultSpin = r.x * dp.y - r.y * dp.x;
+    }
   }
   J.airTime = 2 * J.vz / p.gravity;
   J.height = J.vz * J.vz / (2 * p.gravity);
@@ -292,7 +300,7 @@ export function jumpGround(
     rate = p.jumpRotBias * (s.yawRate - dev) + ((p.lowerBodyInertia + Iu) * dev + Iu * s.twistRate) / p.inertiaOpen;
   }
   J.angMomentum = p.jumpMode >= JUMP_MODE.Full
-    ? p.inertiaOpen * Math.max(0, rate + s.spinCarry + p.jumpWhip * whip) * (0.80 + 0.20 * q)
+    ? p.inertiaOpen * Math.max(0, rate + s.spinCarry + vaultSpin / p.inertiaOpen + p.jumpWhip * whip) * (0.80 + 0.20 * q)
     : 0;
   J.windupTick = -1;
   J.windupPeak = 0;
