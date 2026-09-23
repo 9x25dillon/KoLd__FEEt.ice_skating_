@@ -6,7 +6,7 @@ import { schemeA, latchTurns, SCHEME } from "../app/schemes.ts";
 import type { SchemeState } from "../app/schemes.ts";
 import type { Params } from "../sim/params.ts";
 import { SIM_DT } from "../sim/params.ts";
-import { clamp } from "../sim/math.ts";
+import { clamp, moveToward } from "../sim/math.ts";
 import { MOVE } from "../sim/types.ts";
 import type { SkaterState, SkatingInput } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
@@ -129,23 +129,56 @@ export interface FullState {
   /** The feet where the nudging layouts left them: toeOut and toeOutSplit, -1..1. */
   feet?: { out: number; split: number };
   /** Experimental: per leg, the tick each gesture was armed (trigger high, stick low) and completed (pump, stroke). */
-  gestures?: { high: number[]; low: number[]; pump: number[]; stroke: number[] };
+  gestures?: {
+    high: number[]; peak: number[]; pump: number[]; pumpPower: number[];
+    low: number[]; lowY: number[]; sideSum: number[]; samples: number[]; stroke: number[]; strokePower: number[];
+    extend: { tick: number; peak: number }[];
+  };
+  /** Experimental: the arms' swing, -1 (left, X) .. +1 (right, B), eased toward what is held. */
+  arms?: number;
 }
 export type GameControlState = SchemeState & { full?: FullState };
 export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks: new Map(), feedbackUntil: -1, turn: null, turnStarted: false, foot: 1, request: "Glide", left: { x: 0, y: 0 }, right: { x: 0, y: 0 } });
 const TURNS: Action[] = ["three", "mohawk", "bracket", "loop", "rocker", "counter", "choctaw"];
 export const manualAction = (action: Action): boolean => !TURNS.includes(action) || action === "three" || action === "bracket";
 
-export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; pumps?: boolean; leanAssist?: number; repeatPush?: boolean }
+export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; pumps?: boolean; experimental?: boolean; leanAssist?: number; repeatPush?: boolean }
 /**
- * The Experimental setup's pushes, per leg [left, right]. A PUMP: that leg's
- * trigger pulled past PUMP_HIGH then let back under PUMP_LOW within
- * GESTURE_TICKS. A THUMB STROKE: that stick pulled down past -STROKE_EDGE then
- * swept up past +STROKE_EDGE within GESTURE_TICKS. Either pushes that leg at
- * SINGLE_PUSH; the other gesture of the same leg within PAIR_TICKS makes it a
- * full push. Authored; the operator's experiment to tune on the pad.
+ * The Experimental setup's pushes, per leg [left, right].
+ *
+ * A PUMP: that leg's trigger pulled past PUMP_HIGH, then let back under
+ * PUMP_LOW within GESTURE_TICKS. Its strength is how deep the bend went times
+ * how fast it snapped (full at SNAP_TICKS or quicker), and the push extends
+ * the leg from that peak bend (SkatingInput.pushKnee) — the push is the leg
+ * straightening, so it is the bend it came from that drives it. The body's
+ * knee stays the trigger's, so a pump never reads as a jump's load.
+ *
+ * A THUMB STROKE: that stick pulled down past -STROKE_EDGE, then swept up past
+ * +STROKE_EDGE within GESTURE_TICKS. Its strength is its accuracy: the range
+ * swept (full from the bottom to the top), how straight (little side to side),
+ * and how quick (full at SNAP_TICKS or quicker).
+ *
+ * A pump and a thumb stroke of the same leg within PAIR_TICKS add, to a full
+ * push at most. Authored starting points; the operator's experiment.
  */
-const PUMP_HIGH = 0.6, PUMP_LOW = 0.2, STROKE_EDGE = 0.6, GESTURE_TICKS = 30, PAIR_TICKS = 15, SINGLE_PUSH = 0.6;
+const PUMP_HIGH = 0.6, PUMP_LOW = 0.2, STROKE_EDGE = 0.6, GESTURE_TICKS = 30, PAIR_TICKS = 15, SNAP_TICKS = 6;
+/** Experimental arms, X left / B right: how far they swing (wind-up) and how fast they get there, per second. */
+const ARMS_SWING = 0.7, ARMS_RATE = 3;
+/**
+ * The Experimental setup's buttons. A and Y ask for a family of moves and the
+ * held bumpers choose within it; the physics decides whether it happens. A:
+ * the three-turn gesture, LB + A bracket, RB + A cantilever. Y: spin, LB + Y
+ * twizzle, RB + Y spiral, LB + RB + Y Ina Bauer. L3 or R3: the toe pick.
+ * X / B shift the weight and swing the arms (handled with the foot), and the
+ * triggers and thumb strokes push, so A is not the push here.
+ */
+function experimentalPad(down: (b: number) => boolean): Set<Action> {
+  const lb = down(4), rb = down(5), held = new Set<Action>();
+  if (down(0)) held.add(lb && !rb ? "bracket" : rb && !lb ? "low" : "three");
+  if (down(3)) held.add(lb && rb ? "ina" : lb ? "twizzle" : rb ? "spiral" : "spin");
+  if (down(10) || down(11)) held.add("toe");
+  return held;
+}
 /** Full travel of a nudged foot axis, per second held. */
 const FEET_NUDGE_RATE = 1.5;
 /**
@@ -189,25 +222,52 @@ function feetInput(
 
 /**
  * The Experimental setup's legs: a trigger pump or a thumb stroke pushes that
- * leg, and the two together push it harder. A trigger let go while a jump is
- * loading is the jump's release, not a pump; in the air nothing pushes.
+ * leg, scaled by how well it was done, and the two together add. A trigger let
+ * go while a jump is loading is the jump's release, not a pump; in the air
+ * nothing pushes.
  */
-function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: number[], connected: boolean): Partial<SkatingInput> {
-  const g = f.gestures ??= { high: [-1e9, -1e9], low: [-1e9, -1e9], pump: [-1e9, -1e9], stroke: [-1e9, -1e9] };
+function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x: number; y: number }[], connected: boolean): Partial<SkatingInput> {
+  const none = () => [-1e9, -1e9];
+  const g = f.gestures ??= { high: none(), peak: [0, 0], pump: none(), pumpPower: [0, 0],
+    low: none(), lowY: [0, 0], sideSum: [0, 0], samples: [0, 0], stroke: none(), strokePower: [0, 0],
+    extend: [{ tick: -1e9, peak: 0 }, { tick: -1e9, peak: 0 }] };
   if (!connected) return {};
-  const now = s.tick;
+  const now = s.tick, ground = s.jump.phase === JUMP_PHASE.None;
+  const quick = (ticks: number) => clamp(1 - Math.max(0, ticks - SNAP_TICKS) / (GESTURE_TICKS - SNAP_TICKS), 0.3, 1);
   let out: Partial<SkatingInput> = {};
   for (let i = 0; i < 2; i++) {
     let done = false;
-    if (triggers[i] >= PUMP_HIGH) g.high[i] = now;
-    else if (triggers[i] <= PUMP_LOW && now - g.high[i] <= GESTURE_TICKS && s.jump.phase === JUMP_PHASE.None) {
-      g.pump[i] = now; g.high[i] = -1e9; done = true;
+    // The pump.
+    if (triggers[i] >= PUMP_HIGH) {
+      if (now - g.high[i] > 1) g.peak[i] = 0;
+      g.high[i] = now; g.peak[i] = Math.max(g.peak[i], triggers[i]);
+    } else if (triggers[i] <= PUMP_LOW && now - g.high[i] <= GESTURE_TICKS && ground && s.jump.phase !== JUMP_PHASE.Load) {
+      g.pump[i] = now; g.pumpPower[i] = g.peak[i] * quick(now - g.high[i]);
+      g.extend[i] = { tick: now, peak: g.peak[i] };
+      g.high[i] = -1e9; done = true;
     }
-    if (sticks[i] <= -STROKE_EDGE) g.low[i] = now;
-    else if (sticks[i] >= STROKE_EDGE && now - g.low[i] <= GESTURE_TICKS && s.jump.phase === JUMP_PHASE.None) { g.stroke[i] = now; g.low[i] = -1e9; done = true; }
+    // The thumb stroke.
+    const st = sticks[i];
+    if (st.y <= -STROKE_EDGE) {
+      const continuing = now - g.low[i] <= 1;
+      g.low[i] = now; g.lowY[i] = continuing ? Math.min(g.lowY[i], st.y) : st.y;
+      g.sideSum[i] = 0; g.samples[i] = 0;
+    }
+    else if (now - g.low[i] <= GESTURE_TICKS) {
+      g.sideSum[i] += Math.abs(st.x); g.samples[i]++;
+      if (st.y >= STROKE_EDGE && ground) {
+        const range = clamp((st.y - g.lowY[i]) / 2, 0, 1);
+        const straight = clamp(1 - g.sideSum[i] / Math.max(1, g.samples[i]), 0, 1);
+        g.stroke[i] = now; g.strokePower[i] = range * straight * quick(now - g.low[i]);
+        g.low[i] = -1e9; done = true;
+      }
+    }
     if (done) {
-      const paired = now - g.pump[i] <= PAIR_TICKS && now - g.stroke[i] <= PAIR_TICKS;
-      out = { push: true, pushFoot: i, pushPower: paired ? 1 : SINGLE_PUSH };
+      const pump = now - g.pump[i] <= PAIR_TICKS ? g.pumpPower[i] : 0;
+      const stroke = now - g.stroke[i] <= PAIR_TICKS ? g.strokePower[i] : 0;
+      // A pump extends the leg from its bend; a thumb stroke alone from the leg as it stands.
+      const bend = now - g.pump[i] <= PAIR_TICKS ? g.extend[i].peak : triggers[i];
+      out = { push: true, pushFoot: i, pushPower: clamp(pump + stroke, 0, 1), pushKnee: Math.max(bend, 0.35) };
     }
   }
   return out;
@@ -219,7 +279,9 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   if (!validHardware(h)) throw Error("Full repertoire needs valid raw controller input");
   const key = (k: string) => h.keys.includes(k);
   const down = (b: number) => (h.buttons[b] ?? 0) > 0.5;
-  const modified = down(profile.modifier);
+  // Experimental: the bumpers are the alteration and the stick clicks the toe picks.
+  const modified = options.experimental ? down(4) || down(5) : down(profile.modifier);
+  const expPad = options.experimental ? experimentalPad(down) : null;
   // Lock the bank on the physical press. Releasing a modifier first must not
   // turn a held Spiral into a fresh Spin, or a Mohawk into a fresh Three-turn.
   for (const b of BINDABLE_BUTTONS) {
@@ -228,6 +290,7 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   }
   const held = new Set<Action>(ACTIONS.filter(a => {
     if (options.manual && !manualAction(a.id)) return false;
+    if (expPad) return key(a.key) || expPad.has(a.id);
     const b = profile.bindings[a.id];
     return key(a.key) || (f.buttonBanks.get(b.button) === b.modified && down(b.button));
   }).map(a => a.id));
@@ -235,8 +298,8 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   const l = shapeStick(h.axes[0], -h.axes[1], profile), r = shapeStick(h.axes[2], -h.axes[3], profile);
   f.left = l; f.right = r;
   const trigger = (b: number) => Math.max(0, ((h.buttons[b] ?? 0) - profile.triggerDeadzone) / (1 - profile.triggerDeadzone));
-  const leftFoot = key("q") || down(4), rightFoot = key("e") || down(5);
-  // Bumpers select and retain a foot. Both explicitly select shared weight.
+  // Bumpers select and retain a foot — X and B in Experimental. Both explicitly select shared weight.
+  const leftFoot = key("q") || down(options.experimental ? 2 : 4), rightFoot = key("e") || down(options.experimental ? 1 : 5);
   if (leftFoot || rightFoot) f.foot = leftFoot && rightFoot ? 0.5 : leftFoot ? 0 : 1;
   const kx = Number(key("d") || key("arrowright")) - Number(key("a") || key("arrowleft"));
   const ky = Number(key("w") || key("arrowup")) - Number(key("s") || key("arrowdown"));
@@ -249,7 +312,7 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   const mapped = schemeA(raw);
   if (options.twoFoot) {
     // Hold the modifier for arms without dropping the right blade's last command.
-    const arms = modified || key("c");
+    const arms = !options.experimental && (modified || key("c"));
     if (!arms) f.bladeRight = { ...r };
     const blade = f.bladeRight ?? { x: 0, y: 0 };
     // The modifier feet layout puts the left stick on the feet while held: the
@@ -267,7 +330,7 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     mapped.pitch = keyPitch || (leftPitch + rightPitch) / 2;
     // Each stick's fore–aft is its own blade's heel/toe. The keyboard's W/S stays shared.
     mapped.pitchSplit = keyPitch ? 0 : (rightPitch - leftPitch) / 2;
-    if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l.y, arms ? f.bladeRight!.y : r.y], h.connected));
+    if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l, arms ? f.bladeRight! : r], h.connected));
     if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options));
     // A trigger per knee: LT the left leg, RT the right. The brake moves off LT
     // to D-pad ↑, free in this setup unless the profile has bound it, until
@@ -284,6 +347,14 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     mapped.brake = key("x") || (!options.feet && down(12) && !dpadUpBound);
     mapped.carriage = key("c") ? 1 : arms ? Math.min(1, Math.hypot(r.x, r.y)) : 0;
     mapped.windup = key(",") ? 1 : arms ? r.x : 0;
+    if (options.experimental) {
+      // X / B swing the arms toward their side, eased so a press is a swing
+      // and not a flick (a flick twists the trunk hard enough to skid a foot).
+      const want = h.connected ? Number(down(1)) - Number(down(2)) : 0;
+      f.arms = moveToward(f.arms ?? 0, want, ARMS_RATE * SIM_DT);
+      if (!key(",")) mapped.windup = f.arms * ARMS_SWING;
+      if (!key("c")) mapped.carriage = Math.abs(f.arms);
+    }
   }
   const input = latchTurns(SCHEME.A, mapped, st, s.flips, options.twoFoot === true);
   if ((input.spin || s.move === MOVE.Spin) && (!options.twoFoot || modified)) input.pitch = Math.max(input.pitch, r.y);

@@ -492,6 +492,8 @@ export interface SkaterState {
   strokeMusicScale: number;
   /** The current stroke's pushPower, when its push gave one (absent otherwise). */
   strokeScale?: number;
+  /** The current stroke's pushKnee, when its push gave one (absent otherwise). */
+  strokeKnee?: number;
   /** The jump in progress, if any. sim/jump.ts owns every field. */
   jump: JumpState;
   /** The last jump that came down, as the technical panel would read it. */
@@ -667,6 +669,13 @@ export interface SkatingInput {
    */
   pushFoot?: number;
   pushPower?: number;
+  /**
+   * With `push`: the bend the pushing leg extends from, 0..1. The push is the
+   * leg straightening, so its force follows this bend easing to nothing over
+   * the stroke, instead of the knee as it now stands. Optional; absent, the
+   * stroke reads the pushing leg's knee as it always has.
+   */
+  pushKnee?: number;
   push: boolean;
   brake: boolean;
   /**

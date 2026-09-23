@@ -225,47 +225,82 @@ test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad
 
 // ── Experimental: the legs on the triggers, pumps and thumb strokes ─────────
 
-/** From 3 m/s on both feet for 1 s (2 s with `ticks`), the pad driven by `plan`. Speed, the pushes mapped, and whether it took off. */
+/** From 3 m/s, weight shared (X + B), the pad driven by `plan` each tick from rest. */
 function experiment(plan: (i: number, h: ControllerHardware) => void, ticks = 120) {
-  const r = rig("experimental", 3); r.h.buttons[7] = 0;
-  const pushes: string[] = [];
+  const r = rig("experimental", 3);
+  const pushes: string[] = [], inputs: ReturnType<typeof r.tick>["input"][] = [];
   let took = false;
   for (let i = 0; i < ticks && !r.s.fallen; i++) {
-    r.h.buttons[4] = r.h.buttons[5] = i < 2 ? 1 : 0;
+    r.h.buttons.fill(0); r.h.axes = [0, 0, 0, 0];
+    if (i < 2) r.h.buttons[1] = r.h.buttons[2] = 1;
     plan(i, r.h);
     const before = r.s.jump.phase, { input } = r.tick();
-    if (input.push) pushes.push(`${input.pushFoot}@${input.pushPower}`);
+    inputs.push(input);
+    if (input.push) pushes.push(`${input.pushFoot}@${input.pushPower!.toFixed(2)}`);
     if (before !== JUMP_PHASE.Air && r.s.jump.phase === JUMP_PHASE.Air) took = true;
   }
-  return { v: Math.hypot(r.s.vel.x, r.s.vel.y), pushes, took, fallen: r.s.fallen };
+  return { v: Math.hypot(r.s.vel.x, r.s.vel.y), pushes, took, fallen: r.s.fallen, inputs, st: r.st };
 }
+const near = (x: number, y: number) => Math.abs(x - y) < 0.005;
 
-test("experimental: a trigger pump or a thumb stroke pushes that leg; the two together push harder", () => {
-  // MEASURED from 3 m/s after 1 s: glide 2.891; right-trigger pump 3.010
-  // (right leg at 0.6); right thumb stroke, down then up, 2.991 (0.6); both
-  // within 0.125 s, 3.091 — the stroke upgraded to a full push mid-stroke.
+test("experimental: a pump pushes by how deep and how quick; the leg extends from its bend", () => {
+  // MEASURED from 3 m/s after 1 s: glide 2.891; a full bend snapped straight
+  // 3.175 (push 1.00); 0.65 let down slowly, 2.931 (0.24).
   const glide = experiment(() => {});
-  const pump = experiment((i, h) => { h.buttons[7] = i >= 10 && i < 20 ? 0.9 : 0; });
-  const stroke = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.9 : i >= 16 && i < 22 ? -0.9 : 0; });
-  const both = experiment((i, h) => {
-    h.buttons[7] = i >= 10 && i < 20 ? 0.9 : 0;
-    h.axes[3] = i >= 12 && i < 18 ? 0.9 : i >= 18 && i < 24 ? -0.9 : 0;
-  });
-  assert.deepEqual(pump.pushes, ["1@0.6"]);
-  assert.deepEqual(stroke.pushes, ["1@0.6"]);
-  assert.deepEqual(both.pushes, ["1@0.6", "1@1"]);
-  const near = (x: number, y: number) => Math.abs(x - y) < 0.005;
-  assert.ok(near(glide.v, 2.891) && near(pump.v, 3.010) && near(stroke.v, 2.991) && near(both.v, 3.091),
-    [glide, pump, stroke, both].map(r => r.v.toFixed(3)).join(" / "));
-  for (const r of [pump, stroke, both]) assert.equal(r.fallen, false);
+  const deep = experiment((i, h) => { h.buttons[7] = i >= 10 && i < 20 ? 1 : 0; });
+  const lazy = experiment((i, h) => { h.buttons[7] = i >= 10 && i < 20 ? 0.65 : i >= 20 && i < 40 ? 0.4 : 0; });
+  assert.deepEqual([deep.pushes, lazy.pushes], [["1@1.00"], ["1@0.24"]]);
+  assert.ok(near(glide.v, 2.891) && near(deep.v, 3.175) && near(lazy.v, 2.931), [glide, deep, lazy].map(r => r.v.toFixed(3)).join(" / "));
+  assert.equal(deep.inputs.find(x => x.push)!.pushKnee, 1, "the push extends from the full bend");
 });
 
-test("experimental: pumping the legs in turn builds speed; loading both and letting go is a jump", () => {
-  // MEASURED: alternating left/right pumps every 0.25 s for 2 s, 3 -> 3.276 m/s.
-  const pumping = experiment((i, h) => { const k = i % 60; h.buttons[6] = k < 10 ? 0.9 : 0; h.buttons[7] = k >= 30 && k < 40 ? 0.9 : 0; }, 240);
-  assert.ok(Math.abs(pumping.v - 3.276) < 0.005 && !pumping.fallen, `pumped to ${pumping.v.toFixed(3)}`);
-  assert.deepEqual(pumping.pushes.slice(0, 4), ["0@0.6", "1@0.6", "0@0.6", "1@0.6"], "each leg on its own beat");
+test("experimental: a thumb stroke pushes by its accuracy — full, straight and quick", () => {
+  // MEASURED: full bottom-to-top in a quarter of the gesture window, 2.987
+  // (1.00); a short stroke never reaches the top edge and does not push.
+  const clean = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 1 : i >= 16 && i < 19 ? -1 : 0; });
+  const crooked = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 1 : i >= 16 && i < 40 ? -0.85 : 0; h.axes[2] = i >= 16 && i < 40 ? 0.5 : 0; });
+  const short = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.65 : i >= 16 && i < 36 ? -0.65 : 0; });
+  assert.deepEqual(clean.pushes, ["1@1.00"]);
+  assert.ok(near(clean.v, 2.987), clean.v.toFixed(3));
+  assert.equal(crooked.pushes.length, 1);
+  assert.ok(Number(crooked.pushes[0].split("@")[1]) < 0.7, `a crooked, slow stroke pushes less (${crooked.pushes[0]})`);
+  assert.deepEqual(short.pushes, []);
+});
+
+test("experimental: pumping the legs in turn builds real speed, and never reads as a jump; loading both and letting go does", () => {
+  // MEASURED: alternating full pumps every 0.25 s for 2 s, 3 -> 4.061 m/s,
+  // each leg on its own beat at full strength, no takeoff. (Before the push
+  // extended from its bend, 3.276.)
+  const pumping = experiment((i, h) => { const k = i % 60; h.buttons[6] = k < 10 ? 1 : 0; h.buttons[7] = k >= 30 && k < 40 ? 1 : 0; }, 240);
+  assert.ok(near(pumping.v, 4.061) && !pumping.fallen && !pumping.took, `pumped to ${pumping.v.toFixed(3)}`);
+  assert.deepEqual(pumping.pushes.slice(0, 4), ["0@1.00", "1@1.00", "0@1.00", "1@1.00"]);
   const jump = experiment((i, h) => { h.buttons[6] = h.buttons[7] = i >= 10 && i < 50 ? 0.95 : 0; });
   assert.equal(jump.took, true, "load and release is the takeoff");
-  assert.deepEqual(jump.pushes, [], "and not a pump, on the ice or in the air");
+  assert.deepEqual(jump.pushes, [], "and not a pump");
+});
+
+test("experimental: X / B shift the weight and swing the arms; the stick clicks pick the toe", () => {
+  const left = experiment((i, h) => { h.buttons[2] = i >= 10 && i < 80 ? 1 : 0; }, 80);
+  assert.equal(left.st.full!.foot, 0, "X: weight to the left foot, and it stays");
+  const swing = left.inputs.map(x => x.windup);
+  assert.ok(swing[79] < -0.69 && swing[12] > -0.1, `arms swing left, eased (${swing[12].toFixed(2)} -> ${swing[79].toFixed(2)})`);
+  const right = experiment((i, h) => { h.buttons[1] = i >= 10 ? 1 : 0; }, 60);
+  assert.equal(right.st.full!.foot, 1, "B: the right foot");
+  assert.ok(right.inputs[59].windup > 0.5 && right.inputs[59].carriage > 0.7, "arms out to the right");
+  for (const click of [10, 11]) {
+    const pick = experiment((i, h) => { h.buttons[click] = i === 20 ? 1 : 0; }, 30);
+    assert.ok(pick.inputs[20].toe && !pick.inputs[21].toe, `${click === 10 ? "L3" : "R3"}: one toe pick`);
+  }
+});
+
+test("experimental: A asks for a turn and Y for rotation; held bumpers choose which", () => {
+  const ask = (buttons: number[]) => experiment((i, h) => { if (i >= 10) for (const b of buttons) h.buttons[b] = 1; }, 12).inputs[11];
+  assert.equal(ask([0]).turn, true, "A: three-turn gesture");
+  assert.equal(ask([4, 0]).bracket, true, "LB + A: bracket");
+  assert.equal(ask([3]).spin, true, "Y: spin");
+  assert.equal(ask([4, 3]).twizzle, true, "LB + Y: twizzle");
+  assert.equal(ask([5, 3]).inaBauer, true, "RB + Y: spiral");
+  assert.equal(ask([4, 5, 3]).inaBauer, true, "both + Y: Ina Bauer");
+  assert.equal(ask([4, 5, 3]).weight, 0.5, "the Ina Bauer is two-footed");
+  assert.equal(ask([0]).push, false, "A is not the push here");
 });

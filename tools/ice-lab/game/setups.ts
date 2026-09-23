@@ -9,7 +9,7 @@ import type { ControllerProfile, GameControlState } from "./full-controls.ts";
 export const SETUPS = [
   { id: "simulation", name: "Simulation", description: "One stick per blade, one trigger per knee, and the feet turn in the hips (feet layout in the controller profile). Blades scrape, dig and catch; the trunk twists; stops come from the feet and edges. Hold L3 for right-stick arms; the right blade retains its last command. Minimal added assistance." },
   { id: "explorer", name: "Blade Explorer", description: "Left stick controls lean and fore–aft pressure. Right stick controls arms, which twist the trunk. Blades stay parallel but scrape, dig and catch. Medium–high balance and speed-aware lean assistance; manual turn gestures and landings." },
-  { id: "experimental", name: "Experimental", description: "The operator's experiment. Triggers are the legs: pull to bend that knee, pump (bend then snap straight) to push with that leg; load and release the standing leg to jump. Thumbsticks are the feet and blades as in Simulation — side to side the edge, up/down heel/toe — and a quick bottom-to-top thumb stroke is that foot pushing too; a thumb stroke and a trigger pump of the same leg together push harder than either. Everything through the blades; minimal assistance." },
+  { id: "experimental", name: "Experimental", description: "The operator's experiment. Triggers are the legs: pull to bend, pump (bend deep, snap straight) to push — deeper and quicker is stronger; load and release the standing leg to jump. Thumbsticks are the feet and blades — side to side the edge, up/down heel/toe — and a bottom-to-top thumb stroke pushes that foot, stronger the fuller, straighter and quicker it is; a stroke and a pump of the same leg add. X / B shift the weight and swing the arms left / right. L3 / R3 pick the toe. A asks for a turn, Y for rotation; held bumpers choose which (LB+A bracket, RB+A cantilever; LB+Y twizzle, RB+Y spiral, both+Y Ina Bauer). The physics decides. Minimal assistance." },
   { id: "repertoire", name: "Full Repertoire", description: "Dedicated turn and glide bindings, assisted balance and optional landing coaching. Entries, jumps and combinations still depend on your skating." },
 ] as const;
 export type Setup = typeof SETUPS[number]["id"];
@@ -36,7 +36,7 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
 export function setupInput(c: Controls, s: SkaterState, setup: Setup, st: GameControlState, p: Params, profile: ControllerProfile, assistance = 0.75) {
   return fullInput(c, s, st, p, profile, {
     manual: setup !== "repertoire", twoFoot: setup === "simulation" || setup === "experimental",
-    feet: setup === "simulation" || setup === "experimental", pumps: setup === "experimental",
+    feet: setup === "simulation" || setup === "experimental", pumps: setup === "experimental", experimental: setup === "experimental",
     leanAssist: setup === "explorer" ? assistance : 0,
     repeatPush: setup !== "simulation" && setup !== "experimental",
   });

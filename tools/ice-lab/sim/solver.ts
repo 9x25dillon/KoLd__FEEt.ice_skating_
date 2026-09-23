@@ -504,7 +504,10 @@ export function step(
   const knee = s.knee;
   // The same bend rate, offset by how far the pushing leg's command sits from
   // the standing leg's. Zero offset without a split: exactly the body's knee.
-  const pushKnee = (): number => clamp(knee + (clamp(legTargets[s.strokeFoot], 0, 1) - kneeTarget), 0, 1);
+  const pushKnee = (): number => s.strokeKnee !== undefined
+    // A push that named its bend extends from it: the leg straightening over the stroke.
+    ? s.strokeKnee * clamp(s.strokeTime / p.strokeDuration, 0, 1)
+    : clamp(knee + (clamp(legTargets[s.strokeFoot], 0, 1) - kneeTarget), 0, 1);
   const split = clamp(axis(input.leanSplit, 0), -1, 1);
   const pitch = axis(input.pitch, 0), pitchSplit = clamp(axis(input.pitchSplit ?? 0, 0), -1, 1);
   // Each blade's own point on the rocker: the shared pitch, split apart.
@@ -578,6 +581,7 @@ export function step(
     // Two-beat alternation, unless the push names its leg.
     s.strokeFoot = (input.pushFoot === 0 || input.pushFoot === 1 ? input.pushFoot : 1 - s.strokeFoot) as Foot;
     s.strokeScale = input.pushPower === undefined ? undefined : clamp(axis(input.pushPower, 1), 0, 1);
+    s.strokeKnee = input.pushKnee === undefined ? undefined : clamp(axis(input.pushKnee, 0), 0, 1);
     // Legs, once per push rather than per tick: SkateSolver.cpp's own
     // S.LegPool -= 0.011f * Knee, at the moment the push begins.
     if (staminaOn) s.legs = clamp(s.legs - p.staminaLegsPerPush * pushKnee(), 0, 1);
@@ -609,6 +613,8 @@ export function step(
   // stronger push. It never weakens one.
   if (s.strokeTime > 0 && input.pushFoot === s.strokeFoot && input.pushPower !== undefined && s.strokeScale !== undefined)
     s.strokeScale = Math.max(s.strokeScale, clamp(axis(input.pushPower, 1), 0, 1));
+  if (s.strokeTime > 0 && input.pushFoot === s.strokeFoot && input.pushKnee !== undefined && s.strokeKnee !== undefined)
+    s.strokeKnee = Math.max(s.strokeKnee, clamp(axis(input.pushKnee, 0), 0, 1));
   const stroking = s.strokeTime > 0;
 
   // ── 1c. or a turn's pivot, in place of sections 2-5 ───────────────────────

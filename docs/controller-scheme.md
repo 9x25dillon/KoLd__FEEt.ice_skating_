@@ -152,7 +152,7 @@ godot4 --headless --path games/ice-run-godot -- --smoke-test --full-controls
 ```
 
 First-time Godot setup still requires the full preparation command to generate audio.
-Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/31`. The three setups record final mapped
+Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/32`. The three setups record final mapped
 inputs and parameters under label D; they add no solver arithmetic changes. Older
 builds reject D-labelled clips; current builds continue accepting A/B/C clips.
 
@@ -185,18 +185,24 @@ edges; pushed together, on their outside edges, which catch.
 
 ## Experimental (the operator's)
 
-The legs on the triggers, the feet and blades on the thumbs. Everything through the blades
-(slip, trunk, feet), minimal assistance, no Cruise.
+The legs on the triggers, the feet and blades on the thumbs, weight and arms on X / B, the
+toe picks on the stick clicks, and A / Y asking for moves that the physics then performs or
+refuses. Everything through the blades (slip, trunk, feet), minimal assistance, no Cruise.
+The other three setups are unchanged.
 
 | Input | Does |
 | --- | --- |
-| LT / RT | left / right knee: pull to bend. **Pump** — past 60% then back under 20% within 0.25 s — is that leg pushing. Load the standing leg and let go: the jump |
-| Left / right stick | that foot and blade: side to side the edge, up/down heel/toe. A **thumb stroke** — down past 60% then up past 60% within 0.25 s — is that foot pushing |
-| Pump + thumb stroke, same leg, within 0.125 s | one full push (either alone pushes at 0.6) |
-| Feet in the hips | the feet layout, as Simulation |
-| Everything else | as Simulation |
+| LT / RT | left / right knee: pull to bend. **Pump** — past 60% then back under 20% within 0.25 s — is that leg pushing, as strong as the bend was deep and the snap quick; the push extends the leg from that bend. Load the standing leg and let go: the jump |
+| Left / right stick | that foot and blade: side to side the edge, up/down heel/toe. A **thumb stroke** — down past 60% then up past 60% within 0.25 s — is that foot pushing, as strong as it was full, straight and quick |
+| Pump + thumb stroke, same leg, within 0.125 s | add, up to a full push |
+| X / B | weight to the left / right foot (it stays), arms swing left / right (eased, not a flick); both: shared weight |
+| L3 / R3 | toe pick |
+| A | turn: the three-turn gesture; LB + A bracket; RB + A cantilever |
+| Y | rotation: spin; LB + Y twizzle; RB + Y spiral; LB + RB + Y Ina Bauer |
+| D-pad | the feet (D-pad layout): ← / → turn both, LB or RB + ← / → toes in / out, ↑ straightens |
 
-Measured from 3 m/s over 1 s: glide 2.891, one pump 3.010, one thumb stroke 2.991, both
-together 3.091; alternating pumps every 0.25 s for 2 s, 3.276. The thresholds and the 0.6 are
-authored starting points for tuning on the pad (`game/full-controls.ts`, `PUMP_*`, `STROKE_EDGE`,
-`GESTURE_TICKS`, `PAIR_TICKS`, `SINGLE_PUSH`).
+Measured from 3 m/s over 1 s: glide 2.891; one deep snapped pump 3.175; one lazy pump 2.931;
+one clean thumb stroke 2.987. Alternating full pumps every 0.25 s for 2 s: 3 → 4.061 m/s, with
+no takeoff. The thresholds and weights are authored starting points for tuning on the pad
+(`game/full-controls.ts`: `PUMP_*`, `STROKE_EDGE`, `GESTURE_TICKS`, `PAIR_TICKS`, `SNAP_TICKS`,
+`ARMS_*`).
