@@ -528,6 +528,8 @@ export interface SkaterState {
   twist?: number;
   twistRate?: number;
   yawDev?: number;
+  /** torqueMode 1 only: last tick's carve rate, rad/s, against which yawDev keeps the body's spin. */
+  yawSteer?: number;
   /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.

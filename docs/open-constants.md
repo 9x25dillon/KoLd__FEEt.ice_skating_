@@ -129,6 +129,7 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
   - Measured (Simulation params, 6 m/s): a slow wind-up on a lean-0.4 edge winds 0.80 rad with the feet held; a flick on a flat blade pivots the feet ~25° the opposite way; on an edge the toe pivots further than the heel (lean 0.2: 22° vs 19°)
   - Fixed by: shoulder-hip separation and skid onset from video of wind-ups and three-turn preparations
   - Model limit: the carve's own turning is the legs' (not charged to the pivot grip) — a momentum-true version where all turning comes through the ice cannot carve at any contact depth up to 2 mm (measured)
+  - Stage C2: the legs steer only a weighted foot — engagement is smoothstep(0.3 g, 0.8 g) of the support blade's load (authored; tying it to edge depth made the balance loop's own counter-steer into carried spin and the skater fell, measured). Under an unweighted foot the body keeps its spin. The trunk's PD is solved implicitly (explicit damping overshot with the feet free). Measured: carve at lean 0.5, shoulders led then released on a 0.15 s rise — blades 34° across, back in line on the sink; a smooth 0.2 s wind-up release on a lean-0.5 edge takes the jump's L from 4.61 to 8.57, a snapped one drops it to 2.38. A full 90° hockey stop needs hip rotation of the feet (stage B2)
 
 - **`biteC0`** — lateral holding capacity of a flat blade, per unit load
   - Value: `0.08`

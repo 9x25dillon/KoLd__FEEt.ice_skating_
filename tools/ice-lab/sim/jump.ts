@@ -34,6 +34,14 @@ import type { Params } from "./params.ts";
 import { clamp, saturate, lerp, moveToward, rotate, normalizeOr, wrapPi, dot, mul, len, add } from "./math.ts";
 
 export const JUMP_MODE = { Off: 0, Hop: 1, Full: 2 } as const;
+
+/**
+ * kg m². The upper body's share of the whole (torqueMode, sim/solver.ts's
+ * trunkTorque): the body's inertia at this carriage less the lower body's.
+ */
+export function upperInertia(p: Params, carriage: number): number {
+  return Math.max(0.1, lerp(p.inertiaTucked, p.inertiaOpen, clamp(carriage, 0, 1)) - p.lowerBodyInertia);
+}
 export const JUMP_PHASE = { None: 0, Load: 1, Air: 2 } as const;
 
 /** The six jumps, in data/jump-definitions.csv's row order. */
@@ -273,8 +281,18 @@ export function jumpGround(
     && (s.tick - J.windupTick) * dt <= p.windupWindow;
   let whip = saturate(finite(input.carriage, 0));
   if (J.armed) whip = Math.max(whip, p.jumpAssist * J.windupPeak);
+  // With the trunk modelled (torqueMode) the body is two, each with its own
+  // spin past the carve: the lower's yawDev, the upper's yawDev + twistRate,
+  // each at its own inertia. A twist cannot make spin by itself — only the
+  // ice holding the feet while the shoulders swing can — so a release that
+  // pivots the feet instead leaves with nothing.
+  let rate = p.jumpRotBias * s.yawRate;
+  if (s.twistRate !== undefined) {
+    const dev = s.yawDev ?? 0, Iu = upperInertia(p, finite(input.carriage, 0));
+    rate = p.jumpRotBias * (s.yawRate - dev) + ((p.lowerBodyInertia + Iu) * dev + Iu * s.twistRate) / p.inertiaOpen;
+  }
   J.angMomentum = p.jumpMode >= JUMP_MODE.Full
-    ? p.inertiaOpen * Math.max(0, p.jumpRotBias * s.yawRate + s.spinCarry + p.jumpWhip * whip) * (0.80 + 0.20 * q)
+    ? p.inertiaOpen * Math.max(0, rate + s.spinCarry + p.jumpWhip * whip) * (0.80 + 0.20 * q)
     : 0;
   J.windupTick = -1;
   J.windupPeak = 0;

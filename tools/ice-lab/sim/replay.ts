@@ -207,7 +207,14 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       optional twist/twistRate/yawDev, written only in torqueMode 1 and
 //       otherwise absent, so no digest moves. Fixture rebased, every digest
 //       unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/26";
+//   /27 Stage C2: with slipMode 1 the carve also fails when the whole body's
+//       mass cannot be turned on the grip left (rising off the edge); with
+//       torqueMode 1 the legs steer only a weighted foot (yawSteer, optional
+//       state, absent otherwise), the trunk's PD is implicit, windup is read
+//       clockwise-positive as SkatingInput documents, and the takeoff counts
+//       each body's own spin. slipMode/torqueMode 1 clips from /26 must be
+//       re-recorded; the fixture was rebased with every digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/27";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

@@ -49,7 +49,7 @@
 // residual slip velocity, which is the same idea one derivative apart, but the
 // bible's version is the project's own and reads more directly on screen.
 
-import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos, lerp, rng } from "./math.ts";
+import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos, lerp, rng, smoothstep } from "./math.ts";
 import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT, MOVE, HELD } from "./types.ts";
 import type {
   SkaterState, BladeState, SkatingInput, EdgeEvent, Foot, Fall,
@@ -61,7 +61,7 @@ import type { IceGrid } from "./ice.ts";
 import type { Vec2 } from "./math.ts";
 import { onBeat, accentCredit } from "./music.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
-import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE } from "./jump.ts";
+import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE, upperInertia } from "./jump.ts";
 import {
   newTurn, newSpin, newInaBauer, newSpiral, noMove, turnStart, twizzleStart, spinStart, inaBauerStart, inaBauerEnd,
   spiralStart, spiralEnd,
@@ -211,23 +211,55 @@ function pivotCapacity(s: SkaterState, p: Params): number {
  * trunk's reaction and take out any deviation, up to pivotCapacity; past that
  * it pivots (yawDev), resisted only by the scrape's share of the capacity.
  * Returns the lower body's yaw rate.
+ *
+ * STAGE C2: the legs steer only a foot with weight on it (engagement, 0..1:
+ * none below 0.3 g on the support blade, all above 0.8 g). Where the carve's
+ * rate changes under an unweighted foot, the body keeps the spin it had — the
+ * change goes into yawDev for both bodies — so a three-turn's rise spins
+ * through and an unweighted skater keeps turning while the travel does not.
+ * (Engagement by edge depth was measured first: the balance loop's own
+ * counter-steer from upright then became carried spin and the skater fell.)
  */
 function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input: SkatingInput): number {
   const Il = p.lowerBodyInertia;
-  const Iu = Math.max(0.1, lerp(p.inertiaTucked, p.inertiaOpen, clamp(axis(input.carriage, 0), 0, 1)) - Il);
-  const twist = s.twist ?? 0, twistRate = s.twistRate ?? 0, dev0 = s.yawDev ?? 0;
-  const target = clamp(axis(input.windup, 0), -1, 1) * p.twistMax;
-  // On the upper body; the lower takes it back.
-  const tauM = clamp(p.twistStiffness * (target - twist) - p.twistDamping * twistRate,
-    -p.twistTorqueMax, p.twistTorqueMax);
-  // The ice torque that would hold the lower body on its carve this tick.
-  const need = tauM - Il * dev0 / dt;
+  const Iu = upperInertia(p, axis(input.carriage, 0));
+  const twist = s.twist ?? 0, twistRate = s.twistRate ?? 0;
+  const b = s.blade[s.supportFoot];
+  const engaged = smoothstep(0.3, 0.8, b.normalLoad / (p.mass * p.gravity));
+  // What the legs could not carry of the carve's change stays as the body's own spin.
+  const dev0 = (s.yawDev ?? 0) + ((s.yawSteer ?? steer) - steer) * (1 - engaged);
+  s.yawSteer = steer;
+  // SkatingInput.windup is clockwise-positive; twist is counter-clockwise.
+  const target = -clamp(axis(input.windup, 0), -1, 1) * p.twistMax;
+  // The trunk's PD is solved implicitly: with the feet free the two bodies are
+  // light (reduced inertia ~0.36 kg m²) and an explicit step of this damping
+  // overshoots every tick. `a` is how much one N m changes the twist rate this
+  // tick, `base` the twist rate it would have without the trunk's torque.
+  const e = target - twist;
+  const trunk = (a: number, base: number): [number, number] => {
+    let rate = (base + a * p.twistStiffness * e) / (1 + a * (p.twistStiffness * dt + p.twistDamping));
+    let tau = p.twistStiffness * (e - rate * dt) - p.twistDamping * rate;
+    if (Math.abs(tau) > p.twistTorqueMax) { tau = sign(tau) * p.twistTorqueMax; rate = base + a * tau; }
+    return [rate, tau];
+  };
+  // Feet held on the carve: only the upper body moves; the ice answers the
+  // reaction and takes out any spin the lower body carried, up to its grip.
+  const [heldRate, heldTau] = trunk(dt / Iu, twistRate + dev0);
+  const need = heldTau - Il * dev0 / dt;
   const cap = pivotCapacity(s, p);
-  const dev = Math.abs(need) <= cap ? 0 : dev0 + (sign(need) * cap * scrapeShare(p) - tauM) / Il * dt;
-  const upper = dev0 + twistRate + tauM / Iu * dt;
+  let dev: number, rate: number;
+  if (Math.abs(need) <= cap) {
+    dev = 0; rate = heldRate;
+  } else {
+    // The feet pivot, resisted only by the scrape's share of that grip.
+    const ice = sign(need) * cap * scrapeShare(p);
+    const [freeRate, freeTau] = trunk(dt * (1 / Iu + 1 / Il), twistRate - ice / Il * dt);
+    dev = dev0 + (ice - freeTau) / Il * dt;
+    rate = freeRate;
+  }
   s.yawDev = dev;
-  s.twistRate = upper - dev;
-  s.twist = twist + s.twistRate * dt;
+  s.twistRate = rate;
+  s.twist = twist + rate * dt;
   return steer + dev;
 }
 
@@ -771,6 +803,17 @@ export function step(
 
   if (!turning) {
     const steer = yawDenom > 1e-6 ? yawNumer / yawDenom : 0;
+    // The whole body's mass has to be turned, not only what the blades carry:
+    // rising off the edge leaves the grip too small for the curve, and the
+    // travel runs straight on while the body keeps turning.
+    if (slipOn && !carveLost) {
+      let grip = 0;
+      for (let i = 0; i < 2; i++) {
+        const b = s.blade[i];
+        if (b.inContact && !(stroking && i === s.strokeFoot)) grip += b.biteCapacity;
+      }
+      if (p.mass * Math.abs(steer) * len(s.vel) > grip) carveLost = true;
+    }
     const yawRate = torqueOn ? trunkTorque(s, p, dt, steer, input) : steer;
     s.yawRate = yawRate;
     const dPsi = yawRate * dt;
