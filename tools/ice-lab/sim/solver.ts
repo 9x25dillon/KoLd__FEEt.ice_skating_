@@ -49,7 +49,7 @@
 // residual slip velocity, which is the same idea one derivative apart, but the
 // bible's version is the project's own and reads more directly on screen.
 
-import { add, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos, lerp, rng, smoothstep } from "./math.ts";
+import { add, sub, mul, dot, len, perpLeft, rotate, normalizeOr, clamp, sign, asinClamped, moveToward, quantize, crc32, v2, tan, sin, cos, lerp, rng, smoothstep } from "./math.ts";
 import { EDGE_CODE_NONE, REGIME, FALL, EVENT, FOOT, MOVE, HELD } from "./types.ts";
 import type {
   SkaterState, BladeState, SkatingInput, EdgeEvent, Foot, Fall,
@@ -393,6 +393,56 @@ const legInput = (input: SkatingInput): SkatingInput =>
 /** Metres each foot of an Ina Bauer sits from the body along the track, lead ahead. */
 const INA_BAUER_STRIDE = 0.3;
 
+/**
+ * THE FORE-AFT PENDULUM (pitchMode). big_reffg.txt §3.5: the lateral
+ * pendulum's mirror along the support blade — along the blade, not the body,
+ * because across it the edge holds the body and along it only the ankle can:
+ * with the feet turned off the body (a hockey stop, a spread eagle) the
+ * braking is across the blades and the ankle is not asked to carry it. The
+ * body leans `pitch` toward the toe; the ice under the blades accelerates
+ * the base `aFwd` along the blade (braking is negative, and pitches the body
+ * forward) — the push, drag and the rink's slope act through the hips and
+ * the body, and an edge's hold and a skid's friction act across the blade;
+ * none of them turns the body about the ankle. The ankle's one
+ * authority is where along the blade the ice pushes back, the contact `c`
+ * from the blade's centre:
+ *
+ *   L pitch'' = g (sin pitch - c / L) - aFwd cos pitch.
+ *
+ * `c` is clamped to the loaded blades' reach, half a blade length. The ankle
+ * steers by the capture point (Pratt 2006; Hof 2008's extrapolated centre of
+ * mass): the COM's offset from where this acceleration would balance it,
+ * plus its rate over sqrt(g / L) — the one point a contact held there brings
+ * the body to rest over. The contact goes to the capture point, and
+ * `pitchGain` of its distance past the lean asked beyond it, which draws the
+ * capture point to the asked lean. With no acceleration the body settles over
+ * contactS = 0.5 + 0.5 x input.pitch, pitchMode 0's direct placement. A
+ * capture point off the blade cannot be brought back by the ankle: held off
+ * as long as the lateral balance timeout, the skater is down.
+ */
+function pitchTick(
+  s: SkaterState, p: Params, dt: number, alive: boolean, pitchIn: number, velStart: Vec2, velBlades: Vec2, L: number,
+): void {
+  const g = p.gravity, along = s.blade[s.supportFoot].tangent, w = Math.sqrt(g / L);
+  const aFwd = dot(sub(velBlades, velStart), along) / dt;
+  let reach = 0;
+  for (const b of s.blade)
+    if (b.inContact) reach = Math.max(reach, 0.5 * p.bladeLength * Math.abs(dot(b.tangent, along)));
+  const capture = (phi: number, rate: number): number =>
+    L * sin(phi) - (aFwd * L / g) * cos(phi) + L * cos(phi) * rate / w;
+  let phi = s.pitch ?? 0, rate = s.pitchRate ?? 0, c = 0;
+  if (alive && reach > 0) {
+    const xi = capture(phi, rate), asked = clamp(pitchIn, -1, 1) * 0.5 * p.bladeLength;
+    c = clamp(xi + p.pitchGain * (xi - asked), -reach, reach);
+  }
+  rate += ((g * (sin(phi) - c / L) - aFwd * cos(phi)) / L) * dt;
+  phi = clamp(phi + rate * dt, -1.55, 1.55);
+  s.pitch = phi;
+  s.pitchRate = rate;
+  s.pitchContact = c;
+  s.pitchOffTime = Math.abs(capture(phi, rate)) > reach ? (s.pitchOffTime ?? 0) + dt : 0;
+}
+
 // ── construction ────────────────────────────────────────────────────────────
 
 function makeBlade(): BladeState {
@@ -419,6 +469,8 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     lobeDir: 0, lobeLastDir: 0, lobeCandDir: 0, lobeCandT: 0, lobeAlternations: 0, lobeRepeats: 0,
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
+    // Present only where the pendulum is, so a standing-up retry resets it too.
+    ...(p.pitchMode === 1 ? { pitch: 0, pitchRate: 0, pitchContact: 0, pitchOffTime: 0 } : {}),
   };
 }
 
@@ -590,6 +642,19 @@ export function step(
   const ina = s.move === MOVE.InaBauer;
   const spiral = s.move === MOVE.Spiral;
   const moveThisTick = s.move;
+  // pitchMode 1: the fore-aft pendulum's ankle places the shared contact; a
+  // pivot or a spin keeps the input's direct placement (model limit).
+  const pitchOn = p.pitchMode === 1 && !turning;
+  // What only the ice did along the blade pitches the body: the push goes up
+  // the leg into the hips, and drag and the rink's slope act on the whole
+  // body — none of them turns it about the ankle — while an edge's hold and
+  // a skid's friction are across the blade (section 5 says which is which).
+  const velStart = v2(s.vel.x, s.vel.y);
+  let comDv = v2(0, 0), carveDv = v2(0, 0), velBlades = velStart;
+  if (pitchOn) {
+    const shared = clamp(2 * (s.pitchContact ?? 0) / p.bladeLength, -1, 1);
+    for (let i = 0; i < 2; i++) contactS[i] = clamp(0.5 + 0.5 * clamp(shared + (i === 0 ? -pitchSplit : pitchSplit), -1, 1), 0, 1);
+  }
 
   // ── 1. legs -> normal load ────────────────────────────────────────────────
   // A deep knee is more push, more bite and more jump impulse; here it only
@@ -976,7 +1041,12 @@ export function step(
       // An edge that holds carries the travel round with it. With slip on,
       // one that cannot leaves the travel behind for the slip solve — and a
       // foot the trunk pivots off its carve carries only the carve's share.
-      if (!slipOn || !carveLost) s.vel = rotate(s.vel, torqueOn ? steer * dt : dPsi);
+      if (!slipOn || !carveLost) {
+        const before = s.vel;
+        s.vel = rotate(s.vel, torqueOn ? steer * dt : dPsi);
+        // The edge's own force, square to the blade: it carries no pitch.
+        if (pitchOn) carveDv = add(carveDv, sub(s.vel, before));
+      }
     }
     if (footOn) {
       // The body turns; the blades follow it at their own angles in the hips.
@@ -1003,7 +1073,8 @@ export function step(
   // ── 5. losses ─────────────────────────────────────────────────────────────
   let speed = len(s.vel);
   if (!turning && speed > 1e-6) {
-    const dir = mul(s.vel, 1 / speed);
+    const dir = mul(s.vel, 1 / speed), speed0 = speed;
+    let glideDv = 0;
 
     // Skid scrub, following SkateSolver.cpp: mu_skid * (excess acceleration)
     // * dt is a speed decrement, which is where the snow comes from.
@@ -1016,6 +1087,7 @@ export function step(
       if (!b.inContact) continue;
       // With slip on, the scrape is already the slip solve's sideways force.
       dv += muLong(b.tilt, !slipOn && b.latSlipAccel > 0, p, condAt(b.contact)) * b.normalLoad / p.mass * dt;
+      if (pitchOn) glideDv += muLong(b.tilt, false, p, condAt(b.contact)) * b.normalLoad / p.mass * dt;
     }
     if (input.brake) dv += p.muSkid * nTotal / p.mass * dt;
     // An Ina Bauer's trailing foot is never turned out quite square to the lead.
@@ -1038,8 +1110,15 @@ export function step(
     // or through a turn's pivot, which leave this block before it runs.
     if (p.rinkRelief !== 0) speed = Math.max(0, speed - dv + dot(rinkSlopeAccel(s.pos, p), dir) * dt);
     else speed = Math.max(0, speed - dv);
+    // Of this block's losses only the glide's friction runs along the blade.
+    // Drag and the slope act on the body; a skid's friction (muSkid, the
+    // scrub, the brake, an Ina Bauer's trailing foot) runs across it, and
+    // with slipMode 1 the slip solve has already put the scrape there.
+    if (pitchOn) comDv = mul(dir, speed - speed0 + glideDv);
     s.vel = mul(dir, speed);
   }
+
+  if (pitchOn) velBlades = v2(s.vel.x - comDv.x - carveDv.x, s.vel.y - comDv.y - carveDv.y);
 
   // ── 5b. stroke ────────────────────────────────────────────────────────────
   // You push SIDEWAYS against an edge. A blade offers almost nothing along its
@@ -1145,12 +1224,20 @@ export function step(
   s.leanRate += leanAccel * dt;
   s.lean = clamp(s.lean + s.leanRate * dt, -1.55, 1.55);
   s.comZ = L * cos(s.lean);
+  if (pitchOn) {
+    pitchTick(s, p, dt, alive, pitch, velStart, velBlades, L);
+    // The COM a leg length from the base, leaning both ways at once.
+    const across = L * sin(s.lean), along = L * sin(s.pitch ?? 0);
+    s.comZ = Math.sqrt(Math.max(0, L * L - across * across - along * along));
+  }
 
   // Blade contacts hang off the base of the pendulum, not off the COM. In a
   // turn the pendulum is in the travel frame, and so are they.
   const frameH = moveThisTick === MOVE.Turn || moveThisTick === MOVE.Twizzle ? turnFrame(s) : s.heading;
   const right = mul(perpLeft(frameH), -1);
-  const base = add(s.pos, mul(right, L * sin(s.lean)));
+  let base = add(s.pos, mul(right, L * sin(s.lean)));
+  // Pitched toward the toe, the boots are behind the centre of mass.
+  if (pitchOn) base = add(base, mul(s.blade[s.supportFoot].tangent, -L * sin(s.pitch ?? 0)));
   for (let i = 0; i < 2; i++) {
     const off = s.supportMode === 2 ? p.stanceHalfWidth : 0;
     s.blade[i].contact = add(base,
@@ -1230,6 +1317,7 @@ export function step(
     let reason: Fall = FALL.None;
     if (Math.abs(s.lean) > p.fallLean) reason = FALL.LeanExceeded;
     else if (s.balanceErrorTime > p.fallErrorTime) reason = FALL.BalanceTimeout;
+    else if (pitchOn && (s.pitchOffTime ?? 0) > p.fallErrorTime) reason = FALL.Pitched;
 
     if (reason !== FALL.None) {
       s.fallReason = reason;

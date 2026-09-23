@@ -730,6 +730,22 @@ export interface Params {
   freeLegStiffness: number;
   freeLegDamping: number;
   freeLegTorqueMax: number;
+
+  // ── the fore-aft pendulum ─────────────────────────────────────────────────
+  /**
+   * 0: SkatingInput.pitch puts the contact on the rocker directly, and the
+   * body has no fore-aft lean. 1: the body is a second inverted pendulum
+   * along the support blade (big_reffg.txt §3.5, the lateral one's mirror).
+   * The pitch input asks for a lean toward toe or heel; the ankle moves the
+   * contact along the blade to hold it, and the blade's own length is its
+   * whole authority. Braking pitches the body forward, speeding up pitches it
+   * back; past what the blade can catch, the skater goes down. With no
+   * acceleration the contact settles where pitch 0 used to put it directly.
+   */
+  pitchMode: number;
+  /** How hard the ankle draws the capture point to the asked lean: 1 closes
+   *  the gap at the pendulum's own rate, sqrt(g / L). Authored. */
+  pitchGain: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -959,6 +975,9 @@ export const DEFAULT_PARAMS: Params = {
   freeLegDamping: 20,
   freeLegTorqueMax: 100,
 
+  pitchMode: 0,
+  pitchGain: 1,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -1129,6 +1148,8 @@ export function validate(p: Params): string[] {
   if (!(p.freeLegMass > 0 && p.freeLegMass < 0.3 && p.freeLegReach > 0 && p.freeLegReach < 1 && p.freeLegArc > 0 && p.freeLegArc < Math.PI))
     errs.push("free leg mass share 0-0.3, reach 0-1 m, arc 0-π");
   if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
+  if (![0, 1].includes(p.pitchMode)) errs.push("pitchMode is 0 (the input sets the contact) or 1 (the ankle balances a fore-aft lean)");
+  if (!(p.pitchGain > 0)) errs.push("pitchGain must be positive");
   if (![0, 1].includes(p.speedSpinMode)) errs.push("speedSpinMode is 0 (the block lifts) or 1 (it also turns the body)");
   if (![0, 1].includes(p.footMode)) errs.push("footMode is 0 (blades along the body) or 1 (each foot turns in its hip)");
   if (p.footMode === 1 && p.slipMode !== 1) errs.push("footMode 1 needs slipMode 1: a turned blade must be able to scrape");

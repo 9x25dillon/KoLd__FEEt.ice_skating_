@@ -19,6 +19,9 @@
 // Explorer and Simulation gained slip and the trunk; a fourth setup,
 // Experimental, maps pumps, thumb strokes, X/B weight and arms, L3/R3 toe
 // picks, A/Y move families, automatic back crossovers and the free leg.
+//
+// Re-recorded (2026-09-23, solver /36): the contract bump alone (pitchMode,
+// 0 everywhere); every mapped input is unchanged.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";

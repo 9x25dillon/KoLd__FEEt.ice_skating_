@@ -251,7 +251,11 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       the legs' engagement reads the whole load on the ice (on two feet
 //       each blade's half had read as rising off it). slip/torque clips from
 //       /34 must be re-recorded; the fixture was rebased, digests unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/35";
+//   /36 The fore-aft pendulum (pitchMode, 0 everywhere): Params gained
+//       pitchMode and pitchGain; SkaterState optional pitch/pitchRate/
+//       pitchContact/pitchOffTime, absent unless pitchMode is 1; FALL gained
+//       Pitched (6). Fixture rebased, every digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/36";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
