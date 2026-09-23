@@ -70,6 +70,12 @@ toward coverage only after the value has been checked against the primary source
 both. [ice-literature.md](ice-literature.md) marks every number it records as measured, modelled or
 secondary.
 
+**The authors' own abstract counts as the primary source for the values it states** (operator's
+decision, 2026-09-22, made when both glide papers turned out to be closed access). That covers only
+what the abstract itself says. A number, spread or condition that appears only in another paper's quote
+of the full text stays secondary, and so does anything the abstract leaves out. The case's `notes` say
+which values came from the abstract.
+
 **Derived cases check the implementation, not the model.** A derived case can find a sign error, an
 integration error at 120 Hz, or a regression. It cannot show that the model matches reality, because
 it only compares the solver with the equations it was written from. Derived cases are part of the
