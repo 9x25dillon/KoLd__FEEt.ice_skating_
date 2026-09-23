@@ -42,15 +42,17 @@ var sequence: Array = ["glide","edge","jump","spin","pose"]
 var camera_mode := 0
 var follow_direction := Vector3(1,0,0)
 var music_enabled := true
-var beginner := true
-var scheme := 1
+var beginner := false
+var scheme := 3
+var skating_setup := "explorer"
+var assistance := 0.75
 var controller_profile: Dictionary = {}
 var saved_controller_profile: Dictionary = {}
 var track := 0
 var profile := 0
 var character := 0
 var costume := 0
-var cruise := true
+var cruise := false
 var push_pending := false
 var toe_pending := false
 var trick_pending := false
@@ -70,11 +72,22 @@ const SKIN_SURFACES := 7
 
 func _ready() -> void:
 	boot_test = "--smoke-test" in OS.get_cmdline_user_args()
+	if boot_test:
+		skating_setup = ""
+		scheme = 1
+		beginner = true
+		cruise = true
 	screenshot_test = "--capture" in OS.get_cmdline_user_args()
 	if boot_test and "--full-controls" in OS.get_cmdline_user_args():
 		scheme = 3
 	if not boot_test and not screenshot_test:
 		load_preferences()
+	if not skating_setup.is_empty():
+		scheme = 3
+		if skating_setup != "repertoire":
+			beginner = false
+		if skating_setup == "simulation":
+			cruise = false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--costume="):
 			costume = maxi(int(arg.trim_prefix("--costume=")),0)
@@ -345,10 +358,25 @@ func show_page(page: String) -> void:
 		menu.add_child(button("← Back",func():show_page("home")))
 	elif page == "settings":
 		clear_menu("Your skating setup", "Changes apply to your next skate. Keyboard and analog controller are supported. Face buttons request moves; the physics decides what is possible.")
-		menu.add_child(button("Assist: "+("Beginner" if beginner else "Simulation"),func():beginner=not beginner;show_page("settings")))
-		menu.add_child(button("Control: "+["Lean & load","Assisted steering","Two-foot control","Full repertoire"][scheme],func():scheme=(scheme+1)%4;show_page("settings")))
+		for entry in catalog.get("setups",[]):
+			var setup_id: String = entry.id
+			menu.add_child(button(("• " if skating_setup == setup_id else "")+str(entry.name),func():
+				skating_setup=setup_id;scheme=3;beginner=setup_id=="repertoire";cruise=false;show_page("settings")))
+			if skating_setup == setup_id:
+				menu.add_child(paragraph(str(entry.description),14))
+		if skating_setup == "explorer":
+			var assist_label := label("Balance & lean assistance: %d%%" % roundi(assistance*100),14)
+			menu.add_child(assist_label)
+			var assist_slider := HSlider.new()
+			assist_slider.min_value=.5;assist_slider.max_value=1;assist_slider.step=.05;assist_slider.value=assistance
+			assist_slider.value_changed.connect(func(value: float):assistance=value;assist_label.text="Balance & lean assistance: %d%%" % roundi(value*100))
+			menu.add_child(assist_slider)
+		if skating_setup.is_empty() or skating_setup == "repertoire":
+			menu.add_child(button("Landing coach: "+("On" if beginner else "Off"),func():beginner=not beginner;show_page("settings")))
+		menu.add_child(button("Legacy override: "+["Lean & load","Assisted steering","Two-foot control","Full repertoire"][scheme],func():skating_setup="";scheme=(scheme+1)%4;show_page("settings")))
 		menu.add_child(button("Controller tuning & bindings",func():show_page("controller")))
-		menu.add_child(button("Cruise: "+("On" if cruise else "Off"),func():cruise=not cruise;show_page("settings")))
+		if skating_setup != "simulation":
+			menu.add_child(button("Cruise: "+("On" if cruise else "Off"),func():cruise=not cruise;show_page("settings")))
 		menu.add_child(button("Music: "+("On" if music_enabled else "Off"),func():music_enabled=not music_enabled;show_page("settings")))
 		menu.add_child(label("Skater",16))
 		var character_picker := OptionButton.new()
@@ -380,13 +408,16 @@ func show_page(page: String) -> void:
 			profile_picker.selected = profile
 			profile_picker.item_selected.connect(func(index: int):profile=index)
 			menu.add_child(profile_picker)
-		menu.add_child(paragraph("Full repertoire: dedicated turns and glides. Open Controller tuning & bindings for your current layout. RT loads/releases jumps; LT only brakes. Bumpers retain the chosen foot.\n\n" if scheme == 3 else "Controller: left stick steers; RT loads the knee; A pushes; Y spins; B turns; X twizzles; LT taps the toe, holds the brake; bumpers choose the foot; right stick opens the arms. D-pad up requests the Beginner jump; down holds the low pose.\n\nKeyboard: Q/E choose the foot; W/S move the rocker; F plants the toe; comma winds up a jump; I holds Ina Bauer; N requests a bracket. R restarts. Esc pauses.",14))
+		if skating_setup in ["simulation","explorer"]:
+			menu.add_child(paragraph("Manual turns: tap B for three-turn; transfer foot for mohawk; hold B for loop; reverse lean for rocker. Transfer and reverse for choctaw. D-pad down requests bracket; hold and reverse lean for counter. X twizzles; Y spins; R3 plants the toe. RT loads/releases; LT brakes. LB/RB retain foot selection. Modifier + X/Y/A: Ina Bauer/spiral/cantilever. Simulation uses one stick per blade; hold the modifier for right-stick arms. Explorer uses left-stick lean and pressure, right-stick arms.",14))
+		else:
+			menu.add_child(paragraph("Full repertoire: dedicated turns and glides. Open Controller tuning & bindings for your current layout. RT loads/releases jumps; LT only brakes. Bumpers retain the chosen foot.\n\n" if scheme == 3 else "Controller: left stick steers; RT loads the knee; A pushes; Y spins; B turns; X twizzles; LT taps the toe, holds the brake; bumpers choose the foot; right stick opens the arms. D-pad up requests the Beginner jump; down holds the low pose.\n\nKeyboard: Q/E choose the foot; W/S move the rocker; F plants the toe; comma winds up a jump; I holds Ina Bauer; N requests a bracket. R restarts. Esc pauses.",14))
 		menu.add_child(button("Save this skate's replay",func():link.send("export")))
 		menu.add_child(button("Watch saved replay",func():link.send("replay")))
 		menu.add_child(button("Export session measurements",func():link.send("metrics")))
 		menu.add_child(button("Save settings & back",func():save_preferences();show_page("home")))
 	elif page == "controller":
-		clear_menu("Full repertoire controller", "Tune the fourth scheme here, or import bindings from the browser controller workshop.")
+		clear_menu("Controller tuning", "Sensitivity applies to all three setups. Move shortcuts apply to Full Repertoire; Simulation and Explorer use manual turn gestures.")
 		if controller_profile.is_empty():
 			menu.add_child(paragraph("Waiting for the skating engine."))
 		else:
@@ -411,7 +442,7 @@ func show_page(page: String) -> void:
 			menu.add_child(button("Import controller profile",func():controller_file(false)))
 			menu.add_child(button("Export controller profile",func():controller_file(true)))
 			menu.add_child(button("Restore controller defaults",func():controller_profile=catalog.controller.profile.duplicate(true);show_page("controller")))
-			menu.add_child(button("Use Full repertoire & save",func():scheme=3;link.send("controller",{"profile":controller_profile})))
+			menu.add_child(button("Use Full repertoire & save",func():skating_setup="repertoire";scheme=3;beginner=true;cruise=false;link.send("controller",{"profile":controller_profile})))
 		menu.add_child(button("← Settings",func():show_page("settings")))
 	elif page == "result":
 		clear_menu(str(frame.result.title),str(frame.result.detail))
@@ -437,7 +468,7 @@ func start_game(mode: String, index: int = 0) -> void:
 	event_index = index
 	playing = false
 	skater.load_model(CHARACTERS[character].path)
-	link.send("configure",{"options":{"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile}})
+	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile}})
 	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null}})
 
 func on_engine(op: String, data: Dictionary) -> void:
@@ -790,6 +821,10 @@ func load_preferences() -> void:
 	var saved = JSON.parse_string(FileAccess.get_file_as_string(settings_path))
 	if not saved is Dictionary:
 		return
+	skating_setup = str(saved.get("setup",""))
+	if skating_setup not in ["simulation","explorer","repertoire"]:
+		skating_setup = ""
+	assistance = clampf(float(saved.get("assistance",.75)),.5,1)
 	beginner = bool(saved.get("beginner",true))
 	scheme = clampi(int(saved.get("scheme",1)),0,3)
 	if saved.get("controllerProfile") is Dictionary:
@@ -813,6 +848,6 @@ func save_preferences() -> void:
 		return
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"sequence":sequence}))
+		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"sequence":sequence}))
 	else:
 		on_error("Preferences could not be saved.")

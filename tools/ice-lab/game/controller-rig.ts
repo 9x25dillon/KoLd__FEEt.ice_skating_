@@ -8,13 +8,15 @@ import type { EdgeEvent, SkatingInput } from "../sim/types.ts";
 import { JUMP_PHASE, JUMP_CODE } from "../sim/jump.ts";
 import { IceGrid } from "../sim/ice.ts";
 import { ReplayRecorder } from "../sim/replay.ts";
-import { gameInput, GAME_PARAMS } from "./controls.ts";
-import { ACTIONS, BUTTON_NAMES, BINDABLE_BUTTONS, TUNING, FULL_SCHEME, PROFILE_KEY, defaultControllerProfile, loadControllerProfile, parseControllerProfile } from "./full-controls.ts";
+import { SETUPS, SETUP_KEY, setupParams, setupInput } from "./setups.ts";
+import type { Setup } from "./setups.ts";
+import { manualAction, ACTIONS, BUTTON_NAMES, BINDABLE_BUTTONS, TUNING, PROFILE_KEY, defaultControllerProfile, loadControllerProfile, parseControllerProfile } from "./full-controls.ts";
 import type { GameControlState } from "./full-controls.ts";
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const pad = new Pad();
 let profile = loadControllerProfile();
-const p = { ...GAME_PARAMS, musicMode: 0 };
+let setup: Setup = "repertoire", assistance = 0.75;
+let p = { ...setupParams(setup, assistance), musicMode: 0 };
 let s = createState(p, 6.8), st: GameControlState = newSchemeState(), ice = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
 let recorder = new ReplayRecorder(p, 6.8), input: SkatingInput | null = null, low = false;
 let running = true, time = 0, accumulator = 0;
@@ -24,6 +26,7 @@ const virtual: ControllerHardware = { connected: true, axes: [0, 0, 0, 0], butto
 const source = () => el<HTMLSelectElement>("source").value;
 function status(text: string) { el("status").textContent = text; }
 function reset(speed = 6.8) {
+  p = { ...setupParams(setup, assistance), musicMode: 0 };
   s = createState(p, speed); st = newSchemeState(); ice = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
   recorder = new ReplayRecorder(p, speed); trace = []; accumulator = 0; input = null;
 }
@@ -36,7 +39,8 @@ function renderBindings() {
   el("bindings").replaceChildren();
   for (const action of ACTIONS) {
     const row = document.createElement("tr"), name = document.createElement("td"), cell = document.createElement("td"), select = document.createElement("select");
-    name.textContent = `${action.name} · ${action.key === " " ? "Space" : action.key.toUpperCase()}`;
+    select.disabled = setup !== "repertoire" && !manualAction(action.id);
+    name.textContent = `${select.disabled ? "Repertoire only: " : ""}${action.name} · ${action.key === " " ? "Space" : action.key.toUpperCase()}`;
     select.setAttribute("aria-label", `${action.name} binding`);
     for (const modified of [false, true]) for (const button of BINDABLE_BUTTONS.filter(b => b !== profile.modifier)) {
       const option = document.createElement("option"); option.value = `${button}:${Number(modified)}`;
@@ -70,7 +74,7 @@ function renderVirtualButtons() {
   el("virtual-buttons").replaceChildren();
   for (const index of BINDABLE_BUTTONS) {
     const button = document.createElement("button");
-    const assigned = ACTIONS.filter(a => profile.bindings[a.id].button === index);
+    const assigned = ACTIONS.filter(a => profile.bindings[a.id].button === index && (setup === "repertoire" || manualAction(a.id)));
     button.textContent = `${BUTTON_NAMES[index]} · ${index === profile.modifier ? "Hold for extra moves" : assigned.map(a => `${profile.bindings[a.id].modified ? "+ modifier: " : ""}${a.name}`).join(" / ") || "Unassigned"}`;
     button.dataset.button = String(index);
     const base = assigned.find(a => !profile.bindings[a.id].modified);
@@ -93,6 +97,13 @@ el("neutral").onclick = () => {
   virtual.axes.fill(0); virtual.buttons.fill(0); syncVirtualButtons();
   for (const i of el("virtual-axes").querySelectorAll("input")) { i.value = "0"; i.dispatchEvent(new Event("input")); }
 };
+el("setup").onchange = () => {
+  setup = el<HTMLSelectElement>("setup").value as Setup;
+  el("setup-description").textContent = SETUPS.find(s => s.id === setup)!.description;
+  el<HTMLInputElement>("assist").disabled = setup !== "explorer";
+  reset(); renderBindings();
+};
+el("assist").onchange = () => { assistance = Number(el<HTMLInputElement>("assist").value); reset(); };
 el("source").onchange = () => { el("virtual").hidden = source() !== "virtual"; reset(); };
 el("modifier").onchange = () => {
   const before = profile.modifier, after = Number(el<HTMLSelectElement>("modifier").value);
@@ -102,7 +113,7 @@ el("modifier").onchange = () => {
 el("run").onclick = () => { running = !running; el("run").textContent = running ? "Pause" : "Resume"; el("run").setAttribute("aria-pressed", String(running)); accumulator = 0; };
 el("reset").onclick = () => reset(); el("backward").onclick = () => reset(-6.8);
 el("defaults").onclick = () => { profile = defaultControllerProfile(); virtual.buttons.fill(0); reset(); renderTuning(); renderBindings(); status("Defaults restored for preview. Save to keep them."); };
-el("save").onclick = () => { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(parseControllerProfile(profile))); status("Saved. Select Full repertoire in the game's Controls menu."); } catch (e) { status(String(e)); } };
+el("save").onclick = () => { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(parseControllerProfile(profile))); localStorage.setItem(SETUP_KEY, JSON.stringify({ setup, assistance })); status("Saved setup and sensitivity. Reload the game to apply them."); } catch (e) { status(String(e)); } };
 el("export").onclick = () => download("edgework-controller.json", JSON.stringify(profile, null, 2));
 el("replay").onclick = () => download("edgework-controller-replay.json", recorder.toJson());
 el("import").onchange = async () => {
@@ -123,17 +134,17 @@ function draw() {
   el("requested").textContent = st.full?.request ?? "Glide";
   el("skating").textContent = `${fmt(Math.hypot(s.vel.x, s.vel.y))} m/s · ${fmt(s.tick * SIM_DT)} s\n${s.blade.map(b => codeToString(b.code)).join(" / ")}\nLast: ${s.moveDone.tick < 0 ? "—" : s.moveDone.kind === MOVE.Turn ? TURN_NAME[s.moveDone.detail] : "move completed"}`;
   el("raw").textContent = `Left: ${hardware.axes.slice(0, 2).map(fmt).join(" / ")}\nRight: ${hardware.axes.slice(2, 4).map(fmt).join(" / ")}\nLT / RT: ${fmt(hardware.buttons[6] ?? 0)} / ${fmt(hardware.buttons[7] ?? 0)}\nButtons: ${hardware.buttons.flatMap((v, i) => v > 0.5 ? [BUTTON_NAMES[i] ?? String(i)] : []).join(", ") || "—"}`;
-  el("mapped").textContent = input ? `Lean: ${fmt(input.lean)} · pitch: ${fmt(input.pitch)}\nShaped L: ${fmt(st.full?.left.x ?? 0)} / ${fmt(st.full?.left.y ?? 0)}\nKnee: ${fmt(input.knee)} · weight R: ${fmt(input.weight)}\nArms: ${fmt(input.carriage)} · wind-up: ${fmt(input.windup)}\nReversal threshold: ${fmt(p.rockerCounterStick)}\n${["push", "brake", "toe", "turn", "bracket", "spin", "twizzle", "inaBauer"].filter(k => input![k as keyof SkatingInput] === true).join(" · ") || "No move buttons"}` : "Waiting for the first tick";
+  el("mapped").textContent = input ? `Lean: ${fmt(input.lean)} · split: ${fmt(input.leanSplit)} · pitch: ${fmt(input.pitch)}\nShaped L: ${fmt(st.full?.left.x ?? 0)} / ${fmt(st.full?.left.y ?? 0)}\nKnee: ${fmt(input.knee)} · weight R: ${fmt(input.weight)}\nArms: ${fmt(input.carriage)} · wind-up: ${fmt(input.windup)}\nReversal threshold: ${fmt(p.rockerCounterStick)}\n${["push", "brake", "toe", "turn", "bracket", "spin", "twizzle", "inaBauer"].filter(k => input![k as keyof SkatingInput] === true).join(" · ") || "No move buttons"}` : "Waiting for the first tick";
 }
 function frame(now: number) {
   const dt = Math.min(0.1, (now - (time || now)) / 1000); time = now;
   const controls = pad.read(true, ","); hardware = source() === "virtual" ? virtual : controls.hardware!;
-  el("connection").textContent = source() === "virtual" ? "Virtual controller · changes below feed the same mapping as a real pad" : hardware.connected ? "Controller connected · Full repertoire" : "Keyboard active · connect a controller or try the virtual controller";
+  el("connection").textContent = source() === "virtual" ? "Virtual controller · changes below feed the same mapping as a real pad" : hardware.connected ? `Controller connected · ${SETUPS.find(s => s.id === setup)!.name}` : "Keyboard active · connect a controller or try the virtual controller";
   if (source() === "hardware") { if (controls.pause) el("run").click(); if (controls.reset) reset(); }
   if (running && !document.hidden) {
     accumulator += dt;
     while (accumulator >= SIM_DT) {
-      const result = gameInput({ ...controls, hardware }, s, FULL_SCHEME, st, false, p, profile); input = result.input; low = result.cantilever;
+      const result = setupInput({ ...controls, hardware }, s, setup, st, p, profile, assistance); input = result.input; low = result.cantilever;
       const events: EdgeEvent[] = []; step(s, input, p, SIM_DT, events, ice); recorder.capture(input, p, s, events, "D");
       if (s.tick % 4 === 0) { trace.push({ ...s.pos }); if (trace.length > 7200) trace.shift(); }
       accumulator -= SIM_DT;

@@ -1,5 +1,50 @@
 # Hand-off
 
+## Follow-up · three gameplay setups (local changes)
+
+The operator requested three distinct controller setups: minimal-assist simulation,
+assisted blade/ice exploration, and access to the move repertoire. Implemented in
+`game/setups.ts`, shared by browser, controller workshop and Godot bridge:
+
+- Simulation: one stick per blade; hold the profile modifier (default L3) for
+  right-stick arms while retaining the right blade command. Responsive athlete
+  balance model, no added jump/landing/hype assistance, manual strokes and turns.
+- Blade Explorer: direct lean/pressure, manual turns and landing control; adjustable
+  50–100% balance and speed-aware lean assistance, default 75%.
+- Full Repertoire: dedicated turn/glide commands, assisted balance and wind-up,
+  optional game landing coach. No new unimplemented moves are claimed.
+
+The stick layout choices are provisional defaults: clarification was offered but
+no reply arrived during implementation. All three start with Cruise off. Legacy
+mapping overrides remain, and the lab's A/B/C experiment is unchanged. Setup
+changes start a fresh browser run / apply to the next Godot skate. The workshop
+can compare all three, save browser setup/sensitivity, and export replay inputs.
+Profile JSON transfers bindings/sensitivity only; Godot setup/assistance is separate.
+
+Verified: 500 browser/simulation + 20 bridge tests, TypeScript check, build,
+browser menu/persistence/virtual-pad checks without page errors, and both Godot
+smoke checks. Replay stays `/22`: setups change mapped inputs/parameters,
+not solver arithmetic. See `docs/controller-scheme.md` for controls and limitations.
+Next: physical Xbox-pad comparison of shallow edges, low-speed lean, right-blade
+retention while controlling arms, manual turn gestures and Repertoire landings.
+Sensitivity and assistance remain authored starting points pending that play data.
+
+## Follow-up · 2026-09-21 rocker lateral-load fix (local changes)
+
+Confirmed and fixed the rocker/counter inconsistency listed below: at the cusp,
+the lean flipped but the path kept bending the entry way. Both turns now negate
+`pathRate`, so the exit trajectory and lateral load follow the exit lean. Eight
+regression cases cover both feet, both curve directions, and both turn kinds;
+all eight failed before the fix and pass after it. This checks model consistency,
+not validation against real skating. Replay contract is now `ice-lab-f64/22`;
+the 240-frame fixture's inputs and digests are unchanged. Older rocker/counter
+clips need their original solver or re-recording.
+
+Verified: 491 browser/sim tests, 16 Godot bridge tests, both Godot smoke checks,
+TypeScript check, browser build, and fidelity report (6 internal cases pass;
+external gate remains unmet).
+Queue item 7(a) and the rocker lateral-load assumption below are resolved.
+
 ## 0 · Start here (written at the close of 2026-09-21, sixteenth session)
 
 **Check first.** Another agent session may share this checkout. Run `git status --short --branch` and

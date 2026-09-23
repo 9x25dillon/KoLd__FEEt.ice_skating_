@@ -159,6 +159,32 @@ test("holding turn through the cusp with the stick reversed rockers it: same foo
   assert.equal(r.s.fallen, false);
 });
 
+for (const against of [false, true]) for (const weight of [0, 1]) for (const lean of [-0.3, 0.3]) {
+  test(`${against ? "counter" : "rocker"} reverses path and lateral load at the cusp (foot ${weight}, lean ${lean})`, () => {
+    let entryPath = 0, exitTicks = 0;
+    let previous: { x: number; y: number } | undefined;
+    const r = drive(moves(), 6.8, weight, lean, { against, each: (i, s) => {
+      if (s.move === MOVE.Turn) {
+        if (s.turn.cusps === 0) entryPath = s.turn.pathRate;
+        else {
+          exitTicks++;
+          assert.ok(s.turn.pathRate * entryPath < 0, "exit lobe bends opposite to entry");
+          assert.ok(s.latAccel * s.lean > 0, "lateral load supports the exit lean");
+          if (previous) {
+            const bend = previous.x * s.vel.y - previous.y * s.vel.x;
+            assert.ok(bend * entryPath < 0, "velocity actually follows the reversed lobe");
+          }
+          previous = { ...s.vel };
+        }
+      }
+      return i >= 240 && i < 280 ? { turn: !against, bracket: against, lean: -2 * lean } : {};
+    } });
+    assert.equal(r.turns[0]?.value, against ? TURN_KIND.Counter : TURN_KIND.Rocker);
+    assert.ok(exitTicks > 1, "observed the second half of the pivot");
+    assert.equal(r.s.fallen, false);
+  });
+}
+
 test("a mohawk's weight shift with a rocker's reversal is a choctaw: RFI onto LBO, the new foot on the other edge", () => {
   // Weight to the left foot at the cusp, turn held through it, stick pushed
   // against the entry curve. RFI curves left; LBO, skated backward, curves

@@ -8,6 +8,8 @@ import type { GameScheme as Scheme } from "./controls.ts";
 import { FULL_SCHEME, ACTIONS, bindingLabel, loadControllerProfile } from "./full-controls.ts";
 import { MOVE, TURN_KIND, FALL, codeToString } from "../sim/types.ts";
 import { JUMP_PHASE, JUMP_CODE } from "../sim/jump.ts";
+import { SETUPS, SETUP_KEY, isSetup, setupParams, setupInput } from "./setups.ts";
+import type { Setup } from "./setups.ts";
 import { GAME_PARAMS, CONTROL_NAMES, gameInput } from "./controls.ts";
 import { IceRun } from "./run.ts";
 import { SkateScene } from "./scene.ts";
@@ -109,6 +111,15 @@ let controllerProfile = loadControllerProfile();
 window.addEventListener("focus", () => { controllerProfile = loadControllerProfile(); renderFullBindings(); });
 let scheme: Scheme = SCHEME.B;
 try { const saved = Number(localStorage.getItem("edgework-control-scheme") ?? SCHEME.B); if ([0, 1, 2, 3].includes(saved)) scheme = saved as Scheme; } catch { /* Session controls work without storage. */ }
+let setup: Setup | null = "explorer", assistance = 0.75;
+try {
+  const saved = JSON.parse(localStorage.getItem(SETUP_KEY) ?? "null");
+  if (saved && (isSetup(saved.setup) || saved.setup === null)) {
+    setup = saved.setup;
+    if (Number.isFinite(saved.assistance) && saved.assistance >= 0.5 && saved.assistance <= 1) assistance = saved.assistance;
+  }
+} catch { /* Use the exploration starting point. */ }
+if (setup) { scheme = FULL_SCHEME; beginner = setup === "repertoire"; cruise = false; }
 let freeSkate = true, cantilever = false, lowHeld = false;
 let elapsedSkate = 0, pendingToe = false;
 const guide = el("guide") as HTMLDialogElement;
@@ -139,7 +150,7 @@ try { best = Math.max(0, Number(localStorage.getItem("edgework-ice-run-best")) |
 el("record").textContent = `Personal best · ${best.toLocaleString()} pts`;
 
 function start() {
-  params = applyProfile(beginner ? BEGINNER_PARAMS : GAME_PARAMS, careerMode ? career.profile : SAMPLE_PROFILES[profileIndex]);
+  params = applyProfile(setup ? setupParams(setup, assistance) : beginner ? BEGINNER_PARAMS : GAME_PARAMS, careerMode ? career.profile : SAMPLE_PROFILES[profileIndex]);
   applyTrack(params);
   document.body.dataset.career = String(careerMode);
   el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : "ON THE ICE / PRACTICE";
@@ -198,8 +209,8 @@ function finish() {
 }
 el("start").addEventListener("click", () => mode === "paused" && !playback?.done ? resume() : start());
 el("pause").addEventListener("click", pause);
-el("free").addEventListener("click", () => { careerMode = false; freeSkate = true; courseMode = false; cruise = true; start(); });
-el("rookie").addEventListener("click", () => { careerMode=false; freeSkate=true; courseMode=true; cruise=true; start(); });
+el("free").addEventListener("click", () => { careerMode = false; freeSkate = true; courseMode = false; cruise = setup === null; start(); });
+el("rookie").addEventListener("click", () => { careerMode=false; freeSkate=true; courseMode=true; cruise=setup === null; start(); });
 el("timed").addEventListener("click", () => { careerMode = false; freeSkate = false; courseMode = false; cruise = false; start(); });
 el("controls").addEventListener("click", () => {
   resumeAfterGuide = mode === "playing"; pause(); guide.showModal();
@@ -232,7 +243,7 @@ el("opening-style").addEventListener("click", openWardrobe);
 el("close-wardrobe").addEventListener("click", () => wardrobe.close());
 wardrobe.addEventListener("close", () => { if (resumeAfterWardrobe) resume(); });
 (el("difficulty") as HTMLSelectElement).addEventListener("change", e => {
-  beginner=(e.target as HTMLSelectElement).value==="beginner"; start(); pause();
+  beginner=(e.target as HTMLSelectElement).value==="beginner" && (setup === null || setup === "repertoire"); start(); pause();
 });
 el("trick").addEventListener("click", () => { pendingTrick=true; });
 const schemeSelect = el("scheme-select") as HTMLSelectElement;
@@ -242,11 +253,33 @@ SAMPLE_PROFILES.forEach((profile, index) => { const option = document.createElem
 function saveControlScheme() { try { localStorage.setItem("edgework-control-scheme", String(scheme)); } catch { /* Session-only selection. */ } }
 function renderFullBindings() {
   el("full-bindings").innerHTML = ACTIONS.map(a => `<tr><td>${a.name}</td><td>${a.key === " " ? "Space" : a.key.toUpperCase()}</td><td>${bindingLabel(controllerProfile, a.id)}</td></tr>`).join("");
-  el("full-guide").hidden = scheme !== FULL_SCHEME;
+  el("full-guide").hidden = scheme !== FULL_SCHEME || (setup !== null && setup !== "repertoire");
   el("legacy-guide").hidden = scheme === FULL_SCHEME;
 }
-renderFullBindings();
-schemeSelect.addEventListener("change", () => { scheme = Number(schemeSelect.value) as Scheme; steering = newSchemeState(); saveControlScheme(); renderFullBindings(); });
+const setupSelect = el("setup-select") as HTMLSelectElement;
+function saveSetup() { try { localStorage.setItem(SETUP_KEY, JSON.stringify({ setup, assistance })); } catch { /* Session only. */ } }
+function renderSetup() {
+  setupSelect.value = setup ?? "custom";
+  el("setup-description").textContent = SETUPS.find(s => s.id === setup)?.description ?? "Custom legacy mapping and assists.";
+  el("manual-guide").hidden = setup === null || setup === "repertoire";
+  (el("assistance") as HTMLInputElement).value = String(assistance);
+  (el("assistance") as HTMLInputElement).disabled = setup !== "explorer";
+  el("assistance-value").textContent = `${Math.round(assistance * 100)}%`;
+  (el("difficulty") as HTMLSelectElement).disabled = setup !== null && setup !== "repertoire";
+  (el("difficulty") as HTMLSelectElement).value = beginner ? "beginner" : "simulation";
+  (el("cruise") as HTMLButtonElement).disabled = setup === "simulation";
+  renderFullBindings();
+}
+setupSelect.addEventListener("change", () => {
+  setup = isSetup(setupSelect.value) ? setupSelect.value : null;
+  if (setup) { scheme = FULL_SCHEME; beginner = setup === "repertoire"; cruise = false; }
+  saveSetup(); saveControlScheme(); renderSetup(); start(); pause();
+});
+el("assistance").addEventListener("change", e => {
+  assistance = Number((e.target as HTMLInputElement).value); saveSetup(); renderSetup(); start(); pause();
+});
+renderSetup();
+schemeSelect.addEventListener("change", () => { setup = null; saveSetup(); scheme = Number(schemeSelect.value) as Scheme; steering = newSchemeState(); saveControlScheme(); renderFullBindings(); renderSetup(); start(); pause(); });
 profileSelect.addEventListener("change", () => { profileIndex = Number(profileSelect.value); start(); pause(); });
 el("save-replay").addEventListener("click", () => {
   const blob = new Blob([playback ? replayJson : recorder.toJson()], {type:"application/json"});
@@ -352,7 +385,7 @@ function draw(_now: number) {
   el("move").textContent = skater.fallen
     ? skater.fallReason === FALL.Collision ? "HIT THE BOARDS · tap Space / A to get up" : "FALL · tap Space / A to get up"
     : move;
-  el("stance").textContent = `${CONTROL_NAMES[scheme]} · ${codeToString(skater.blade[0].code)} / ${codeToString(skater.blade[1].code)} · ${Math.hypot(skater.vel.x, skater.vel.y).toFixed(1)} m/s`;
+  el("stance").textContent = `${SETUPS.find(s => s.id === setup)?.name ?? CONTROL_NAMES[scheme]} · ${codeToString(skater.blade[0].code)} / ${codeToString(skater.blade[1].code)} · ${Math.hypot(skater.vel.x, skater.vel.y).toFixed(1)} m/s`;
   el("landing").textContent = skater.landed.tick < 0 ? "" : `Last jump: ${JUMP_CODE[skater.landed.kind] ?? "hop"} · ${skater.landed.turned.toFixed(2)} rev · ${skater.landed.fall ? "fall" : skater.landed.stepOut ? "step-out" : "landed"}`;
   el("spin-level").textContent = lastSpinLabel;
   el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : footChangeFlash > 0 ? "Foot change!" : comboFlash > 0 ? `Combination ${comboLabel}!` : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
@@ -364,7 +397,7 @@ function frame(now: number) {
   if (guide.open || wardrobe.open || careerBoard.open) { pendingPush = false; pendingToe = false; pendingTrick=false; draw(now); requestAnimationFrame(frame); return; }
   if (controls.cycleView && !lowHeld && !(navigator.getGamepads?.().find(g => g?.connected)?.buttons[13]?.pressed)) scene.overview = !scene.overview;
   if (controls.zoom) scene.zoom = Math.max(0.65, Math.min(1.8, scene.zoom * Math.pow(1.15, controls.zoom)));
-  if (controls.cycleScheme) { scheme = ((scheme + 1) % 4) as Scheme; steering = newSchemeState(); schemeSelect.value = String(scheme); saveControlScheme(); renderFullBindings(); }
+  if (controls.cycleScheme) { setup = null; saveSetup(); scheme = ((scheme + 1) % 4) as Scheme; steering = newSchemeState(); schemeSelect.value = String(scheme); saveControlScheme(); renderFullBindings(); renderSetup(); start(); }
   if (controls.pause) { if (mode === "playing") pause(); else if (mode === "paused") resume(); }
   if (controls.reset && mode !== "ready") start();
   if (mode === "ready" && controls.push) start();
@@ -397,7 +430,9 @@ function frame(now: number) {
       const repeated = canStroke && skater.tick % 90 === 0 && ((scheme !== FULL_SCHEME && (pushHeld || padPush)) || (cruise && Math.hypot(skater.vel.x, skater.vel.y) < (courseMode ? 5.5 : beginner ? 5.5 + playground.flow * 0.035 : 5.5)));
       const aim = scene.worldAim(controls.lx, controls.ly);
       const aimed = scheme === SCHEME.B ? { ...controls, lx: aim.x, ly: aim.y } : controls;
-      const mapped = gameInput({ ...aimed, push: pendingPush || repeated, autoPush: repeated, toe: pendingToe }, skater, scheme, steering, lowPose, params, controllerProfile);
+      const liveControls = { ...aimed, push: pendingPush || repeated, autoPush: repeated, toe: pendingToe };
+      const mapped = setup ? setupInput(liveControls, skater, setup, steering, params, controllerProfile, assistance)
+        : gameInput(liveControls, skater, scheme, steering, lowPose, params, controllerProfile);
       const input = beginner ? coach.apply(mapped.input, skater, params, pendingTrick, SIM_DT) : mapped.input;
       pendingTrick = false; cantilever = mapped.cantilever;
       pendingPush = false; pendingToe = false;

@@ -1,4 +1,52 @@
-# Full repertoire controller scheme
+# Three gameplay controller setups
+
+The browser Controls menu, Godot Settings and browser controller workshop now offer
+three complete setups. Selecting one changes both input mapping and assistance;
+the game starts a fresh run so its recording includes the actual parameters.
+The old mappings remain available as custom overrides. The lab's blind A/B/C
+experiment remains unchanged.
+
+| Setup | Continuous control | Assistance and move access |
+| --- | --- | --- |
+| Simulation | Left/right sticks control the corresponding blades via mean lean and differential tilt; average fore–aft pressure controls the rocker. Hold the profile's modifier (L3 by default) for right-stick arms and wind-up; the right blade retains its last command until release. | Responsive athlete balance model, no jump assist, no landing coach, no Cruise or held-repeat strokes. Manual turn gestures. |
+| Blade Explorer | Left stick directly controls lean and rocker pressure; right stick controls arms. Bumpers retain the chosen foot. | 50–100% assistance, default 75%: blends balance damping/recovery and latency toward the assisted preset, and blends excessive lean toward a speed-dependent blade-support limit. Manual jump landings and turn gestures. |
+| Full Repertoire | Left-stick lean/pressure, right-stick arms, retained foot selection. | Assisted balance, wind-up jump assistance, dedicated turn/glide commands, optional landing coach in the game. Covers implemented moves; entries must still be physically available. |
+
+All three start with Cruise off. Explorer and Repertoire can enable it and repeat
+strokes while A is held. Simulation requires each press. RT loads/releases, LT
+brakes, R3 plants the toe or changes spin foot, X twizzles and Y spins. Modifier
++ X/Y/A selects Ina Bauer/spiral/cantilever. Start a spin before engaging the
+modifier to adjust arms/camel in Simulation; the button bank stays latched.
+
+For manual turns, tap B for a three-turn, transfer feet for a mohawk, hold B for
+a loop, or reverse lean during the first half for a rocker. Transfer plus reversal
+produces a choctaw. D-pad down requests a bracket; hold it and reverse lean for
+a counter. Dedicated loop/rocker/counter/mohawk/choctaw shortcuts apply only in
+Repertoire. The corresponding keyboard controls are B/N plus Q/E and lean inputs.
+Simulation keyboard: A/D left blade, left/right arrows right blade, W/S pressure,
+C arms, comma wind-up. Explorer keeps A/D or arrows for lean.
+
+These are authored tuning starting points, not external physics validation.
+Simulation keeps the feedback controller representing the athlete's muscles;
+removing it would not provide direct anatomical control. The model still has
+one body lean and one shared fore–aft pressure channel. Hype assistance is off
+in the three setups to keep their selected assistance consistent. Blade geometry,
+friction, jump impulse and landing shock are not increased for easier play.
+
+Use the workshop at **http://localhost:8123/game/controller.html** to compare the
+same forward/backward entry in each setup, with raw axes, mapped lean/split,
+pressure and observed moves visible. Save stores setup and assistance in
+`edgework-skating-setup-v1`, alongside the existing controller profile. Reload the
+browser game to apply it. Profile JSON transfers sensitivity/bindings only; choose
+the setup and assistance separately in Godot. The workshop does not run the game's
+optional landing coach.
+
+Automated coverage includes raw-input blade/arms switching, per-stroke Simulation,
+Explorer lean limiting, manual turns, physical load/release jumps, replay checks,
+and matching browser/Godot state for all three setups. Physical-pad comfort still
+needs hands-on testing.
+
+## Full Repertoire bindings
 
 Full repertoire is the fourth **game** scheme, available in the browser's Controls
 menu and Godot's Settings. The instrument's blind A/B/C experiment stays separate.
@@ -72,7 +120,7 @@ control guide links there too.
 5. Adjust stick deadzone, response curve, lean sensitivity, keyboard lean or trigger
    deadzone. These are control mappings, not modifications to the solver constants.
 6. Save for the browser game, or export a controller profile for another install.
-   Saving does not change which scheme is selected: pick Full repertoire in Controls.
+   Saving also stores the selected gameplay setup and assistance; reload the game.
 
 Virtual axes stay set; each virtual button toggles its actual held state. Hold the
 modifier first for extra moves. Release all controls clears the virtual pad.
@@ -103,8 +151,8 @@ godot4 --headless --path games/ice-run-godot -- --smoke-test --full-controls
 ```
 
 First-time Godot setup still requires the full preparation command to generate audio.
-Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/21`:
-only accepted mapping metadata expanded, and the pinned fixture is unchanged. Older
+Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/22`. The three setups record final mapped
+inputs and parameters under label D; they add no solver arithmetic changes. Older
 builds reject D-labelled clips; current builds continue accepting A/B/C clips.
 
 Defaults are authored starting points. Virtual-pad and automated checks establish

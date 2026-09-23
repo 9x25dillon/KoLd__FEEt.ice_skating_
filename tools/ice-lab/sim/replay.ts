@@ -179,7 +179,11 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       replay/rebase-fixture.ts with every digest unchanged; only
 //       `initial.params` grew the one key. A clip that made that exact
 //       gesture diverges under /21 and must be re-recorded.
-export const REPLAY_SOLVER = "ice-lab-f64/21";
+//   /22 Rocker/counter exit lobes reverse at the cusp, matching the flipped
+//       lean and unchanged travel sense. Previously the second-half lateral
+//       load opposed the lean. Clips containing these turns must be
+//       re-recorded; the moves-off fixture retains every digest.
+export const REPLAY_SOLVER = "ice-lab-f64/22";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
