@@ -5,11 +5,14 @@
   "source": {
     "type": "literature",
     "citation": "Federolf PA, Mills R, Nigg B (2008). Ice friction of flared ice hockey skate blades. Journal of Sports Sciences 26(11), 1201–1208. doi:10.1080/02640410802027360",
-    "primary_checked": false,
-    "notes": "Quoted by Lever et al. 2022 p. 338: standard hockey blades (rocker 3.35 m, hollow 12.7 mm), weighted sled 53 kg per blade, launched at 1.8 m/s, indoor Olympic hockey rink, ice surface −5.7 to −4.9 °C, mu = 0.0071 ± 0.0005. Not entered as expected until read in the primary. A sled, not a skater: compare blade friction only, with model drag at this speed subtracted. Hockey blade, L1 transfer. See docs/ice-literature.md §9."
+    "primary_checked": true,
+    "notes": "Abstract (PubMed 18608838), the primary for what it states (fidelity-gate §2.2): friction from the deceleration of an aluminium test sled on three test blades, initial speed 1.8 m/s, 53 kg on each blade; standard blades mu = 0.0071 (s = 0.0005). Secondary only, via Lever et al. 2022 p. 338, and so not entered as venue data: rocker 3.35 m, hollow 12.7 mm, indoor Olympic hockey rink, ice surface -5.7 to -4.9 C. Not stated in the abstract: whether air drag was subtracted. Expected is mu g, with g 9.81; u_m is the reported s times g. Stand-in for the sled: a 106 kg reference-height skater gliding flat on two feet, so each blade carries the sled's 53 kg; the model's glide friction does not depend on load, which Federolf found only slightly (ice-literature.md). The model's own air drag on that skater is inside the measured value, about 0.01 m/s^2 at 1.8 m/s by the open-constants arithmetic; the sled's drag is unknown. A hockey blade on a sled standing in for a figure skate: an L1 transfer. Checked after the first run, not used to choose anything: with the model's air drag removed the stand-in decelerates at 0.0589 m/s^2 (muGlide g), 15% under expected and still inside tolerance; with it, 0.0720. The verdict does not hang on the unknown drag handling."
   },
   "requires": [],
-  "skater": null,
+  "skater": {
+    "mass_kg": 106,
+    "height_m": 1.65
+  },
   "venue": {
     "venue_type": null,
     "indoor": null,
@@ -32,7 +35,26 @@
     "travel_direction": null,
     "paired_case": null
   },
-  "inputs": null,
+  "inputs": {
+    "initial": {
+      "speed_ms": 1.8,
+      "lean_rad": 0.0
+    },
+    "modes": {
+      "jumpMode": 0,
+      "movesMode": 0
+    },
+    "script": [
+      {
+        "seconds": 1.5,
+        "input": {
+          "lean": 0.0,
+          "weight": 0.5
+        }
+      }
+    ],
+    "clip": null
+  },
   "observable": {
     "name": "glide_decel_ms2",
     "window": {
@@ -41,5 +63,13 @@
     },
     "radius": null
   },
-  "expected": null
+  "expected": {
+    "comparison": "within",
+    "value": 0.069651,
+    "unit": "m/s^2",
+    "measurement_uncertainty": 0.0049050000000000005,
+    "band": 0.01741275,
+    "tolerance": 0.018090408717397737,
+    "confidence": "L1"
+  }
 }

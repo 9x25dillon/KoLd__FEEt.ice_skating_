@@ -6,7 +6,7 @@
     "type": "literature",
     "citation": "de Koning JJ, de Groot G, van Ingen Schenau GJ (1992). Ice friction during speed skating. Journal of Biomechanics 25(6), 565–571. doi:10.1016/0021-9290(92)90099-M",
     "primary_checked": false,
-    "notes": "Quoted by Lever et al. 2022 p. 338: long-track speed skates, 72 kg skater, strides at 8 m/s, straights mu = 0.0046 ± 0.0004, curves 0.0059 ± 0.0004, ice surface −1.8 to −11 °C. A stride average on a different blade; likely stays unsourced for a figure skate. Recorded so it is not re-derived."
+    "notes": "Quoted by Lever et al. 2022 p. 338: long-track speed skates, 72 kg skater, strides at 8 m/s, straights mu = 0.0046 ± 0.0004, curves 0.0059 ± 0.0004, ice surface −1.8 to −11 °C. A stride average on a different blade; likely stays unsourced for a figure skate. Recorded so it is not re-derived. 2026-09-22: the abstract (PubMed 1517252), primary for what it states (fidelity-gate §2.2), confirms the means 0.0046 straights and 0.0059 curves, a minimum near -7 C ice, and friction rising with speed. It gives no spread, skater mass or speed, so no u_m can be sourced; still a stride average on a speed skate. Stays unsourced."
   },
   "requires": [],
   "skater": null,

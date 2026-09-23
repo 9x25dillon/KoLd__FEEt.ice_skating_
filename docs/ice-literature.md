@@ -285,6 +285,11 @@ are **not** to be entered as `expected` until checked.
   non-stroking, near-vertical blade at about 1.8 m/s, with u<sub>m</sub> from ±0.0005 on μ. Caveats:
   a sled on two blades, not a skater, so the case must compare **blade friction only**, with the
   model's drag at that speed subtracted or shown negligible. Hockey blade, transfer L1.
+  - *2026-09-22, sourced from the abstract (fidelity-gate §2.2).* **Correction:** the abstract says
+    three test blades, not two. It confirms 1.8 m/s, 53 kg per blade and μ 0.0071 (s = 0.0005); rocker,
+    hollow and ice temperature remain secondary. The model's drag is not negligible here (about 18% of
+    the stand-in's deceleration), so the case shows the verdict both ways instead: 0.0720 m/s² with drag,
+    0.0589 without, both within the 0.0181 tolerance of 0.0697. Passes.
 - **`glide-speedskate-straight-dekoning1992`** — O4, straight-line μ 0.0046 ± 0.0004 at 8 m/s.
   Caveats: speed-skate blade, a stride average rather than a glide, drag dominant at 8 m/s. Likely
   `unmodelled` for a figure-skate blade. Recorded so it is not re-derived.
