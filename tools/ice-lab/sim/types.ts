@@ -625,6 +625,12 @@ export interface SkatingInput {
    * and replay recorded without it is unchanged; absent reads as 0.
    */
   pitchSplit?: number;
+  /**
+   * -1..1, the two knees' commands set apart: left leg at knee - kneeSplit,
+   * right at knee + kneeSplit. The standing leg's bend sets the load and the
+   * jump; the pushing leg's sets the push. Optional like `pitchSplit`.
+   */
+  kneeSplit?: number;
   push: boolean;
   brake: boolean;
   /**

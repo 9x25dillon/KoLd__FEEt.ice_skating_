@@ -8,13 +8,13 @@ experiment remains unchanged.
 
 | Setup | Continuous control | Assistance and move access |
 | --- | --- | --- |
-| Simulation | Left/right sticks control the corresponding blades via mean lean and differential tilt; average fore–aft pressure controls the rocker. Hold the profile's modifier (L3 by default) for right-stick arms and wind-up; the right blade retains its last command until release. | Responsive athlete balance model, no jump assist, no landing coach, no Cruise or held-repeat strokes. Manual turn gestures. |
+| Simulation | Left/right sticks control the corresponding blades: each stick's side-to-side is its blade's tilt and its fore–aft is that blade's heel/toe. LT bends the left knee, RT the right; the standing leg's knee sets load and jump, the pushing leg's sets the push. Brake is D-pad ↑ for now. Through a turn each held stick keeps its side of the ice until that stick is released. Hold the profile's modifier (L3 by default) for right-stick arms and wind-up; the right blade retains its last command until release. | Responsive athlete balance model, no jump assist, no landing coach, no Cruise or held-repeat strokes. Manual turn gestures. |
 | Blade Explorer | Left stick directly controls lean and rocker pressure; right stick controls arms. Bumpers retain the chosen foot. | 50–100% assistance, default 75%: blends balance damping/recovery and latency toward the assisted preset, and blends excessive lean toward a speed-dependent blade-support limit. Manual jump landings and turn gestures. |
 | Full Repertoire | Left-stick lean/pressure, right-stick arms, retained foot selection. | Assisted balance, wind-up jump assistance, dedicated turn/glide commands, optional landing coach in the game. Covers implemented moves; entries must still be physically available. |
 
 All three start with Cruise off. Explorer and Repertoire can enable it and repeat
 strokes while A is held. Simulation requires each press. RT loads/releases, LT
-brakes, R3 plants the toe or changes spin foot, X twizzles and Y spins. Modifier
+brakes (in Simulation: LT/RT are the left/right knees and D-pad ↑ brakes), R3 plants the toe or changes spin foot, X twizzles and Y spins. Modifier
 + X/Y/A selects Ina Bauer/spiral/cantilever. Start a spin before engaging the
 modifier to adjust arms/camel in Simulation; the button bank stays latched.
 
@@ -23,7 +23,8 @@ a loop, or reverse lean during the first half for a rocker. Transfer plus revers
 produces a choctaw. D-pad down requests a bracket; hold it and reverse lean for
 a counter. Dedicated loop/rocker/counter/mohawk/choctaw shortcuts apply only in
 Repertoire. The corresponding keyboard controls are B/N plus Q/E and lean inputs.
-Simulation keyboard: A/D left blade, left/right arrows right blade, W/S pressure,
+Simulation keyboard: A/D left blade, left/right arrows right blade, W/S pressure
+(shared by both blades), Shift both knees, X brake,
 C arms, comma wind-up. Explorer keeps A/D or arrows for lean.
 
 These are authored tuning starting points, not external physics validation.

@@ -84,6 +84,29 @@ import type { PivotTick } from "./moves.ts";
  */
 const axis = (v: number, fallback: number): number => (Number.isFinite(v) ? v : fallback);
 
+/**
+ * Each leg's knee command, [left, right]: the shared knee, split apart by
+ * `kneeSplit` as `leanSplit` splits tilt. With no split both are the knee.
+ */
+const legKnees = (input: SkatingInput, floor = 0): [number, number] => {
+  const knee = axis(input.knee, 0.35), split = clamp(axis(input.kneeSplit ?? 0, 0), -1, 1);
+  return [Math.max(knee - split, floor), Math.max(knee + split, floor)];
+};
+
+/**
+ * The knee the body stands on: each leg's, by how much of the weight it takes.
+ * Exactly the shared knee when there is no split (a + w * 0 is a).
+ */
+const supportKnee = ([l, r]: [number, number], weightR: number): number => l + weightR * (r - l);
+
+/**
+ * The jump reads the knee it loads, lands and absorbs on: the standing leg's.
+ * Without a split this is the input itself, untouched.
+ */
+const legInput = (input: SkatingInput): SkatingInput =>
+  (input.kneeSplit ?? 0) === 0 ? input
+    : { ...input, knee: supportKnee(legKnees(input), clamp(axis(input.weight, 0.5), 0, 1)) };
+
 /** Metres each foot of an Ina Bauer sits from the body along the track, lead ahead. */
 const INA_BAUER_STRIDE = 0.3;
 
@@ -209,7 +232,7 @@ export function step(
   // bite, no stroke, no balance loop to fall out of. sim/jump.ts flies the
   // body and lands it. Unreachable while jumpMode is 0.
   if (s.jump.phase === JUMP_PHASE.Air) {
-    jumpAir(s, input, pFatigue, dt, events);
+    jumpAir(s, legInput(input), pFatigue, dt, events);
     // A landing resolves INSIDE jumpAir, on this early-return path — the only
     // one there is, every landing goes through it — so this is the one place
     // music credit and hype can ever see EVENT.Landing.
@@ -230,11 +253,18 @@ export function step(
   // speed. Before this, a released trigger read as a straight leg, the push
   // force (strokePower * knee) was zero, and a pad could not get moving at
   // all. Deeper RT is still a stronger push; the floor only sets where zero is.
-  const kneeTarget = Math.max(axis(input.knee, 0.35),
-    alive && (input.push || s.strokeTime > 0) ? 0.35 : 0);
-  s.knee = moveToward(s.knee, clamp(kneeTarget, 0, 1), p.kneeRate * dt);
-  const knee = s.knee;
+  //
+  // Each leg has its own command (kneeSplit); the body's knee, the one that
+  // sets the load, bite and jump, is the standing leg's. The pushing leg's
+  // bend sets the push (pushKnee). Floored per leg, so either leg can push.
   const weightR = clamp(axis(input.weight, 0.5), 0, 1);
+  const legTargets = legKnees(input, alive && (input.push || s.strokeTime > 0) ? 0.35 : 0);
+  const kneeTarget = clamp(supportKnee(legTargets, weightR), 0, 1);
+  s.knee = moveToward(s.knee, kneeTarget, p.kneeRate * dt);
+  const knee = s.knee;
+  // The same bend rate, offset by how far the pushing leg's command sits from
+  // the standing leg's. Zero offset without a split: exactly the body's knee.
+  const pushKnee = (): number => clamp(knee + (clamp(legTargets[s.strokeFoot], 0, 1) - kneeTarget), 0, 1);
   const split = clamp(axis(input.leanSplit, 0), -1, 1);
   const pitch = axis(input.pitch, 0), pitchSplit = clamp(axis(input.pitchSplit ?? 0, 0), -1, 1);
   // Each blade's own point on the rocker: the shared pitch, split apart.
@@ -308,7 +338,7 @@ export function step(
     s.strokeFoot = (1 - s.strokeFoot) as Foot;   // two-beat alternation
     // Legs, once per push rather than per tick: SkateSolver.cpp's own
     // S.LegPool -= 0.011f * Knee, at the moment the push begins.
-    if (staminaOn) s.legs = clamp(s.legs - p.staminaLegsPerPush * knee, 0, 1);
+    if (staminaOn) s.legs = clamp(s.legs - p.staminaLegsPerPush * pushKnee(), 0, 1);
     // "A straight stroke on a flat, a crossover on a curve" (bible §2.1). Read
     // off the BODY's lean, not the blade's: at speed a wide arc needs little
     // blade and a lot of lean — 7 m/s round 13 m is 9 degrees of blade and 21
@@ -423,7 +453,7 @@ export function step(
         pushMass = pb.normalLoad / g;
         if (s.crossover) {
           const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? p.backPushScale : 1;
-          crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * knee * p.mass * back,
+          crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * pushKnee() * p.mass * back,
             biteCapacity(pb.normalLoad, s.crossSide * p.strokeEdge, p, condAt(pb.contact)));
         }
       }
@@ -661,7 +691,7 @@ export function step(
       // push drives backward: a C-cut rather than a stroke, and with the moves
       // on a slightly weaker one (backPushScale).
       const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? -1 : 1;
-      const wanted = p.strokePower * knee * p.mass * s.strokeMusicScale
+      const wanted = p.strokePower * pushKnee() * p.mass * s.strokeMusicScale
         * (back < 0 && p.movesMode >= 1 ? p.backPushScale : 1);
       const force = Math.min(wanted, push.biteCapacity);
       if (s.crossover && crossLat > 0) {
@@ -845,7 +875,7 @@ export function step(
   // ── 10. is the knee loading a jump, or releasing one? ─────────────────────
   if (!turning) carryDecay(s, p, dt);
   const wasGrounded = s.jump.phase !== JUMP_PHASE.Air;
-  jumpGround(s, input, pFatigue, dt, events);
+  jumpGround(s, legInput(input), pFatigue, dt, events);
   if (staminaOn && wasGrounded && s.jump.phase === JUMP_PHASE.Air)
     s.legs = clamp(s.legs - p.staminaLegsPerJump, 0, 1);
 

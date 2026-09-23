@@ -130,3 +130,18 @@ test("simulation: each stick's fore–aft is its own blade's heel/toe; the other
     assert.equal(o.map().input.pitchSplit, undefined, `${id} never drives the split`);
   }
 });
+
+test("simulation: LT and RT are the left and right knees; the brake is D-pad ↑", () => {
+  const r = rig("simulation"); r.h.buttons[6] = 0.9; r.h.buttons[7] = 0;
+  const left = r.map().input;
+  const lt = (0.9 - r.profile.triggerDeadzone) / (1 - r.profile.triggerDeadzone);
+  assert.ok(left.kneeSplit! < 0 && Math.abs(left.knee - left.kneeSplit! - lt) < 1e-12, "left knee from LT");
+  assert.ok(Math.abs(left.knee + left.kneeSplit!) < 1e-12, "right leg straight");
+  assert.equal(left.brake, false, "LT is no longer the brake here");
+  r.h.buttons[6] = 0; r.h.buttons[12] = 1;
+  assert.equal(r.map().input.brake, true);
+  const other = rig("explorer"); other.h.buttons[6] = 0.9;
+  const o = other.map().input;
+  assert.equal(o.brake, true, "the other setups keep LT as the brake");
+  assert.equal(o.kneeSplit, undefined);
+});

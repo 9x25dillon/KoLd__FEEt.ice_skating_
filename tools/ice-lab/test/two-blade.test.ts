@@ -15,6 +15,7 @@ import type { SkatingInput, SkaterState } from "../sim/types.ts";
 import { ReplayRecorder, parseReplay } from "../sim/replay.ts";
 import { SIM_DT } from "../sim/params.ts";
 import { step } from "../sim/solver.ts";
+import { JUMP_PHASE } from "../sim/jump.ts";
 
 const glide = (over: Partial<SkatingInput>, ticks = 240): SkaterState =>
   run(createState(DEFAULT_PARAMS, 5), { ...NEUTRAL_INPUT, lean: 0.3, ...over }, DEFAULT_PARAMS, ticks);
@@ -83,4 +84,59 @@ test("a replay with pitchSplit round-trips, and one without it still parses", ()
   const bad = JSON.parse(rec.toJson());
   bad.frames[0].input.pitchSplit = 2;
   assert.throws(() => parseReplay(JSON.stringify(bad)), /pitchSplit/);
+});
+
+// ── per-leg knee ────────────────────────────────────────────────────────────
+
+
+test("an absent kneeSplit is exactly a zero one, pushing and loading included", () => {
+  const p = { ...DEFAULT_PARAMS, movesMode: 1, jumpMode: 2 };
+  for (const knee of [0, 0.35, 0.8]) for (const weight of [0, 0.3, 1]) {
+    const go = (extra: Partial<SkatingInput>) => {
+      const s = createState(p, 5);
+      for (let i = 0; i < 240; i++) step(s, { ...NEUTRAL_INPUT, lean: 0.2, knee, weight, push: i % 90 === 0, ...extra }, p, SIM_DT, []);
+      return s;
+    };
+    const absent = go({}), zero = go({ kneeSplit: 0 });
+    assert.deepEqual(body(zero), body(absent), `knee ${knee}, weight ${weight}`);
+    assert.equal(zero.knee, absent.knee);
+    assert.equal(zero.jump.phase, absent.jump.phase);
+  }
+});
+
+test("the standing leg's knee is the body's: the free leg's bend moves nothing", () => {
+  // On the right foot: the right knee at 0.8 by two routes, the free left leg straight or bent.
+  const straightFree = glide({ weight: 1, knee: 0.4, kneeSplit: 0.4 });
+  const bentFree = glide({ weight: 1, knee: 0.8, kneeSplit: 0 });
+  assert.ok(Math.abs(straightFree.knee - bentFree.knee) < 1e-12);
+  assert.deepEqual(body(straightFree).map(v => v.toFixed(9)), body(bentFree).map(v => v.toFixed(9)));
+});
+
+test("the pushing leg's bend sets the push, the standing leg held", () => {
+  // The first push is the right leg's (two-beat alternation from the left).
+  // Standing mostly on the left: support = 0.7 kL + 0.3 kR, held at 0.6.
+  // MEASURED from 3 m/s, one push: right leg at 0.95 -> 3.3245 m/s, at 0.6 -> 3.1372.
+  const gain = (kR: number): number => {
+    const kL = (0.6 - 0.3 * kR) / 0.7, s = createState(DEFAULT_PARAMS, 3);
+    const input = { ...NEUTRAL_INPUT, weight: 0.3, knee: (kL + kR) / 2, kneeSplit: (kR - kL) / 2 };
+    for (let i = 0; i < 120; i++) step(s, { ...input, push: i === 0 }, DEFAULT_PARAMS, SIM_DT, []);
+    assert.equal(s.strokeFoot, FOOT.Right);
+    assert.ok(Math.abs(s.knee - 0.6) < 1e-9, "same standing knee");
+    return Math.hypot(s.vel.x, s.vel.y);
+  };
+  const bent = gain(0.95), even = gain(0.6);
+  assert.ok(bent - 3 > 1.5 * (even - 3), `bent push leg ${bent.toFixed(4)} vs even ${even.toFixed(4)} m/s`);
+});
+
+test("a jump loads on the standing leg's knee, not the mean of the two", () => {
+  const p = { ...DEFAULT_PARAMS, movesMode: 1, jumpMode: 2 };
+  const load = (kneeSplit: number): number => {
+    const s = createState(p, 5);
+    // Mean 0.45, under jumpLoadKnee; the right (standing) leg at 0.45 + split.
+    run(s, { ...NEUTRAL_INPUT, weight: 1, knee: 0.45, kneeSplit }, p, 30);
+    return s.jump.phase;
+  };
+  assert.ok(0.45 < p.jumpLoadKnee && 0.9 >= p.jumpLoadKnee);
+  assert.equal(load(0.45), JUMP_PHASE.Load, "standing leg bent: loading");
+  assert.equal(load(-0.45), JUMP_PHASE.None, "standing leg straight, free leg bent: nothing");
 });

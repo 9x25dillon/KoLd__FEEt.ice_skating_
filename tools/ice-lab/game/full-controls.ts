@@ -162,6 +162,17 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     mapped.pitch = keyPitch || (leftPitch + rightPitch) / 2;
     // Each stick's fore–aft is its own blade's heel/toe. The keyboard's W/S stays shared.
     mapped.pitchSplit = keyPitch ? 0 : (rightPitch - leftPitch) / 2;
+    // A trigger per knee: LT the left leg, RT the right. The brake moves off LT
+    // to D-pad ↑, free in this setup unless the profile has bound it, until
+    // stops come from the blades themselves.
+    if (h.connected && !key("shift")) {
+      const kneeL = trigger(6), kneeR = trigger(7);
+      mapped.knee = (kneeL + kneeR) / 2;
+      mapped.kneeSplit = (kneeR - kneeL) / 2;
+    }
+    const dpadUpBound = ACTIONS.some(a => (!options.manual || manualAction(a.id))
+      && profile.bindings[a.id].button === 12 && profile.bindings[a.id].modified === modified);
+    mapped.brake = key("x") || (down(12) && !dpadUpBound);
     mapped.carriage = key("c") ? 1 : arms ? Math.min(1, Math.hypot(r.x, r.y)) : 0;
     mapped.windup = key(",") ? 1 : arms ? r.x : 0;
   }
@@ -208,7 +219,7 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   else if (held.has("spiral")) input.weight = f.foot === 0.5 ? s.supportFoot : f.foot;
   const cantilever = held.has("low") && !s.fallen && s.move === MOVE.None && s.jump.phase === JUMP_PHASE.None
     && Math.hypot(s.vel.x, s.vel.y) >= 1 && !input.turn && !input.bracket && !input.spin && !input.twizzle && !input.inaBauer;
-  if (cantilever) Object.assign(input, { knee: 0.65, weight: 0.5, pitch: -0.25, pitchSplit: 0, push: false, toe: false, carriage: 1, windup: 0 });
+  if (cantilever) Object.assign(input, { knee: 0.65, kneeSplit: 0, weight: 0.5, pitch: -0.25, pitchSplit: 0, push: false, toe: false, carriage: 1, windup: 0 });
   if (held.has("low")) input.windup = 0;
   // Assistance scales edge demand with available speed, preserving the stick's
   // side and analog depth. Do not rewrite turn gestures or airborne control.
