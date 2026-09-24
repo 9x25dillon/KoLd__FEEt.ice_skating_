@@ -51,5 +51,6 @@ export function setupInput(c: Controls, s: SkaterState, setup: Setup, st: GameCo
     leanAssist: setup === "explorer" ? assistance : 0,
     repeatPush: setup !== "simulation" && !exp,
     digGate: setup === "diggate",
+    standingPush: !exp,
   });
 }

@@ -250,6 +250,29 @@ test("rocking back on the pad in Simulation: both sticks to the heel, yanked or 
   for (const [depth, ramp] of [[1, 1], [1, 12], [1, 24], [0.8, 1]]) assert.equal(rock(depth, ramp).fallen, false, `${depth} over ${ramp} ticks`);
 });
 
+test("from a standstill, A pushes from the standing leg and the weight goes across — every push counts, and the knee makes it stronger", () => {
+  // MEASURED from 0 m/s, A every 0.5 s for 4 s (the operator, 2026-09-24:
+  // "i cant seem to gain any momentum from a standing position"). Before, the
+  // weight stayed where the bumpers left it while the pushes alternated feet:
+  // every other push came off an unloaded blade and the skater fell (0.44
+  // m/s, down at 2 s in Simulation and Explorer). Now, knees straight: 1.09
+  // m/s at 4 s (Repertoire 1.12); knees at 0.65: 2.53 (2.54); pushes
+  // alternating right, left…; standing; never a jump.
+  for (const setup of ["simulation", "explorer", "repertoire"] as const) for (const [knee, at4] of [[0, setup === "repertoire" ? 1.121 : setup === "explorer" ? 1.089 : 1.094], [0.65, setup === "simulation" ? 2.53 : 2.54]] as const) {
+    const r = rig(setup, 0); const feet: string[] = [];
+    for (let i = 0; i < 480 && !r.s.fallen; i++) {
+      r.h.buttons.fill(0); r.h.axes = [0, 0, 0, 0]; r.h.buttons[7] = knee; if (setup === "simulation") r.h.buttons[6] = knee;
+      if (i % 60 < 3) r.h.buttons[0] = 1;
+      const { input } = r.tick(); if (input.push && input.pushFoot !== undefined) feet.push(String(input.pushFoot));
+    }
+    const v = Math.hypot(r.s.vel.x, r.s.vel.y);
+    assert.equal(r.s.fallen, false, `${setup}, knee ${knee}`);
+    assert.equal(r.s.jump.phase, JUMP_PHASE.None);
+    assert.equal(feet.join(""), "10101010", `${setup}: pushes alternate feet`);
+    assert.ok(Math.abs(v - at4) < 0.02, `${setup}, knee ${knee}: ${v.toFixed(3)} m/s at 4 s`);
+  }
+});
+
 // ── Experimental: the legs on the triggers, pumps and thumb strokes ─────────
 
 /** From 3 m/s, weight shared (X + B), the pad driven by `plan` each tick from rest. */

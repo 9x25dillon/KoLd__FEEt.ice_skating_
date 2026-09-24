@@ -91,6 +91,8 @@ export function encode(inputs: SkatingInput[]): [number, Partial<SkatingInput>][
   inputs.forEach((input, i) => {
     const changed: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(input)) if (prev[k] !== v) changed[k] = v; // === , not Object.is: JSON cannot carry -0
+    // A field that was there and is gone (a push's pushFoot, the tick after): null, which no input uses.
+    for (const k of Object.keys(prev)) if (prev[k] !== undefined && (input as unknown as Record<string, unknown>)[k] === undefined) changed[k] = null;
     if (Object.keys(changed).length) out.push([i, changed as Partial<SkatingInput>]);
     prev = input as unknown as Record<string, unknown>;
   });
@@ -101,7 +103,10 @@ export function decode(changes: [number, Partial<SkatingInput>][], ticks: number
   const out: SkatingInput[] = [];
   let at = 0, current = {} as SkatingInput;
   for (let i = 0; i < ticks; i++) {
-    if (at < changes.length && changes[at][0] === i) current = { ...current, ...changes[at++][1] };
+    if (at < changes.length && changes[at][0] === i) {
+      current = { ...current, ...changes[at++][1] };
+      for (const [k, v] of Object.entries(current)) if (v === null) delete (current as unknown as Record<string, unknown>)[k];
+    }
     out.push(current);
   }
   return out;
