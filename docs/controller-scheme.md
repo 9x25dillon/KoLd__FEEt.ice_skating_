@@ -4,7 +4,10 @@ The browser Controls menu, Godot Settings and browser controller workshop now of
 three complete setups. Selecting one changes both input mapping and assistance;
 the game starts a fresh run so its recording includes the actual parameters.
 The old mappings remain available as custom overrides. The lab's blind A/B/C
-experiment remains unchanged.
+experiment keeps its labels. Since 2026-09-24 its scheme C — and the old Two-foot
+control override, which shares that mapping — holds L3 for right-stick arms as
+Simulation holds its modifier: the right blade keeps its last command until L3
+is let go. The lab's next course is keyboard G only; L3 no longer changes it.
 
 | Setup | Continuous control | Assistance and move access |
 | --- | --- | --- |

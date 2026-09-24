@@ -513,9 +513,14 @@ an Ina Bauer.
 Pad: **left stick** lean, **RT** knee, **A** stroke, **LT** brake, **LB/RB**
 weight, **Y** reset, **X** preset, **Back** scheme; for jumps, **right stick**
 carriage (flicked **right** before the release, the wind-up), **B** toe pick, **D-pad ↑** jump mode (and past full jumps, the moves), **D-pad ↓** camera view, **D-pad ← →**
-zoom — or, in the jump challenge, the previous / next jump. The courses are on
-the stick clicks: **left stick click** next course, **right stick click** next
-ghost. With the moves on the face buttons take the bible's §2.1 layout: **B** is the
+zoom — or, in the jump challenge, the previous / next jump. The next ghost is
+the **right stick click**; the next course is keyboard **G** only (the left stick
+click was the next course until 2026-09-24 — it is scheme C's arms now). In
+scheme C both sticks are blades, so **hold L3** and the right stick is the arms
+— its reach the carriage, thrown right the wind-up — while the right blade keeps
+its last command; let go of L3 and the stick is the right blade again. After a
+hop the HUD says why in words (which foot, which way, which edge, the pick, the
+arms), and a landing that let RT go says what that cost. With the moves on the face buttons take the bible's §2.1 layout: **B** is the
 turn, **X** held a twizzle, **Y** held a spin, **LB + RB** together an Ina Bauer, reset moves to **Back**, and the toe
 pick moves to a tap of **LT**, which held is still the brake (the preset and the
 scheme stay on keyboard **T** and **M**).
@@ -613,7 +618,7 @@ mapping below is the developer's copy and belongs nowhere on screen:
 |---|---|---|
 | **A · Lean & Load** | left stick is the lean vector, fore/aft on it the rocker; right stick is carriage, which only a jump reads | the bible's §2.1 proposal, and what ships if it wins |
 | **B · Steer & Load** | left stick is intended travel direction; the skater picks the edge and the lean; nothing on the pad addresses the blade | keeps the carve physics, gives up deliberate inside/outside edge choice — the sport's alphabet |
-| **C · Two-Foot** | left stick is the left blade's edge, right stick the right blade's; fore/aft on either stick is that blade's contact point, and the solver gets their mean | possibly unlearnable, possibly the most distinctive scheme in any sports game |
+| **C · Two-Foot** | left stick is the left blade's edge, right stick the right blade's; fore/aft on either stick is that blade's contact point, and the solver gets their mean; L3 held lends the right stick to the arms, the right blade holding its last command | possibly unlearnable, possibly the most distinctive scheme in any sports game |
 
 Three, not one, because the bible's own risk 1 says so: *"no shipped game has
 used analog lean plus analog knee as its primary verb … keep two fallback

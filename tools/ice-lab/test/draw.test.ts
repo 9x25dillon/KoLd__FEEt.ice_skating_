@@ -8,7 +8,7 @@
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { pendulum, bodyPoints, SEGMENT } from "../app/draw.ts";
+import { pendulum, bodyPoints, SEGMENT, wrapWords } from "../app/draw.ts";
 import type { V3 } from "../app/draw.ts";
 import { PRESETS } from "../sim/params.ts";
 import { createState, run } from "../sim/solver.ts";
@@ -68,4 +68,13 @@ test("the knee is solved, not placed: two fixed segments, bending forward, deepe
   }
   assert.ok(forward[0] > 0, "the knee goes forward, not back");
   assert.ok(forward[1] > forward[0], `a deep knee bends further: ${forward.map((f) => f.toFixed(3))}`);
+});
+
+test("a HUD hint wraps at spaces to the panel's width, and loses no word", () => {
+  const hint = "forward on the right foot: no jump leaves here — skate backward (a three-turn) or take off from the left outside edge for an axel";
+  const lines = wrapWords(hint, 62);
+  assert.ok(lines.length >= 2);
+  for (const l of lines) assert.ok(l.length <= 62, `"${l}" is ${l.length} characters`);
+  assert.equal(lines.join(" "), hint);
+  assert.deepEqual(wrapWords("short", 62), ["short"]);
 });

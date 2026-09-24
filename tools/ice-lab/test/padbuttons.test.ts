@@ -1,8 +1,9 @@
 // The game layer on an Xbox pad — app/pad.ts, read through a fake gamepad.
 //
-// The stick clicks were the last two free buttons, so they carry the courses'
-// two choices, and the D-pad's left and right became a step the lab
-// interprets. A remap is exactly the kind of change that quietly takes a
+// The stick clicks were the last two free buttons, so they carried the
+// courses' two choices, and the D-pad's left and right became a step the lab
+// interprets. Since 2026-09-24 L3 is held for scheme C's arms instead, and the
+// next course is keyboard G alone; R3 is still the next ghost. A remap is exactly the kind of change that quietly takes a
 // button away from something else, so the neighbours are checked too.
 
 import { strict as assert } from "node:assert";
@@ -25,13 +26,20 @@ Object.defineProperty(g.navigator, "getGamepads", { value: () => [gamepad()], co
 const pad = new Pad({ addEventListener: () => { /* no keys in a test */ } } as unknown as HTMLElement);
 const press = (...buttons: number[]) => { held = buttons; return pad.read(); };
 
-test("clicking the left stick is the next course, the right stick the next ghost — once per click", () => {
+test("clicking the left stick is the arms held, not the next course; the right stick is still the next ghost — once per click", () => {
+  // This test used to pin the old behaviour — L3 pressed gave toggleGame true,
+  // once per click. L3 is now scheme C's arms, held through a jump, and a
+  // course change on it would reset the skater mid-takeoff, so the pad no
+  // longer asks for one. test/app-loads.test.ts holds the lab to it, and to
+  // keyboard G still changing the course.
   press();
   let c = press(L3);
-  assert.equal(c.toggleGame, true);
+  assert.equal(c.toggleGame, false, "L3 is not the next course any more");
+  assert.equal(c.armsHold, true, "it is the arms, held");
   assert.equal(c.cycleGhost, false);
   c = press(L3);
-  assert.equal(c.toggleGame, false, "held is not pressed again");
+  assert.equal(c.armsHold, true, "held, not once per click: the arms stay out while it is down");
+  assert.equal(press().armsHold, false, "and let go, the right stick is the blade again");
   press();
   c = press(R3);
   assert.equal(c.cycleGhost, true);

@@ -185,3 +185,40 @@ test("C · actually puts the two blades on separate edges", () => {
     `the blades must actually be apart: ${(s.blade[0].tilt * D).toFixed(1)} / ${(s.blade[1].tilt * D).toFixed(1)}`);
   assert.ok(len(s.vel) > 0.5, "and still moving");
 });
+
+test("C · L3 held lends the right stick to the arms, and the right blade keeps its last command", () => {
+  // Until 2026-09-24 C's arms were the keyboard's alone, and a pad skating C
+  // hopped without rotation. L3 held now reads the right stick as A does —
+  // its reach the carriage, its sideways throw the wind-up — while the right
+  // blade holds the command it had when L3 went down (game/full-controls.ts's
+  // Simulation modifier does the same).
+  const st = newSchemeState();
+  const edge = schemeC({ ...sticks, lx: -0.4, rx: -0.4, ry: 0.2 }, st);
+  assert.equal(edge.lean, -0.4);
+  assert.equal(edge.carriage, 0, "released, the right stick is the blade and not the arms");
+  assert.equal(edge.windup, 0);
+
+  const arms = schemeC({ ...sticks, lx: -0.4, rx: 0.6, ry: 0.8, armsHold: true }, st);
+  assert.equal(arms.carriage, 1, "the stick's reach is the carriage");
+  assert.equal(arms.windup, 0.6, "its sideways throw is the wind-up");
+  assert.equal(arms.lean, -0.4, "the right blade still has -0.4: the lean does not move");
+  assert.equal(arms.leanSplit, 0, "nor does the split");
+  assert.equal(arms.pitch, edge.pitch, "nor the rocker: the stick's fore/aft is the arms, not the blade's toe");
+
+  const half = schemeC({ ...sticks, lx: -0.4, rx: 0, ry: 0.3, armsHold: true }, st);
+  assert.equal(half.carriage, 0.3);
+  assert.equal(half.lean, -0.4, "held through every tick L3 is down");
+
+  const back = schemeC({ ...sticks, lx: -0.4, rx: 0.2, ry: 0 }, st);
+  assert.equal(back.carriage, 0, "L3 let go: the right stick is the right blade again");
+  assert.equal(back.windup, 0);
+  assert.equal(back.lean, (-0.4 + 0.2) / 2, "reading the stick where it is now");
+
+  // The keyboard's arms work either way, as they always did.
+  assert.equal(schemeC({ ...sticks, carriage: 1 }, st).carriage, 1);
+  assert.equal(schemeC({ ...sticks, windup: 1, armsHold: true }, st).windup, 1);
+  // No state handed in and L3 held: nothing remembered, so the right blade rests.
+  const fresh = schemeC({ ...sticks, lx: -0.4, rx: 0.9, armsHold: true });
+  assert.equal(fresh.lean, -0.2);
+  assert.equal(fresh.carriage, 0.9);
+});

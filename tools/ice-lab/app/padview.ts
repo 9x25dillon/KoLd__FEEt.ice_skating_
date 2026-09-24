@@ -37,7 +37,7 @@ const FLASH_TICKS = 30;
 export const STICK_ROLE = [
   { left: "lean ↔ edge · ↕ rocker", right: "carriage · jumps" },
   { left: "point where to go", right: "carriage · jumps" },
-  { left: "left blade · ↕ rocker", right: "right blade · ↕ rocker" },
+  { left: "left blade · ↕ rocker", right: "right blade · L3: arms" },
 ] as const;
 
 type Flash = "push" | "toe" | "reset" | "pause" | "cyclePreset" | "cycleScheme" | "cycleJump";

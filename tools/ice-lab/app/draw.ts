@@ -233,6 +233,11 @@ export class Renderer {
   private still = new Camera();
   /** Fed once per tick by the lab; drawn when `opt.pad` is on. */
   readonly pad = new PadView();
+  /**
+   * Why the last landing was a hop, and what the knee cost it (app/hophint.ts).
+   * Set by the lab on each landing, cleared on reset; drawn under the LAST line.
+   */
+  hint: string[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -725,6 +730,8 @@ export class Renderer {
       out.push([`LAST  ${name}  ${L.turned.toFixed(2)} rev  TQ ${L.takeoffQuality.toFixed(2)}  `
         + `LQ ${L.landingQuality.toFixed(2)}${L.fall ? "  FALL" : L.stepOut ? "  step-out" : ""}`
         + `${L.twoFoot && L.kind !== JUMP_NONE ? "  two-foot" : ""}${L.armed ? "  wound" : ""}`, L.fall ? "#ff4d6d" : INK]);
+      // Wrapped to the HUD's 480 px: a hint is a sentence, and the panel is not.
+      for (const h of this.hint) for (const w of wrapWords(h, 62)) out.push([`  ${w}`, GOLD]);
     }
     return out;
   }
@@ -860,3 +867,15 @@ export class Renderer {
 }
 
 const clampUnit = (x: number): number => (x < -1 ? -1 : x > 1 ? 1 : x);
+
+/** Split a sentence into lines of at most `width` characters, at spaces. */
+export function wrapWords(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    if (line && line.length + 1 + word.length > width) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}

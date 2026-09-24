@@ -14,7 +14,8 @@ import { ReplayRecorder, ReplayPlayer, parseReplay, MAX_REPLAY_BYTES } from "../
 import { IceGrid } from "../sim/ice.ts";
 import { Telemetry } from "../sim/telemetry.ts";
 import { SessionMeter } from "../sim/session.ts";
-import type { SkaterState, EdgeEvent } from "../sim/types.ts";
+import { EVENT } from "../sim/types.ts";
+import type { SkaterState, EdgeEvent, SkatingInput } from "../sim/types.ts";
 import { Renderer, DEFAULT_OPTIONS } from "./draw.ts";
 import type { DrawOptions, DrawExtras } from "./draw.ts";
 import { Camera, VIEW, VIEW_NAME } from "./camera.ts";
@@ -56,6 +57,7 @@ import { Pad } from "./pad.ts";
 import { applyScheme, newSchemeState, SCHEME_LABEL } from "./schemes.ts";
 import type { Scheme } from "./schemes.ts";
 import { FixedStep } from "./loop.ts";
+import { hopHint } from "./hophint.ts";
 import { EdgeAudio } from "./audio.ts";
 import { loadTables, scoreJump } from "../sim/score.ts";
 import type { ScoreTables, JumpScore } from "../sim/score.ts";
@@ -234,6 +236,7 @@ export class Lab {
           this.player.advance();
           this.camera.update(this.player.state, SIM_DT);
           this.renderer.pad.note(null, this.player.input);
+          if (this.player.input) this.noteLanding(this.player.state, this.player.input, this.player.events, this.player.params);
           this.audio.onTick(this.player.input, this.player.events, this.player.state);
           this.telemetry.capture(this.player.state);
           this.telemetry.pushEvents(this.player.events);
@@ -299,6 +302,7 @@ export class Lab {
     this.renderer.pad.note(c, it, this.params.movesMode >= 1);
     this.events.length = 0;
     step(this.state, it, this.params, SIM_DT, this.events, this.ice);
+    this.noteLanding(this.state, it, this.events, this.params);
     this.audio.onTick(it, this.events, this.state);
     this.meter.sample(this.state, it, this.events, SIM_DT);
     this.camera.update(this.state, SIM_DT);
@@ -314,6 +318,17 @@ export class Lab {
         this.recordingError = `Recording stopped: ${error instanceof Error ? error.message : String(error)}`;
       }
     }
+  }
+
+  /**
+   * On a landing, put why it was a hop, and what the knee cost it, on the HUD
+   * (app/hophint.ts). Taken on the landing tick itself: that is the only tick
+   * the knee the landing absorbed with is still the input in hand, and the
+   * takeoff's reading on the JumpState is overwritten by the next takeoff.
+   */
+  private noteLanding(s: SkaterState, it: SkatingInput, events: readonly EdgeEvent[], p: Params): void {
+    if (!events.some((e) => e.type === EVENT.Landing)) return;
+    this.renderer.hint = hopHint(s.landed, { kind: s.jump.kind, code: s.jump.takeoffCode }, p.jumpMode, it.knee);
   }
 
   /**
@@ -598,6 +613,7 @@ export class Lab {
     this.startGhost();
     this.telemetry.reset();
     this.renderer.clearTrace();
+    this.renderer.hint = [];
     // A fresh sheet each run, the way a rink is actually resurfaced between skaters.
     this.ice = new IceGrid(this.params.rinkHalfLength, this.params.rinkHalfWidth);
     this.renderer.clearWear(this.ice);
