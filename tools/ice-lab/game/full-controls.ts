@@ -160,7 +160,7 @@ export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks
 const TURNS: Action[] = ["three", "mohawk", "bracket", "loop", "rocker", "counter", "choctaw"];
 export const manualAction = (action: Action): boolean => !TURNS.includes(action) || action === "three" || action === "bracket";
 
-export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; pumps?: boolean; experimental?: boolean; leanAssist?: number; repeatPush?: boolean; digGate?: boolean }
+export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; pumps?: boolean; experimental?: boolean; leanAssist?: number; repeatPush?: boolean; digGate?: boolean; standingPush?: boolean }
 
 /**
  * THE DIG GATE (the Dig Gate setup, 2026-09-24). LB + RB held — and no A or
@@ -535,6 +535,22 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
       if (!key(",")) mapped.windup = f.arms * ARMS_SWING;
       if (!key("c")) mapped.carriage = Math.abs(f.arms);
     }
+  }
+  // Simulation, Blade Explorer, Full Repertoire (the operator, 2026-09-24: no
+  // momentum from a standstill): a push is the standing leg's, both blades
+  // down through it, then the weight goes to the other foot — Experimental's
+  // stroking rule (pumpInput). Before, the weight stayed where the bumpers
+  // left it while the pushes alternated feet, so every other push came from
+  // an unloaded blade, and from rest the skater fell (measured: 0.44 m/s,
+  // down at 2 s; now 0 -> 2 m/s in 4 s of pushes, standing).
+  if (options.standingPush) {
+    if (mapped.push && s.strokeTime <= 0 && mapped.pushFoot === undefined && !(leftFoot || rightFoot)) {
+      const foot = f.foot === 0 || f.foot === 1 ? f.foot : 1 - s.strokeFoot;
+      mapped.pushFoot = foot;
+      f.transferAt = s.tick + Math.round(p.strokeDuration / SIM_DT);
+      f.transferTo = 1 - foot;
+    }
+    if (f.transferTo !== undefined) mapped.weight = 0.5;
   }
   if (options.digGate) digGate(f, s, p, h.connected && down(4) && down(5) && !down(0) && !down(3), mapped);
   const input = latchTurns(SCHEME.A, mapped, st, s.flips, options.twoFoot === true);

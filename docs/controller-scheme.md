@@ -47,6 +47,14 @@ Explorer lean limiting, manual turns, physical load/release jumps, replay checks
 and matching browser/Godot state for all three setups. Physical-pad comfort still
 needs hands-on testing.
 
+**Pushing (Simulation, Blade Explorer, Full Repertoire, since 2026-09-24):** A pushes from the leg you
+stand on; both blades are down through the push, then the weight goes to the other foot, so the next
+push is the other leg's — the same rule as Experimental's strokes. From a standstill, A every 0.5 s:
+about 1.1 m/s after 4 s with the knees straight, 2.5 m/s with them bent to 0.65 (a deeper knee is a
+stronger push). The bumpers still choose a foot.
+
+**Game HUD:** compact; the backquote key (`` ` ``) hides it, `/` toggles the AI ghost.
+
 ## Full Repertoire bindings
 
 Full repertoire is the fourth **game** scheme, available in the browser's Controls

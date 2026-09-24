@@ -44,6 +44,12 @@
 // freeLeg stays at rest for a press's first 0.25 s (30 ticks of the script
 // differ, freeLeg only); every other input the same; Simulation's scripted
 // fall a tick later (710 -> 711).
+//
+// Re-recorded (2026-09-24, solver /39), operator-directed: in Simulation,
+// Blade Explorer and Full Repertoire a push is the standing leg's and the
+// weight goes across after it (pushFoot and weight change on push ticks);
+// Simulation's scripted fall 711 -> 715, Explorer's 694 -> 696. The encoding
+// now writes a field that disappears (a push's pushFoot) as null.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
