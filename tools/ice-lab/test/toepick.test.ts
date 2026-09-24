@@ -18,7 +18,7 @@ import type { SkatingInput, EdgeEvent } from "../sim/types.ts";
 import { setupParams, SETUPS } from "../game/setups.ts";
 
 // The Simulation athlete with stages B/C off (test/pitch.test.ts's base), the pendulum on, the pick off.
-const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 1, toePickMode: 0 };
+const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 1, toePickMode: 0, pitchInternalMode: 0 };
 const FEET = { ...SIM, slipMode: 1, footMode: 1 };
 const on = (p: Params): Params => ({ ...p, toePickMode: 1 });
 
@@ -93,7 +93,7 @@ test("a stick yanked to one heel throws the other blade onto its pick", () => {
   // in one tick; the split around it puts the unasked left blade at contactS 1
   // — on the pick. The pendulum's own counter-movement; Experimental's stroke
   // is forgiving so it need not go there (test/setups.test.ts).
-  const p = on(setupParams("experimental"));
+  const p = on({ ...setupParams("experimental"), pitchInternalMode: 0 });
   const r = skate(p, { knee: 0.38, pitch: -0.5, pitchSplit: -0.5 }, 3, 0.1);
   assert.equal(r.s.fallReason, FALL.ToePickTrip);
   assert.equal(r.catches[0].foot, FOOT.Left);

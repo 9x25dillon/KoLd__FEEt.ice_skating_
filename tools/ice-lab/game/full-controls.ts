@@ -485,7 +485,15 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
       f.lastPush = s.tick;
     }
     if (options.pumps && f.transferTo !== undefined) mapped.weight = 0.5;
-    if (freeLegIndex >= 0 && h.connected) mapped.freeLeg = 0.5 + 0.5 * trigger(freeLegIndex === 0 ? 6 : 7);
+    if (freeLegIndex >= 0 && h.connected) {
+      // A snap of the free leg's trigger is a push, not a swing: until the
+      // press outlasts the gesture window the leg stays at rest. A snapped
+      // swing twists the body hard (freeLegMode), and stroking spun the
+      // skater round (2026-09-24, measured: heading reversed, yaw 10 rad/s).
+      const pull = trigger(freeLegIndex === 0 ? 6 : 7), rise = f.gestures?.rise?.[freeLegIndex] ?? -1e9;
+      const snapping = pull >= PUMP_HIGH && s.tick - rise < GESTURE_TICKS;
+      mapped.freeLeg = snapping ? 0.5 : 0.5 + 0.5 * pull;
+    }
     if (options.pumps && !mapped.push) {
       const auto = autoCrossover(f, s, p);
       if (auto) Object.assign(mapped, auto);

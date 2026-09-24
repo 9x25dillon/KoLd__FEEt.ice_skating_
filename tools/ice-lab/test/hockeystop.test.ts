@@ -59,29 +59,30 @@ function hockeyStop(entry: number, stopLean = 0.3) {
 }
 
 test("a hockey stop from play: rise, turn the blades square, scrape to a standstill, stand", () => {
-  // MEASURED (since the fore-aft pendulum is on in Simulation, 2026-09-23):
-  // entry lean 0.4, stop lean 0.3 — scraped to 1 m/s 1.47 s after the rise,
-  // standstill 6.30 s after it (the bot's glide, blades in line), 15.8 m from
-  // the start of the carve, the blades held 65° or more across until 2 m/s,
-  // and standing 1.5 s later. (Without the pendulum: 1.60 s, 4.31 s, 15.4 m,
-  // 63°; before /34: standstill 2.99 s, 14.1 m, 72°.)
+  // MEASURED (since the arms join the fore-aft pendulum in Simulation,
+  // 2026-09-24): entry lean 0.4, stop lean 0.3 — scraped to 1 m/s 1.57 s
+  // after the rise, standstill 4.09 s after it (the bot's glide, blades in
+  // line), 15.2 m from the start of the carve, the blades held 64° or more
+  // across until 2 m/s, and standing 1.5 s later. (The ankle alone: 1.47 s,
+  // 6.30 s, 15.8 m, 65°; without the pendulum: 1.60 s, 4.31 s, 15.4 m, 63°;
+  // before /34: standstill 2.99 s, 14.1 m, 72°.)
   const r = hockeyStop(0.4);
   assert.equal(r.s.fallen, false, "standing");
-  assert.ok(Math.abs(r.scraped - 1.47) < 0.05, `scraped to 1 m/s ${r.scraped.toFixed(2)} s after the rise`);
-  assert.ok(Math.abs(r.stopped - 6.30) < 0.05, `stopped ${r.stopped.toFixed(2)} s after the rise`);
-  assert.ok(Math.abs(r.dist - 15.8) < 0.2, `${r.dist.toFixed(1)} m`);
-  assert.ok(Math.abs(r.squareFrom2 - 65.4) < 2, `blades held across: ${r.squareFrom2.toFixed(0)}° at the least above 2 m/s`);
+  assert.ok(Math.abs(r.scraped - 1.57) < 0.05, `scraped to 1 m/s ${r.scraped.toFixed(2)} s after the rise`);
+  assert.ok(Math.abs(r.stopped - 4.09) < 0.05, `stopped ${r.stopped.toFixed(2)} s after the rise`);
+  assert.ok(Math.abs(r.dist - 15.23) < 0.2, `${r.dist.toFixed(1)} m`);
+  assert.ok(Math.abs(r.squareFrom2 - 63.6) < 2, `blades held across: ${r.squareFrom2.toFixed(0)}° at the least above 2 m/s`);
   assert.ok(Math.abs(r.s.lean) < 0.1, `upright after (${r.s.lean.toFixed(2)})`);
   assert.ok(r.events.some(e => e.type === EVENT.SkidBegin), "and it was a skid all the way");
 });
 
 test("from any entry lean up to 0.5 the stop holds: a forgiving stop, slower the deeper the entry", () => {
-  // MEASURED (with the fore-aft pendulum): scraped to 1 m/s — entry 0.3
-  // 1.47 s, 0.35 1.47, 0.45 1.50, 0.5 1.18 — all standing; the glide after
-  // is the bot's (0.45 is still creeping at 8 s). Without the pendulum 1.52,
-  // 1.56, 1.64, 1.37. Before engagement read the whole load on the ice, a
+  // MEASURED (the pendulum with the arms): scraped to 1 m/s — entry 0.3
+  // 1.50 s, 0.35 1.53, 0.45 1.62, 0.5 1.31 — all standing; the glide after
+  // is the bot's. The ankle alone: 1.47, 1.47, 1.50, 1.18; without the
+  // pendulum 1.52, 1.56, 1.64, 1.37. Before engagement read the whole load on the ice, a
   // skater on two feet counted as half-unweighted and entry 0.5 fell every time.
-  for (const [entry, time] of [[0.3, 1.47], [0.35, 1.47], [0.45, 1.50], [0.5, 1.18]]) {
+  for (const [entry, time] of [[0.3, 1.50], [0.35, 1.53], [0.45, 1.62], [0.5, 1.31]]) {
     const r = hockeyStop(entry);
     assert.ok(!r.s.fallen && Math.abs(r.scraped - time) < 0.05, `entry ${entry}: ${r.scraped.toFixed(2)} s, fallen ${r.s.fallen}`);
   }

@@ -37,6 +37,13 @@
 // Re-recorded (2026-09-24, solver /38), operator-directed: a fifth setup,
 // Dig Gate (Experimental's athlete, a phase-gated dig on LB + RB), gains its
 // record; the other four are unchanged.
+//
+// Re-recorded (2026-09-24, solver /39): the arms join the fore-aft pendulum
+// in Simulation, Experimental and Dig Gate, and a snap of Experimental's
+// free-leg trigger no longer swings the leg: Experimental's and Dig Gate's
+// freeLeg stays at rest for a press's first 0.25 s (30 ticks of the script
+// differ, freeLeg only); every other input the same; Simulation's scripted
+// fall a tick later (710 -> 711).
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";

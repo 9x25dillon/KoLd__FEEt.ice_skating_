@@ -152,7 +152,7 @@ godot4 --headless --path games/ice-run-godot -- --smoke-test --full-controls
 ```
 
 First-time Godot setup still requires the full preparation command to generate audio.
-Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/38`. The three setups record final mapped
+Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/39`. The three setups record final mapped
 inputs and parameters under label D; they add no solver arithmetic changes. Older
 builds reject D-labelled clips; current builds continue accepting A/B/C clips.
 
@@ -213,7 +213,7 @@ The other three setups are unchanged.
 | Pump + thumb stroke, same leg, within 0.125 s | add, up to a full push |
 | **Strokes switch feet** | on one foot, the leg you stand on pushes, whichever trigger or stick you snap (a lifted leg has nothing to push against); both blades are down through the push, then the weight goes to the other foot and stays, and the leg that pushed is free — so the next push is the other leg's. From a glide, start with the free leg's trigger: the standing trigger is the jump's load. While stroking (within 1 s of a push) a snap of the standing trigger is the next push; hold it past 0.25 s for the jump. With shared weight each trigger pushes its own leg |
 | X / B | weight to the left / right foot (it stays), arms swing left / right (eased, not a flick); both: shared weight |
-| Free leg's trigger | with the weight on one foot the other leg is free: its trigger swings it forward (released, it rests); snapped (pulled and let go within 0.25 s) it is a push from the standing leg. Smooth and over a deep edge it adds spin its own way round (a right free leg with the jump); snapped, it twists the blade loose |
+| Free leg's trigger | with the weight on one foot the other leg is free: held, its trigger swings it forward (released, it rests) — the swing starts once the press outlasts 0.25 s; snapped (pulled and let go within 0.25 s) it is a push from the standing leg and the leg stays at rest (a snapped swing spun the skater round). Smooth and over a deep edge it adds spin its own way round (a right free leg with the jump); snapped, it twists the blade loose |
 | L3 / R3 | toe pick |
 | A | turn: the three-turn gesture; LB + A bracket; RB + A cantilever |
 | Y | rotation: spin; LB + Y twizzle; RB + Y spiral; LB + RB + Y Ina Bauer |

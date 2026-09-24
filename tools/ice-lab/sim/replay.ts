@@ -263,7 +263,13 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       contactAsked and digL, present only with pitchMode 1; Params gained
 //       digOracle (a test oracle, 0 everywhere). Fixture rebased, every
 //       digest unchanged; pitchMode 1 clips from /37 must be re-recorded.
-export const REPLAY_SOLVER = "ice-lab-f64/38";
+//   /39 The arms in the fore-aft pendulum (pitchInternalMode, on in
+//       Simulation, Experimental and Dig Gate): Params gained
+//       pitchInternalMode and pitchAnkleTau; SkaterState optional
+//       pitchAnkle and pitchIntAccel, present only with both modes on.
+//       Fixture rebased, every digest unchanged; clips from those setups
+//       at /38 must be re-recorded.
+export const REPLAY_SOLVER = "ice-lab-f64/39";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

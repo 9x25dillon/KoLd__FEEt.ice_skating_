@@ -206,7 +206,7 @@ test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad
   // its inside edge, in the model's frame — 2.79 m/s after 3 s; sticks
   // centred, 4.25. Pushed toward each other the blades sit on their outside
   // edges, which catch: the stop is sudden and the fore-aft pendulum pitches
-  // the skater forward, down at tick 171, at 3.0 m/s. Slammed on in one tick
+  // the skater forward, down at tick 176 (171 with the ankle alone), at 2.8 m/s. Slammed on in one tick
   // the inside-edge snowplow holds too (2.72). With the toe-pick trip on
   // (the morning of 2026-09-24, off since — the operator: it made pumping
   // useless) the slam and the catch tripped on the pick; with pitchMode 0 a
@@ -228,7 +228,7 @@ test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad
   const v = (s: typeof inside) => Math.hypot(s.vel.x, s.vel.y);
   assert.ok(Math.abs(v(inside) - 2.79) < 0.05 && Math.abs(v(flat) - 4.25) < 0.05, `inside ${v(inside).toFixed(2)}, flat ${v(flat).toFixed(2)}`);
   assert.equal(caught.fallReason, FALL.Pitched, "caught edges pitch the skater forward");
-  assert.equal(caught.tick, 171);
+  assert.equal(caught.tick, 176);
   assert.equal(slammed.fallen, false, "slammed on, it holds");
   assert.ok(Math.abs(v(slammed) - 2.72) < 0.05, `slammed ${v(slammed).toFixed(2)}`);
 });
@@ -379,13 +379,16 @@ test("experimental: no automatic crossovers forward, straight, or too slow", () 
 
 test("experimental: the free leg's trigger swings it — released it rests — and a snap on it is a push", () => {
   // B puts the weight on the right foot: the left leg is free. Held past the
-  // gesture window it is a swing; snapped, the standing (right) leg pushes and
-  // the weight goes across to the left (the operator's call, 2026-09-24: a
-  // lifted leg cannot push; strokes switch feet).
+  // gesture window (0.25 s) it is a swing — the leg stays at rest until then,
+  // since a snapped swing twists the body hard and stroking spun the skater
+  // round; snapped, the standing (right) leg pushes and the weight goes
+  // across to the left (the operator's call, 2026-09-24: a lifted leg cannot
+  // push; strokes switch feet).
   const r = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 60 ? 1 : 0; }, 90);
   assert.equal(r.st.full!.foot, 1);
   assert.equal(r.inputs[10].freeLeg, 0.5, "released: at rest");
-  assert.equal(r.inputs[25].freeLeg, 1, "LT pulled: swung forward");
+  assert.equal(r.inputs[25].freeLeg, 0.5, "LT just pulled: could still be a snap, the leg waits");
+  assert.equal(r.inputs[55].freeLeg, 1, "LT held past 0.25 s: swung forward");
   assert.deepEqual(r.pushes, [], "a held swing released is a swing, not a push");
   const snap = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 26 ? 1 : 0; }, 90);
   assert.deepEqual(snap.pushes, ["1@1.00"], "snapped: the standing leg pushes");
@@ -397,11 +400,11 @@ test("experimental: the free leg's trigger swings it — released it rests — a
 test("experimental: strokes switch feet — each push is the standing leg's, then the weight goes across; a held trigger is still the jump", () => {
   // MEASURED from 3 m/s, weight on the right (B), a snap every 0.5 s for
   // 2.5 s, starting on the free (left) leg's trigger: the pushes alternate
-  // right, left, right…, both blades down through each push, and none reads
-  // as a jump — while stroking, a snap of the standing trigger is the next
-  // push. LT alone 4.017 m/s; alternating LT, RT 3.047 (every snap then lands
-  // on the free leg's trigger, which also swings that leg forward); gliding
-  // 2.731. From a glide the standing trigger is the jump's load at once, as
+  // right, left, right…, both blades down through each push, straight down
+  // the ice, and none reads as a jump — while stroking, a snap of the
+  // standing trigger is the next push. LT alone 4.087 m/s; alternating LT, RT
+  // 4.090; gliding 2.731. (Before the free leg waited out a snap, its swing
+  // spun the skater right round: 4.017 and 3.047, heading reversed.) From a glide the standing trigger is the jump's load at once, as
   // it was: RT snapped first takes off. Held 0.6 s, it takes off.
   const B = (i: number, h: ControllerHardware) => { if (i >= 2 && i < 4) h.buttons[1] = 1; };
   const snaps = (pick: (n: number) => number) => experiment((i, h) => {
@@ -414,7 +417,8 @@ test("experimental: strokes switch feet — each push is the standing leg's, the
     assert.equal(r.took, false, "a snap while stroking is never a jump");
     assert.equal(r.fallen, false);
   }
-  assert.ok(near(lt.v, 4.017) && near(alt.v, 3.047), [lt, alt].map(r => r.v.toFixed(3)).join(" / "));
+  assert.ok(near(lt.v, 4.087) && near(alt.v, 4.090), [lt, alt].map(r => r.v.toFixed(3)).join(" / "));
+  for (const r of [lt, alt]) assert.ok(Math.abs(r.st.full!.foot - 0.5) === 0.5, "on one foot between strokes");
   const weights = lt.inputs.slice(10, 70).map(x => x.weight);
   assert.ok(weights.includes(0.5) && weights.at(-1) === 0, "both down through the push, then onto the left foot");
   const standingFirst = snaps(() => 7);

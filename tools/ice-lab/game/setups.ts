@@ -38,7 +38,8 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   // SkatingInput.toe, which is untouched.
   // Dig Gate is Experimental's athlete with a phase-gated dig (2026-09-24).
   const exp = setup === "experimental" || setup === "diggate";
-  if (setup === "simulation" || exp) { p.footMode = 1; p.pitchMode = 1; }
+  // The arms and trunk with it (pitchInternalMode), 2026-09-24: the operator's queue item.
+  if (setup === "simulation" || exp) { p.footMode = 1; p.pitchMode = 1; p.pitchInternalMode = 1; }
   if (exp) p.freeLegMode = 1;
   return p;
 }

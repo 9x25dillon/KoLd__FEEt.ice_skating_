@@ -39,25 +39,26 @@ function backJump(checkAt: number) {
 }
 
 test("from backward speed: wind up, load, release, check — a double loop, landed", () => {
-  // MEASURED (since the fore-aft pendulum is on in Experimental): takeoff L
-  // 37.2 (mostly the arms' whip at takeoff; the heel dig adds a little — the
-  // ankle now has to lean the body onto the heel rather than put the contact
-  // there), air 0.58 s; checked 0.40 s into the air: 1.99 revolutions, called
-  // clean, standing. (Without the pendulum, since /34: 38.7, 2.07; before: 37.0, 1.98.)
+  // MEASURED (the pendulum with the arms, 2026-09-24): takeoff L 37.5
+  // (mostly the arms' whip at takeoff; the heel dig adds a little — the ankle
+  // has to lean the body onto the heel rather than put the contact there),
+  // air 0.58 s; checked 0.40 s into the air: 2.01 revolutions, called clean,
+  // standing. (The ankle alone: 37.2, 1.99; without the pendulum, since /34:
+  // 38.7, 2.07; before: 37.0, 1.98.)
   const r = backJump(0.4);
-  assert.ok(Math.abs(r.L - 37.2) < 0.1, `L ${r.L.toFixed(1)}`);
+  assert.ok(Math.abs(r.L - 37.54) < 0.1, `L ${r.L.toFixed(1)}`);
   assert.equal(r.landed, true);
   assert.equal(r.s.fallen, false);
   assert.equal(r.s.landed.kind, JUMP.Loop);
   assert.equal(r.s.landed.revolutions, 2);
-  assert.ok(Math.abs(r.s.landed.turned - 1.99) < 0.01 && r.s.landed.rotationCall === 0, `turned ${r.s.landed.turned.toFixed(2)}`);
+  assert.ok(Math.abs(r.s.landed.turned - 2.01) < 0.01 && r.s.landed.rotationCall === 0, `turned ${r.s.landed.turned.toFixed(2)}`);
 });
 
 test("the check's timing is the skill: early is short, late over-turns into a triple that falls", () => {
-  // MEASURED (with the fore-aft pendulum): at 0.35 s, 1.80 revolutions — a
-  // quarter short, landed; at 0.45 s, 2.17 — called a downgraded triple, a
-  // fall. (Without it: 1.87; 2.26, under-rotated.)
+  // MEASURED (the pendulum with the arms): at 0.35 s, 1.81 revolutions — a
+  // quarter short, landed; at 0.45 s, 2.19 — called a downgraded triple, a
+  // fall. (The ankle alone: 1.80, 2.17; without the pendulum: 1.87; 2.26, under-rotated.)
   const early = backJump(0.35), late = backJump(0.45);
-  assert.ok(!early.s.fallen && Math.abs(early.s.landed.turned - 1.80) < 0.01 && early.s.landed.rotationCall === 1, `early ${early.s.landed.turned.toFixed(2)}`);
+  assert.ok(!early.s.fallen && Math.abs(early.s.landed.turned - 1.81) < 0.01 && early.s.landed.rotationCall === 1, `early ${early.s.landed.turned.toFixed(2)}`);
   assert.ok(late.s.fallen && late.s.landed.revolutions === 3, `late: ${late.s.landed.turned.toFixed(2)} turned`);
 });

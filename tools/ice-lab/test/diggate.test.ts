@@ -43,20 +43,21 @@ test("Dig Gate is Experimental's athlete, listed as a fifth setup", () => {
 });
 
 test("skating backward, LB + RB: lean eased in, the contact arrives, the feet turn, the lean eases out — and the dig winds the way the skater curves", () => {
-  // MEASURED from 3-7 m/s backward, both sticks 0.3 either way: lean from
-  // 0.25 s, the contact arrives and the dig begins at 1.50 s (lean early),
-  // 0.5 s of dig, recovered at 3.00 s; the blades wind the body 0.64-0.76
-  // N m s with the lean (-0.61 to -0.72 the other way); no falls.
+  // MEASURED from 3-7 m/s backward, both sticks 0.3 either way, the arms
+  // with the pendulum: lean from 0.25 s, the contact arrives and the dig
+  // begins at 1.70 s (lean early), 0.5 s of dig, recovered at 3.20 s; the
+  // blades wind the body 0.64-0.81 N m s with the lean (-0.60 to -0.70 the
+  // other way); no falls. (The ankle alone: the dig at 1.50 s, 0.64-0.76.)
   for (const v of [-3, -5, -7]) for (const lx of [0.3, -0.3]) {
     const r = dig(v, lx);
     assert.equal(r.s.fallen, false, `${v} m/s, ${lx}`);
     assert.deepEqual(r.phases.map(x => x.split("@")[0]), ["idle", "lean", "dig", "recover", "idle"], r.phases.join(" "));
     const digAt = Number(r.phases[2].split("@")[1]);
-    assert.ok(Math.abs(digAt - 1.5) < 0.02, `dig at ${digAt}`);
+    assert.ok(Math.abs(digAt - 1.7) < 0.02, `dig at ${digAt}`);
     assert.equal(r.g.leanEarly, true);
     assert.equal(r.g.applied, true);
     assert.equal(Math.sign(r.winding), Math.sign(lx), `winds with the lean (${r.winding.toFixed(2)})`);
-    assert.ok(Math.abs(r.winding) > 0.6 && Math.abs(r.winding) < 0.8, `${v} m/s, ${lx}: ${r.winding.toFixed(2)}`);
+    assert.ok(Math.abs(r.winding) > 0.59 && Math.abs(r.winding) < 0.83, `${v} m/s, ${lx}: ${r.winding.toFixed(2)}`);
   }
 });
 
