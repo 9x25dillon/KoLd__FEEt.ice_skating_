@@ -120,9 +120,16 @@ export interface SchemeState {
    * own stick (`latchTurns`' perBlade). Toggled by every cusp like `mirror`.
    */
   bladeMirror: [boolean, boolean];
+  /**
+   * C only: the right stick as the right blade last read it. While L3 lends
+   * the stick to the arms, the right blade keeps this command.
+   */
+  rightBlade: { x: number; y: number };
 }
 
-export const newSchemeState = (): SchemeState => ({ commit: 0, flips: 0, mirror: false, bladeMirror: [false, false] });
+export const newSchemeState = (): SchemeState => ({
+  commit: 0, flips: 0, mirror: false, bladeMirror: [false, false], rightBlade: { x: 0, y: 0 },
+});
 
 /**
  * How far back toward centre a stick must come before a turn's mirror lets go.
@@ -264,10 +271,24 @@ export function schemeB(
  * it is the horizontal axes that are spent, and the vertical ones were idle.)
  * Each stick's fore/aft is relieved of its sideways bleed exactly as A's left
  * stick is, so holding an edge does not walk the contact point.
+ *
+ * THE ARMS ARE ON L3. Both sticks are blades, so until 2026-09-24 C's arms
+ * were the keyboard's alone and a pad could hop but not whip: every takeoff
+ * the operator made on C was a hop with no rotation, because in this model
+ * the arms are most of a jump's turn. Now, while L3 is held (`armsHold`), the
+ * right stick is the arms exactly as A reads it — its reach the carriage, its
+ * sideways throw the wind-up — and the right blade keeps the last command it
+ * had, as the game's Simulation setup does with its modifier
+ * (game/full-controls.ts). Let go of L3 and the stick is the right blade
+ * again. `st` owns that remembered command; without one, a held L3 leaves the
+ * right blade at rest. The keyboard's C and U still work, held or not.
  */
-export function schemeC(c: Controls): SkatingInput {
+export function schemeC(c: Controls, st: SchemeState = newSchemeState()): SkatingInput {
+  const arms = c.armsHold === true;
+  if (!arms) st.rightBlade = { x: c.rx, y: c.ry };
+  const blade = st.rightBlade;
   const l = c.kPrimaryX !== 0 ? c.kPrimaryX : c.lx;     // left blade:  A/D
-  const r = c.kAltX !== 0 ? c.kAltX : c.rx;            // right blade: arrows
+  const r = c.kAltX !== 0 ? c.kAltX : blade.x;         // right blade: arrows
   const mean = (l + r) / 2;
   const apart = (r - l) / 2;
   return {
@@ -275,11 +296,11 @@ export function schemeC(c: Controls): SkatingInput {
     lean: clamp(mean, -1, 1),
     leanSplit: clamp(apart, -1, 1),
     pitch: c.ky !== 0 ? c.ky
-      : clamp((relievedPitch(c.lx, c.ly) + relievedPitch(c.rx, c.ry)) / 2, -1, 1),
+      : clamp((relievedPitch(c.lx, c.ly) + relievedPitch(blade.x, blade.y)) / 2, -1, 1),
     knee: c.knee, weight: c.weight, push: c.push, brake: c.brake,
-    // The right stick is the right blade here, so C's carriage and wind-up are
-    // the keyboard's alone. A pad skating C can hop but not whip or wind a rotation.
-    carriage: clamp(c.carriage, 0, 1), windup: clamp(c.windup, -1, 1), toe: c.toe, turn: c.turn, bracket: c.bracket, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
+    carriage: arms ? carriage(c) : clamp(c.carriage, 0, 1),
+    windup: arms ? windup(c) : clamp(c.windup, -1, 1),
+    toe: c.toe, turn: c.turn, bracket: c.bracket, twizzle: c.twizzle, spin: c.spin, inaBauer: c.inaBauer,
   };
 }
 
@@ -292,7 +313,7 @@ export function applyScheme(
   p: Params, st: SchemeState, flips = 0,
 ): SkatingInput {
   if (scheme === SCHEME.B) return latchTurns(scheme, schemeB(c, heading, vel, yawRate, p, st), st, flips);
-  if (scheme === SCHEME.C) return latchTurns(scheme, schemeC(c), st, flips);
+  if (scheme === SCHEME.C) return latchTurns(scheme, schemeC(c, st), st, flips);
   return latchTurns(scheme, schemeA(c), st, flips);
 }
 

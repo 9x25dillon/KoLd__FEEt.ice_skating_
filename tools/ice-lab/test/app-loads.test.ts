@@ -241,3 +241,38 @@ test("reset cancels a pending file read rather than entering stale playback", as
   assert.equal(lab.clock.paused, false);
   assert.equal(lab.recorder.ticks, 0);
 });
+
+test("in the lab, clicking L3 no longer changes the course; keyboard G still does", async () => {
+  // L3 is held for scheme C's arms (app/schemes.ts). It used to be the next
+  // course too, and a course change resets the skater — so a player holding
+  // L3 into a jump would have been thrown back to a start line. The lab reads
+  // a real Pad here, with a fake gamepad and a keyboard it can press.
+  const lab = await makeLab() as LabHarness & { courseKind: string | null };
+  const { Pad } = await import("../app/pad.ts");
+  const keys = new Map<string, (e: unknown) => void>();
+  const target = { addEventListener: (type: string, f: (e: unknown) => void) => keys.set(type, f) };
+  let buttons: number[] = [];
+  const nav = globalThis.navigator as unknown as Record<string, unknown>;
+  Object.defineProperty(nav, "getGamepads", { configurable: true, value: () => [{
+    connected: true, axes: [0, 0, 0, 0],
+    buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: buttons.includes(i), value: buttons.includes(i) ? 1 : 0 })),
+  }] });
+  try {
+    lab.pad = new Pad(target as unknown as HTMLElement);
+    lab.tick();
+    assert.equal(lab.courseKind, null, "no course to begin with");
+    for (const held of [[10], [10], [], [10], []]) { buttons = held; lab.tick(); }
+    assert.equal(lab.courseKind, null, "L3 pressed, held and pressed again: still no course");
+    keys.get("keydown")!({ key: "G", preventDefault: () => undefined });
+    lab.tick();
+    assert.equal(lab.courseKind, "figure8", "G is the next course, as it always was");
+    keys.get("keyup")!({ key: "G" });
+    lab.tick();
+    keys.get("keydown")!({ key: "g", preventDefault: () => undefined });
+    lab.tick();
+    assert.equal(lab.courseKind, "edges", "and the next one after that");
+  } finally {
+    // The other tests here run with no pad connected.
+    Object.defineProperty(nav, "getGamepads", { configurable: true, value: () => [] });
+  }
+});

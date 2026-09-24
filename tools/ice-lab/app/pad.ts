@@ -102,6 +102,12 @@ export interface Controls {
    */
   windup: number;
   /**
+   * L3 held. Scheme C lends the right stick to the arms while it is, and the
+   * right blade keeps its last command (schemes.ts). The other schemes already
+   * have their arms on the right stick and ignore it.
+   */
+  armsHold?: boolean;
+  /**
    * One-shot toe-pick strike: pad B, keyboard F. The bible puts the pick on an
    * LT tap, but LT is this rig's brake, and a tap/hold split on one trigger is
    * a second experiment nobody asked for.
@@ -145,7 +151,11 @@ export interface Controls {
   dpadStep: number;
   /** Chase camera up (+1) or down (-1) a step: ] and [. Keyboard only. */
   tilt: number;
-  /** Next course — off, Figure Eight, edge course, jumps: G, or click the left stick. Ignored in playtest. */
+  /**
+   * Next course — off, Figure Eight, edge course, jumps: G. Keyboard only since
+   * 2026-09-24: clicking the left stick used to do it too, and L3 is now
+   * scheme C's arms, held through a jump. Ignored in playtest.
+   */
   toggleGame: boolean;
   /** Which ghost to race — best, last, a file, none: H, or click the right stick. */
   cycleGhost: boolean;
@@ -162,7 +172,7 @@ export interface Controls {
 const NOTHING: Controls = {
   lx: 0, ly: 0, rx: 0, ry: 0, lean: 0, pitch: 0,
   kx: 0, ky: 0, kPrimaryX: 0, kAltX: 0,
-  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, windup: 0, toe: false, turn: false, bracket: false, twizzle: false, spin: false, inaBauer: false,
+  knee: 0.35, weight: 0.5, push: false, brake: false, carriage: 0, windup: 0, armsHold: false, toe: false, turn: false, bracket: false, twizzle: false, spin: false, inaBauer: false,
   reset: false, pause: false, cyclePreset: false, cycleScheme: false, cycleJump: false,
   cycleView: false, zoom: 0, tilt: 0, toggleGame: false, cycleGhost: false, pickJump: -1, dpadStep: 0, cycleProfile: false,
   cycleMoves: false, cycleRink: false,
@@ -292,10 +302,13 @@ export class Pad {
       out.cycleView = (gp.buttons[DPAD_DOWN]?.pressed ?? false) && !this.prevButtons.has(DPAD_DOWN);
       if ((gp.buttons[DPAD_RIGHT]?.pressed ?? false) && !this.prevButtons.has(DPAD_RIGHT)) out.dpadStep += 1;
       if ((gp.buttons[DPAD_LEFT]?.pressed ?? false) && !this.prevButtons.has(DPAD_LEFT)) out.dpadStep -= 1;
-      // The stick clicks were the pad's last free buttons: the lab's two
-      // choices. With the moves on, the game reclaims R3 for bracket —
-      // it has no course or ghost to read cycleGhost, so both readings coexist.
-      out.toggleGame = (gp.buttons[L3]?.pressed ?? false) && !this.prevButtons.has(L3);
+      // The stick clicks were the pad's last free buttons. L3 used to be the
+      // next course; it is now held for scheme C's arms, and a course change
+      // on the click would throw a skater off the jump they were holding it
+      // for, so the courses are keyboard G alone. R3 is still the next ghost,
+      // and with the moves on the game reclaims it for bracket — it has no
+      // course or ghost to read cycleGhost, so both readings coexist.
+      out.armsHold = gp.buttons[L3]?.pressed ?? false;
       if (!moves) out.cycleGhost = (gp.buttons[R3]?.pressed ?? false) && !this.prevButtons.has(R3);
       this.prevButtons = new Set(gp.buttons.flatMap((b, i) => (b.pressed ? [i] : [])));
     }
