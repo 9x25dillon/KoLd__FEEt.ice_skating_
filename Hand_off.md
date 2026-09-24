@@ -1,127 +1,137 @@
 # Hand-off
 
-## 0 · Start here (written at the close of 2026-09-23, seventeenth session)
+## 0 · Start here (written at the close of 2026-09-23, eighteenth session)
 
-**Check first.** Another agent session shares this checkout (Phase 17/18 work). Run
-`git status --short --branch`, `git fetch`, `git log --oneline -1 origin/main`. This session's work is
-on **`phase17-assurance`**, merged with `origin/main` at `3812255` (PR #25 and everything before), pushed,
-PR opened — see §0.6 for its merge. Uncommitted **and not this session's** (the other session's Phase 17
-work — touch none without asking): `games/ice-run-godot/{README.md,bridge/engine.mjs,scripts/main.gd,
-tests/engine.test.mjs,tests/host.test.mjs}`, `tools/ice-lab/test/turns.test.ts`, untracked
-`docs/phase17-*.md` and `tools/ice-lab/test/phase17-replay.test.ts` (this session only moved that test's
-contract pins, `/22`→`/35`, with the operator's leave). Operator data, untracked on purpose:
-`E_W_replays_sessions_eng_bld/`, `Ice Lab — KoLd__FEEt edgework.html`, `session-notes/`.
+**Check first.** Another agent session shares the main checkout (`/home/kill/KoLd__FEEt.ice_skating_`,
+on `phase17-assurance`, with that session's uncommitted Phase 17 work: `games/ice-run-godot/{README.md,
+bridge/engine.mjs,scripts/main.gd,tests/engine.test.mjs,tests/host.test.mjs}`,
+`tools/ice-lab/test/turns.test.ts`, untracked `docs/phase17-*.md` and
+`tools/ice-lab/test/phase17-replay.test.ts` — touch none without asking). Operator data, untracked on
+purpose: `E_W_replays_sessions_eng_bld/`, `Ice Lab — KoLd__FEEt edgework.html`, `session-notes/`.
 
-At close: **609/609** browser/sim tests, **20/20** Godot bridge, typecheck clean (scratch TypeScript —
-see memory `ice-lab-typecheck-toolchain`), native reference check, build. Replay contract
-**`ice-lab-f64/35`** (from `/22` this morning; every bump rebased the fixture with digests unchanged —
-the history is in `sim/replay.ts`). Fidelity gate: 8 pass / 0 fail, first external passes (glide 1,
-jump 1, from the merged Phase 18 work) — gate still not met.
+**This session worked in a worktree** so it never switched the shared checkout's branch:
+`/home/kill/KoLd__FEEt.pendulum`. Do the same — `git fetch && git worktree add -b <branch>
+../KoLd__FEEt.<name> origin/main` — then `git worktree list` shows every live one.
 
-### 0.1 · The idea this session followed
+`main` is at the merge of this hand-off (after `3b3e290`, PR #28). PRs this session: **#26** (the
+seventeenth session's work), **#27** the fore-aft pendulum, **#28** it switched on — all merged.
 
-The operator's direction, now in memory (`blades-parallel-tricks-from-physics`,
-`owner-likes-emergent-mechanics`): **every move through the blades.** Buttons may *ask*; the physics
-performs or refuses. New physics is **off by default** behind a mode param, measured before it is
-switched on anywhere, and each setup opts in. Nothing old moves: every mode-off path is the previous
-arithmetic, proven by the fixture digests at each bump.
+At close: **596/596** browser/sim tests, **20/20** Godot bridge, typecheck clean (scratch TypeScript —
+memory `ice-lab-typecheck-toolchain`), native reference check, build. Replay contract
+**`ice-lab-f64/36`**. Fidelity gate: 8 pass / 0 fail, gate not met (unchanged).
 
-### 0.2 · What exists now (all under `tools/ice-lab/`)
+**One loose end, not ours:** the other session's untracked `tools/ice-lab/test/phase17-replay.test.ts`
+still pins `ice-lab-f64/35` — a one-line change to `/36` (plus its fixture pins, if any), with the
+operator's leave, as the seventeenth session did for `/22`→`/35`.
 
-| Stage | Mode param | What it does | On in |
-| --- | --- | --- | --- |
-| A · two-blade | inputs `pitchSplit`, `kneeSplit` (optional) | per-blade turn mirror (`app/schemes.ts` `latchBlades`), heel/toe and knee per blade | Simulation, Experimental |
-| B1 · slip | `slipMode` | blades and travel separate; the scrape follows the grip curve (`scrapeRefTilt`), the wrong edge catches (a trip); the dig (`bladeLength`) winds the body | Simulation, Explorer, Experimental |
-| B2 · feet | `footMode` | feet turn in the hips (`turnout`, `hipInternal`); per-blade slip solve: snowplow, T-stop, spread eagle | Simulation, Experimental |
-| C1/C2 · trunk | `torqueMode` | upper/lower body; wind-up twists the trunk; pivot grip from the rut (load- and edge-dependent since /34); momentum carried when unweighted; wind-up and free leg feed the takeoff | Simulation, Explorer, Experimental |
-| free leg | `freeLegMode` | the unweighted leg as a third body (16.1% mass, Dempster/Winter) | Experimental |
-| fore-aft pendulum | `pitchMode` | the body tips toward toe/heel over the support blade; the ankle's contact (half a blade) is its only authority; a sudden stop past it pitches the skater down (`FALL.Pitched`) — PR #27, switched on in PR #28 | Simulation, Experimental |
-| speed→spin | `speedSpinMode` | the takeoff block as r × Δp — **measured, left OFF everywhere** (it opposes the curve except for the lutz) | none |
+### 0.1 · What exists now: the fore-aft pendulum (`pitchMode`)
 
-**Setups** (`game/setups.ts`): Simulation, Blade Explorer, **Experimental** (the operator's — keep it;
-memory `four-setups-kept`), Full Repertoire (unchanged). Experimental: triggers are the legs (pump
-= push, deeper and quicker stronger; load + release = jump), sticks are feet and blades (a bottom-to-top
-thumb stroke pushes, by accuracy), X/B weight and arms, L3/R3 toe picks, A turn family / Y rotation
-family with bumpers as the alteration, D-pad the feet, automatic back crossovers on the beat, the free
-leg on the unweighted leg's trigger. Feet layouts (all setups with feet): D-pad nudges (default),
-stick up/down, modifier + left stick — picked in `/game/controller.html`. Full docs:
-`docs/controller-scheme.md`. Every authored constant: `docs/open-constants.md`.
+`tools/ice-lab/sim/solver.ts` `pitchTick`; `big_reffg.txt` §3.5 is the spec (the lateral pendulum's
+mirror). **On in Simulation and Experimental** (`game/setups.ts`, operator's choice), 0 in Blade
+Explorer and Full Repertoire; `DEFAULT_PARAMS.pitchMode` is 0, so mode-0 arithmetic is bit-identical
+(fixture digests unchanged at `/36`).
 
-**Tests that play skills from the pad or the solver** (read these to see what the physics can do):
-`test/hockeystop.test.ts` (the hockey stop, bot-held square), `test/backjump.test.ts` (backward
-double loop, landed by a timed check), `test/hook.test.ts`, `test/slip.test.ts`, `test/feet.test.ts`,
-`test/torque.test.ts`, `test/freeleg.test.ts`, `test/speedspin.test.ts`, `test/two-blade.test.ts`,
-and the Experimental block in `test/setups.test.ts`.
+- **Axis:** the support blade's tangent — not the body's heading. Across the blade the edge holds the
+  body; along it only the ankle can.
+- **Authority:** the contact `c` along the blade, clamped to half of `bladeLength` (0.14 m) — projected
+  over the loaded blades. `contactS` for the tick uses last tick's `c` (one-tick lag); `pitchSplit` still
+  splits the blades around it.
+- **Dynamics:** `L φ'' = g (sin φ − c/L) − aFwd cos φ`.
+- **Control:** capture point `ξ = L sin φ − (aFwd L/g) cos φ + L cos φ · φ'/√(g/L)`;
+  `c = clamp(ξ + pitchGain (ξ − asked))`, `asked = input.pitch × bladeLength/2` — so with no
+  acceleration the body settles over pitchMode 0's `contactS = 0.5 + 0.5 × pitch`.
+- **Fall:** `|ξ| > reach` held for `fallErrorTime` (0.35 s) → `FALL.Pitched` (6, "PITCHED").
+- **Which forces pitch the body** (the heart of it): only what the ice does *along the blade*. Excluded:
+  the stroke (section 5b: through the leg into the hips), drag and the rink's slope (on the body), the
+  carve's velocity rotation (the edge's force is square to the blade), and in section 5 everything but
+  glide friction (`muSkid` 0.35 g, the scrub, the brake, the Ina Bauer's trailing foot — across the blade).
+  The slip solve's scrape (slipMode 1) already has its real direction and is kept.
+- **Not modelled:** pivots and spins keep direct placement (`pitchOn = pitchMode === 1 && !turning`);
+  no hip strategy or arm authority fore-aft; no toe-pick trip.
+- **Measured** (`test/pitch.test.ts`): glides and strokes hold the contact within 1.5 cm; pitch 0.5
+  settles at contactS 0.75; the full inside snowplow from 5 m/s stops upright, leaning back 0.069 rad;
+  both outside edges caught from 2–5 m/s → pitched forward, down at 0.39 s.
+- **With it on in the setups** (re-pinned): hockey stop scrapes to 1 m/s in 1.47 s (1.60 without);
+  pad snowplow on outside edges pitches forward 0.35 s after the edges set; Experimental takeoffs
+  lose 1–2% spin (backward loop L 38.7 → 37.2, still clean); with `speedSpinMode` the lutz's block 2.26 → 1.08.
+- **Test bases:** `torque`, `slip`, `feet`, `pitch` strip stages B/C *and* the pendulum (`pitchMode: 0`) so
+  each measures only what it switches on — keep that pattern for every new mode.
+- **Hockey stop test** now pins `scraped` (first below 1 m/s). The old 0.3 m/s "standstill" was the
+  bot's glide: below ~1 m/s the bot stops holding the blades square in both modes.
+
+### 0.2 · How the design got there (four wrong turns — don't repeat them)
+
+1. Pitch along the body's heading → the spread eagle and hockey stop fell (feet turned 90° off the body
+   left no reach). → the support blade's tangent.
+2. A PD on the asked lean against true vertical saturated under any steady braking; aiming it at the
+   balancing lean made every stroke's acceleration step a target step. → capture-point control.
+3. Every velocity change pitched the body → strokes drove the contact end to end. → push, drag, slope and
+   the carve excluded.
+4. The lumped `muSkid` along the travel pitched a blunt blade's skid into falls. → only glide friction
+   counts along the blade.
+
+The lesson, for the next mode: **before coding a new body, list where each existing force is applied
+(which point, which direction) in `step`.** All four turns were that question answered late.
 
 ### 0.3 · The queue, next (operator's order where given)
 
-1. **[operator] Play Experimental on the Xbox pad**, then export replays to `E_W_replays_sessions_eng_bld/`.
-   Check: (a) the pump and thumb-stroke thresholds (60%/20%, 0.25 s, `SNAP_TICKS`) — every number in
-   `docs/controller-scheme.md`'s Experimental table is authored; (b) **which stick direction reads as
-   "knees in" on screen** — in the model's frame, sticks *apart* put both blades on their inside edges
-   (the controlled snowplow), *together* on their outside edges (they catch); (c) both knees deep with
-   shared weight crosses the jump load (0.7) — it will feel like pumping stalls.
-2. **Elite Series 2 paddles** (plan, memory `controller-hardware-roadmap`): first add a raw-button
-   readout to the workshop and have the operator press each paddle — the browser Gamepad API often does
-   not expose them; Godot 4's SDL mapping has `JoyButton.PADDLE1–4`. Proposed: P2/P4 feet turn
-   anticlockwise/clockwise (thumbs never leave the sticks mid-hockey-stop), P1/P3 free leg; trigger stops
-   at full travel; profile switch = one setup per profile.
-3. **Fore-aft pendulum** — the body has none: a snowplow with both edges caught stops dead upright.
-4. **Arms' whip vs physics.** `jump.ts`'s whip (`jumpWhip` × carriage, ~38 of a ~40 takeoff L) is an
-   injection that does not pass through the ice; everything built today does (the edge's grip × time
-   is the real budget: wind-up +4, free leg +1.5). Deciding whether to rebalance is the operator's call.
-5. **Tutorial** (memory `tutorial-balance-then-release`): balance → edges → scrape/dig → air.
-6. **Combining the four setups into three** — when the operator asks; bring options built from their parts.
-7. **SIXAXIS / motion for the console build** — later; research the engine's sensor support then.
+1. **[operator] Play Simulation and Experimental on the Xbox pad**, export replays to
+   `E_W_replays_sessions_eng_bld/`. New to check: a hard snowplow, a hockey stop, deliberately catching
+   both outside edges (does the forward pitch at ~0.4 s feel fair?), and whether heel/toe on the stick
+   now feels laggy — the stick asks for a lean, the contact follows it (leaning toward the toe first
+   moves the contact toward the heel). Still open from before: (a) the pump and thumb-stroke thresholds
+   (60%/20%, 0.25 s, `SNAP_TICKS`); (b) which stick direction reads "knees in"; (c) both knees deep with
+   shared weight crossing the jump load (0.7).
+2. **The dig under the pendulum** — the dig (`test/torque.test.ts`) needs the contact at the toe or heel
+   *at once*; with the pendulum on it winds the body far less (tested with it forced on: toe dig L 1.01 → 0).
+   Options to measure and bring: accept it (the skater must lean early); a faster ankle (`pitchGain` > 1);
+   or the dig reading the asked contact. Operator's call.
+3. **Toe-pick trip** — `FALL.ToePickTrip` exists and nothing raises it; §3.5 specifies it (contact at
+   the pick with speed → trip). Braking can now run the contact to the toe, so it is reachable.
+4. **Fore-aft authority beyond the ankle** — the lateral pendulum has arms and the free leg
+   (`internalMax`); fore-aft has none, and pivots/spins bypass the pendulum.
+5. **Elite Series 2 paddles** (memory `controller-hardware-roadmap`): raw-button readout first.
+6. **Arms' whip vs physics** (`jump.ts` `jumpWhip`, ~38 of ~40 takeoff L, not through the ice) — operator's call.
+7. Tutorial (memory `tutorial-balance-then-release`); combining four setups into three (when asked);
+   SIXAXIS later.
 
-### 0.4 · Key decisions (the operator's, this session)
+### 0.4 · Key decisions (this session)
 
-- Every move through the blades; physics-caused behaviour is intended; buttons only ask.
-- Simulation keeps parallel-blade feel with physics tricks; the engine must still give complete per-blade
-  control (the feet) so every skill is performable.
-- The scrape is a skill: edge-dependent, the grip curve encouraged, **tripping kept**.
-- Setups: Simulation gets everything, Explorer parallel blades + slip + trunk, Repertoire unchanged,
-  plus the operator's Experimental; all four stay.
-- The dig feeds the jump; the trick is read off the takeoff (foot, direction, edge, pick).
-- Crossovers automatic when skating backward on a deep enough curve; the bible's beat rule kept (off the
-  beat is chopped to 45% — the automatic ones land on the beat).
-- Speed-to-spin: built, measured, **left off** (it opposes the curve for every jump but the lutz).
-- "YOU TOUCH WHAT YOU WANT TO" — edit what's needed; the **delete-nothing** rule still holds.
+- **Operator:** the pendulum is on in Simulation and Experimental; Blade Explorer and Full Repertoire keep
+  pitchMode 0. Standing decisions from before still hold (every move through the blades; buttons ask;
+  four setups kept; delete nothing).
+- **Agent, reported, open to revision:** capture-point ankle over a PD; the support blade as the axis;
+  `fallErrorTime` reused for the pitch fall; the hockey-stop test's metric moved to the 1 m/s scrape.
 
-### 0.5 · Unresolved assumptions (authored or simplified — see `docs/open-constants.md`)
+### 0.5 · Unresolved assumptions (all in `docs/open-constants.md` under `pitchMode`)
 
-- `scrapeRefTilt` 0.6 rad (the edge that scrapes at μ_skid); `bladeLength` 0.28 m.
-- Trunk: `lowerBodyInertia` 0.4, `twistMax` 0.8, `twistTorqueMax` 60, stiffness 600, damping 60.
-- Contact: the rut's cross-section (0.18 × 4.16 mm at 77 kg, LEVER 2022) scaling with load at constant
-  indentation pressure — the paper itself cautions (p. 340); a hockey blade, not a figure blade.
-- Engagement smoothstep 0.3–0.8 g; the carve's turning is the legs' (not charged to the ice) — a
-  momentum-true alternative could not carve at any contact depth up to 2 mm (measured).
-- Free leg reach 0.4 m, arc 1.2 rad, hip PD 150/20/100 — only its mass (16.1%) is sourced.
-- `turnout` 0.5 for the reference skater; `hipInternal` 0.6; `footTurnRate` 6.
-- Experimental's gesture thresholds and the automatic crossover's 1.5 m/s floor.
-- The pad's stick-x sign against the screen (see §0.3 item 1b).
+- `pitchGain` 1 — authored.
+- Reach = half `bladeLength` (0.14 m) both ways: the ankle at the blade's centre. A real boot's ankle
+  sits behind centre — the heel side is shorter.
+- `fallErrorTime` 0.35 s, the lateral timeout's, reused.
+- The contact's torque linearised (`g c / L`); `aFwd` a raw per-tick difference, unfiltered; one-tick lag.
+- The push acts through the centre of mass (a real push leg's line of action is not exactly through it).
+- In slipMode 0, the skid's friction taken as all across the blade.
+- Fixed by: centre-of-pressure traces from instrumented skates (braking, stroking, snowplow).
 
-### 0.6 · Git and the merge
+### 0.6 · Things that tripped this session (add to §5)
 
-`phase17-assurance` is pushed with a PR to `main`. Memory `keep-going-and-merging`: `gh pr merge` is
-classifier-blocked for the agent — ask the operator to run it with `!`. Before merging a later branch,
-`git fetch` and merge `origin/main` in: this session found the Phase 17 mapping script's two bugs only
-because of that merge (the golden `test/fixtures/setup-mapping-v1.json` is re-recorded with
-`node test/setup-script.ts --write` after an intended mapping change — say why in its header).
-
-### 0.7 · Things that tripped this session (add to §5)
-
-- **Measure before pinning.** Several "MEASURED" numbers were first guessed and failed; every pinned
-  value now comes from a run. Probe with `--test-name-pattern` or a scratch copy of a test with its
-  asserts turned into logs.
-- **Scripted inputs lie.** Many "physics failures" were the test script: a stick deflection doubling as
-  a wind-up, a weight left on one foot, an instant jump in an asked swing (a velocity step spikes a PD).
-  Check the script before the physics.
-- **Explicit damping on light coupled bodies overshoots** — the trunk is solved implicitly for that reason.
-- **Every new param bumps the replay contract**: `node tools/ice-lab/replay/rebase-fixture.ts`, then the
-  pins in `docs/controller-scheme.md` and `test/phase17-replay.test.ts`, then
-  `node tools/ice-lab/validate.mjs --report docs/fidelity-report.md`, then `node test/setup-script.ts --write`
-  if mappings moved. Godot: `node games/ice-run-godot/tools/prepare.mjs --engine-only` before its tests.
+- **Force a mode on to see its reach:** set `pitchMode: 1` in `DEFAULT_PARAMS` temporarily, run the whole
+  suite, restore (`grep -n "^  pitchMode" sim/params.ts`). It lists every test the mode touches.
+- **Fall reasons without editing tests:** a one-line hook in the solver's fall block,
+  `(globalThis as any).__probe?.(s, reason); // PROBE-TEMP`, plus `node --import <hook.mjs> --test …`
+  where the hook sets `globalThis.__probe`. Delete every `PROBE-TEMP` line before committing.
+- **Measuring a pinned test:** copy it to `test/_m_x.test.ts`, append a `MEASURE` test that logs, run
+  with `--test-name-pattern MEASURE`, delete the copy.
+- **Bot thresholds can measure the bot**, not the physics (the hockey stop's 0.3 m/s tail).
+- `sim/` must not call `Math.asin` etc. (`test/boundary.test.ts`) — use `sim/math.ts` (`asinClamped`,
+  `atan2`); `Math.sqrt` is allowed.
+- The fall-retry (`Object.assign(s, createState(p), …)`) does not clear optional state fields — a
+  mode's fields must be in `createState` or a retry inherits them (the pendulum re-fell at once).
+- `game/setups.ts` exports `SETUPS` (objects with `id`), not a list of ids.
+- The contract-bump checklist (§0.7 of the archived seventeenth §0) still holds: `rebase-fixture.ts`,
+  pins in `docs/controller-scheme.md`, `validate.mjs --report`, `setup-script.ts --write` (say why in
+  `test/setup-mapping.test.ts`'s header), Godot `prepare.mjs --engine-only`.
 
 
 ## Follow-up · three gameplay setups (local changes)
@@ -879,6 +889,7 @@ worth having.
 
 | date | what happened |
 | --- | --- |
+| 2026-09-23 (eighteenth) | The fore-aft pendulum (`pitchMode`, PR #27): along the support blade, capture-point ankle over half a blade, only along-blade ice forces pitch the body, `FALL.Pitched`; contract `/36`. Switched on in Simulation and Experimental (PR #28), skill tests re-measured, hockey-stop test pinned on the scrape. Four design turns, each a force applied at the wrong point — see §0.2. |
 | 2026-09-23 (seventeenth) | Every move through the blades: stages A (two-blade), B1 (slip, scrape, dig), B2 (feet), C1/C2 (trunk), the free leg; setups assigned; the Experimental setup (pumps, thumb strokes, X/B, toe clicks, A/Y families, automatic back crossovers); the hockey stop and a backward double loop from play; speed-to-spin built and left off; merged origin/main (Phase 17/18) and fixed the two bugs its mapping script found. Replay `/22` → `/35`. 609 + 20 tests. |
 | 2026-09-21 (sixteenth, part three) | Jump combinations (`sim/combo.ts`, PR #17) and the protocol sheet (`sim/sheet.ts`, PR #18): the solver already allowed a jump straight off a landing edge; the data's `landing_edge` + takeoff defines the link. Sheet applies the bible's repetition rule and the data's fall deductions; segment total on both result screens. Hand-off restructured: stale checkpoints and §0 moved to `Hand_off-archive.md`. |
 | 2026-09-21 (sixteenth, part two) | Choctaw (mohawk with `flipFrame` skipped, `choctawScrub` 1.65, replay `/21`), `replay/rebase-fixture.ts`, Godot costume parity (split skirt/tights materials, runtime recolour from `SKINS`). PR #16. |
