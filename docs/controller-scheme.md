@@ -152,7 +152,7 @@ godot4 --headless --path games/ice-run-godot -- --smoke-test --full-controls
 ```
 
 First-time Godot setup still requires the full preparation command to generate audio.
-Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/36`. The three setups record final mapped
+Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/38`. The three setups record final mapped
 inputs and parameters under label D; they add no solver arithmetic changes. Older
 builds reject D-labelled clips; current builds continue accepting A/B/C clips.
 
@@ -182,6 +182,20 @@ the travel (feet, then hips). Which stick direction reads as "knees in" on scree
 checked on the pad: in the model's frame, sticks pushed apart put both blades on their inside
 edges; pushed together, on their outside edges, which catch.
 
+**The toe pick** (`toePickMode`, on in Simulation and Experimental since 2026-09-24): going
+forward faster than 1.5 m/s with a loaded blade's contact 0.11 m or more toward the toe, the pick
+catches and the skater trips. A stick held full forward (toe) at speed does it; so does braking
+too suddenly, since the ankle rides a sudden stop by driving the contact toward the toe — both
+outside edges caught, or a snowplow slammed on: set its edges over 0.1 s or more (measured,
+3–7 m/s) and it holds. Rocking back is the same: both sticks yanked to the heel (90% at once, or
+full within 0.1 s) catch the pick, because the ankle leans the body back by first pushing the
+contact toward the toe; eased over 0.2 s it holds. Backward the pick trails and never trips.
+
+**The dig and the lean** (pendulum on): the dig pushes where the ankle has the contact, which
+trails the stick by about a second. Lean toward the toe (or heel) *before* the blade goes across —
+a toe lean held short of the pick, 75% — and the dig winds the body; lean at the dig and it
+winds the other way. The lab's overlay rings the asked contact on each blade and lights `DIG`.
+
 
 ## Experimental (the operator's)
 
@@ -193,10 +207,11 @@ The other three setups are unchanged.
 | Input | Does |
 | --- | --- |
 | LT / RT | left / right knee: pull to bend. **Pump** — past 60% then back under 20% within 0.25 s — is that leg pushing, as strong as the bend was deep and the snap quick; the push extends the leg from that bend. Load the standing leg and let go: the jump |
-| Left / right stick | that foot and blade: side to side the edge, up/down heel/toe. A **thumb stroke** — down past 60% then up past 60% within 0.25 s — is that foot pushing, as strong as it was full, straight and quick |
+| Left / right stick | that foot and blade: side to side the edge, up/down heel/toe. A **thumb stroke** — down past 50% then up past 50% within 0.25 s (after the deadzone and curve: about 70% of the stick's travel) — is that foot pushing, as strong as it was full, straight and quick, judged forgivingly: three-quarters down to three-quarters up in 0.1 s is a full push, a little wobble is free. The stick is still that blade's heel/toe, so a stroke yanked to the stick's ends catches a pick (going faster than 1.5 m/s): past about 85% down the ankle throws the *other* blade onto its pick; from deep down all the way to the top, the pushing blade's own — the toe push |
 | Pump + thumb stroke, same leg, within 0.125 s | add, up to a full push |
+| **Strokes switch feet** | on one foot, the leg you stand on pushes, whichever trigger or stick you snap (a lifted leg has nothing to push against); both blades are down through the push, then the weight goes to the other foot and stays, and the leg that pushed is free — so the next push is the other leg's. From a glide, start with the free leg's trigger: the standing trigger is the jump's load. While stroking (within 1 s of a push) a snap of the standing trigger is the next push; hold it past 0.25 s for the jump. With shared weight each trigger pushes its own leg |
 | X / B | weight to the left / right foot (it stays), arms swing left / right (eased, not a flick); both: shared weight |
-| Free leg's trigger | with the weight on one foot the other leg is free: its trigger swings it forward (released, it rests) and it does not pump. Smooth and over a deep edge it adds spin its own way round (a right free leg with the jump); snapped, it twists the blade loose |
+| Free leg's trigger | with the weight on one foot the other leg is free: its trigger swings it forward (released, it rests); snapped (pulled and let go within 0.25 s) it is a push from the standing leg. Smooth and over a deep edge it adds spin its own way round (a right free leg with the jump); snapped, it twists the blade loose |
 | L3 / R3 | toe pick |
 | A | turn: the three-turn gesture; LB + A bracket; RB + A cantilever |
 | Y | rotation: spin; LB + Y twizzle; RB + Y spiral; LB + RB + Y Ina Bauer |
@@ -204,9 +219,9 @@ The other three setups are unchanged.
 | (automatic) | **back crossovers**: skating backward at 1.5 m/s or more, leaning at least `crossoverLean` (12°), the skater strokes a crossover on every beat of the music — on the beat, so never the chopped off-beat push — as an ordinary stroke from the knee, both blades down for the push. Bent knees stroke harder. Holding both knees deep past the jump's load (0.7 on the standing leg; with shared weight, the average) loads a jump instead |
 
 Measured from 3 m/s over 1 s: glide 2.891; one deep snapped pump 3.175; one lazy pump 2.931;
-one clean thumb stroke 2.987. Alternating full pumps every 0.25 s for 2 s: 3 → 4.061 m/s, with
+one firm thumb stroke (75% to 75%) 2.985. Alternating full pumps every 0.25 s for 2 s: 3 → 4.061 m/s, with
 no takeoff. Backward on a curve (sticks 0.65, knees 0.6), the automatic crossovers take 3 → 6.13 m/s
 in 8 s with no pumping (knees 0.3: 4.59). Pumps on a curve are crossover pushes and follow the bible's beat rule:
 off the beat they are chopped to 45%. The thresholds and weights are authored starting points for tuning on the pad
-(`game/full-controls.ts`: `PUMP_*`, `STROKE_EDGE`, `GESTURE_TICKS`, `PAIR_TICKS`, `SNAP_TICKS`,
+(`game/full-controls.ts`: `PUMP_*`, `STROKE_*`, `GESTURE_TICKS`, `PAIR_TICKS`, `SNAP_TICKS`,
 `ARMS_*`).

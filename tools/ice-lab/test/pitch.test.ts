@@ -16,8 +16,8 @@ import type { SkatingInput } from "../sim/types.ts";
 import { len } from "../sim/math.ts";
 import { setupParams, SETUPS } from "../game/setups.ts";
 
-// The Simulation athlete with stages B/C and the pendulum off, as test/feet.test.ts has it; the feet on for the stops.
-const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 0 };
+// The Simulation athlete with stages B/C, the pendulum and the toe pick off, as test/feet.test.ts has it; the feet on for the stops.
+const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 0, toePickMode: 0 };
 const FEET = { ...SIM, slipMode: 1, footMode: 1 };
 const on = (p: Params): Params => ({ ...p, pitchMode: 1 });
 

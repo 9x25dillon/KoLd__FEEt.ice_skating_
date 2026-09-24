@@ -202,29 +202,57 @@ test("feet, modifier layout: hold the modifier and the left stick nudges the fee
 test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad left toes in, then the sticks set the edges", () => {
   // MEASURED from 5 m/s (right trigger 0.5): both bumpers share the weight;
   // modifier + D-pad left for 1 s toes both feet in (34°, hipInternal); then
-  // with the sticks pushed apart — each blade on its inside edge, in the
-  // model's frame — 2.71 m/s after 3 s; sticks centred, 4.25. Pushed toward
-  // each other the blades sit on their outside edges, which catch: the stop
-  // is sudden and the fore-aft pendulum (on in Simulation) pitches the skater
-  // forward, down 0.35 s after the sticks set the edges, at 2.9 m/s. (With
-  // pitchMode 0 it was a dead stop, upright.)
-  const plow = (lx: number, rx: number) => {
+  // the thumbs set the edges over 0.15 s. Sticks pushed apart — each blade on
+  // its inside edge, in the model's frame — 2.79 m/s after 3 s; sticks
+  // centred, 4.25. Pushed toward each other the blades sit on their outside
+  // edges, which catch: the stop is sudden, the ankle drives the contact onto
+  // the pick and it catches (toePickMode) at tick 131, at 4.69 m/s.
+  // Slammed on in one tick, even the inside edges brake too suddenly for the
+  // ankle: the pick catches 2 ticks after the sticks move — setting a snowplow
+  // is a skill (a 0.1 s ramp or slower holds, 3-7 m/s; 0.05 s trips).
+  // Before the pick (instant sticks): inside 2.71, flat 4.25; outside edges
+  // pitched forward, down at tick 162, 2.9 m/s; with pitchMode 0 a dead stop.
+  const plow = (lx: number, rx: number, ramp = 18) => {
     const r = rig("simulation", 5); r.h.buttons[7] = 0.5;
     for (let i = 0; i < 360 && !r.s.fallen; i++) {
       r.h.buttons[4] = r.h.buttons[5] = i < 2 ? 1 : 0;
       r.h.buttons[10] = r.h.buttons[14] = i < 120 ? 1 : 0;
-      r.h.axes = i < 120 ? [0, 0, 0, 0] : [lx, 0, rx, 0];
+      const k = i < 120 ? 0 : Math.min(1, (i - 119) / ramp);
+      r.h.axes = [lx * k, 0, rx * k, 0];
       r.tick();
     }
     return r.s;
   };
-  const inside = plow(-1, 1), flat = plow(0, 0), caught = plow(1, -1);
+  const inside = plow(-1, 1), flat = plow(0, 0), caught = plow(1, -1), slammed = plow(-1, 1, 1);
   for (const s of [inside, flat]) assert.equal(s.fallen, false);
   assert.deepEqual(inside.footAngle!.map(a => Math.round(a * 180 / Math.PI)), [-34, -34], "both toes in");
   const v = (s: typeof inside) => Math.hypot(s.vel.x, s.vel.y);
-  assert.ok(Math.abs(v(inside) - 2.71) < 0.05 && Math.abs(v(flat) - 4.25) < 0.05, `inside ${v(inside).toFixed(2)}, flat ${v(flat).toFixed(2)}`);
-  assert.equal(caught.fallReason, FALL.Pitched, "caught edges pitch the skater forward");
-  assert.equal(caught.tick, 162, "0.35 s after the sticks set the edges");
+  assert.ok(Math.abs(v(inside) - 2.79) < 0.05 && Math.abs(v(flat) - 4.25) < 0.05, `inside ${v(inside).toFixed(2)}, flat ${v(flat).toFixed(2)}`);
+  assert.equal(caught.fallReason, FALL.ToePickTrip, "caught edges throw the skater onto the pick");
+  assert.equal(caught.tick, 131);
+  assert.equal(slammed.fallReason, FALL.ToePickTrip, "a snowplow slammed on catches the pick");
+  assert.equal(slammed.tick, 122, "2 ticks after the sticks move");
+});
+
+test("rocking back on the pad in Simulation: both sticks yanked to the heel catch the pick, eased back they do not", () => {
+  // MEASURED from 3, 5 and 7 m/s alike, both sticks pulled back together: to
+  // lean the body back the ankle first drives the contact toward the toe, so
+  // a yank — 90% or more in one tick, or full within 0.1 s — puts it on the
+  // pick; eased over 0.2 s, or to 80%, the skater rocks back and stays up.
+  const rock = (depth: number, ramp: number) => {
+    const r = rig("simulation", 5); r.h.buttons[7] = 0.5;
+    for (let i = 0; i < 240 && !r.s.fallen; i++) {
+      r.h.buttons[4] = r.h.buttons[5] = i < 2 ? 1 : 0;
+      const k = i < 60 ? 0 : Math.min(1, (i - 59) / ramp) * depth;
+      r.h.axes = [0, k, 0, k];
+      r.tick();
+    }
+    return r.s;
+  };
+  assert.equal(rock(1, 1).fallReason, FALL.ToePickTrip, "yanked");
+  assert.equal(rock(1, 12).fallReason, FALL.ToePickTrip, "full within 0.1 s");
+  assert.equal(rock(1, 24).fallen, false, "eased over 0.2 s");
+  assert.equal(rock(0.8, 1).fallen, false, "to 80%");
 });
 
 // ── Experimental: the legs on the triggers, pumps and thumb strokes ─────────
@@ -243,7 +271,7 @@ function experiment(plan: (i: number, h: ControllerHardware) => void, ticks = 12
     if (input.push) pushes.push(`${input.pushFoot}@${input.pushPower!.toFixed(2)}`);
     if (before !== JUMP_PHASE.Air && r.s.jump.phase === JUMP_PHASE.Air) took = true;
   }
-  return { v: Math.hypot(r.s.vel.x, r.s.vel.y), pushes, took, fallen: r.s.fallen, inputs, st: r.st };
+  return { v: Math.hypot(r.s.vel.x, r.s.vel.y), pushes, took, fallen: r.s.fallen, reason: r.s.fallReason, inputs, st: r.st };
 }
 const near = (x: number, y: number) => Math.abs(x - y) < 0.005;
 
@@ -258,17 +286,23 @@ test("experimental: a pump pushes by how deep and how quick; the leg extends fro
   assert.equal(deep.inputs.find(x => x.push)!.pushKnee, 1, "the push extends from the full bend");
 });
 
-test("experimental: a thumb stroke pushes by its accuracy — full, straight and quick", () => {
-  // MEASURED: full bottom-to-top in a quarter of the gesture window, 2.987
-  // (1.00); a short stroke never reaches the top edge and does not push.
-  const clean = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 1 : i >= 16 && i < 19 ? -1 : 0; });
-  const crooked = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 1 : i >= 16 && i < 40 ? -0.85 : 0; h.axes[2] = i >= 16 && i < 40 ? 0.5 : 0; });
+test("experimental: a thumb stroke pushes by its accuracy, forgivingly — and yanked to the ends it catches the pick", () => {
+  // MEASURED (2026-09-24, the stroke made forgiving and the toe pick on): a
+  // firm stroke, three-quarters down to three-quarters up, pushes 0.99, 2.985
+  // (the old full bottom-to-top stroke gave 1.00, 2.987); a crooked one, 0.67;
+  // a short one never reaches the edge and does not push. Pulled to the stick's
+  // end at 3 m/s the ankle throws the other blade onto its pick: down at tick 12.
+  const firm = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.75 : i >= 16 && i < 19 ? -0.75 : 0; });
+  const crooked = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.75 : i >= 16 && i < 40 ? -0.75 : 0; h.axes[2] = i >= 16 && i < 40 ? 0.5 : 0; });
   const short = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.65 : i >= 16 && i < 36 ? -0.65 : 0; });
-  assert.deepEqual(clean.pushes, ["1@1.00"]);
-  assert.ok(near(clean.v, 2.987), clean.v.toFixed(3));
+  const yanked = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 1 : i >= 16 && i < 19 ? -1 : 0; });
+  assert.deepEqual(firm.pushes, ["1@0.99"]);
+  assert.ok(near(firm.v, 2.985), firm.v.toFixed(3));
   assert.equal(crooked.pushes.length, 1);
   assert.ok(Number(crooked.pushes[0].split("@")[1]) < 0.7, `a crooked, slow stroke pushes less (${crooked.pushes[0]})`);
   assert.deepEqual(short.pushes, []);
+  assert.equal(yanked.reason, FALL.ToePickTrip, "yanked to the end: the pick");
+  assert.deepEqual(yanked.pushes, []);
 });
 
 test("experimental: pumping the legs in turn builds real speed, and never reads as a jump; loading both and letting go does", () => {
@@ -347,13 +381,49 @@ test("experimental: no automatic crossovers forward, straight, or too slow", () 
   assert.equal(crossing(-1, 0.65, 0.6).crossovers, 0, "under 1.5 m/s");
 });
 
-test("experimental: the free leg's trigger swings it — released it rests — and it does not pump", () => {
-  // B puts the weight on the right foot: the left leg is free.
-  const r = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 30 ? 1 : 0; }, 40);
+test("experimental: the free leg's trigger swings it — released it rests — and a snap on it is a push", () => {
+  // B puts the weight on the right foot: the left leg is free. Held past the
+  // gesture window it is a swing; snapped, the standing (right) leg pushes and
+  // the weight goes across to the left (the operator's call, 2026-09-24: a
+  // lifted leg cannot push; strokes switch feet).
+  const r = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 60 ? 1 : 0; }, 90);
   assert.equal(r.st.full!.foot, 1);
   assert.equal(r.inputs[10].freeLeg, 0.5, "released: at rest");
   assert.equal(r.inputs[25].freeLeg, 1, "LT pulled: swung forward");
-  assert.deepEqual(r.pushes, [], "a free leg's pump is a swing, not a push");
+  assert.deepEqual(r.pushes, [], "a held swing released is a swing, not a push");
+  const snap = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 26 ? 1 : 0; }, 90);
+  assert.deepEqual(snap.pushes, ["1@1.00"], "snapped: the standing leg pushes");
+  assert.equal(snap.st.full!.foot, 0, "and the weight goes across");
   const shared = experiment(() => {}, 5);
   assert.equal(shared.inputs[4].freeLeg, undefined, "both feet down: no free leg");
+});
+
+test("experimental: strokes switch feet — each push is the standing leg's, then the weight goes across; a held trigger is still the jump", () => {
+  // MEASURED from 3 m/s, weight on the right (B), a snap every 0.5 s for
+  // 2.5 s, starting on the free (left) leg's trigger: the pushes alternate
+  // right, left, right…, both blades down through each push, and none reads
+  // as a jump — while stroking, a snap of the standing trigger is the next
+  // push. LT alone 4.017 m/s; alternating LT, RT 3.047 (every snap then lands
+  // on the free leg's trigger, which also swings that leg forward); gliding
+  // 2.731. From a glide the standing trigger is the jump's load at once, as
+  // it was: RT snapped first takes off. Held 0.6 s, it takes off.
+  const B = (i: number, h: ControllerHardware) => { if (i >= 2 && i < 4) h.buttons[1] = 1; };
+  const snaps = (pick: (n: number) => number) => experiment((i, h) => {
+    B(i, h);
+    if (i >= 10 && (i - 10) % 60 < 8) h.buttons[pick(Math.floor((i - 10) / 60))] = 1;
+  }, 300);
+  const lt = snaps(() => 6), alt = snaps(n => n % 2 ? 7 : 6);
+  for (const r of [lt, alt]) {
+    assert.deepEqual(r.pushes, ["1@1.00", "0@1.00", "1@1.00", "0@1.00", "1@1.00"]);
+    assert.equal(r.took, false, "a snap while stroking is never a jump");
+    assert.equal(r.fallen, false);
+  }
+  assert.ok(near(lt.v, 4.017) && near(alt.v, 3.047), [lt, alt].map(r => r.v.toFixed(3)).join(" / "));
+  const weights = lt.inputs.slice(10, 70).map(x => x.weight);
+  assert.ok(weights.includes(0.5) && weights.at(-1) === 0, "both down through the push, then onto the left foot");
+  const standingFirst = snaps(() => 7);
+  assert.equal(standingFirst.took, true, "from a glide the standing trigger's snap is the jump's load");
+  assert.deepEqual(standingFirst.pushes, []);
+  const hold = experiment((i, h) => { B(i, h); h.buttons[7] = i >= 20 && i < 90 ? 1 : 0; }, 200);
+  assert.equal(hold.took, true, "held: the jump");
 });

@@ -151,6 +151,10 @@ const footTangent = (heading: Vec2, foot: number, angle: number): Vec2 =>
  * the rotation. The winding then acts on the body itself, both halves
  * together, rather than being carried to a takeoff.
  */
+/** Where along blade i the dig pushes, 0 heel .. 1 toe: its contact, or under the test oracle the asked one. */
+const digS = (s: SkaterState, p: Params, i: number): number =>
+  p.digOracle === 1 && s.contactAsked ? s.contactAsked[i] : s.blade[i].contactS;
+
 function slipSolveFeet(
   s: SkaterState, p: Params, dt: number, stroking: boolean, wasSkid: boolean[], events: EdgeEvent[],
   torqueOn: boolean, carriage: number,
@@ -162,7 +166,7 @@ function slipSolveFeet(
     const b = s.blade[i];
     if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
     const side = s.supportMode === 2 ? (i === FOOT.Left ? p.stanceHalfWidth : -p.stanceHalfWidth) : 0;
-    const r = add(mul(b.tangent, (b.contactS - 0.5) * p.bladeLength), mul(bodyLeft, side));
+    const r = add(mul(b.tangent, (digS(s, p, i) - 0.5) * p.bladeLength), mul(bodyLeft, side));
     const n = perpLeft(b.tangent);
     const vLat = dot(add(s.vel, mul(perpLeft(r), spin)), n), into = -sign(vLat);
     const need = p.mass * b.weight * Math.abs(vLat);
@@ -188,6 +192,7 @@ function slipSolveFeet(
   s.vel = add(s.vel, dv);
   if (torqueOn) s.yawDev = (s.yawDev ?? 0) + dL / (p.lowerBodyInertia + upperInertia(p, carriage));
   else s.spinCarry += dL / p.inertiaOpen;
+  if (s.digL !== undefined) s.digL += dL;
   return dot(force, bodyLeft);
 }
 
@@ -229,11 +234,12 @@ function slipSolve(
     for (let i = 0; i < 2; i++) {
       const b = s.blade[i];
       if (scrapes[i] === 0) continue;
-      const r = mul(b.tangent, (b.contactS - 0.5) * p.bladeLength);
+      const r = mul(b.tangent, (digS(s, p, i) - 0.5) * p.bladeLength);
       const f = mul(n, into * scrapes[i] * used);
       dL += (r.x * f.y - r.y * f.x) * dt;
     }
     s.spinCarry += dL / p.inertiaOpen;
+    if (s.digL !== undefined) s.digL += dL;
   }
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
@@ -394,6 +400,22 @@ const legInput = (input: SkatingInput): SkatingInput =>
 const INA_BAUER_STRIDE = 0.3;
 
 /**
+ * THE TOE PICK (toePickMode). big_reffg.txt §3.5, EDGE-005: a loaded blade
+ * whose contact has reached the pick's root while it travels toward its toe
+ * faster than `toePickTripSpeed` drives the pick into the ice — a trip.
+ * Backward the pick trails the blade and only strikes. The blade that
+ * catches, or -1.
+ */
+function toePickCatch(s: SkaterState, p: Params): number {
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    if (b.inContact && (b.contactS - 0.5) * p.bladeLength >= p.toePickEngage
+      && dot(s.vel, b.tangent) > p.toePickTripSpeed) return i;
+  }
+  return -1;
+}
+
+/**
  * THE FORE-AFT PENDULUM (pitchMode). big_reffg.txt §3.5: the lateral
  * pendulum's mirror along the support blade — along the blade, not the body,
  * because across it the edge holds the body and along it only the ankle can:
@@ -470,7 +492,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     fallReason: FALL.None, fallen: false, tick: 0,
     blade: [makeBlade(), makeBlade()],
     // Present only where the pendulum is, so a standing-up retry resets it too.
-    ...(p.pitchMode === 1 ? { pitch: 0, pitchRate: 0, pitchContact: 0, pitchOffTime: 0 } : {}),
+    ...(p.pitchMode === 1 ? { pitch: 0, pitchRate: 0, pitchContact: 0, pitchOffTime: 0, contactAsked: [0.5, 0.5] as [number, number], digL: 0 } : {}),
   };
 }
 
@@ -483,6 +505,7 @@ export function step(
   const eventsAtStart = events.length;
   const g = p.gravity;
   s.tick++;
+  if (s.digL !== undefined) s.digL = 0;   // pitchMode 1 observability: this tick's winding from the blades
   // Explicit resource, not a hidden global (sim/ice.ts): with no grid passed,
   // or `iceGridMode` 0, `condAt` is 0 everywhere and every call site below
   // reads exactly what it did before this file existed.
@@ -610,6 +633,8 @@ export function step(
   const pitch = axis(input.pitch, 0), pitchSplit = clamp(axis(input.pitchSplit ?? 0, 0), -1, 1);
   // Each blade's own point on the rocker: the shared pitch, split apart.
   const contactS = [pitch - pitchSplit, pitch + pitchSplit].map((c) => clamp(0.5 + 0.5 * clamp(c, -1, 1), 0, 1));
+  // Observability (pitchMode 1): the contact the input asked for, before the ankle places it.
+  if (s.contactAsked) { s.contactAsked[0] = contactS[0]; s.contactAsked[1] = contactS[1]; }
 
   // ── 0c. a turn, a twizzle or a spin begins ────────────────────────────────
   // sim/moves.ts: on a fresh press, if the ice permits one. From here until it
@@ -1315,7 +1340,18 @@ export function step(
     else s.balanceErrorTime = 0;
 
     let reason: Fall = FALL.None;
+    // The pendulum's to catch: without it the body has no fore-aft lean to
+    // throw over the pick, and a pivot or a spin places the contact itself.
+    const picked = p.toePickMode === 1 && pitchOn ? toePickCatch(s, p) : -1;
     if (Math.abs(s.lean) > p.fallLean) reason = FALL.LeanExceeded;
+    else if (picked >= 0) {
+      reason = FALL.ToePickTrip;
+      const b = s.blade[picked];
+      events.push({
+        tick: s.tick, type: EVENT.ToePickCatch, foot: picked as Foot,
+        prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: dot(s.vel, b.tangent),
+      });
+    }
     else if (s.balanceErrorTime > p.fallErrorTime) reason = FALL.BalanceTimeout;
     else if (pitchOn && (s.pitchOffTime ?? 0) > p.fallErrorTime) reason = FALL.Pitched;
 

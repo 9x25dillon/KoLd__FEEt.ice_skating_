@@ -558,6 +558,16 @@ export interface SkaterState {
   pitchContact?: number;
   pitchOffTime?: number;
   /**
+   * pitchMode 1 only, observability: each blade's contact as the input asked
+   * for it, 0 heel .. 1 toe (what pitchMode 0 would have placed), beside
+   * blade[i].contactS, where the ankle actually has it; and the angular
+   * impulse the blades' pushes gave the body this tick, N m s, counter-
+   * clockwise positive — non-zero while a dig winds. Read-only for the
+   * physics, except under the test oracle `digOracle`.
+   */
+  contactAsked?: [number, number];
+  digL?: number;
+  /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
    * Tracked and replay-safe; not yet spent by sim/score.ts.

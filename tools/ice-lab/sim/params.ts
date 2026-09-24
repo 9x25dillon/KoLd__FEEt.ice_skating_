@@ -746,6 +746,30 @@ export interface Params {
   /** How hard the ankle draws the capture point to the asked lean: 1 closes
    *  the gap at the pendulum's own rate, sqrt(g / L). Authored. */
   pitchGain: number;
+
+  // ── the toe pick ──────────────────────────────────────────────────────────
+  /**
+   * 0: nothing raises FALL.ToePickTrip. 1: a loaded blade whose contact sits
+   * at the pick's root, travelling toward its toe, catches the pick and trips
+   * the skater (big_reffg.txt §3.5 and EDGE-005: s >= s_toe with v > v_trip).
+   * Backward, the pick trails and only strikes — what the toe jumps plant.
+   * Only with pitchMode 1: the trip is the fore-aft pendulum's to throw.
+   */
+  toePickMode: number;
+  /** m from the blade's centre toward the toe past which the pick bites.
+   *  big_reffg.txt's ToePickEngagePos, authored there. */
+  toePickEngage: number;
+  /** m/s toward the toe above which a biting pick trips the skater rather
+   *  than stopping them. big_reffg.txt's ToePickTripSpeed, authored there. */
+  toePickTripSpeed: number;
+  /**
+   * TEST / DEBUG ORACLE — never on in a setup. 0: the dig pushes where the
+   * blade meets the ice, blade[i].contactS. 1 (with pitchMode 1): where the
+   * input asked for the contact (SkaterState.contactAsked) — the pre-pendulum
+   * dig, reproduced beside the real one to show why its numbers were wrong:
+   * under the pendulum it pushes where the blade is not meeting the ice.
+   */
+  digOracle: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -978,6 +1002,11 @@ export const DEFAULT_PARAMS: Params = {
   pitchMode: 0,
   pitchGain: 1,
 
+  toePickMode: 0,
+  toePickEngage: 0.11,
+  toePickTripSpeed: 1.5,
+  digOracle: 0,
+
   mass: 55.0,
   comHeight: 0.95,
   stanceHalfWidth: 0.12,
@@ -1150,6 +1179,10 @@ export function validate(p: Params): string[] {
   if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
   if (![0, 1].includes(p.pitchMode)) errs.push("pitchMode is 0 (the input sets the contact) or 1 (the ankle balances a fore-aft lean)");
   if (!(p.pitchGain > 0)) errs.push("pitchGain must be positive");
+  if (![0, 1].includes(p.toePickMode)) errs.push("toePickMode is 0 (the pick never trips) or 1 (a pick that bites going forward trips)");
+  if (!(p.toePickEngage > 0 && p.toePickEngage < 0.5 * p.bladeLength)) errs.push("toePickEngage must lie between the blade's centre and its toe (0 .. bladeLength / 2)");
+  if (!(p.toePickTripSpeed > 0)) errs.push("toePickTripSpeed must be positive");
+  if (![0, 1].includes(p.digOracle)) errs.push("digOracle is 0 (the dig pushes at the contact) or 1 (test oracle: at the asked contact)");
   if (![0, 1].includes(p.speedSpinMode)) errs.push("speedSpinMode is 0 (the block lifts) or 1 (it also turns the body)");
   if (![0, 1].includes(p.footMode)) errs.push("footMode is 0 (blades along the body) or 1 (each foot turns in its hip)");
   if (p.footMode === 1 && p.slipMode !== 1) errs.push("footMode 1 needs slipMode 1: a turned blade must be able to scrape");

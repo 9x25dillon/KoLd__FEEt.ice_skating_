@@ -16,6 +16,10 @@ export interface Frame {
   code: [number, number]; tilt: [number, number]; load: [number, number];
   latForce: [number, number]; demand: [number, number]; regime: [number, number];
   dwell: [number, number];
+  /** Where each blade's contact is, 0 heel .. 1 toe, and where the input asked for it (the same without the pendulum). */
+  contact: [number, number]; contactAsked: [number, number];
+  /** The blades' winding this tick, N m s — the dig — or NaN where it is not tracked (pitchMode 0). */
+  digL: number;
 }
 
 export class Telemetry {
@@ -44,7 +48,9 @@ export class Telemetry {
       f.code[i] = b.code; f.tilt[i] = b.tilt; f.load[i] = b.normalLoad;
       f.latForce[i] = b.latForce; f.demand[i] = b.demandRatio;
       f.regime[i] = b.regime; f.dwell[i] = b.dwell;
+      f.contact[i] = b.contactS; f.contactAsked[i] = s.contactAsked ? s.contactAsked[i] : b.contactS;
     }
+    f.digL = s.digL ?? NaN;
     this.head = (this.head + 1) % this.capacity;
     if (this.filled < this.capacity) this.filled++;
   }
@@ -72,6 +78,7 @@ export class Telemetry {
       "lat_accel", "int_accel", "tilt_cmd_deg", "support_foot", "support_mode",
       "L_code", "L_tilt_deg", "L_load_N", "L_lat_force_N", "L_demand", "L_regime", "L_dwell_s",
       "R_code", "R_tilt_deg", "R_load_N", "R_lat_force_N", "R_demand", "R_regime", "R_dwell_s",
+      "L_contact", "L_contact_asked", "R_contact", "R_contact_asked", "dig_Nms",
     ].join(",");
     const d = (r: number): string => ((r * 180) / Math.PI).toFixed(3);
     const rows = this.frames().map((f) => [
@@ -82,6 +89,8 @@ export class Telemetry {
       f.demand[0].toFixed(3), REGIME_NAME[f.regime[0]], f.dwell[0].toFixed(3),
       codeToString(f.code[1]), d(f.tilt[1]), f.load[1].toFixed(1), f.latForce[1].toFixed(1),
       f.demand[1].toFixed(3), REGIME_NAME[f.regime[1]], f.dwell[1].toFixed(3),
+      f.contact[0].toFixed(3), f.contactAsked[0].toFixed(3), f.contact[1].toFixed(3), f.contactAsked[1].toFixed(3),
+      Number.isNaN(f.digL) ? "" : f.digL.toFixed(4),
     ].join(","));
     return [head, ...rows].join("\n");
   }
@@ -102,5 +111,6 @@ function blank(): Frame {
     supportFoot: 0, supportMode: 0,
     code: [0xff, 0xff], tilt: [0, 0], load: [0, 0], latForce: [0, 0],
     demand: [0, 0], regime: [0, 0], dwell: [0, 0],
+    contact: [0.5, 0.5], contactAsked: [0.5, 0.5], digL: NaN,
   };
 }
