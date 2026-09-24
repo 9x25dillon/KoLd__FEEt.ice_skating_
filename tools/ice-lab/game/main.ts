@@ -7,6 +7,7 @@ import { newSchemeState, SCHEME } from "../app/schemes.ts";
 import type { GameScheme as Scheme } from "./controls.ts";
 import { FULL_SCHEME, ACTIONS, bindingLabel, loadControllerProfile, digStatus } from "./full-controls.ts";
 import type { GameControlState } from "./full-controls.ts";
+import { Ghost } from "./ghost.ts";
 import { MOVE, TURN_KIND, FALL, codeToString } from "../sim/types.ts";
 import { JUMP_PHASE, JUMP_CODE } from "../sim/jump.ts";
 import { SETUPS, SETUP_KEY, isSetup, setupParams, setupInput } from "./setups.ts";
@@ -128,6 +129,14 @@ let resumeAfterGuide = false;
 const wardrobe = el("wardrobe") as HTMLDialogElement;
 let resumeAfterWardrobe = false;
 let skater = createState(params, 4.5), steering = newSchemeState(), run = new IceRun();
+// The AI ghost (game/ghost.ts): on by default, remembered, toggled with G or the settings box.
+let ghostOn = (() => { try { return localStorage.getItem("edgework-ghost") !== "off"; } catch { return true; } })();
+let ghost: Ghost | null = null;
+function setGhost(on: boolean) {
+  ghostOn = on; (el("ghost-toggle") as HTMLInputElement).checked = on;
+  try { localStorage.setItem("edgework-ghost", on ? "on" : "off"); } catch { /* Session only. */ }
+  ghost = on ? new Ghost(skater) : null;
+}
 /** A fresh sheet each run: resurfaced between skaters, the way a rink actually is. */
 let ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
 let mode: "ready" | "playing" | "paused" | "done" = "ready";
@@ -173,6 +182,7 @@ function start() {
   trail.forEach(t => t.length = 0); accumulator = 0; flash = 0; pendingPush = false; mode = "playing";
   pendingToe = false; cantilever = false; elapsedSkate = 0;
   practice = new Practice(); scene.reset(skater);
+  ghost = ghostOn ? new Ghost(skater) : null;
   el("overlay").hidden = true; el("pause").hidden = false;
   // A run's tick zero is the beat grid's phase origin (sim/music.ts): the
   // track restarts from its own zero at the same moment, so the two stay in
@@ -258,6 +268,8 @@ function renderFullBindings() {
   el("legacy-guide").hidden = scheme === FULL_SCHEME;
 }
 const setupSelect = el("setup-select") as HTMLSelectElement;
+(el("ghost-toggle") as HTMLInputElement).checked = ghostOn;
+el("ghost-toggle").addEventListener("change", e => setGhost((e.target as HTMLInputElement).checked));
 function saveSetup() { try { localStorage.setItem(SETUP_KEY, JSON.stringify({ setup, assistance })); } catch { /* Session only. */ } }
 function renderSetup() {
   setupSelect.value = setup ?? "custom";
@@ -318,7 +330,7 @@ trackSelect.addEventListener("change", () => {
   if (wasPlaying) void musicEl.play().catch(() => { /* still locked */ });
 });
 canvas.addEventListener("wheel", e => { e.preventDefault(); scene.zoom = Math.max(0.65, Math.min(1.8, scene.zoom * (e.deltaY > 0 ? 0.9 : 1.1))); }, { passive: false });
-window.addEventListener("keydown", e => { if (e.key.toLowerCase() === "u") lowHeld = true; if(e.key === " ") pushHeld = true; });
+window.addEventListener("keydown", e => { if (e.key.toLowerCase() === "u") lowHeld = true; if(e.key === " ") pushHeld = true; if (e.key.toLowerCase() === "g" && !e.repeat) setGhost(!ghostOn); });
 window.addEventListener("keyup", e => { if (e.key.toLowerCase() === "u") lowHeld = false; if(e.key === " ") pushHeld = false; });
 window.addEventListener("blur", () => { lowHeld = false; pushHeld = false; pause(); });
 document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
@@ -330,7 +342,10 @@ function draw(_now: number) {
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode ? playground : null, !playback ? rookie : null);
+  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode ? playground : null, !playback ? rookie : null, playback ? null : ghost);
+  const note = el("ghost-note");
+  note.hidden = !ghost || !!playback;
+  if (ghost && !playback) note.textContent = `Ghost · ${ghost.trick.name} — ${ghost.trick.how}${ghost.pressing ? ` · now: ${ghost.pressing}` : ""}`;
   const landingEffect = scene.effects.landing;
   el("jump-feedback").hidden = !landingEffect;
   if (landingEffect) {
@@ -440,6 +455,7 @@ function frame(now: number) {
       pendingPush = false; pendingToe = false;
       const events: EdgeEvent[] = [];
       step(skater, input, params, SIM_DT, events, ice);
+      if (ghost) ghost.tick(skater);
       // sim/moves.ts spinTick's own foot change: changeCompletedTick advances
       // the instant a transfer resolves, mid-spin, well before the spin
       // itself ends — a toast now, not only ever reflected later in the
