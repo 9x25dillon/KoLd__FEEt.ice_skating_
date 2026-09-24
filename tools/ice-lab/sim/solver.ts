@@ -394,6 +394,22 @@ const legInput = (input: SkatingInput): SkatingInput =>
 const INA_BAUER_STRIDE = 0.3;
 
 /**
+ * THE TOE PICK (toePickMode). big_reffg.txt §3.5, EDGE-005: a loaded blade
+ * whose contact has reached the pick's root while it travels toward its toe
+ * faster than `toePickTripSpeed` drives the pick into the ice — a trip.
+ * Backward the pick trails the blade and only strikes. The blade that
+ * catches, or -1.
+ */
+function toePickCatch(s: SkaterState, p: Params): number {
+  for (let i = 0; i < 2; i++) {
+    const b = s.blade[i];
+    if (b.inContact && (b.contactS - 0.5) * p.bladeLength >= p.toePickEngage
+      && dot(s.vel, b.tangent) > p.toePickTripSpeed) return i;
+  }
+  return -1;
+}
+
+/**
  * THE FORE-AFT PENDULUM (pitchMode). big_reffg.txt §3.5: the lateral
  * pendulum's mirror along the support blade — along the blade, not the body,
  * because across it the edge holds the body and along it only the ankle can:
@@ -1315,7 +1331,18 @@ export function step(
     else s.balanceErrorTime = 0;
 
     let reason: Fall = FALL.None;
+    // The pendulum's to catch: without it the body has no fore-aft lean to
+    // throw over the pick, and a pivot or a spin places the contact itself.
+    const picked = p.toePickMode === 1 && pitchOn ? toePickCatch(s, p) : -1;
     if (Math.abs(s.lean) > p.fallLean) reason = FALL.LeanExceeded;
+    else if (picked >= 0) {
+      reason = FALL.ToePickTrip;
+      const b = s.blade[picked];
+      events.push({
+        tick: s.tick, type: EVENT.ToePickCatch, foot: picked as Foot,
+        prevCode: b.code, newCode: b.code, prevDwell: b.dwell, value: dot(s.vel, b.tangent),
+      });
+    }
     else if (s.balanceErrorTime > p.fallErrorTime) reason = FALL.BalanceTimeout;
     else if (pitchOn && (s.pitchOffTime ?? 0) > p.fallErrorTime) reason = FALL.Pitched;
 

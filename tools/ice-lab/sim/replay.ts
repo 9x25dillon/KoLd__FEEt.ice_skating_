@@ -255,7 +255,11 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       pitchMode and pitchGain; SkaterState optional pitch/pitchRate/
 //       pitchContact/pitchOffTime, absent unless pitchMode is 1; FALL gained
 //       Pitched (6). Fixture rebased, every digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/36";
+//   /37 The toe pick (toePickMode, 0 everywhere): Params gained toePickMode,
+//       toePickEngage and toePickTripSpeed; with toePickMode and pitchMode 1
+//       FALL.ToePickTrip is raised, with an EVENT.ToePickCatch. Fixture
+//       rebased, every digest unchanged.
+export const REPLAY_SOLVER = "ice-lab-f64/37";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 
