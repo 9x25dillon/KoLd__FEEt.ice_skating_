@@ -52,5 +52,7 @@ export function setupInput(c: Controls, s: SkaterState, setup: Setup, st: GameCo
     repeatPush: setup !== "simulation" && !exp,
     digGate: setup === "diggate",
     standingPush: !exp,
+    // The Elite paddles: Experimental and Simulation only, the operator's choice.
+    paddles: setup === "experimental" || setup === "simulation" ? setup : undefined,
   });
 }

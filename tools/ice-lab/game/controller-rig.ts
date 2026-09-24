@@ -11,7 +11,8 @@ import { ReplayRecorder } from "../sim/replay.ts";
 import { SETUPS, SETUP_KEY, setupParams, setupInput } from "./setups.ts";
 import type { Setup } from "./setups.ts";
 import { manualAction, ACTIONS, BUTTON_NAMES, BINDABLE_BUTTONS, TUNING, PROFILE_KEY, FEET_LAYOUTS, defaultControllerProfile, loadControllerProfile, parseControllerProfile } from "./full-controls.ts";
-import type { FeetLayout } from "./full-controls.ts";
+import { PADDLE_ACTIONS, PADDLE_BUTTONS, PADDLE_POSITIONS, PADDLE_PRESETS, PADDLE_SETUPS, paddleActionAllowed, paddleLayer, paddlePreset } from "./full-controls.ts";
+import type { FeetLayout, PaddleAction, PaddleSetup } from "./full-controls.ts";
 import type { GameControlState } from "./full-controls.ts";
 import { PadProbe, beyondStandard, describeChange, describeSlots } from "./pad-probe.ts";
 import type { PadChange } from "./pad-probe.ts";
@@ -25,7 +26,12 @@ let recorder = new ReplayRecorder(p, 6.8), input: SkatingInput | null = null, lo
 let running = true, time = 0, accumulator = 0;
 let trace: { x: number; y: number }[] = [];
 let hardware: ControllerHardware = { connected: false, axes: [0, 0, 0, 0], buttons: [], keys: [] };
-const virtual: ControllerHardware = { connected: true, axes: [0, 0, 0, 0], buttons: Array(16).fill(0), keys: [] };
+// 22 buttons, as Firefox reports an Elite: 16 and 17 unused, 18–21 the paddles.
+const virtual: ControllerHardware = { connected: true, axes: [0, 0, 0, 0], buttons: Array(22).fill(0), keys: [] };
+const paddleName = (b: number) => `b${b} · ${PADDLE_POSITIONS[b as keyof typeof PADDLE_POSITIONS]}`;
+/** The paddles as the operator sees them: top row first, left before right. */
+const PADDLE_ORDER = [20, 18, 21, 19] as const;
+let paddleSetup: PaddleSetup = "experimental";
 const source = () => el<HTMLSelectElement>("source").value;
 function status(text: string) { el("status").textContent = text; }
 function reset(speed = 6.8) {
@@ -63,6 +69,43 @@ function renderBindings() {
   }
   renderVirtualButtons();
 }
+function renderPaddles() {
+  el<HTMLSelectElement>("paddle-setup").value = paddleSetup;
+  const layer = paddleLayer(profile, paddleSetup);
+  const change = (next: typeof layer, what: string) => {
+    profile.paddles = { ...profile.paddles, [paddleSetup]: next };
+    st = newSchemeState(); renderPaddles(); status(`${what} Save to use it in the game.`);
+  };
+  el("paddle-presets").replaceChildren();
+  for (const preset of PADDLE_PRESETS) {
+    const button = document.createElement("button");
+    button.textContent = preset.name;
+    const layerOk = PADDLE_BUTTONS.every(b => paddleActionAllowed(paddleSetup, preset.layer[b]));
+    button.disabled = !layerOk;
+    if (!layerOk) button.title = "Simulation has no free leg";
+    button.setAttribute("aria-pressed", String(PADDLE_BUTTONS.every(b => layer[b] === preset.layer[b])));
+    button.addEventListener("click", () => change(paddlePreset(preset.id), `Paddles: ${preset.name}.`));
+    el("paddle-presets").append(button);
+  }
+  el("paddles").replaceChildren();
+  for (const b of PADDLE_ORDER) {
+    const row = document.createElement("tr"), name = document.createElement("td"), cell = document.createElement("td"), select = document.createElement("select");
+    row.dataset.button = String(b);
+    name.textContent = paddleName(b);
+    select.setAttribute("aria-label", `Paddle ${paddleName(b)} action`);
+    for (const action of PADDLE_ACTIONS) {
+      if (!paddleActionAllowed(paddleSetup, action.id)) continue;
+      const option = document.createElement("option"); option.value = action.id; option.textContent = action.name; select.append(option);
+    }
+    select.value = layer[b];
+    select.addEventListener("change", () => change({ ...layer, [b]: select.value as PaddleAction }, `Paddle ${paddleName(b)} changed.`));
+    cell.append(select); row.append(name, cell); el("paddles").append(row);
+  }
+  el("paddle-note").textContent = setup === "experimental" || setup === "simulation" ? "" : `The paddles do nothing in ${SETUPS.find(x => x.id === setup)!.name}.`;
+}
+function syncPaddles() {
+  for (const row of el("paddles").querySelectorAll<HTMLElement>("tr")) row.classList.toggle("on", (hardware.buttons[Number(row.dataset.button)] ?? 0) > 0.5);
+}
 function renderTuning() {
   el("tuning").replaceChildren();
   for (const t of TUNING) {
@@ -86,6 +129,13 @@ function renderVirtualButtons() {
     button.addEventListener("click", () => { virtual.buttons[index] = virtual.buttons[index] > 0.5 ? 0 : 1; syncVirtualButtons(); });
     el("virtual-buttons").append(button);
   }
+  for (const index of PADDLE_ORDER) {
+    const button = document.createElement("button");
+    button.textContent = `Paddle ${paddleName(index)}`;
+    button.dataset.button = String(index);
+    button.addEventListener("click", () => { virtual.buttons[index] = virtual.buttons[index] > 0.5 ? 0 : 1; syncVirtualButtons(); });
+    el("virtual-buttons").append(button);
+  }
   syncVirtualButtons();
 }
 function syncVirtualButtons() {
@@ -101,8 +151,15 @@ el("neutral").onclick = () => {
   virtual.axes.fill(0); virtual.buttons.fill(0); syncVirtualButtons();
   for (const i of el("virtual-axes").querySelectorAll("input")) { i.value = "0"; i.dispatchEvent(new Event("input")); }
 };
+el("paddle-setup").onchange = () => {
+  const value = el<HTMLSelectElement>("paddle-setup").value;
+  if (PADDLE_SETUPS.includes(value as PaddleSetup)) { paddleSetup = value as PaddleSetup; renderPaddles(); }
+};
 el("setup").onchange = () => {
   setup = el<HTMLSelectElement>("setup").value as Setup;
+  // The paddle layer shown follows the setup, when it is one that reads them.
+  if (setup === "experimental" || setup === "simulation") paddleSetup = setup;
+  renderPaddles();
   el("setup-description").textContent = SETUPS.find(s => s.id === setup)!.description;
   el<HTMLInputElement>("assist").disabled = setup !== "explorer";
   reset(); renderBindings();
@@ -120,13 +177,13 @@ el("feet").onchange = () => {
 };
 el("run").onclick = () => { running = !running; el("run").textContent = running ? "Pause" : "Resume"; el("run").setAttribute("aria-pressed", String(running)); accumulator = 0; };
 el("reset").onclick = () => reset(); el("backward").onclick = () => reset(-6.8);
-el("defaults").onclick = () => { profile = defaultControllerProfile(); virtual.buttons.fill(0); reset(); renderTuning(); renderBindings(); status("Defaults restored for preview. Save to keep them."); };
+el("defaults").onclick = () => { profile = defaultControllerProfile(); virtual.buttons.fill(0); reset(); renderTuning(); renderBindings(); renderPaddles(); status("Defaults restored for preview. Save to keep them."); };
 el("save").onclick = () => { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(parseControllerProfile(profile))); localStorage.setItem(SETUP_KEY, JSON.stringify({ setup, assistance })); status("Saved setup and sensitivity. Reload the game to apply them."); } catch (e) { status(String(e)); } };
 el("export").onclick = () => download("edgework-controller.json", JSON.stringify(profile, null, 2));
 el("replay").onclick = () => download("edgework-controller-replay.json", recorder.toJson());
 el("import").onchange = async () => {
   const file = el<HTMLInputElement>("import").files?.[0]; if (!file) return;
-  try { if (file.size > 65536) throw Error("Profile exceeds 64 KiB"); profile = parseControllerProfile(JSON.parse(await file.text())); reset(); renderTuning(); renderBindings(); status("Profile imported for preview. Save to use it in the game."); } catch (e) { status(String(e)); }
+  try { if (file.size > 65536) throw Error("Profile exceeds 64 KiB"); profile = parseControllerProfile(JSON.parse(await file.text())); reset(); renderTuning(); renderBindings(); renderPaddles(); status("Profile imported for preview. Save to use it in the game."); } catch (e) { status(String(e)); }
 };
 const canvas = el<HTMLCanvasElement>("ice"), ctx = canvas.getContext("2d")!;
 const fmt = (n: number) => n.toFixed(2);
@@ -141,7 +198,7 @@ function draw() {
   el("observed").textContent = s.fallen ? "Fall · push to recover" : s.jump.phase === JUMP_PHASE.Air ? `Airborne · ${JUMP_CODE[s.jump.kind] ?? "jump"}` : low ? "Cantilever" : move;
   el("requested").textContent = st.full?.request ?? "Glide";
   el("skating").textContent = `${fmt(Math.hypot(s.vel.x, s.vel.y))} m/s · ${fmt(s.tick * SIM_DT)} s\n${s.blade.map(b => codeToString(b.code)).join(" / ")}\nLast: ${s.moveDone.tick < 0 ? "—" : s.moveDone.kind === MOVE.Turn ? TURN_NAME[s.moveDone.detail] : "move completed"}`;
-  el("raw").textContent = `Left: ${hardware.axes.slice(0, 2).map(fmt).join(" / ")}\nRight: ${hardware.axes.slice(2, 4).map(fmt).join(" / ")}\nLT / RT: ${fmt(hardware.buttons[6] ?? 0)} / ${fmt(hardware.buttons[7] ?? 0)}\nButtons: ${hardware.buttons.flatMap((v, i) => v > 0.5 ? [BUTTON_NAMES[i] ?? String(i)] : []).join(", ") || "—"}`;
+  el("raw").textContent = `Left: ${hardware.axes.slice(0, 2).map(fmt).join(" / ")}\nRight: ${hardware.axes.slice(2, 4).map(fmt).join(" / ")}\nLT / RT: ${fmt(hardware.buttons[6] ?? 0)} / ${fmt(hardware.buttons[7] ?? 0)}\nButtons: ${hardware.buttons.flatMap((v, i) => v > 0.5 ? [BUTTON_NAMES[i] ?? (i in PADDLE_POSITIONS ? `Paddle ${paddleName(i)}` : String(i))] : []).join(", ") || "—"}`;
   el("mapped").textContent = input ? `Lean: ${fmt(input.lean)} · split: ${fmt(input.leanSplit)} · pitch: ${fmt(input.pitch)}\nShaped L: ${fmt(st.full?.left.x ?? 0)} / ${fmt(st.full?.left.y ?? 0)}\nKnee: ${fmt(input.knee)} · weight R: ${fmt(input.weight)}\nArms: ${fmt(input.carriage)} · wind-up: ${fmt(input.windup)}\nReversal threshold: ${fmt(p.rockerCounterStick)}\n${["push", "brake", "toe", "turn", "bracket", "spin", "twizzle", "inaBauer"].filter(k => input![k as keyof SkatingInput] === true).join(" · ") || "No move buttons"}` : "Waiting for the first tick";
 }
 // The raw probe reads getGamepads() itself rather than through Pad, which only
@@ -202,6 +259,6 @@ function frame(now: number) {
       accumulator -= SIM_DT;
     }
   } else accumulator = 0;
-  draw(); drawProbe(now); requestAnimationFrame(frame);
+  draw(); drawProbe(now); syncPaddles(); requestAnimationFrame(frame);
 }
-renderTuning(); renderBindings(); requestAnimationFrame(frame);
+renderTuning(); renderBindings(); renderPaddles(); requestAnimationFrame(frame);

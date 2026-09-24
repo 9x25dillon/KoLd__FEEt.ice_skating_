@@ -255,3 +255,47 @@ the controller workshop show the phase ("Dig · leaning to the toe 0.40", "Dig �
 Measured from the pad (`test/diggate.test.ts`), backward 3–7 m/s, either lean: the dig starts at 1.5 s,
 winds the body the way it curves (0.61–0.76 N m s) and the skater stays up every time. Constants in
 `game/full-controls.ts` (`DIG_*`), all measured on the Experimental athlete.
+
+
+## Elite Series 2 paddles (Experimental and Simulation, 2026-09-24)
+
+Firefox reports the Xbox Elite Series 2's four back paddles as buttons **18–21**, past the standard
+layout, so no move binding touches them. They are a **lower-body layer**, bound in the controller
+workshop's *Elite paddles* card and saved in the controller profile (`paddles`, one layer per setup;
+a profile saved before them loads with the defaults). They act in **Experimental and Simulation
+only** — Dig Gate, Blade Explorer, Full Repertoire and the Ice Lab page ignore them — and the D-pad
+keeps working alongside them.
+
+| Index | Assumed position | Experimental default | Simulation default |
+| --- | --- | --- | --- |
+| b20 | top-left | feet anticlockwise | feet anticlockwise |
+| b18 | top-right | feet clockwise | feet clockwise |
+| b21 | bottom-left | left free leg | weight left |
+| b19 | bottom-right | right free leg | weight right |
+
+Each action is exactly an existing control. **Feet** anticlockwise / clockwise: D-pad ← / → without
+the modifier (in the D-pad and modifier feet layouts; the stick layout's sticks hold the feet
+themselves); with the D-pad the same way the feet still turn at one rate. **Free leg** (Experimental
+only): held, that leg swings fully forward at once — a paddle is never a push, so there is no snap
+window to wait out; released, it rests; the standing leg's paddle does nothing; with the trigger also
+swinging it, the stronger swing wins, and a snap of the trigger is still a push. **Weight** left /
+right: X / B in Experimental (without the arm swing), LB / RB in Simulation. **Toe pick** left /
+right: L3 / R3 in Experimental, the toe binding in Simulation (the solver has one toe-pick channel,
+so both ask the same pick).
+
+Presets, one click each, matching the operator's Elite profiles — the top paddles turn the feet in
+all three: **Skating / stops** (bottom: free legs; Experimental's default), **Weight shift**
+(bottom: weight left / right; Simulation's default), **Toe picks** (bottom: toe picks). Simulation
+has no free leg (`freeLegMode` 0), so its layer cannot hold one and Skating / stops is not offered
+there: a layer per setup, rather than a free-leg paddle that silently does nothing or turns into
+something else.
+
+**Verify the positions.** Which index is which paddle is assumed from the Linux xpad driver's P1–P4
+order, not measured. In the workshop, press each paddle and watch the *Raw gamepad probe* card: the
+index it lights should be the one its row names ("b20 · top-left"), and that row turns teal while
+held. If one is wrong, swap the two rows' actions and save.
+
+With the paddles the thumbs never leave the sticks: from 6 m/s, both sticks held at 0.6 and both
+knees at 0.6, the top-left paddle turning the feet against the curve for a second scrapes the skater
+to 4.04 m/s at 4 s (straight feet: 5.05), the edges the sticks' throughout — a turn-and-scrape, not
+a full stop, which still needs the feet held square as the travel swings (`test/paddles.test.ts`).
