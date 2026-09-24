@@ -252,8 +252,11 @@ export function digStatus(f: FullState | undefined): string {
  * forgivingly (the operator's call, 2026-09-24): the range swept (full at
  * STROKE_FULL, well short of bottom to top), how straight (side to side past
  * STROKE_WOBBLE counts against it), and how quick (full at STROKE_SNAP_TICKS
- * or quicker). The stick is still that blade's heel/toe, so with the toe
- * pick on (toePickMode) a stroke yanked to the stick's ends catches a pick:
+ * or quicker). The push extends the leg from a full bend (STROKE_KNEE): a
+ * stroke is a deliberate whole-leg push, its accuracy its only measure, and
+ * a clean one pushes as hard as a full pump. The stick is still that blade's
+ * heel/toe, so with the toe pick on (toePickMode) a stroke yanked to the
+ * stick's ends catches a pick:
  * the other blade's, thrown there as the ankle leans the body back, or the
  * pushing blade's own at the top — the toe push. The skill is not to.
  *
@@ -274,6 +277,15 @@ const PUMP_HIGH = 0.6, PUMP_LOW = 0.2, GESTURE_TICKS = 30, PAIR_TICKS = 15, SNAP
 /** s after a push that the skater is still stroking: a snap of the standing trigger is the next push, not a jump. Authored. */
 const STROKING_S = 1;
 const STROKE_EDGE = 0.5, STROKE_FULL = 1.2, STROKE_WOBBLE = 0.2, STROKE_SNAP_TICKS = 12;
+/**
+ * The bend a thumb stroke's push extends from (SkatingInput.pushKnee): a full
+ * leg's, the same as a full pump's, so an accurate stroke is a full push
+ * whatever the triggers are doing. Authored. Before (2026-09-24), a stroke
+ * extended from the trigger as it stood — released, the solver's 0.35 floor —
+ * and pushed at 0.35 of a pump: from a standstill +0.06 m/s a stroke against a
+ * pump's +0.25 (measured, Dig Gate), though the operator starts on strokes.
+ */
+const STROKE_KNEE = 1;
 /**
  * Experimental's automatic back crossovers: skating backward at AUTO_CROSS_SPEED
  * or more, leaning at least the solver's crossoverLean, on the ice and in no
@@ -389,10 +401,13 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
       }
     }
     if (done) {
-      const pump = now - g.pump[i] <= PAIR_TICKS ? g.pumpPower[i] : 0;
-      const stroke = now - g.stroke[i] <= PAIR_TICKS ? g.strokePower[i] : 0;
-      // A pump extends the leg from its bend; a thumb stroke alone from the leg as it stands.
-      const bend = now - g.pump[i] <= PAIR_TICKS ? g.extend[i].peak : triggers[i];
+      const pumped = now - g.pump[i] <= PAIR_TICKS, stroked = now - g.stroke[i] <= PAIR_TICKS;
+      const pump = pumped ? g.pumpPower[i] : 0;
+      const stroke = stroked ? g.strokePower[i] : 0;
+      // A pump extends the leg from its bend; a thumb stroke from a full
+      // leg's bend (STROKE_KNEE), or the trigger's if that is deeper. Paired,
+      // the deeper of the two, so a pump never weakens a stroke.
+      const bend = Math.max(pumped ? g.extend[i].peak : 0, stroked ? Math.max(triggers[i], STROKE_KNEE) : 0);
       // On one foot the standing leg pushes, whichever gesture asked: off the
       // ice the free leg has nothing to push against.
       out = { push: true, pushFoot: freeLeg >= 0 ? 1 - freeLeg : i, pushPower: clamp(pump + stroke, 0, 1), pushKnee: Math.max(bend, 0.35) };

@@ -217,8 +217,8 @@ The other three setups are unchanged.
 | Input | Does |
 | --- | --- |
 | LT / RT | left / right knee: pull to bend. **Pump** — past 60% then back under 20% within 0.25 s — is that leg pushing, as strong as the bend was deep and the snap quick; the push extends the leg from that bend. Load the standing leg and let go: the jump |
-| Left / right stick | that foot and blade: side to side the edge, up/down heel/toe. A **thumb stroke** — down past 50% then up past 50% within 0.25 s (after the deadzone and curve: about 70% of the stick's travel) — is that foot pushing, as strong as it was full, straight and quick, judged forgivingly: three-quarters down to three-quarters up in 0.1 s is a full push, a little wobble is free. The stick is still that blade's heel/toe, so a stroke yanked to the stick's ends catches a pick (going faster than 1.5 m/s): past about 85% down the ankle throws the *other* blade onto its pick; from deep down all the way to the top, the pushing blade's own — the toe push |
-| Pump + thumb stroke, same leg, within 0.125 s | add, up to a full push |
+| Left / right stick | that foot and blade: side to side the edge, up/down heel/toe. A **thumb stroke** — down past 50% then up past 50% within 0.25 s (after the deadzone and curve: about 70% of the stick's travel) — is that foot pushing, as strong as it was full, straight and quick, judged forgivingly: three-quarters down to three-quarters up in 0.1 s is a full push, a little wobble is free. A stroke is a whole-leg push: it extends the leg from a full bend (`STROKE_KNEE`), whatever the triggers are doing, so a clean stroke pushes as hard as a full pump (before 2026-09-24 it pushed from the trigger as it stood — released, a third of a pump). The stick is still that blade's heel/toe, so a stroke yanked to the stick's ends catches a pick (going faster than 1.5 m/s): past about 85% down the ankle throws the *other* blade onto its pick; from deep down all the way to the top, the pushing blade's own — the toe push |
+| Pump + thumb stroke, same leg, within 0.125 s | add, up to a full push, from the deeper of the two bends |
 | **Strokes switch feet** | on one foot, the leg you stand on pushes, whichever trigger or stick you snap (a lifted leg has nothing to push against); both blades are down through the push, then the weight goes to the other foot and stays, and the leg that pushed is free — so the next push is the other leg's. From a glide, start with the free leg's trigger: the standing trigger is the jump's load. While stroking (within 1 s of a push) a snap of the standing trigger is the next push; hold it past 0.25 s for the jump. With shared weight each trigger pushes its own leg |
 | X / B | weight to the left / right foot (it stays), arms swing left / right (eased, not a flick); both: shared weight |
 | Free leg's trigger | with the weight on one foot the other leg is free: held, its trigger swings it forward (released, it rests) — the swing starts once the press outlasts 0.25 s; snapped (pulled and let go within 0.25 s) it is a push from the standing leg and the leg stays at rest (a snapped swing spun the skater round). Smooth and over a deep edge it adds spin its own way round (a right free leg with the jump); snapped, it twists the blade loose |
@@ -229,11 +229,13 @@ The other three setups are unchanged.
 | (automatic) | **back crossovers**: skating backward at 1.5 m/s or more, leaning at least `crossoverLean` (12°), the skater strokes a crossover on every beat of the music — on the beat, so never the chopped off-beat push — as an ordinary stroke from the knee, both blades down for the push. Bent knees stroke harder. Holding both knees deep past the jump's load (0.7 on the standing leg; with shared weight, the average) loads a jump instead |
 
 Measured from 3 m/s over 1 s: glide 2.891; one deep snapped pump 3.175; one lazy pump 2.931;
-one firm thumb stroke (75% to 75%) 2.985. Alternating full pumps every 0.25 s for 2 s: 3 → 4.061 m/s, with
+one firm thumb stroke (75% to 75%) 3.171 (was 2.985 when a stroke pushed from the released trigger). From a
+standstill, triggers released, a right-stick stroke every 0.5 s: 1.977 m/s at 4 s, the pushes alternating feet —
+the same as snapping LT, RT in turn (1.978); was 0.509. Alternating full pumps every 0.25 s for 2 s: 3 → 4.061 m/s, with
 no takeoff. Backward on a curve (sticks 0.65, knees 0.6), the automatic crossovers take 3 → 6.13 m/s
 in 8 s with no pumping (knees 0.3: 4.59). Pumps on a curve are crossover pushes and follow the bible's beat rule:
 off the beat they are chopped to 45%. The thresholds and weights are authored starting points for tuning on the pad
-(`game/full-controls.ts`: `PUMP_*`, `STROKE_*`, `GESTURE_TICKS`, `PAIR_TICKS`, `SNAP_TICKS`,
+(`game/full-controls.ts`: `PUMP_*`, `STROKE_*` including `STROKE_KNEE`, `GESTURE_TICKS`, `PAIR_TICKS`, `SNAP_TICKS`,
 `ARMS_*`).
 
 
