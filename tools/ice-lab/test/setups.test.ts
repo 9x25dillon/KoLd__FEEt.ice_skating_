@@ -205,13 +205,12 @@ test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad
   // the thumbs set the edges over 0.15 s. Sticks pushed apart — each blade on
   // its inside edge, in the model's frame — 2.79 m/s after 3 s; sticks
   // centred, 4.25. Pushed toward each other the blades sit on their outside
-  // edges, which catch: the stop is sudden, the ankle drives the contact onto
-  // the pick and it catches (toePickMode) at tick 131, at 4.69 m/s.
-  // Slammed on in one tick, even the inside edges brake too suddenly for the
-  // ankle: the pick catches 2 ticks after the sticks move — setting a snowplow
-  // is a skill (a 0.1 s ramp or slower holds, 3-7 m/s; 0.05 s trips).
-  // Before the pick (instant sticks): inside 2.71, flat 4.25; outside edges
-  // pitched forward, down at tick 162, 2.9 m/s; with pitchMode 0 a dead stop.
+  // edges, which catch: the stop is sudden and the fore-aft pendulum pitches
+  // the skater forward, down at tick 171, at 3.0 m/s. Slammed on in one tick
+  // the inside-edge snowplow holds too (2.72). With the toe-pick trip on
+  // (the morning of 2026-09-24, off since — the operator: it made pumping
+  // useless) the slam and the catch tripped on the pick; with pitchMode 0 a
+  // catch is a dead stop, upright.
   const plow = (lx: number, rx: number, ramp = 18) => {
     const r = rig("simulation", 5); r.h.buttons[7] = 0.5;
     for (let i = 0; i < 360 && !r.s.fallen; i++) {
@@ -228,17 +227,16 @@ test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad
   assert.deepEqual(inside.footAngle!.map(a => Math.round(a * 180 / Math.PI)), [-34, -34], "both toes in");
   const v = (s: typeof inside) => Math.hypot(s.vel.x, s.vel.y);
   assert.ok(Math.abs(v(inside) - 2.79) < 0.05 && Math.abs(v(flat) - 4.25) < 0.05, `inside ${v(inside).toFixed(2)}, flat ${v(flat).toFixed(2)}`);
-  assert.equal(caught.fallReason, FALL.ToePickTrip, "caught edges throw the skater onto the pick");
-  assert.equal(caught.tick, 131);
-  assert.equal(slammed.fallReason, FALL.ToePickTrip, "a snowplow slammed on catches the pick");
-  assert.equal(slammed.tick, 122, "2 ticks after the sticks move");
+  assert.equal(caught.fallReason, FALL.Pitched, "caught edges pitch the skater forward");
+  assert.equal(caught.tick, 171);
+  assert.equal(slammed.fallen, false, "slammed on, it holds");
+  assert.ok(Math.abs(v(slammed) - 2.72) < 0.05, `slammed ${v(slammed).toFixed(2)}`);
 });
 
-test("rocking back on the pad in Simulation: both sticks yanked to the heel catch the pick, eased back they do not", () => {
-  // MEASURED from 3, 5 and 7 m/s alike, both sticks pulled back together: to
-  // lean the body back the ankle first drives the contact toward the toe, so
-  // a yank — 90% or more in one tick, or full within 0.1 s — puts it on the
-  // pick; eased over 0.2 s, or to 80%, the skater rocks back and stays up.
+test("rocking back on the pad in Simulation: both sticks to the heel, yanked or eased, and the skater stays up", () => {
+  // MEASURED at 5 m/s. To lean the body back the ankle first drives the
+  // contact toward the toe; with the toe-pick trip on (the morning of
+  // 2026-09-24) a yank put it on the pick. Off, every rock-back holds.
   const rock = (depth: number, ramp: number) => {
     const r = rig("simulation", 5); r.h.buttons[7] = 0.5;
     for (let i = 0; i < 240 && !r.s.fallen; i++) {
@@ -249,10 +247,7 @@ test("rocking back on the pad in Simulation: both sticks yanked to the heel catc
     }
     return r.s;
   };
-  assert.equal(rock(1, 1).fallReason, FALL.ToePickTrip, "yanked");
-  assert.equal(rock(1, 12).fallReason, FALL.ToePickTrip, "full within 0.1 s");
-  assert.equal(rock(1, 24).fallen, false, "eased over 0.2 s");
-  assert.equal(rock(0.8, 1).fallen, false, "to 80%");
+  for (const [depth, ramp] of [[1, 1], [1, 12], [1, 24], [0.8, 1]]) assert.equal(rock(depth, ramp).fallen, false, `${depth} over ${ramp} ticks`);
 });
 
 // ── Experimental: the legs on the triggers, pumps and thumb strokes ─────────
@@ -286,12 +281,12 @@ test("experimental: a pump pushes by how deep and how quick; the leg extends fro
   assert.equal(deep.inputs.find(x => x.push)!.pushKnee, 1, "the push extends from the full bend");
 });
 
-test("experimental: a thumb stroke pushes by its accuracy, forgivingly — and yanked to the ends it catches the pick", () => {
+test("experimental: a thumb stroke pushes by its accuracy, forgivingly", () => {
   // MEASURED (2026-09-24, the stroke made forgiving and the toe pick on): a
   // firm stroke, three-quarters down to three-quarters up, pushes 0.99, 2.985
   // (the old full bottom-to-top stroke gave 1.00, 2.987); a crooked one, 0.67;
-  // a short one never reaches the edge and does not push. Pulled to the stick's
-  // end at 3 m/s the ankle throws the other blade onto its pick: down at tick 12.
+  // a short one never reaches the edge and does not push. Yanked end to end,
+  // a full push, 2.986 (with the toe-pick trip on, that morning, it tripped).
   const firm = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.75 : i >= 16 && i < 19 ? -0.75 : 0; });
   const crooked = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.75 : i >= 16 && i < 40 ? -0.75 : 0; h.axes[2] = i >= 16 && i < 40 ? 0.5 : 0; });
   const short = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.65 : i >= 16 && i < 36 ? -0.65 : 0; });
@@ -301,8 +296,9 @@ test("experimental: a thumb stroke pushes by its accuracy, forgivingly — and y
   assert.equal(crooked.pushes.length, 1);
   assert.ok(Number(crooked.pushes[0].split("@")[1]) < 0.7, `a crooked, slow stroke pushes less (${crooked.pushes[0]})`);
   assert.deepEqual(short.pushes, []);
-  assert.equal(yanked.reason, FALL.ToePickTrip, "yanked to the end: the pick");
-  assert.deepEqual(yanked.pushes, []);
+  assert.equal(yanked.fallen, false);
+  assert.deepEqual(yanked.pushes, ["1@1.00"]);
+  assert.ok(near(yanked.v, 2.986), yanked.v.toFixed(3));
 });
 
 test("experimental: pumping the legs in turn builds real speed, and never reads as a jump; loading both and letting go does", () => {

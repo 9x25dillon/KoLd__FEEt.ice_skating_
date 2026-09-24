@@ -182,7 +182,9 @@ the travel (feet, then hips). Which stick direction reads as "knees in" on scree
 checked on the pad: in the model's frame, sticks pushed apart put both blades on their inside
 edges; pushed together, on their outside edges, which catch.
 
-**The toe pick** (`toePickMode`, on in Simulation and Experimental since 2026-09-24): going
+**The toe pick** (`toePickMode`) — **off in every setup** since the afternoon of 2026-09-24, on
+the operator's word after play ("not working at all"; "makes pumping completely useless"). It was on
+in Simulation and Experimental that morning; what it did, for the record: going
 forward faster than 1.5 m/s with a loaded blade's contact 0.11 m or more toward the toe, the pick
 catches and the skater trips. A stick held full forward (toe) at speed does it; so does braking
 too suddenly, since the ankle rides a sudden stop by driving the contact toward the toe — both
@@ -225,3 +227,23 @@ in 8 s with no pumping (knees 0.3: 4.59). Pumps on a curve are crossover pushes 
 off the beat they are chopped to 45%. The thresholds and weights are authored starting points for tuning on the pad
 (`game/full-controls.ts`: `PUMP_*`, `STROKE_*`, `GESTURE_TICKS`, `PAIR_TICKS`, `SNAP_TICKS`,
 `ARMS_*`).
+
+
+## Dig Gate (a fifth setup, 2026-09-24)
+
+Experimental's athlete and every Experimental binding, plus a **phase-gated dig** on **LB + RB**
+(held, with no A or Y). The gate only asks; the blades dig or don't.
+
+| Phase | What the controller asks |
+| --- | --- |
+| idle | nothing |
+| wait | going forward, nothing — it waits for you to skate backward (forward, the dig threw the skater down 10 times in 10, 3–7 m/s) |
+| lean | the toe, eased in to 0.4 over 0.5 s; then it waits until the contact the ankle actually has is within 0.02 of the asked (the lean begun early) — timeout 1.5 s |
+| dig | both feet turned against the curve (toeOutSplit toward the lean) for 0.5 s; the scraping blades wind the body |
+| recover | the lean eased back out over 1 s |
+
+Let go of LB + RB during the lean and it eases back out without digging. The game's stance line and
+the controller workshop show the phase ("Dig · leaning to the toe 0.40", "Dig · digging · winding").
+Measured from the pad (`test/diggate.test.ts`), backward 3–7 m/s, either lean: the dig starts at 1.5 s,
+winds the body the way it curves (0.61–0.76 N m s) and the skater stays up every time. Constants in
+`game/full-controls.ts` (`DIG_*`), all measured on the Experimental athlete.

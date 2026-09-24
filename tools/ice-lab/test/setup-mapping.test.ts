@@ -33,6 +33,10 @@
 // Re-recorded (2026-09-24, solver /37 and /38): the toe pick on in Simulation
 // and Experimental, Experimental's thumb stroke made forgiving, and the dig's
 // observability fields (digOracle) — every mapped input and story unchanged.
+//
+// Re-recorded (2026-09-24, solver /38), operator-directed: a fifth setup,
+// Dig Gate (Experimental's athlete, a phase-gated dig on LB + RB), gains its
+// record; the other four are unchanged.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
