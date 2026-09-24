@@ -48,10 +48,74 @@ export interface Binding { button: number; modified: boolean }
  */
 export const FEET_LAYOUTS = ["dpad", "stickY", "modifier"] as const;
 export type FeetLayout = typeof FEET_LAYOUTS[number];
+/**
+ * THE PADDLE LAYER (Xbox Elite Series 2, 2026-09-24, the operator's design).
+ * Firefox reports the Elite's four back paddles as buttons 18–21, past the
+ * standard layout, so they are free of every move binding. They are a
+ * lower-body layer — the feet, the free leg, the weight, the toe — so the
+ * thumbs can stay on the blades: a hockey stop turns the feet on a paddle
+ * with both sticks still holding the edges. Only Experimental and Simulation
+ * read them; a pad without them (a standard pad, the keyboard) reads them as
+ * released, so it maps exactly as before.
+ *
+ * Which physical paddle is which index is assumed from the Linux xpad
+ * driver's P1..P4 order, not measured: the workshop names both, and the
+ * operator checks each with the raw probe and swaps bindings if it is wrong.
+ */
+export const PADDLE_BUTTONS = [18, 19, 20, 21] as const;
+export type PaddleButton = typeof PADDLE_BUTTONS[number];
+export const PADDLE_POSITIONS: Record<PaddleButton, string> = { 18: "top-right", 19: "bottom-right", 20: "top-left", 21: "bottom-left" };
+/**
+ * What a paddle can do, each exactly what an existing control does: the feet
+ * as D-pad left/right without the modifier (the feet layout's nudge, "dpad" or
+ * "modifier"; the "stickY" layout's sticks hold the feet themselves); the free
+ * leg as its trigger held fully (Experimental only); the weight as X / B in
+ * Experimental, LB / RB in Simulation; the toe as L3 / R3 in Experimental, the
+ * toe binding in Simulation. The solver has one toe pick channel
+ * (SkatingInput.toe), so the left and right picks ask the same thing — two
+ * names so the paddles read as the operator's Elite profile does.
+ */
+export const PADDLE_ACTIONS = [
+  { id: "none", name: "Nothing" },
+  { id: "feetAnticlockwise", name: "Feet anticlockwise" },
+  { id: "feetClockwise", name: "Feet clockwise" },
+  { id: "freeLegLeft", name: "Left free leg" },
+  { id: "freeLegRight", name: "Right free leg" },
+  { id: "weightLeft", name: "Weight left" },
+  { id: "weightRight", name: "Weight right" },
+  { id: "toeLeft", name: "Left toe pick" },
+  { id: "toeRight", name: "Right toe pick" },
+] as const;
+export type PaddleAction = typeof PADDLE_ACTIONS[number]["id"];
+export type PaddleLayer = Record<PaddleButton, PaddleAction>;
+/**
+ * A layer per setup, since the two setups do not have the same body:
+ * Simulation has no free leg (freeLegMode 0), so a free-leg paddle there could
+ * only do nothing, or quietly become something else. Each setup keeps its own
+ * four paddles instead, and Simulation's cannot hold a free leg.
+ */
+export const PADDLE_SETUPS = ["experimental", "simulation"] as const;
+export type PaddleSetup = typeof PADDLE_SETUPS[number];
+/** The operator's three Elite profiles: the top paddles turn the feet in each, the bottom ones differ. */
+export const PADDLE_PRESETS = [
+  { id: "skating", name: "Skating / stops", layer: { 20: "feetAnticlockwise", 18: "feetClockwise", 21: "freeLegLeft", 19: "freeLegRight" } },
+  { id: "weight", name: "Weight shift", layer: { 20: "feetAnticlockwise", 18: "feetClockwise", 21: "weightLeft", 19: "weightRight" } },
+  { id: "toe", name: "Toe picks", layer: { 20: "feetAnticlockwise", 18: "feetClockwise", 21: "toeLeft", 19: "toeRight" } },
+] as const satisfies readonly { id: string; name: string; layer: PaddleLayer }[];
+export type PaddlePreset = typeof PADDLE_PRESETS[number]["id"];
+export const PADDLE_DEFAULTS: Record<PaddleSetup, PaddlePreset> = { experimental: "skating", simulation: "weight" };
+export const paddleActionAllowed = (setup: PaddleSetup, action: PaddleAction): boolean => setup === "experimental" || (action !== "freeLegLeft" && action !== "freeLegRight");
+export const paddlePreset = (id: PaddlePreset): PaddleLayer => ({ ...PADDLE_PRESETS.find(x => x.id === id)!.layer });
+/** A setup's paddles: the profile's layer, or the setup's default preset when it has none. */
+export function paddleLayer(profile: ControllerProfile, setup: PaddleSetup): PaddleLayer {
+  return profile.paddles?.[setup] ?? paddlePreset(PADDLE_DEFAULTS[setup]);
+}
 export interface ControllerProfile {
   version: 1;
   /** Absent in profiles saved before the feet existed: reads as "dpad". */
   feet?: FeetLayout;
+  /** Absent in profiles saved before the paddles existed, per setup: that setup's default preset. */
+  paddles?: Partial<Record<PaddleSetup, PaddleLayer>>;
   deadzone: number;
   curve: number;
   leanGain: number;
@@ -90,9 +154,27 @@ export function parseControllerProfile(value: unknown): ControllerProfile {
     seen.add(key); bindings[a.id] = { button: b.button, modified: b.modified };
   }
   if (p.feet !== undefined && !FEET_LAYOUTS.includes(p.feet)) throw Error("Choose a feet layout: dpad, stickY or modifier");
+  let paddles: ControllerProfile["paddles"];
+  if (p.paddles !== undefined) {
+    if (!p.paddles || typeof p.paddles !== "object" || Array.isArray(p.paddles)) throw Error("Invalid paddle layers");
+    paddles = {};
+    for (const setup of PADDLE_SETUPS) {
+      const layer = p.paddles[setup];
+      if (layer === undefined) continue;
+      if (!layer || typeof layer !== "object" || Array.isArray(layer)) throw Error(`Invalid paddle layer for ${setup}`);
+      const out = {} as PaddleLayer;
+      for (const b of PADDLE_BUTTONS) {
+        const a = layer[b];
+        if (!PADDLE_ACTIONS.some(x => x.id === a)) throw Error(`Invalid paddle binding for b${b} (${setup})`);
+        if (!paddleActionAllowed(setup, a)) throw Error(`${setup} has no free leg: choose another action for b${b}`);
+        out[b] = a;
+      }
+      paddles[setup] = out;
+    }
+  }
   return { version: 1, deadzone: p.deadzone, curve: p.curve, leanGain: p.leanGain,
     keyboardLean: p.keyboardLean, triggerDeadzone: p.triggerDeadzone, modifier: p.modifier, bindings,
-    ...(p.feet !== undefined ? { feet: p.feet } : {}) };
+    ...(p.feet !== undefined ? { feet: p.feet } : {}), ...(paddles !== undefined ? { paddles } : {}) };
 }
 export function loadControllerProfile(): ControllerProfile {
   try { const saved = localStorage.getItem(PROFILE_KEY); if (saved) return parseControllerProfile(JSON.parse(saved)); } catch { /* A corrupt or unavailable save uses defaults. */ }
@@ -160,7 +242,9 @@ export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks
 const TURNS: Action[] = ["three", "mohawk", "bracket", "loop", "rocker", "counter", "choctaw"];
 export const manualAction = (action: Action): boolean => !TURNS.includes(action) || action === "three" || action === "bracket";
 
-export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; pumps?: boolean; experimental?: boolean; leanAssist?: number; repeatPush?: boolean; digGate?: boolean; standingPush?: boolean }
+export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; pumps?: boolean; experimental?: boolean; leanAssist?: number; repeatPush?: boolean; digGate?: boolean; standingPush?: boolean;
+  /** Which setup's paddle layer to read (b18–b21); absent, the paddles do nothing. */
+  paddles?: PaddleSetup }
 
 /**
  * THE DIG GATE (the Dig Gate setup, 2026-09-24). LB + RB held — and no A or
@@ -322,7 +406,7 @@ const FEET_NUDGE_RATE = 1.5;
 function feetInput(
   f: FullState, layout: FeetLayout, h: ControllerHardware, key: (k: string) => boolean, down: (b: number) => boolean,
   modified: boolean, left: { x: number; y: number }, right: { x: number; y: number }, stick: { x: number; y: number },
-  profile: ControllerProfile, options: MappingOptions,
+  profile: ControllerProfile, options: MappingOptions, paddleTurn = 0,
 ): Partial<SkatingInput> {
   const feet = f.feet ??= { out: 0, split: 0 };
   const step = FEET_NUDGE_RATE * SIM_DT;
@@ -337,12 +421,22 @@ function feetInput(
   if (key("\\")) { feet.out = 0; feet.split = 0; }
   if (layout === "dpad" && h.connected) {
     const l = down(14) && !bound(14), r = down(15) && !bound(15);
+    // A paddle turning the feet (paddleTurn, -1 anticlockwise) is D-pad
+    // left/right without the modifier; the two together still turn the feet
+    // at one rate, and pressed against each other they cancel as the D-pad's
+    // own left and right do.
+    const pl = paddleTurn < 0, pr = paddleTurn > 0;
     // Left is anticlockwise (split) or toes in (out); right the reverse.
-    if (l !== r) nudge(modified ? "out" : "split", l ? -1 : 1);
+    if (modified) {
+      if (l !== r) nudge("out", l ? -1 : 1);
+      if (pl !== pr) nudge("split", pl ? -1 : 1);
+    } else if ((l || pl) !== (r || pr)) nudge("split", l || pl ? -1 : 1);
     if (down(12) && !bound(12)) { feet.out = 0; feet.split = 0; }
-  } else if (layout === "modifier" && h.connected && modified) {
-    nudge("split", stick.x);
-    nudge("out", stick.y);
+  } else if (layout === "modifier" && h.connected) {
+    if (modified) {
+      nudge("split", clamp(stick.x + paddleTurn, -1, 1));
+      nudge("out", stick.y);
+    } else if (paddleTurn) nudge("split", paddleTurn);
   } else if (layout === "stickY" && h.connected) {
     // Up turns the toe out. The modifier puts heel/toe back on the left stick.
     const lf = modified ? feet.out - feet.split : left.y, rf = right.y;
@@ -448,12 +542,19 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     const b = profile.bindings[a.id];
     return key(a.key) || (f.buttonBanks.get(b.button) === b.modified && down(b.button));
   }).map(a => a.id));
+  // The Elite paddles, in the setups that read them. Indices past the pad's
+  // buttons read as released, so a standard pad and the keyboard map as before.
+  const paddles = options.paddles && h.connected ? paddleLayer(profile, options.paddles) : null;
+  const paddle = (a: PaddleAction) => paddles !== null && PADDLE_BUTTONS.some(b => paddles[b] === a && down(b));
+  // A toe-pick paddle is one more toe button: held with L3 or R3 it is still one pick.
+  if (paddle("toeLeft") || paddle("toeRight")) held.add("toe");
   const fresh = (a: Action) => held.has(a) && !f.previous.has(a);
   const l = shapeStick(h.axes[0], -h.axes[1], profile), r = shapeStick(h.axes[2], -h.axes[3], profile);
   f.left = l; f.right = r;
   const trigger = (b: number) => Math.max(0, ((h.buttons[b] ?? 0) - profile.triggerDeadzone) / (1 - profile.triggerDeadzone));
   // Bumpers select and retain a foot — X and B in Experimental. Both explicitly select shared weight.
-  const leftFoot = key("q") || down(options.experimental ? 2 : 4), rightFoot = key("e") || down(options.experimental ? 1 : 5);
+  // The weight paddles are the same choice; they do not swing the arms as X / B do.
+  const leftFoot = key("q") || down(options.experimental ? 2 : 4) || paddle("weightLeft"), rightFoot = key("e") || down(options.experimental ? 1 : 5) || paddle("weightRight");
   if (leftFoot || rightFoot) f.foot = leftFoot && rightFoot ? 0.5 : leftFoot ? 0 : 1;
   // Experimental: a push has run its course — the weight goes to the other
   // foot and the leg that pushed is free. X / B during it keep their choice.
@@ -508,15 +609,20 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
       const pull = trigger(freeLegIndex === 0 ? 6 : 7), rise = f.gestures?.rise?.[freeLegIndex] ?? -1e9;
       const snapping = pull >= PUMP_HIGH && s.tick - rise < GESTURE_TICKS;
       mapped.freeLeg = snapping ? 0.5 : 0.5 + 0.5 * pull;
+      // Its paddle swings it fully forward at once — a paddle is never a
+      // push, so there is no snap to wait out — the stronger of the two
+      // whatever the trigger asks. The standing leg's paddle does nothing.
+      if (paddle(freeLegIndex === 0 ? "freeLegLeft" : "freeLegRight")) mapped.freeLeg = Math.max(mapped.freeLeg, 1);
     }
     if (options.pumps && !mapped.push) {
       const auto = autoCrossover(f, s, p);
       if (auto) Object.assign(mapped, auto);
     }
     // An automatic crossover keeps both blades down through its push, unless
-    // X / B asks for a foot this tick.
-    if (options.pumps && s.tick < (f.crossUntil ?? -1) && !down(1) && !down(2)) mapped.weight = 0.5;
-    if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options));
+    // X / B or a weight paddle asks for a foot this tick.
+    if (options.pumps && s.tick < (f.crossUntil ?? -1) && !down(1) && !down(2) && !paddle("weightLeft") && !paddle("weightRight")) mapped.weight = 0.5;
+    const paddleTurn = Number(paddle("feetClockwise")) - Number(paddle("feetAnticlockwise"));
+    if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options, paddleTurn));
     // A trigger per knee: LT the left leg, RT the right. The brake moves off LT
     // to D-pad ↑, free in this setup unless the profile has bound it, until
     // stops come from the blades themselves.
