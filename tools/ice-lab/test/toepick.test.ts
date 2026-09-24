@@ -1,7 +1,8 @@
 // The toe pick (toePickMode): a loaded blade whose contact reaches the pick's
 // root while it travels toward its toe faster than toePickTripSpeed catches
 // the pick — a trip (big_reffg.txt §3.5, EDGE-005). The fore-aft pendulum's
-// to throw, so it needs pitchMode 1. Off everywhere; measured here first.
+// to throw, so it needs pitchMode 1. On in Simulation and Experimental (the
+// operator's word, 2026-09-24), with Experimental's thumb stroke made forgiving.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -13,8 +14,8 @@ import { NEUTRAL_INPUT, FALL, EVENT, FOOT } from "../sim/types.ts";
 import type { SkatingInput, EdgeEvent } from "../sim/types.ts";
 import { setupParams, SETUPS } from "../game/setups.ts";
 
-// The Simulation athlete with stages B/C off (test/pitch.test.ts's base), the pendulum on.
-const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 1 };
+// The Simulation athlete with stages B/C off (test/pitch.test.ts's base), the pendulum on, the pick off.
+const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 1, toePickMode: 0 };
 const FEET = { ...SIM, slipMode: 1, footMode: 1 };
 const on = (p: Params): Params => ({ ...p, toePickMode: 1 });
 
@@ -29,11 +30,12 @@ function skate(p: Params, input: Partial<SkatingInput>, speed: number, T = 3) {
   return { s, t, catches: events.filter(e => e.type === EVENT.ToePickCatch) };
 }
 
-test("toePickMode is 0 by default and in every setup, and validates", () => {
+test("toePickMode is 0 by default, on in Simulation and Experimental only, and validates", () => {
   assert.equal(DEFAULT_PARAMS.toePickMode, 0);
   assert.equal(DEFAULT_PARAMS.toePickEngage, 0.11);
   assert.equal(DEFAULT_PARAMS.toePickTripSpeed, 1.5);
-  for (const { id } of SETUPS) assert.equal(setupParams(id).toePickMode, 0, id);
+  for (const { id } of SETUPS)
+    assert.equal(setupParams(id).toePickMode, id === "simulation" || id === "experimental" ? 1 : 0, id);
   assert.deepEqual(validate(on(FEET)), []);
   assert.ok(validate({ ...FEET, toePickMode: 2 }).some(e => /toePickMode/.test(e)));
   assert.ok(validate({ ...FEET, toePickEngage: 0.14 }).some(e => /toePickEngage/.test(e)), "at the blade's end the pick is out of reach");
@@ -81,13 +83,14 @@ test("both outside edges caught: the ankle drives the contact onto the pick, and
   }
 });
 
-test("why it is not on in Experimental yet: a stick pulled to one heel throws the other blade onto its pick", () => {
-  // MEASURED (Experimental's thumb stroke, test/setups.test.ts, 3 m/s): the
-  // right stick pulled full back asks pitch -0.5, pitchSplit -0.5. To lean the
+test("a stick yanked to one heel throws the other blade onto its pick", () => {
+  // MEASURED (Experimental's thumb stroke pulled to the stick's end, 3 m/s):
+  // the right stick full back asks pitch -0.5, pitchSplit -0.5. To lean the
   // body back the ankle first moves the shared contact 7.9 cm toward the toe,
   // in one tick; the split around it puts the unasked left blade at contactS 1
-  // — on the pick. The pendulum's own counter-movement, left as it is here.
-  const p = on({ ...setupParams("experimental") });
+  // — on the pick. The pendulum's own counter-movement; Experimental's stroke
+  // is forgiving so it need not go there (test/setups.test.ts).
+  const p = setupParams("experimental");
   const r = skate(p, { knee: 0.38, pitch: -0.5, pitchSplit: -0.5 }, 3, 0.1);
   assert.equal(r.s.fallReason, FALL.ToePickTrip);
   assert.equal(r.catches[0].foot, FOOT.Left);

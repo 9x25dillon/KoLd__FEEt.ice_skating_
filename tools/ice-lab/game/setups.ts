@@ -31,7 +31,8 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   // parallel. Repertoire keeps its dedicated moves on the carve as it was.
   if (setup !== "repertoire") { p.slipMode = 1; p.torqueMode = 1; }
   // The fore-aft pendulum (pitchMode) with the feet: the operator's choice, 2026-09-23.
-  if (setup === "simulation" || setup === "experimental") { p.footMode = 1; p.pitchMode = 1; }
+  // The toe pick with it (toePickMode), on the operator's word, 2026-09-24.
+  if (setup === "simulation" || setup === "experimental") { p.footMode = 1; p.pitchMode = 1; p.toePickMode = 1; }
   if (setup === "experimental") p.freeLegMode = 1;
   return p;
 }

@@ -158,14 +158,20 @@ export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: bo
  * knee stays the trigger's, so a pump never reads as a jump's load.
  *
  * A THUMB STROKE: that stick pulled down past -STROKE_EDGE, then swept up past
- * +STROKE_EDGE within GESTURE_TICKS. Its strength is its accuracy: the range
- * swept (full from the bottom to the top), how straight (little side to side),
- * and how quick (full at SNAP_TICKS or quicker).
+ * +STROKE_EDGE within GESTURE_TICKS. Its strength is its accuracy, judged
+ * forgivingly (the operator's call, 2026-09-24): the range swept (full at
+ * STROKE_FULL, well short of bottom to top), how straight (side to side past
+ * STROKE_WOBBLE counts against it), and how quick (full at STROKE_SNAP_TICKS
+ * or quicker). The stick is still that blade's heel/toe, so with the toe
+ * pick on (toePickMode) a stroke yanked to the stick's ends catches a pick:
+ * the other blade's, thrown there as the ankle leans the body back, or the
+ * pushing blade's own at the top — the toe push. The skill is not to.
  *
  * A pump and a thumb stroke of the same leg within PAIR_TICKS add, to a full
  * push at most. Authored starting points; the operator's experiment.
  */
-const PUMP_HIGH = 0.6, PUMP_LOW = 0.2, STROKE_EDGE = 0.6, GESTURE_TICKS = 30, PAIR_TICKS = 15, SNAP_TICKS = 6;
+const PUMP_HIGH = 0.6, PUMP_LOW = 0.2, GESTURE_TICKS = 30, PAIR_TICKS = 15, SNAP_TICKS = 6;
+const STROKE_EDGE = 0.5, STROKE_FULL = 1.2, STROKE_WOBBLE = 0.2, STROKE_SNAP_TICKS = 12;
 /**
  * Experimental's automatic back crossovers: skating backward at AUTO_CROSS_SPEED
  * or more, leaning at least the solver's crossoverLean, on the ice and in no
@@ -246,7 +252,7 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
     extend: [{ tick: -1e9, peak: 0 }, { tick: -1e9, peak: 0 }] };
   if (!connected) return {};
   const now = s.tick, ground = s.jump.phase === JUMP_PHASE.None;
-  const quick = (ticks: number) => clamp(1 - Math.max(0, ticks - SNAP_TICKS) / (GESTURE_TICKS - SNAP_TICKS), 0.3, 1);
+  const quick = (ticks: number, snap = SNAP_TICKS) => clamp(1 - Math.max(0, ticks - snap) / (GESTURE_TICKS - snap), 0.3, 1);
   let out: Partial<SkatingInput> = {};
   for (let i = 0; i < 2; i++) {
     let done = false;
@@ -270,9 +276,10 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
     else if (now - g.low[i] <= GESTURE_TICKS) {
       g.sideSum[i] += Math.abs(st.x); g.samples[i]++;
       if (st.y >= STROKE_EDGE && ground) {
-        const range = clamp((st.y - g.lowY[i]) / 2, 0, 1);
-        const straight = clamp(1 - g.sideSum[i] / Math.max(1, g.samples[i]), 0, 1);
-        g.stroke[i] = now; g.strokePower[i] = range * straight * quick(now - g.low[i]);
+        const range = clamp((st.y - g.lowY[i]) / STROKE_FULL, 0, 1);
+        const wobble = g.sideSum[i] / Math.max(1, g.samples[i]);
+        const straight = clamp(1 - Math.max(0, wobble - STROKE_WOBBLE) / (1 - STROKE_WOBBLE), 0, 1);
+        g.stroke[i] = now; g.strokePower[i] = range * straight * quick(now - g.low[i], STROKE_SNAP_TICKS);
         g.low[i] = -1e9; done = true;
       }
     }
