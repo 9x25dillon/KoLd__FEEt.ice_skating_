@@ -135,11 +135,23 @@ export interface FullState {
     high: number[]; peak: number[]; pump: number[]; pumpPower: number[];
     low: number[]; lowY: number[]; sideSum: number[]; samples: number[]; stroke: number[]; strokePower: number[];
     extend: { tick: number; peak: number }[];
+    /** The tick each trigger's press rose past PUMP_HIGH. */
+    rise?: number[];
   };
   /** Experimental: the arms' swing, -1 (left, X) .. +1 (right, B), eased toward what is held. */
   arms?: number;
   /** Experimental: the tick an automatic crossover's push ends; both blades stay down until then. */
   crossUntil?: number;
+  /**
+   * Experimental: a pumped or stroked push in progress — both blades down
+   * until `transferAt`, then the weight goes to `transferTo`, the other foot,
+   * and the leg that pushed is the free leg (2026-09-24, the operator: switch
+   * feet as a skater does).
+   */
+  transferAt?: number;
+  transferTo?: number;
+  /** Experimental: the tick the last pumped or stroked push began. */
+  lastPush?: number;
 }
 export type GameControlState = SchemeState & { full?: FullState };
 export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks: new Map(), feedbackUntil: -1, turn: null, turnStarted: false, foot: 1, request: "Glide", left: { x: 0, y: 0 }, right: { x: 0, y: 0 } });
@@ -169,8 +181,20 @@ export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: bo
  *
  * A pump and a thumb stroke of the same leg within PAIR_TICKS add, to a full
  * push at most. Authored starting points; the operator's experiment.
+ *
+ * On one foot, the leg the skater stands on pushes, whichever trigger or
+ * stick asked — a lifted leg has nothing to push against. Both blades are
+ * down through the push, then the weight moves across and stays (fullInput,
+ * `transferTo`): the leg that pushed is free, and the next push is the other
+ * leg's — strokes alternate feet as a skater's do. The standing trigger is
+ * also the jump's load: while stroking (within STROKING_S of the last push)
+ * it loads only once held past GESTURE_TICKS, so a snap is the next push and
+ * a hold is a jump; from a glide it loads at once, as it always did
+ * (fullInput). With shared weight each trigger pushes its own leg.
  */
 const PUMP_HIGH = 0.6, PUMP_LOW = 0.2, GESTURE_TICKS = 30, PAIR_TICKS = 15, SNAP_TICKS = 6;
+/** s after a push that the skater is still stroking: a snap of the standing trigger is the next push, not a jump. Authored. */
+const STROKING_S = 1;
 const STROKE_EDGE = 0.5, STROKE_FULL = 1.2, STROKE_WOBBLE = 0.2, STROKE_SNAP_TICKS = 12;
 /**
  * Experimental's automatic back crossovers: skating backward at AUTO_CROSS_SPEED
@@ -256,12 +280,15 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
   let out: Partial<SkatingInput> = {};
   for (let i = 0; i < 2; i++) {
     let done = false;
-    if (i === freeLeg) continue;   // off the ice: a swing, not a push
     // The pump.
+    const rise = g.rise ??= none();
     if (triggers[i] >= PUMP_HIGH) {
-      if (now - g.high[i] > 1) g.peak[i] = 0;
+      if (now - g.high[i] > 1) { g.peak[i] = 0; rise[i] = now; }
       g.high[i] = now; g.peak[i] = Math.max(g.peak[i], triggers[i]);
-    } else if (triggers[i] <= PUMP_LOW && now - g.high[i] <= GESTURE_TICKS && ground && s.jump.phase !== JUMP_PHASE.Load) {
+    } else if (triggers[i] <= PUMP_LOW && now - g.high[i] <= GESTURE_TICKS && ground && s.jump.phase !== JUMP_PHASE.Load
+      // The free leg's trigger also swings it: only a snap, pulled and let go
+      // inside the gesture window, is a push; a held swing released is a swing.
+      && (i !== freeLeg || now - rise[i] <= GESTURE_TICKS)) {
       g.pump[i] = now; g.pumpPower[i] = g.peak[i] * quick(now - g.high[i]);
       g.extend[i] = { tick: now, peak: g.peak[i] };
       g.high[i] = -1e9; done = true;
@@ -288,7 +315,9 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
       const stroke = now - g.stroke[i] <= PAIR_TICKS ? g.strokePower[i] : 0;
       // A pump extends the leg from its bend; a thumb stroke alone from the leg as it stands.
       const bend = now - g.pump[i] <= PAIR_TICKS ? g.extend[i].peak : triggers[i];
-      out = { push: true, pushFoot: i, pushPower: clamp(pump + stroke, 0, 1), pushKnee: Math.max(bend, 0.35) };
+      // On one foot the standing leg pushes, whichever gesture asked: off the
+      // ice the free leg has nothing to push against.
+      out = { push: true, pushFoot: freeLeg >= 0 ? 1 - freeLeg : i, pushPower: clamp(pump + stroke, 0, 1), pushKnee: Math.max(bend, 0.35) };
     }
   }
   return out;
@@ -333,6 +362,11 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   // Bumpers select and retain a foot — X and B in Experimental. Both explicitly select shared weight.
   const leftFoot = key("q") || down(options.experimental ? 2 : 4), rightFoot = key("e") || down(options.experimental ? 1 : 5);
   if (leftFoot || rightFoot) f.foot = leftFoot && rightFoot ? 0.5 : leftFoot ? 0 : 1;
+  // Experimental: a push has run its course — the weight goes to the other
+  // foot and the leg that pushed is free. X / B during it keep their choice.
+  if (f.transferTo !== undefined && (leftFoot || rightFoot)) f.transferTo = undefined;
+  if (f.transferTo !== undefined && s.tick >= (f.transferAt ?? 0)) { f.foot = f.transferTo; f.transferTo = undefined; }
+  const pushing = f.transferTo !== undefined;
   const kx = Number(key("d") || key("arrowright")) - Number(key("a") || key("arrowleft"));
   const ky = Number(key("w") || key("arrowup")) - Number(key("s") || key("arrowdown"));
   const raw = { ...c, kx: kx * profile.keyboardLean, ky, lean: l.x * profile.leanGain,
@@ -364,8 +398,15 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     mapped.pitchSplit = keyPitch ? 0 : (rightPitch - leftPitch) / 2;
     // Experimental: with the weight on one foot the other leg is free — its
     // trigger swings it forward (released, it rests), and it does not pump.
-    const freeLegIndex = options.pumps && f.foot !== 0.5 ? (f.foot === 1 ? 0 : 1) : -1;
+    const freeLegIndex = options.pumps && f.foot !== 0.5 && !pushing ? (f.foot === 1 ? 0 : 1) : -1;
     if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l, arms ? f.bladeRight! : r], h.connected, freeLegIndex));
+    // A push begins: both blades down through it, then the weight goes across.
+    if (options.pumps && mapped.push && (mapped.pushFoot === 0 || mapped.pushFoot === 1) && !(leftFoot || rightFoot)) {
+      f.transferAt = s.tick + Math.round(p.strokeDuration / SIM_DT);
+      f.transferTo = 1 - mapped.pushFoot;
+      f.lastPush = s.tick;
+    }
+    if (options.pumps && f.transferTo !== undefined) mapped.weight = 0.5;
     if (freeLegIndex >= 0 && h.connected) mapped.freeLeg = 0.5 + 0.5 * trigger(freeLegIndex === 0 ? 6 : 7);
     if (options.pumps && !mapped.push) {
       const auto = autoCrossover(f, s, p);
@@ -379,9 +420,19 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     // to D-pad ↑, free in this setup unless the profile has bound it, until
     // stops come from the blades themselves.
     if (h.connected && !key("shift")) {
-      const kneeL = trigger(6), kneeR = trigger(7);
-      mapped.knee = (kneeL + kneeR) / 2;
-      mapped.kneeSplit = (kneeR - kneeL) / 2;
+      const kneeL = trigger(6), kneeR = trigger(7), knees = [kneeL, kneeR];
+      // Experimental, on one foot, while stroking: the standing trigger is the
+      // push's and the jump's. Until the press has been held past the gesture
+      // window it is a snap — the next push — and the knee stays short of the
+      // jump's load. From a glide the load is the jump's at once.
+      const stroking = s.tick - (f.lastPush ?? -1e9) < STROKING_S / SIM_DT;
+      if (options.pumps && stroking && f.foot !== 0.5 && !pushing && f.gestures?.rise) {
+        const stand = f.foot === 1 ? 1 : 0;
+        if (knees[stand] >= PUMP_HIGH && s.tick - f.gestures.rise[stand] < GESTURE_TICKS)
+          knees[stand] = Math.min(knees[stand], p.jumpLoadKnee - 0.01);
+      }
+      mapped.knee = (knees[0] + knees[1]) / 2;
+      mapped.kneeSplit = (knees[1] - knees[0]) / 2;
     }
     // With the feet, stops come from the blades: D-pad up is the feet's, and
     // only the keyboard's X still brakes.

@@ -381,13 +381,49 @@ test("experimental: no automatic crossovers forward, straight, or too slow", () 
   assert.equal(crossing(-1, 0.65, 0.6).crossovers, 0, "under 1.5 m/s");
 });
 
-test("experimental: the free leg's trigger swings it — released it rests — and it does not pump", () => {
-  // B puts the weight on the right foot: the left leg is free.
-  const r = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 30 ? 1 : 0; }, 40);
+test("experimental: the free leg's trigger swings it — released it rests — and a snap on it is a push", () => {
+  // B puts the weight on the right foot: the left leg is free. Held past the
+  // gesture window it is a swing; snapped, the standing (right) leg pushes and
+  // the weight goes across to the left (the operator's call, 2026-09-24: a
+  // lifted leg cannot push; strokes switch feet).
+  const r = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 60 ? 1 : 0; }, 90);
   assert.equal(r.st.full!.foot, 1);
   assert.equal(r.inputs[10].freeLeg, 0.5, "released: at rest");
   assert.equal(r.inputs[25].freeLeg, 1, "LT pulled: swung forward");
-  assert.deepEqual(r.pushes, [], "a free leg's pump is a swing, not a push");
+  assert.deepEqual(r.pushes, [], "a held swing released is a swing, not a push");
+  const snap = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 26 ? 1 : 0; }, 90);
+  assert.deepEqual(snap.pushes, ["1@1.00"], "snapped: the standing leg pushes");
+  assert.equal(snap.st.full!.foot, 0, "and the weight goes across");
   const shared = experiment(() => {}, 5);
   assert.equal(shared.inputs[4].freeLeg, undefined, "both feet down: no free leg");
+});
+
+test("experimental: strokes switch feet — each push is the standing leg's, then the weight goes across; a held trigger is still the jump", () => {
+  // MEASURED from 3 m/s, weight on the right (B), a snap every 0.5 s for
+  // 2.5 s, starting on the free (left) leg's trigger: the pushes alternate
+  // right, left, right…, both blades down through each push, and none reads
+  // as a jump — while stroking, a snap of the standing trigger is the next
+  // push. LT alone 4.017 m/s; alternating LT, RT 3.047 (every snap then lands
+  // on the free leg's trigger, which also swings that leg forward); gliding
+  // 2.731. From a glide the standing trigger is the jump's load at once, as
+  // it was: RT snapped first takes off. Held 0.6 s, it takes off.
+  const B = (i: number, h: ControllerHardware) => { if (i >= 2 && i < 4) h.buttons[1] = 1; };
+  const snaps = (pick: (n: number) => number) => experiment((i, h) => {
+    B(i, h);
+    if (i >= 10 && (i - 10) % 60 < 8) h.buttons[pick(Math.floor((i - 10) / 60))] = 1;
+  }, 300);
+  const lt = snaps(() => 6), alt = snaps(n => n % 2 ? 7 : 6);
+  for (const r of [lt, alt]) {
+    assert.deepEqual(r.pushes, ["1@1.00", "0@1.00", "1@1.00", "0@1.00", "1@1.00"]);
+    assert.equal(r.took, false, "a snap while stroking is never a jump");
+    assert.equal(r.fallen, false);
+  }
+  assert.ok(near(lt.v, 4.017) && near(alt.v, 3.047), [lt, alt].map(r => r.v.toFixed(3)).join(" / "));
+  const weights = lt.inputs.slice(10, 70).map(x => x.weight);
+  assert.ok(weights.includes(0.5) && weights.at(-1) === 0, "both down through the push, then onto the left foot");
+  const standingFirst = snaps(() => 7);
+  assert.equal(standingFirst.took, true, "from a glide the standing trigger's snap is the jump's load");
+  assert.deepEqual(standingFirst.pushes, []);
+  const hold = experiment((i, h) => { B(i, h); h.buttons[7] = i >= 20 && i < 90 ? 1 : 0; }, 200);
+  assert.equal(hold.took, true, "held: the jump");
 });
