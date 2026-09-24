@@ -568,6 +568,14 @@ export interface SkaterState {
   contactAsked?: [number, number];
   digL?: number;
   /**
+   * pitchMode and pitchInternalMode 1 only: the ankle's share of the contact
+   * demand (its slow part, m from the blade's centre, before the blade's
+   * reach clamps it), and the arms' and trunk's fore-aft acceleration this
+   * tick, m/s^2, + toward the heel (the sign of the aFwd it adds to).
+   */
+  pitchAnkle?: number;
+  pitchIntAccel?: number;
+  /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
    * Tracked and replay-safe; not yet spent by sim/score.ts.

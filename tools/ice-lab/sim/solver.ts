@@ -444,6 +444,7 @@ function toePickCatch(s: SkaterState, p: Params): number {
  */
 function pitchTick(
   s: SkaterState, p: Params, dt: number, alive: boolean, pitchIn: number, velStart: Vec2, velBlades: Vec2, L: number,
+  armsLeft: number,
 ): void {
   const g = p.gravity, along = s.blade[s.supportFoot].tangent, w = Math.sqrt(g / L);
   const aFwd = dot(sub(velBlades, velStart), along) / dt;
@@ -452,17 +453,32 @@ function pitchTick(
     if (b.inContact) reach = Math.max(reach, 0.5 * p.bladeLength * Math.abs(dot(b.tangent, along)));
   const capture = (phi: number, rate: number): number =>
     L * sin(phi) - (aFwd * L / g) * cos(phi) + L * cos(phi) * rate / w;
-  let phi = s.pitch ?? 0, rate = s.pitchRate ?? 0, c = 0;
+  let phi = s.pitch ?? 0, rate = s.pitchRate ?? 0, c = 0, aInt = 0;
+  // pitchInternalMode: the arms' and trunk's reach, as contact — their
+  // acceleration enters the lean as g c / L does, times cos(pitch).
+  const armsOn = p.pitchInternalMode === 1, armsReach = armsLeft * L * cos(phi) / g;
   if (alive && reach > 0) {
     const xi = capture(phi, rate), asked = clamp(pitchIn, -1, 1) * 0.5 * p.bladeLength;
-    c = clamp(xi + p.pitchGain * (xi - asked), -reach, reach);
+    const demand = xi + p.pitchGain * (xi - asked);
+    if (armsOn) {
+      // The ankle follows the demand's slow part; the arms take what is left,
+      // as far as they reach — the fast part, and past the blade's end.
+      const tau = p.pitchAnkleTau;
+      const slow = s.pitchAnkle = tau > 1e-4 ? (s.pitchAnkle ?? 0) + (demand - (s.pitchAnkle ?? 0)) * Math.min(1, dt / tau) : demand;
+      c = clamp(slow, -reach, reach);
+      const arms = clamp(demand - c, -armsReach, armsReach);
+      aInt = armsReach > 0 ? arms * g / (L * cos(phi)) : 0;
+    } else c = clamp(demand, -reach, reach);
   }
-  rate += ((g * (sin(phi) - c / L) - aFwd * cos(phi)) / L) * dt;
+  rate += ((g * (sin(phi) - c / L) - (aFwd + aInt) * cos(phi)) / L) * dt;
   phi = clamp(phi + rate * dt, -1.55, 1.55);
   s.pitch = phi;
   s.pitchRate = rate;
   s.pitchContact = c;
-  s.pitchOffTime = Math.abs(capture(phi, rate)) > reach ? (s.pitchOffTime ?? 0) + dt : 0;
+  if (armsOn) s.pitchIntAccel = aInt;
+  // Down when even the ankle and the arms together cannot bring the capture point back.
+  const catchable = reach + (armsOn ? p.fallAuthorityCredit * armsReach : 0);
+  s.pitchOffTime = Math.abs(capture(phi, rate)) > catchable ? (s.pitchOffTime ?? 0) + dt : 0;
 }
 
 // ── construction ────────────────────────────────────────────────────────────
@@ -493,6 +509,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     blade: [makeBlade(), makeBlade()],
     // Present only where the pendulum is, so a standing-up retry resets it too.
     ...(p.pitchMode === 1 ? { pitch: 0, pitchRate: 0, pitchContact: 0, pitchOffTime: 0, contactAsked: [0.5, 0.5] as [number, number], digL: 0 } : {}),
+    ...(p.pitchMode === 1 && p.pitchInternalMode === 1 ? { pitchAnkle: 0, pitchIntAccel: 0 } : {}),
   };
 }
 
@@ -1189,7 +1206,7 @@ export function step(
   s.leanEq = equilibriumLean(s.latAccel, g);
   s.balanceError = s.lean - s.leanEq;
 
-  let aInt = 0;
+  let aInt = 0, armsLat = 0;
   if (alive) {
     // POSITIVE gain: an over-lean needs MORE lateral acceleration to arrest it.
     //
@@ -1213,6 +1230,8 @@ export function step(
     } else {
       s.intHeld = 0;
     }
+
+    armsLat = aInt;   // the arms' share, before the stance: fore-aft gets what is left (pitchInternalMode)
 
     // The centre of pressure is NOT washed out: a stance 24 cm wide really can
     // hold a small lean indefinitely, which is what standing still is.
@@ -1250,7 +1269,8 @@ export function step(
   s.lean = clamp(s.lean + s.leanRate * dt, -1.55, 1.55);
   s.comZ = L * cos(s.lean);
   if (pitchOn) {
-    pitchTick(s, p, dt, alive, pitch, velStart, velBlades, L);
+    const armsMax = pEff.internalMax;
+    pitchTick(s, p, dt, alive, pitch, velStart, velBlades, L, Math.sqrt(Math.max(0, armsMax * armsMax - armsLat * armsLat)));
     // The COM a leg length from the base, leaning both ways at once.
     const across = L * sin(s.lean), along = L * sin(s.pitch ?? 0);
     s.comZ = Math.sqrt(Math.max(0, L * L - across * across - along * along));

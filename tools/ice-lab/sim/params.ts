@@ -747,6 +747,29 @@ export interface Params {
    *  the gap at the pendulum's own rate, sqrt(g / L). Authored. */
   pitchGain: number;
 
+  /**
+   * 0: the ankle is the fore-aft pendulum's only authority. 1 (with
+   * pitchMode 1): the arms and trunk too — counter-rotation (Hof 2007),
+   * which turns the body over the blade without moving the contact and
+   * without any force from the ice. The contact demand is split by speed, as
+   * a standing human splits it (Horak & Nashner 1986: ankle for slow, hip for
+   * fast): the ankle follows it over pitchAnkleTau, the arms take the rest
+   * within what of internalMax the lateral balance leaves them (one pair of
+   * arms, one vector).
+   */
+  pitchInternalMode: number;
+  /**
+   * s. pitchInternalMode: how quickly the ankle takes over the contact demand
+   * from the arms — the crossover of the split, 1/(2 pi 1 Hz): ankle below
+   * about 1 Hz, hips and arms above (Horak & Nashner 1986's ankle/hip
+   * strategies; the crossover frequency itself authored). Swept 2026-09-24
+   * (test/pitch-gain-sweep.ts notes): 0.16 takes the counter-movement from
+   * 10.4 to 3.4 cm and brings the contact to a toe lean in 1.30 s (1.08
+   * ankle alone); the lateral washout's 1.5 s left the arms holding the lean
+   * for ~5 s and halved the early dig.
+   */
+  pitchAnkleTau: number;
+
   // ── the toe pick ──────────────────────────────────────────────────────────
   /**
    * 0: nothing raises FALL.ToePickTrip. 1: a loaded blade whose contact sits
@@ -1001,6 +1024,8 @@ export const DEFAULT_PARAMS: Params = {
 
   pitchMode: 0,
   pitchGain: 1,
+  pitchInternalMode: 0,
+  pitchAnkleTau: 0.16,
 
   toePickMode: 0,
   toePickEngage: 0.11,
@@ -1179,6 +1204,8 @@ export function validate(p: Params): string[] {
   if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
   if (![0, 1].includes(p.pitchMode)) errs.push("pitchMode is 0 (the input sets the contact) or 1 (the ankle balances a fore-aft lean)");
   if (!(p.pitchGain > 0)) errs.push("pitchGain must be positive");
+  if (![0, 1].includes(p.pitchInternalMode)) errs.push("pitchInternalMode is 0 (the ankle alone) or 1 (the arms and trunk as well)");
+  if (!(p.pitchAnkleTau >= 0)) errs.push("pitchAnkleTau is a time constant in seconds, or 0 (the ankle takes the whole demand)");
   if (![0, 1].includes(p.toePickMode)) errs.push("toePickMode is 0 (the pick never trips) or 1 (a pick that bites going forward trips)");
   if (!(p.toePickEngage > 0 && p.toePickEngage < 0.5 * p.bladeLength)) errs.push("toePickEngage must lie between the blade's centre and its toe (0 .. bladeLength / 2)");
   if (!(p.toePickTripSpeed > 0)) errs.push("toePickTripSpeed must be positive");
