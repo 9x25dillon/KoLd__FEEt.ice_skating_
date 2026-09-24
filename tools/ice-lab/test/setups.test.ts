@@ -306,22 +306,55 @@ test("experimental: a pump pushes by how deep and how quick; the leg extends fro
 
 test("experimental: a thumb stroke pushes by its accuracy, forgivingly", () => {
   // MEASURED (2026-09-24, the stroke made forgiving and the toe pick on): a
-  // firm stroke, three-quarters down to three-quarters up, pushes 0.99, 2.985
-  // (the old full bottom-to-top stroke gave 1.00, 2.987); a crooked one, 0.67;
-  // a short one never reaches the edge and does not push. Yanked end to end,
-  // a full push, 2.986 (with the toe-pick trip on, that morning, it tripped).
+  // firm stroke, three-quarters down to three-quarters up, pushes 0.99, 3.171
+  // (was 2.985 before a stroke extended from a full bend, STROKE_KNEE; the old
+  // full bottom-to-top stroke gave 1.00, 2.987); a crooked one, 0.67, 3.072
+  // (was 2.952); a short one never reaches the edge and does not push. Yanked
+  // end to end, a full push, 3.174 (was 2.986; with the toe-pick trip on,
+  // that morning, it tripped). A clean stroke now pushes as a full pump does
+  // (3.175, the pump test above).
   const firm = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.75 : i >= 16 && i < 19 ? -0.75 : 0; });
   const crooked = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.75 : i >= 16 && i < 40 ? -0.75 : 0; h.axes[2] = i >= 16 && i < 40 ? 0.5 : 0; });
   const short = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 0.65 : i >= 16 && i < 36 ? -0.65 : 0; });
   const yanked = experiment((i, h) => { h.axes[3] = i >= 10 && i < 16 ? 1 : i >= 16 && i < 19 ? -1 : 0; });
   assert.deepEqual(firm.pushes, ["1@0.99"]);
-  assert.ok(near(firm.v, 2.985), firm.v.toFixed(3));
+  assert.ok(near(firm.v, 3.171), firm.v.toFixed(3));
+  assert.equal(firm.inputs.find(x => x.push)!.pushKnee, 1, "a stroke extends the leg from a full bend, triggers released");
   assert.equal(crooked.pushes.length, 1);
   assert.ok(Number(crooked.pushes[0].split("@")[1]) < 0.7, `a crooked, slow stroke pushes less (${crooked.pushes[0]})`);
+  assert.ok(near(crooked.v, 3.072) && crooked.v < firm.v, crooked.v.toFixed(3));
   assert.deepEqual(short.pushes, []);
   assert.equal(yanked.fallen, false);
   assert.deepEqual(yanked.pushes, ["1@1.00"]);
-  assert.ok(near(yanked.v, 2.986), yanked.v.toFixed(3));
+  assert.ok(near(yanked.v, 3.174), yanked.v.toFixed(3));
+});
+
+test("experimental: thumb strokes get the skater going from a standstill as trigger snaps do", () => {
+  // MEASURED (2026-09-24, Dig Gate and Experimental alike), from rest, the
+  // weight on the right as a session starts, triggers released: a right-stick
+  // stroke (down to 0.8, up to -0.8) every 0.5 s for 4 s, 1.977 m/s — the
+  // pushes alternating feet, both blades down through each — the same as
+  // snapping LT, RT in turn (1.978). Was 0.509: the stroke extended from the
+  // released trigger, the solver's 0.35 floor, a third of a pump's push
+  // (+0.06 m/s a stroke against +0.25), while the operator starts on strokes.
+  const standstill = (setup: "experimental" | "diggate", plan: (i: number, h: ControllerHardware) => void) => {
+    const r = rig(setup, 0); r.h.buttons[7] = 0; const feet: string[] = [], knees: number[] = [];
+    for (let i = 0; i < 480 && !r.s.fallen; i++) {
+      r.h.buttons.fill(0); r.h.axes = [0, 0, 0, 0]; plan(i % 60, r.h);
+      const { input } = r.tick(); if (input.push) { feet.push(String(input.pushFoot)); knees.push(input.pushKnee!); }
+    }
+    return { v: Math.hypot(r.s.vel.x, r.s.vel.y), feet: feet.join(""), knees, fallen: r.s.fallen };
+  };
+  for (const setup of ["experimental", "diggate"] as const) {
+    const strokes = standstill(setup, (k, h) => { h.axes[3] = k < 6 ? 0.8 : k < 9 ? -0.8 : 0; });
+    assert.equal(strokes.fallen, false, setup);
+    assert.equal(strokes.feet, "10101010", `${setup}: strokes alternate feet`);
+    assert.ok(strokes.knees.every(k => k === 1), `${setup}: each from a full bend`);
+    assert.ok(near(strokes.v, 1.977), `${setup}: ${strokes.v.toFixed(3)} m/s at 4 s (was 0.509)`);
+  }
+  let n = 0;
+  const snaps = standstill("diggate", (k, h) => { if (k === 0) n++; h.buttons[n % 2 ? 6 : 7] = k < 8 ? 1 : 0; });
+  assert.ok(near(snaps.v, 1.978), `alternating snaps ${snaps.v.toFixed(3)}`);
 });
 
 test("experimental: pumping the legs in turn builds real speed, and never reads as a jump; loading both and letting go does", () => {
