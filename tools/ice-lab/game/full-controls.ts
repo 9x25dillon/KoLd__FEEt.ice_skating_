@@ -152,13 +152,91 @@ export interface FullState {
   transferTo?: number;
   /** Experimental: the tick the last pumped or stroked push began. */
   lastPush?: number;
+  /** Dig Gate: the phase-gated dig (digGate). */
+  dig?: DigGate;
 }
 export type GameControlState = SchemeState & { full?: FullState };
 export const newFullState = (): FullState => ({ previous: new Set(), buttonBanks: new Map(), feedbackUntil: -1, turn: null, turnStarted: false, foot: 1, request: "Glide", left: { x: 0, y: 0 }, right: { x: 0, y: 0 } });
 const TURNS: Action[] = ["three", "mohawk", "bracket", "loop", "rocker", "counter", "choctaw"];
 export const manualAction = (action: Action): boolean => !TURNS.includes(action) || action === "three" || action === "bracket";
 
-export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; pumps?: boolean; experimental?: boolean; leanAssist?: number; repeatPush?: boolean }
+export interface MappingOptions { manual?: boolean; twoFoot?: boolean; feet?: boolean; pumps?: boolean; experimental?: boolean; leanAssist?: number; repeatPush?: boolean; digGate?: boolean }
+
+/**
+ * THE DIG GATE (the Dig Gate setup, 2026-09-24). LB + RB held — and no A or
+ * Y — queues a dig; the gate only ever asks, the blades do it. It asks the
+ * ankle for the toe first, eased in, and turns the feet across only once the
+ * contact the ankle actually has has arrived where it was asked — the lean
+ * begun early, which is what makes a dig wind the body (test/dig.test.ts);
+ * the dig is whatever the scraping blades then do. It eases the lean back out
+ * after, since a lean let go at speed can throw the contact onto the pick.
+ *
+ * Phases: idle -> wait (going forward it waits for backward travel — a
+ * lutz's entry: measured forward, 3-7 m/s either way round, the dig threw
+ * the skater down every time) -> lean -> dig -> recover. Every number here was measured on the Experimental
+ * athlete (test/diggate.test.ts): toe 0.4 eased in over 0.5 s, the feet
+ * turned against the curve for 0.5 s, the lean eased out over 1 s.
+ */
+export interface DigGate {
+  phase: "idle" | "wait" | "lean" | "dig" | "recover";
+  /** s in this phase. */
+  t: number;
+  /** The toe lean the gate is asking now, 0..DIG_ASK. */
+  ask: number;
+  /** Which way the feet turn: toeOutSplit's sign, with the curve's lean. */
+  side: number;
+  /** The contact arrived before the timeout: the lean was early. */
+  leanEarly: boolean;
+  /** The blades wound the body during the dig (SkaterState.digL). */
+  applied: boolean;
+}
+export const DIG_ASK = 0.4, DIG_EASE_IN = 0.5, DIG_ARRIVED = 0.02, DIG_TIMEOUT = 1.5, DIG_TIME = 0.5, DIG_EASE_OUT = 1.0;
+
+function digGate(f: FullState, s: SkaterState, p: Params, want: boolean, mapped: SkatingInput): void {
+  const g = f.dig ??= { phase: "idle", t: 0, ask: 0, side: 1, leanEarly: false, applied: false };
+  const go = (phase: DigGate["phase"]) => { g.phase = phase; g.t = 0; };
+  g.t += SIM_DT;
+  if (s.fallen || s.jump.phase === JUMP_PHASE.Air) { go("idle"); g.ask = 0; return; }
+  const backward = dot(s.vel, s.heading) < -p.dirSpeedEps;
+  switch (g.phase) {
+    case "idle":
+      if (want) { g.leanEarly = false; g.applied = false; go(backward ? "lean" : "wait"); }
+      break;
+    case "wait":
+      if (!want) go("idle");
+      else if (backward) go("lean");
+      break;
+    case "lean": {
+      if (!want) { go("recover"); break; }
+      g.ask = Math.min(DIG_ASK, g.ask + DIG_ASK * SIM_DT / DIG_EASE_IN);
+      g.side = Math.sign(mapped.lean) || Math.sign(s.lean) || 1;
+      const b = s.blade[s.supportFoot], asked = s.contactAsked ? s.contactAsked[s.supportFoot] : b.contactS;
+      if (g.ask >= DIG_ASK && Math.abs(b.contactS - asked) < DIG_ARRIVED) { g.leanEarly = true; go("dig"); }
+      else if (g.t >= DIG_TIMEOUT) go("dig");
+      break;
+    }
+    case "dig":
+      if (Math.abs(s.digL ?? 0) > 1e-4) g.applied = true;
+      if (g.t >= DIG_TIME) go("recover");
+      break;
+    case "recover":
+      g.ask = Math.max(0, g.ask - DIG_ASK * SIM_DT / DIG_EASE_OUT);
+      if (g.ask === 0) go("idle");
+      break;
+  }
+  if (g.phase === "lean" || g.phase === "dig" || g.phase === "recover") { mapped.pitch = g.ask; mapped.pitchSplit = 0; }
+  if (g.phase === "dig") { mapped.toeOut = 0; mapped.toeOutSplit = g.side; }
+}
+
+/** What the HUD says about the dig gate, or "" when it is idle. */
+export function digStatus(f: FullState | undefined): string {
+  const g = f?.dig;
+  if (!g || g.phase === "idle") return "";
+  if (g.phase === "wait") return "Dig · skate backward";
+  if (g.phase === "lean") return `Dig · leaning to the toe ${g.ask.toFixed(2)}`;
+  if (g.phase === "dig") return `Dig · digging${g.leanEarly ? "" : " (lean late)"}${g.applied ? " · winding" : ""}`;
+  return `Dig · recovering${g.applied ? " · wound" : ""}`;
+}
 /**
  * The Experimental setup's pushes, per leg [left, right].
  *
@@ -450,9 +528,10 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
       if (!key("c")) mapped.carriage = Math.abs(f.arms);
     }
   }
+  if (options.digGate) digGate(f, s, p, h.connected && down(4) && down(5) && !down(0) && !down(3), mapped);
   const input = latchTurns(SCHEME.A, mapped, st, s.flips, options.twoFoot === true);
   if ((input.spin || s.move === MOVE.Spin) && (!options.twoFoot || modified)) input.pitch = Math.max(input.pitch, r.y);
-  f.request = ACTIONS.filter(a => held.has(a.id)).map(a => a.name).join(" + ") || "Glide";
+  f.request = digStatus(f) || ACTIONS.filter(a => held.has(a.id)).map(a => a.name).join(" + ") || "Glide";
 
   // A direct turn binding performs the existing hold/transfer/reversal gesture.
   // It never creates a turn, edge, speed, score or solver state itself.

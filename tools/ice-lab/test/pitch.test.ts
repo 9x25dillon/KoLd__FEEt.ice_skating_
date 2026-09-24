@@ -38,7 +38,7 @@ test("pitchMode is 0 by default, on in Simulation and Experimental only, and val
   assert.equal(DEFAULT_PARAMS.pitchMode, 0);
   assert.equal(DEFAULT_PARAMS.pitchGain, 1);
   for (const { id } of SETUPS)
-    assert.equal(setupParams(id).pitchMode, id === "simulation" || id === "experimental" ? 1 : 0, id);
+    assert.equal(setupParams(id).pitchMode, id === "simulation" || id === "experimental" || id === "diggate" ? 1 : 0, id);
   assert.deepEqual(validate(on(FEET)), []);
   assert.ok(validate({ ...FEET, pitchMode: 2 }).some(e => /pitchMode/.test(e)));
   assert.ok(validate({ ...on(FEET), pitchGain: 0 }).some(e => /pitchGain/.test(e)));

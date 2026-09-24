@@ -5,7 +5,8 @@ import { SIM_DT } from "../sim/params.ts";
 import { Pad } from "../app/pad.ts";
 import { newSchemeState, SCHEME } from "../app/schemes.ts";
 import type { GameScheme as Scheme } from "./controls.ts";
-import { FULL_SCHEME, ACTIONS, bindingLabel, loadControllerProfile } from "./full-controls.ts";
+import { FULL_SCHEME, ACTIONS, bindingLabel, loadControllerProfile, digStatus } from "./full-controls.ts";
+import type { GameControlState } from "./full-controls.ts";
 import { MOVE, TURN_KIND, FALL, codeToString } from "../sim/types.ts";
 import { JUMP_PHASE, JUMP_CODE } from "../sim/jump.ts";
 import { SETUPS, SETUP_KEY, isSetup, setupParams, setupInput } from "./setups.ts";
@@ -267,7 +268,7 @@ function renderSetup() {
   el("assistance-value").textContent = `${Math.round(assistance * 100)}%`;
   (el("difficulty") as HTMLSelectElement).disabled = setup !== null && setup !== "repertoire";
   (el("difficulty") as HTMLSelectElement).value = beginner ? "beginner" : "simulation";
-  (el("cruise") as HTMLButtonElement).disabled = setup === "simulation" || setup === "experimental";
+  (el("cruise") as HTMLButtonElement).disabled = setup === "simulation" || setup === "experimental" || setup === "diggate";
   renderFullBindings();
 }
 setupSelect.addEventListener("change", () => {
@@ -385,7 +386,8 @@ function draw(_now: number) {
   el("move").textContent = skater.fallen
     ? skater.fallReason === FALL.Collision ? "HIT THE BOARDS · tap Space / A to get up" : "FALL · tap Space / A to get up"
     : move;
-  el("stance").textContent = `${SETUPS.find(s => s.id === setup)?.name ?? CONTROL_NAMES[scheme]} · ${codeToString(skater.blade[0].code)} / ${codeToString(skater.blade[1].code)} · ${Math.hypot(skater.vel.x, skater.vel.y).toFixed(1)} m/s`;
+  const dig = digStatus((steering as GameControlState).full);
+  el("stance").textContent = `${SETUPS.find(s => s.id === setup)?.name ?? CONTROL_NAMES[scheme]} · ${codeToString(skater.blade[0].code)} / ${codeToString(skater.blade[1].code)} · ${Math.hypot(skater.vel.x, skater.vel.y).toFixed(1)} m/s${dig ? " · " + dig : ""}`;
   el("landing").textContent = skater.landed.tick < 0 ? "" : `Last jump: ${JUMP_CODE[skater.landed.kind] ?? "hop"} · ${skater.landed.turned.toFixed(2)} rev · ${skater.landed.fall ? "fall" : skater.landed.stepOut ? "step-out" : "landed"}`;
   el("spin-level").textContent = lastSpinLabel;
   el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : footChangeFlash > 0 ? "Foot change!" : comboFlash > 0 ? `Combination ${comboLabel}!` : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
