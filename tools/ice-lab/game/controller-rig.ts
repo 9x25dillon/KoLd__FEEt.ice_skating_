@@ -13,6 +13,8 @@ import type { Setup } from "./setups.ts";
 import { manualAction, ACTIONS, BUTTON_NAMES, BINDABLE_BUTTONS, TUNING, PROFILE_KEY, FEET_LAYOUTS, defaultControllerProfile, loadControllerProfile, parseControllerProfile } from "./full-controls.ts";
 import type { FeetLayout } from "./full-controls.ts";
 import type { GameControlState } from "./full-controls.ts";
+import { PadProbe, beyondStandard, describeChange, describeSlots } from "./pad-probe.ts";
+import type { PadChange } from "./pad-probe.ts";
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const pad = new Pad();
 let profile = loadControllerProfile();
@@ -142,6 +144,50 @@ function draw() {
   el("raw").textContent = `Left: ${hardware.axes.slice(0, 2).map(fmt).join(" / ")}\nRight: ${hardware.axes.slice(2, 4).map(fmt).join(" / ")}\nLT / RT: ${fmt(hardware.buttons[6] ?? 0)} / ${fmt(hardware.buttons[7] ?? 0)}\nButtons: ${hardware.buttons.flatMap((v, i) => v > 0.5 ? [BUTTON_NAMES[i] ?? String(i)] : []).join(", ") || "—"}`;
   el("mapped").textContent = input ? `Lean: ${fmt(input.lean)} · split: ${fmt(input.leanSplit)} · pitch: ${fmt(input.pitch)}\nShaped L: ${fmt(st.full?.left.x ?? 0)} / ${fmt(st.full?.left.y ?? 0)}\nKnee: ${fmt(input.knee)} · weight R: ${fmt(input.weight)}\nArms: ${fmt(input.carriage)} · wind-up: ${fmt(input.windup)}\nReversal threshold: ${fmt(p.rockerCounterStick)}\n${["push", "brake", "toe", "turn", "bracket", "spin", "twizzle", "inaBauer"].filter(k => input![k as keyof SkatingInput] === true).join(" · ") || "No move buttons"}` : "Waiting for the first tick";
 }
+// The raw probe reads getGamepads() itself rather than through Pad, which only
+// ever looks at the first connected pad and only at the indices it maps.
+const probe = new PadProbe();
+let probeShape = "";
+function drawProbe(now: number) {
+  const list = [...(navigator.getGamepads?.() ?? [])];
+  const changes = probe.update(list, now / 1000);
+  const shape = list.map((g, i) => g?.connected ? `${i}:${g.id}:${g.buttons.length}:${g.axes.length}` : "").join("|");
+  if (shape !== probeShape) {
+    // Rebuilt only when a pad arrives, leaves or changes size; every other
+    // frame just rewrites the cells' text and classes.
+    probeShape = shape;
+    el("probe-pads").replaceChildren();
+    list.forEach((g, slot) => {
+      if (!g?.connected) return;
+      const name = document.createElement("div"), cells = document.createElement("div");
+      name.className = "pad-name"; name.textContent = `Slot ${slot} · ${g.mapping === "standard" ? "standard mapping" : "non-standard mapping"} · ${g.id}`;
+      cells.className = "cells";
+      const add = (kind: PadChange["kind"], index: number) => {
+        const cell = document.createElement("span");
+        cell.className = "cell"; cell.dataset.slot = String(slot); cell.dataset.kind = kind; cell.dataset.index = String(index);
+        cells.append(cell);
+      };
+      g.buttons.forEach((_, i) => add("button", i));
+      g.axes.forEach((_, i) => add("axis", i));
+      el("probe-pads").append(name, cells);
+    });
+  }
+  if (changes.length || !el("probe-slots").textContent) {
+    el("probe-slots").textContent = describeSlots(list);
+    el("probe-log").textContent = probe.log.map(describeChange).join("\n") || "No changes yet";
+    if (probe.last) el("probe-last").textContent = describeChange(probe.last);
+  }
+  const last = probe.last;
+  for (const cell of el("probe-pads").querySelectorAll<HTMLElement>(".cell")) {
+    const slot = Number(cell.dataset.slot), index = Number(cell.dataset.index), kind = cell.dataset.kind as "button" | "axis", g = list[slot];
+    if (!g) continue;
+    const button = kind === "button" ? g.buttons[index] : null, value = button ? button.value : g.axes[index] ?? 0;
+    cell.textContent = `${kind === "button" ? "b" : "a"}${index} ${fmt(value)}`;
+    cell.classList.toggle("on", button?.pressed ?? false);
+    cell.classList.toggle("extra", beyondStandard(g.mapping, kind, index));
+    cell.classList.toggle("recent", last !== null && last.slot === slot && last.kind === kind && last.index === index);
+  }
+}
 function frame(now: number) {
   const dt = Math.min(0.1, (now - (time || now)) / 1000); time = now;
   const controls = pad.read(true, ","); hardware = source() === "virtual" ? virtual : controls.hardware!;
@@ -156,6 +202,6 @@ function frame(now: number) {
       accumulator -= SIM_DT;
     }
   } else accumulator = 0;
-  draw(); requestAnimationFrame(frame);
+  draw(); drawProbe(now); requestAnimationFrame(frame);
 }
 renderTuning(); renderBindings(); requestAnimationFrame(frame);
