@@ -129,7 +129,8 @@ let resumeAfterGuide = false;
 const wardrobe = el("wardrobe") as HTMLDialogElement;
 let resumeAfterWardrobe = false;
 let skater = createState(params, 4.5), steering = newSchemeState(), run = new IceRun();
-// The AI ghost (game/ghost.ts): on by default, remembered, toggled with G or the settings box.
+// The AI ghost (game/ghost.ts): on by default, remembered, toggled with / or the settings box
+// (G was Choctaw's key and the lab's game toggle). ` hides the HUD.
 let ghostOn = (() => { try { return localStorage.getItem("edgework-ghost") !== "off"; } catch { return true; } })();
 let ghost: Ghost | null = null;
 function setGhost(on: boolean) {
@@ -330,7 +331,7 @@ trackSelect.addEventListener("change", () => {
   if (wasPlaying) void musicEl.play().catch(() => { /* still locked */ });
 });
 canvas.addEventListener("wheel", e => { e.preventDefault(); scene.zoom = Math.max(0.65, Math.min(1.8, scene.zoom * (e.deltaY > 0 ? 0.9 : 1.1))); }, { passive: false });
-window.addEventListener("keydown", e => { if (e.key.toLowerCase() === "u") lowHeld = true; if(e.key === " ") pushHeld = true; if (e.key.toLowerCase() === "g" && !e.repeat) setGhost(!ghostOn); });
+window.addEventListener("keydown", e => { if (e.key.toLowerCase() === "u") lowHeld = true; if(e.key === " ") pushHeld = true; if (e.key === "/" && !e.repeat) setGhost(!ghostOn); if (e.key === "`" && !e.repeat) document.body.classList.toggle("hud-hidden"); });
 window.addEventListener("keyup", e => { if (e.key.toLowerCase() === "u") lowHeld = false; if(e.key === " ") pushHeld = false; });
 window.addEventListener("blur", () => { lowHeld = false; pushHeld = false; pause(); });
 document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
@@ -345,7 +346,10 @@ function draw(_now: number) {
   scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode ? playground : null, !playback ? rookie : null, playback ? null : ghost);
   const note = el("ghost-note");
   note.hidden = !ghost || !!playback;
-  if (ghost && !playback) note.textContent = `Ghost · ${ghost.trick.name} — ${ghost.trick.how}${ghost.pressing ? ` · now: ${ghost.pressing}` : ""}`;
+  if (ghost && !playback) {
+    note.replaceChildren(`Ghost · ${ghost.trick.name}${ghost.pressing ? ` · ${ghost.pressing}` : ""}`);
+    const how = document.createElement("small"); how.textContent = ghost.trick.how; note.append(how);
+  }
   const landingEffect = scene.effects.landing;
   el("jump-feedback").hidden = !landingEffect;
   if (landingEffect) {

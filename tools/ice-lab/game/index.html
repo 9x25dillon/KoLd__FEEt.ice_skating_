@@ -59,6 +59,20 @@ body{background:#8ebcd9}header .brand{color:#18213b;font-style:italic;letter-spa
 body[data-career=true] #flow-label,body[data-career=true] #stamina-label,body[data-career=true] #hype-label,body[data-career=true] #edge-label,body[data-career=true] #movement>.track{display:none}
 @media(max-width:600px){body[data-career=true] #coach{top:235px;left:16px;right:16px;width:auto;padding:12px;max-height:205px;overflow:auto}body[data-career=true] #coach h2{margin:5px 0;font-size:18px}body[data-career=true] #coach p{margin-bottom:5px}body[data-career=true] #lesson-progress{font-size:12px;letter-spacing:1px}body[data-career=true] #routine-list{display:flex;gap:6px 20px;flex-wrap:wrap;max-height:45px;font-size:10px;margin-top:6px}body[data-career=true] #movement{bottom:190px;padding:8px 12px}body[data-career=true] #stance,body[data-career=true] #technical,body[data-career=true] #music-credit{display:none}}
 @media(max-height:650px) and (min-width:601px){body[data-career=true] #coach{max-height:calc(100dvh - 260px);overflow:auto}}
+
+/* Compact HUD (the operator, 2026-09-24: "make the hud smaller, i cant see"). Each panel
+   shrinks toward its own corner; ` (backquote) hides them all. */
+header{transform:scale(.7);transform-origin:top left;right:auto}
+.stats{transform:scale(.7);transform-origin:top left}
+.actions,#pause{transform:scale(.7);transform-origin:top right}
+#coach{transform:scale(.7);transform-origin:top right}
+#movement{transform:scale(.72);transform-origin:bottom left;min-width:0}
+footer .dock{transform:scale(.72);transform-origin:bottom center}
+#knee{transform:translateX(-50%) scale(.75);transform-origin:bottom center}
+#hint{font-size:12px}
+#ghost-note{color:#cfeaff;font-size:10px;line-height:1.35;margin-top:6px;max-width:250px}
+#ghost-note small{display:block;color:#9fbfd6;font-size:9px}
+body.hud-hidden header,body.hud-hidden .stats,body.hud-hidden .actions,body.hud-hidden #movement,body.hud-hidden #coach,body.hud-hidden footer,body.hud-hidden #knee,body.hud-hidden #hint{display:none}
 </style>
 </head>
 <body>
@@ -84,7 +98,7 @@ body[data-career=true] #flow-label,body[data-career=true] #stamina-label,body[da
 </dialog>
 <dialog id="guide" aria-labelledby="guide-title">
 <button id="close-guide">Back to skating</button><h2 id="guide-title">Every edge. Every move.</h2>
-<div class="settings"><label><input id="ghost-toggle" type="checkbox" checked> AI ghost beside you (G) — shows each trick and the buttons it presses</label><label>Skating setup — starts a new run <select id="setup-select"><option value="simulation">Simulation · manual two-blade control</option><option value="explorer">Blade Explorer · assisted edges</option><option value="experimental">Experimental · legs on the triggers, pumps and thumb strokes</option><option value="diggate">Dig Gate · Experimental with a phase-gated dig (LB + RB)</option><option value="repertoire">Full Repertoire · moves and tricks</option><option value="custom">Custom legacy controls</option></select></label><label>Explorer assistance <input id="assistance" type="range" min="0.5" max="1" step="0.05" value="0.75"><output id="assistance-value">75%</output></label></div><p id="setup-description"></p>
+<div class="settings"><label><input id="ghost-toggle" type="checkbox" checked> AI ghost beside you (/) — shows each trick and the buttons it presses · ` hides the HUD</label><label>Skating setup — starts a new run <select id="setup-select"><option value="simulation">Simulation · manual two-blade control</option><option value="explorer">Blade Explorer · assisted edges</option><option value="experimental">Experimental · legs on the triggers, pumps and thumb strokes</option><option value="diggate">Dig Gate · Experimental with a phase-gated dig (LB + RB)</option><option value="repertoire">Full Repertoire · moves and tricks</option><option value="custom">Custom legacy controls</option></select></label><label>Explorer assistance <input id="assistance" type="range" min="0.5" max="1" step="0.05" value="0.75"><output id="assistance-value">75%</output></label></div><p id="setup-description"></p>
 <div class="settings"><label>Legacy mapping override <select id="scheme-select"><option value="1">Assisted steering</option><option value="0">Assisted lean & load</option><option value="2">Assisted two-foot</option><option value="3">Full repertoire</option></select></label><label>Skater profile — starts a new run <select id="profile-select"></select></label><label>Landing coach — starts a new run <select id="difficulty"><option value="beginner">On · automatic landing posture</option><option value="simulation">Off · manual landing posture</option></select></label><label>Music <select id="track-select"></select></label></div>
 <audio id="music" loop preload="none"></audio>
 <p>Choose a complete setup above, or use a legacy mapping override. Simulation removes jump coaching, wind-up assistance and automatic strokes. Blade Explorer keeps your edge choice with adjustable support. Jumps, turns, spins, twizzles and crossovers are enabled in every scheme. The close camera follows velocity, including backward travel, rather than body rotation.</p>
