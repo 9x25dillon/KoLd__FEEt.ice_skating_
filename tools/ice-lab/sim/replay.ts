@@ -259,7 +259,11 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       toePickEngage and toePickTripSpeed; with toePickMode and pitchMode 1
 //       FALL.ToePickTrip is raised, with an EVENT.ToePickCatch. Fixture
 //       rebased, every digest unchanged.
-export const REPLAY_SOLVER = "ice-lab-f64/37";
+//   /38 The dig's observability under the pendulum: SkaterState optional
+//       contactAsked and digL, present only with pitchMode 1; Params gained
+//       digOracle (a test oracle, 0 everywhere). Fixture rebased, every
+//       digest unchanged; pitchMode 1 clips from /37 must be re-recorded.
+export const REPLAY_SOLVER = "ice-lab-f64/38";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
 

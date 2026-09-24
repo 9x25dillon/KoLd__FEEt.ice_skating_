@@ -152,7 +152,7 @@ godot4 --headless --path games/ice-run-godot -- --smoke-test --full-controls
 ```
 
 First-time Godot setup still requires the full preparation command to generate audio.
-Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/37`. The three setups record final mapped
+Replay frames use scheme label **D**. The solver contract is `ice-lab-f64/38`. The three setups record final mapped
 inputs and parameters under label D; they add no solver arithmetic changes. Older
 builds reject D-labelled clips; current builds continue accepting A/B/C clips.
 
@@ -187,7 +187,14 @@ forward faster than 1.5 m/s with a loaded blade's contact 0.11 m or more toward 
 catches and the skater trips. A stick held full forward (toe) at speed does it; so does braking
 too suddenly, since the ankle rides a sudden stop by driving the contact toward the toe — both
 outside edges caught, or a snowplow slammed on: set its edges over 0.1 s or more (measured,
-3–7 m/s) and it holds. Backward the pick trails and never trips.
+3–7 m/s) and it holds. Rocking back is the same: both sticks yanked to the heel (90% at once, or
+full within 0.1 s) catch the pick, because the ankle leans the body back by first pushing the
+contact toward the toe; eased over 0.2 s it holds. Backward the pick trails and never trips.
+
+**The dig and the lean** (pendulum on): the dig pushes where the ankle has the contact, which
+trails the stick by about a second. Lean toward the toe (or heel) *before* the blade goes across —
+a toe lean held short of the pick, 75% — and the dig winds the body; lean at the dig and it
+winds the other way. The lab's overlay rings the asked contact on each blade and lights `DIG`.
 
 
 ## Experimental (the operator's)

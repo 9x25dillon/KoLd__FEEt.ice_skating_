@@ -625,6 +625,18 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(b.contact.x, b.contact.y, (0.03 + 0.05 * b.weight), 0, Math.PI * 2);
       ctx.fill();
+
+      // With the fore-aft pendulum, where the input asked for the contact: a
+      // ring, tied to the contact the ankle actually has. A lean begun late
+      // shows as the contact running the other way first.
+      if (s.contactAsked) {
+        const off = BL * (s.contactAsked[i] - b.contactS);
+        const ax = b.contact.x + t.x * off, ay = b.contact.y + t.y * off;
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 1 / this.px;
+        ctx.beginPath(); ctx.moveTo(b.contact.x, b.contact.y); ctx.lineTo(ax, ay); ctx.stroke();
+        ctx.beginPath(); ctx.arc(ax, ay, 0.045, 0, Math.PI * 2); ctx.stroke();
+      }
     }
   }
 
@@ -774,7 +786,7 @@ export class Renderer {
     const skidLine = sb.inContact && Math.abs(sb.tilt) > p.flatThreshold;
     const jumpLines = this.jumpLines(s, p);
     const movesLines = this.movesLines(s, p);
-    const height = 4 + 5 * 16 + 6 + 2 * 46 + 4 + (skidLine ? 16 : 0) + (s.fallen ? 16 : 0)
+    const height = 4 + 5 * 16 + (s.contactAsked ? 16 : 0) + 6 + 2 * 46 + 4 + (skidLine ? 16 : 0) + (s.fallen ? 16 : 0)
       + jumpLines.length * 16 + movesLines.length * 16 + 8 + info.length * 16 + 6;
     ctx.fillStyle = "rgba(7,16,26,0.86)";
     ctx.fillRect(8, 8, Math.min(480, this.canvas.width - 16), height);
@@ -810,6 +822,13 @@ export class Renderer {
       saturated ? GOLD : DIM);
     line(`TILT    ${d(s.tiltCmd)}°   angulation ${d(s.tiltCmd - s.lean)}°`);
     line(`KNEE    ${s.knee.toFixed(2)}   support ${s.supportMode === 2 ? "two-foot" : s.supportMode === 1 ? "one-foot" : "none"}`);
+    // The pendulum's contact, asked against actual (0 heel .. 1 toe), and the
+    // dig winding the body this tick — lit while it does.
+    if (s.contactAsked) {
+      const digging = Math.abs(s.digL ?? 0) > 1e-4;
+      line(`CONTACT L ${s.blade[0].contactS.toFixed(2)}/${s.contactAsked[0].toFixed(2)}  R ${s.blade[1].contactS.toFixed(2)}/${s.contactAsked[1].toFixed(2)} asked`
+        + (digging ? `   DIG ${(s.digL ?? 0) > 0 ? "↺" : "↻"} ${Math.abs(s.digL ?? 0).toFixed(3)} N m s` : ""), digging ? GOLD : DIM);
+    }
     y += 6;
 
     for (let i = 0; i < 2; i++) {

@@ -234,6 +234,27 @@ test("a snowplow played on the pad in Simulation: both bumpers, modifier + D-pad
   assert.equal(slammed.tick, 122, "2 ticks after the sticks move");
 });
 
+test("rocking back on the pad in Simulation: both sticks yanked to the heel catch the pick, eased back they do not", () => {
+  // MEASURED from 3, 5 and 7 m/s alike, both sticks pulled back together: to
+  // lean the body back the ankle first drives the contact toward the toe, so
+  // a yank — 90% or more in one tick, or full within 0.1 s — puts it on the
+  // pick; eased over 0.2 s, or to 80%, the skater rocks back and stays up.
+  const rock = (depth: number, ramp: number) => {
+    const r = rig("simulation", 5); r.h.buttons[7] = 0.5;
+    for (let i = 0; i < 240 && !r.s.fallen; i++) {
+      r.h.buttons[4] = r.h.buttons[5] = i < 2 ? 1 : 0;
+      const k = i < 60 ? 0 : Math.min(1, (i - 59) / ramp) * depth;
+      r.h.axes = [0, k, 0, k];
+      r.tick();
+    }
+    return r.s;
+  };
+  assert.equal(rock(1, 1).fallReason, FALL.ToePickTrip, "yanked");
+  assert.equal(rock(1, 12).fallReason, FALL.ToePickTrip, "full within 0.1 s");
+  assert.equal(rock(1, 24).fallen, false, "eased over 0.2 s");
+  assert.equal(rock(0.8, 1).fallen, false, "to 80%");
+});
+
 // ── Experimental: the legs on the triggers, pumps and thumb strokes ─────────
 
 /** From 3 m/s, weight shared (X + B), the pad driven by `plan` each tick from rest. */
