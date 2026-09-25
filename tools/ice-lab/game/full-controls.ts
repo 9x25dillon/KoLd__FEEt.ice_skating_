@@ -574,7 +574,10 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   const trigger = (b: number) => Math.max(0, ((h.buttons[b] ?? 0) - profile.triggerDeadzone) / (1 - profile.triggerDeadzone));
   // Bumpers select and retain a foot — X and B in Experimental. Both explicitly select shared weight.
   // The weight paddles are the same choice; they do not swing the arms as X / B do.
-  const leftFoot = key("q") || down(options.experimental ? 2 : 4) || paddle("weightLeft"), rightFoot = key("e") || down(options.experimental ? 1 : 5) || paddle("weightRight");
+  // Experimental, while a jump loads: the loaded leg holds the weight, and X / B
+  // swing only the arms — so they can swing the jump's way (armsWhipMode).
+  const xbWeight = !(options.experimental && s.jump.phase === JUMP_PHASE.Load);
+  const leftFoot = key("q") || (xbWeight && down(options.experimental ? 2 : 4)) || paddle("weightLeft"), rightFoot = key("e") || (xbWeight && down(options.experimental ? 1 : 5)) || paddle("weightRight");
   if (leftFoot || rightFoot) f.foot = leftFoot && rightFoot ? 0.5 : leftFoot ? 0 : 1;
   // Experimental: a push has run its course — the weight goes to the other
   // foot and the leg that pushed is free. X / B during it keep their choice.

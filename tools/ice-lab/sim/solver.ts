@@ -61,7 +61,7 @@ import type { IceGrid } from "./ice.ts";
 import type { Vec2 } from "./math.ts";
 import { onBeat, accentCredit } from "./music.ts";
 import { classifyCode, classifyDepth } from "./classify.ts";
-import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE, upperInertia } from "./jump.ts";
+import { newJump, noResult, jumpGround, jumpAir, JUMP_PHASE, upperInertia, armsWhip } from "./jump.ts";
 import {
   newTurn, newSpin, newInaBauer, newSpiral, noMove, turnStart, twizzleStart, spinStart, inaBauerStart, inaBauerEnd,
   spiralStart, spiralEnd,
@@ -331,8 +331,11 @@ function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input
   // reaction and takes out any spin the lower body carried, up to its grip.
   // The free leg (freeLegMode): its hip torque, whose reaction the lower body takes too.
   const leg = freeLegTorque(s, p, input, dt);
+  // The arms' whip (armsWhipMode): swung round the body while the knee loads,
+  // its reaction on the lower body too — it becomes spin only as far as the ice holds.
+  const arms = armsWhipTorque(s, p, input, dt);
   const [heldRate, heldTau] = trunk(dt / Iu, twistRate + dev0);
-  const need = heldTau + leg - Il * dev0 / dt;
+  const need = heldTau + leg + arms - Il * dev0 / dt;
   const cap = pivotCapacity(s, p);
   let dev: number, rate: number, pivoting = false;
   if (Math.abs(need) <= cap) {
@@ -344,7 +347,7 @@ function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input
     // by a leg is what set blades skidding on a gentle swing.
     const ice = sign(need) * cap * scrapeShare(p);
     const [freeRate, freeTau] = trunk(dt * (1 / Iu + 1 / Il), twistRate - ice / Il * dt);
-    dev = dev0 + (ice - freeTau) / Il * dt - leg / (Il + Iu) * dt;
+    dev = dev0 + (ice - freeTau) / Il * dt - (leg + arms) / (Il + Iu) * dt;
     rate = freeRate;
     pivoting = true;
   }
@@ -354,10 +357,29 @@ function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input
     s.freeSwingRate += leg * (1 / freeLegInertia(p) + (pivoting ? 1 / (Il + Iu) : 0)) * dt;
     s.freeSwing = (s.freeSwing ?? 0) + s.freeSwingRate * dt;
   }
+  if (s.armsL !== undefined) s.armsL += arms * dt;
   s.yawDev = dev;
   s.twistRate = rate;
   s.twist = twist + rate * dt;
   return steer + dev;
+}
+
+/**
+ * THE ARMS' WHIP (armsWhipMode). While the knee loads for a jump the arms
+ * swing round the body toward the angular momentum today's whip would put
+ * in at takeoff (inertiaOpen x jumpWhip x the signed whip, sim/jump.ts
+ * `armsWhip`), at up to armsWhipTorque. Returns the shoulders' torque on the
+ * arms (N m, counter-clockwise positive); the body takes it back, and the
+ * trunk solve decides whether the edge holds it. Outside a load the arms
+ * hold nothing for a jump: s.armsL rests at 0, and stopping a swing that led
+ * nowhere is not charged to the ice.
+ */
+function armsWhipTorque(s: SkaterState, p: Params, input: SkatingInput, dt: number): number {
+  if (p.armsWhipMode < 1) return 0;
+  if (s.jump.phase !== JUMP_PHASE.Load) { s.armsL = 0; return 0; }
+  s.armsL ??= 0;
+  const want = p.inertiaOpen * p.jumpWhip * armsWhip(s.jump, input, p, s.tick, dt, true);
+  return clamp((want - s.armsL) / dt, -p.armsWhipTorque, p.armsWhipTorque);
 }
 
 /** kg m². The free leg about the body's axis, swung out. */
@@ -542,6 +564,7 @@ export function step(
     ...p,
     jumpImpulse: lerp(p.jumpImpulse * p.staminaJumpImpulseMin, p.jumpImpulse, legsMul),
     inertiaTucked: lerp(p.staminaInertiaFloorMax, p.inertiaTucked, legsMul),
+    jumpInertiaTucked: lerp(p.staminaInertiaFloorMax, p.jumpInertiaTucked, legsMul),
     maxLean: Math.max(0, p.maxLean - lerp(p.staminaMaxLeanLoss, 0, legsMul)),
     maxTilt: Math.max(0, p.maxTilt - lerp(p.staminaMaxLeanLoss, 0, legsMul)),
   } : p;

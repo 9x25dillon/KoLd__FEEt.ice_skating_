@@ -18,7 +18,7 @@ import type { SkatingInput, EdgeEvent } from "../sim/types.ts";
 import { setupParams, SETUPS } from "../game/setups.ts";
 
 // The Simulation athlete with stages B/C off (test/pitch.test.ts's base), the pendulum on, the pick off.
-const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 1, toePickMode: 0, pitchInternalMode: 0 };
+const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, armsWhipMode: 0, footMode: 0, pitchMode: 1, toePickMode: 0, pitchInternalMode: 0 };
 const FEET = { ...SIM, slipMode: 1, footMode: 1 };
 const on = (p: Params): Params => ({ ...p, toePickMode: 1 });
 

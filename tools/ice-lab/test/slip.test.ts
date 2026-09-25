@@ -20,7 +20,7 @@ import { setupParams } from "../game/setups.ts";
 import { JUMP, JUMP_NONE } from "../sim/jump.ts";
 
 // The Simulation athlete with stages B/C and the fore-aft pendulum switched off: each test switches on what it measures.
-const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 0 };
+const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, armsWhipMode: 0, footMode: 0, pitchMode: 0 };
 const slipDeg = (s: SkaterState): number =>
   Math.acos(Math.min(1, Math.abs(dot(s.vel, s.heading)) / Math.max(len(s.vel), 1e-9))) * 180 / Math.PI;
 

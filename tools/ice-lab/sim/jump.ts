@@ -183,6 +183,21 @@ function loseContact(s: SkaterState, events: EdgeEvent[]): void {
 }
 
 /**
+ * The arms' whip, 0..1 of a full one: the carriage, and with a wound-up
+ * jump armed at least jumpAssist of the flick. With armsWhipMode 1 it is
+ * signed, -1..1: arms wound against the rotation (SkatingInput.windup
+ * clockwise, at windupThreshold or past) swing the other way, arms swung the
+ * jump's way or simply out swing with it.
+ */
+export function armsWhip(J: JumpState, input: SkatingInput, p: Params, tick: number, dt: number, signed: boolean): number {
+  let whip = saturate(finite(input.carriage, 0));
+  if (signed) whip *= clamp(1 - 2 * finite(input.windup, 0) / p.windupThreshold, -1, 1);
+  const armed = p.jumpMode >= JUMP_MODE.Full && J.windupTick >= 0 && (tick - J.windupTick) * dt <= p.windupWindow;
+  if (armed) whip = Math.max(whip, p.jumpAssist * J.windupPeak);
+  return whip;
+}
+
+/**
  * On the ice, once per tick, after the carve solve: is the knee loading, and
  * has it just been released? A no-op unless jumpMode is on, so every recorded
  * measurement taken with it off still measures the same thing.
@@ -287,8 +302,9 @@ export function jumpGround(
   // unwinding is the whip, and the assist is how much of it happens for you.
   J.armed = p.jumpMode >= JUMP_MODE.Full && J.windupTick >= 0
     && (s.tick - J.windupTick) * dt <= p.windupWindow;
-  let whip = saturate(finite(input.carriage, 0));
-  if (J.armed) whip = Math.max(whip, p.jumpAssist * J.windupPeak);
+  // With armsWhipMode 1 the whip is not put in here: the arms have already
+  // swung it up through the edge during the load (s.armsL, sim/solver.ts).
+  const whip = s.armsL === undefined ? armsWhip(J, input, p, s.tick, dt, false) : 0;
   // With the trunk modelled (torqueMode) the body is two, each with its own
   // spin past the carve: the lower's yawDev, the upper's yawDev + twistRate,
   // each at its own inertia. A twist cannot make spin by itself — only the
@@ -303,12 +319,15 @@ export function jumpGround(
       const If = p.freeLegMass * p.mass * p.freeLegReach * p.freeLegReach;
       rate += If * (dev + s.freeSwingRate) / p.inertiaOpen;
     }
+    // And the arms (armsWhipMode) with what they swung up on the ice.
+    if (s.armsL !== undefined) rate += s.armsL / p.inertiaOpen;
   }
   J.angMomentum = p.jumpMode >= JUMP_MODE.Full
     ? p.inertiaOpen * Math.max(0, rate + s.spinCarry + vaultSpin / p.inertiaOpen + p.jumpWhip * whip) * (0.80 + 0.20 * q)
     : 0;
   J.windupTick = -1;
   J.windupPeak = 0;
+  if (s.armsL !== undefined) s.armsL = 0;
   J.inertia = p.inertiaOpen;
   J.rotation = 0; J.peakOmega = 0; J.z = 0;
   J.takeoffCode = b.code;
@@ -357,7 +376,7 @@ export function jumpAir(
   let carriage = saturate(finite(input.carriage, 0));
   if (J.armed && J.target > 0 && p.jumpAssist > 0) carriage = lerp(carriage, assistedCarriage(J, p, dt), p.jumpAssist);
   const pull = 1 - carriage;
-  J.inertia = moveToward(J.inertia, lerp(p.inertiaOpen, p.inertiaTucked, pull), p.inertiaPullRate * dt);
+  J.inertia = moveToward(J.inertia, lerp(p.inertiaOpen, p.jumpInertiaTucked, pull), p.inertiaPullRate * dt);
   const omega = J.angMomentum / J.inertia;
   J.rotation += omega * dt;
   J.peakOmega = Math.max(J.peakOmega, omega);
@@ -390,7 +409,7 @@ export function jumpAir(
  * advanced for the tick it starts on.
  */
 export function rotationToLand(J: JumpState, p: Params, dt: number, carriage: number): number {
-  const goal = lerp(p.inertiaOpen, p.inertiaTucked, 1 - carriage);
+  const goal = lerp(p.inertiaOpen, p.jumpInertiaTucked, 1 - carriage);
   let inertia = J.inertia, z = J.z, vz = J.vz, t = J.t, turned = 0;
   for (let k = 0; k < 4096; k++) {
     inertia = moveToward(inertia, goal, p.inertiaPullRate * dt);

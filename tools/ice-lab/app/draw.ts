@@ -29,7 +29,7 @@ import { SPIN_POSITION } from "../sim/types.ts";
  */
 export function armsOpen(s: SkaterState, p: Params): number {
   const span = Math.max(p.inertiaOpen - p.inertiaTucked, 1e-3);
-  if (s.jump.phase === JUMP_PHASE.Air) return clampUnit((s.jump.inertia - p.inertiaTucked) / span);
+  if (s.jump.phase === JUMP_PHASE.Air) return clampUnit((s.jump.inertia - p.jumpInertiaTucked) / Math.max(p.inertiaOpen - p.jumpInertiaTucked, 1e-3));
   if (s.move === MOVE.Spin) return clampUnit((s.spin.inertia / SPIN_INERTIA_SCALE[s.spin.position] - p.inertiaTucked) / span);
   return -1;
 }

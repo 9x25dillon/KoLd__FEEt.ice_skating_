@@ -548,6 +548,13 @@ export interface SkaterState {
   /** freeLegMode 1 only: last tick's asked swing, rad, so the hip knows how fast it is being asked to move. */
   freeSwingTarget?: number;
   /**
+   * armsWhipMode 1 only: the angular momentum, kg m^2/s counter-clockwise
+   * positive, the arms have swung up round the body during this jump's load,
+   * every bit of it through the edge. It leaves with the takeoff; outside a
+   * load it is 0.
+   */
+  armsL?: number;
+  /**
    * pitchMode 1 only: the body's fore-aft lean, rad, + toward the support
    * blade's toe, and its rate; the contact's offset along the blade from its
    * centre, m, + toward the toe; and how long the pendulum's capture point

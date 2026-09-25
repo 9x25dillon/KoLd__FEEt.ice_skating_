@@ -211,6 +211,17 @@ export interface Params {
   /** kg m^2 about the vertical, arms open and drawn in. Bible: 4.0 and 0.95. */
   inertiaOpen: number;
   inertiaTucked: number;
+  /**
+   * kg m^2. The tightest a jump draws in to in the air — arms crossed, legs
+   * wrapped — which ω = L / I turns into revolutions. inertiaTucked is the
+   * arms drawn in on the ice (the trunk's upper body, a spin's floor); the
+   * air's tuck is tighter. The bible's 0.95 in every preset. 0.5 in the
+   * trunk setups (2026-09-25, with armsWhipMode): what the angular momentum
+   * a skater measurably takes off with, ~19-21 kg m^2/s scaled to this
+   * skater (Frontiers in Sports and Active Living 2025), needs at the
+   * ~30 rad/s doubles turn at. docs/open-constants.md.
+   */
+  jumpInertiaTucked: number;
   /** kg m^2 / s the arms can be drawn in or opened at. */
   inertiaPullRate: number;
   /** s either side of the release a toe strike counts as the pick. Bible: 90 ms. */
@@ -731,6 +742,28 @@ export interface Params {
   freeLegDamping: number;
   freeLegTorqueMax: number;
 
+  // ── the arms' whip through the edge (torqueMode) ──────────────────────────
+  /**
+   * 0: the arms' whip is put into the jump at takeoff — inertiaOpen x
+   * jumpWhip x the carriage (JumpResolver.cpp), whichever way the arms are
+   * swung, and it passes through nothing. 1, with torqueMode: the arms swing
+   * round the body while the knee loads, driven toward that same angular
+   * momentum at up to armsWhipTorque, and the swing's reaction lands on the
+   * lower body like the trunk's and the free leg's. The ice answers it only
+   * as far as the edge's pivot grip can (pivotCapacity), shared with the
+   * trunk: over a deep held edge the swing becomes spin, over a flat or
+   * skidding blade it pivots the feet the other way and nets almost nothing.
+   * Arms wound against the jump (SkatingInput.windup clockwise) swing the
+   * other way and take spin away. Takeoff angular momentum is generated on
+   * the ice through the approach and the takeoff (Frontiers in Sports and
+   * Active Living 2025, "Comparisons of angular momentum at takeoff in six
+   * types of jumps in women's figure skating": 0.133-0.152 m h^2 for
+   * doubles, about 15-17 kg m^2/s for 47 kg at 1.55 m).
+   */
+  armsWhipMode: number;
+  /** N m. The most the shoulders swing the arms round the body with. Authored: the trunk's own ceiling (twistTorqueMax). */
+  armsWhipTorque: number;
+
   // ── the fore-aft pendulum ─────────────────────────────────────────────────
   /**
    * 0: SkatingInput.pitch puts the contact on the rocker directly, and the
@@ -879,6 +912,7 @@ export const DEFAULT_PARAMS: Params = {
   jumpRotBias: 1.0,
   inertiaOpen: 4.0,
   inertiaTucked: 0.95,
+  jumpInertiaTucked: 0.95,
   inertiaPullRate: 11.0,     // JumpResolver.cpp
   toeWindow: 0.09,
   landingShock: 1.5,
@@ -1021,6 +1055,9 @@ export const DEFAULT_PARAMS: Params = {
   freeLegStiffness: 150,
   freeLegDamping: 20,
   freeLegTorqueMax: 100,
+
+  armsWhipMode: 0,
+  armsWhipTorque: 60,
 
   pitchMode: 0,
   pitchGain: 1,
@@ -1187,6 +1224,8 @@ export function validate(p: Params): string[] {
     errs.push("staminaJumpImpulseMin is a multiplier on jumpImpulse, in (0, 1]");
   if (p.staminaInertiaFloorMax < p.inertiaTucked)
     errs.push("staminaInertiaFloorMax must be at least inertiaTucked: fatigue cannot pull in tighter than fresh");
+  if (!(p.jumpInertiaTucked > 0 && p.jumpInertiaTucked <= p.inertiaOpen && p.jumpInertiaTucked <= p.staminaInertiaFloorMax))
+    errs.push("jumpInertiaTucked must be positive, no more than inertiaOpen, and no looser than a tired skater's floor (staminaInertiaFloorMax)");
   if (p.staminaMaxLeanLoss < 0) errs.push("staminaMaxLeanLoss cannot be negative");
   if (p.staminaMaxLeanLoss > p.maxLean) errs.push("staminaMaxLeanLoss cannot exceed maxLean itself");
   if (p.staminaBalanceNoiseBase < 0) errs.push("staminaBalanceNoiseBase cannot be negative");
@@ -1202,6 +1241,9 @@ export function validate(p: Params): string[] {
   if (!(p.freeLegMass > 0 && p.freeLegMass < 0.3 && p.freeLegReach > 0 && p.freeLegReach < 1 && p.freeLegArc > 0 && p.freeLegArc < Math.PI))
     errs.push("free leg mass share 0-0.3, reach 0-1 m, arc 0-π");
   if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
+  if (![0, 1].includes(p.armsWhipMode)) errs.push("armsWhipMode is 0 (the whip put in at takeoff) or 1 (the arms swing through the edge)");
+  if (p.armsWhipMode === 1 && p.torqueMode !== 1) errs.push("armsWhipMode 1 needs torqueMode 1: the arms swing against the lower body the edge holds");
+  if (!(p.armsWhipTorque > 0)) errs.push("armsWhipTorque must be positive");
   if (![0, 1].includes(p.pitchMode)) errs.push("pitchMode is 0 (the input sets the contact) or 1 (the ankle balances a fore-aft lean)");
   if (!(p.pitchGain > 0)) errs.push("pitchGain must be positive");
   if (![0, 1].includes(p.pitchInternalMode)) errs.push("pitchInternalMode is 0 (the ankle alone) or 1 (the arms and trunk as well)");
