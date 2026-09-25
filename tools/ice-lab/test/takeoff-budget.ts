@@ -369,12 +369,12 @@ function printTakeoff(kind: Attempt, base: Params, v: Variation): void {
 function printAB(base: Params): void {
   console.log("balance | toe | hook | edge° | pivot° | air° | min radius m | max |yaw rate| | takeoff L | flight s | result");
   console.log("(toe asked from the load's start; contact = the support blade's at blade-off, 0 heel .. 1 toe)");
-  for (const diag of [0, 3, 1]) for (const toe of [0, 0.5, 1]) for (const hook of [0, 0.2]) {
+  for (const diag of [0, 1, 4, 5]) for (const toe of [0, 1]) for (const hook of [0, 0.2]) {
     const p = { ...base, diagTakeoffBalance: diag };
     const r = attempt("held", p, Infinity, { freeLegAt: 0.5, freeLegTo: 0, toe, toeAt: 0, hook });
     const ice = r.frames.filter(f => f.phase === JUMP_PHASE.Load && f.seg), j = r.result;
     const minR = Math.min(...ice.map(f => f.radius)), maxYaw = Math.max(...ice.map(f => Math.abs(f.yawRate)));
-    console.log(`${["A", "B1 no counter-steer", "B2 edge held", "B3 none in the push"][diag]} | ${toe} (contact ${fx(ice.at(-1)?.contactS ?? 0)}) | ${hook} | ${fx((j.takeoffEdge ?? 0) * 360, 0)} | ${fx((j.takeoffPivot ?? 0) * 360, 0)} | ${fx((j.airborne ?? j.turned) * 360, 0)} | ${fx(minR, 2)} | ${fx(maxYaw)} | ${fx(r.L, 1)} | ${fx(j.airTime, 3)} | ${r.takeoff < 0 ? (r.fallen ? "fell on the ice" : "no takeoff") : `${j.revolutions} rev ${["clean", "q", "<", "<<"][j.rotationCall]}${j.fall ? ", fell" : ""}`}`);
+    console.log(`${["A", "B1 no counter-steer", "B2 edge held", "B3 none in the push", "B4 no lean-error term", "B5 no lean-rate term"][diag]} | ${toe} (contact ${fx(ice.at(-1)?.contactS ?? 0)}) | ${hook} | ${fx((j.takeoffEdge ?? 0) * 360, 0)} | ${fx((j.takeoffPivot ?? 0) * 360, 0)} | ${fx((j.airborne ?? j.turned) * 360, 0)} | ${fx(minR, 2)} | ${fx(maxYaw)} | ${fx(r.L, 1)} | ${fx(j.airTime, 3)} | ${r.takeoff < 0 ? (r.fallen ? "fell on the ice" : "no takeoff") : `${j.revolutions} rev ${["clean", "q", "<", "<<"][j.rotationCall]}${j.fall ? ", fell" : ""}`}`);
   }
 }
 

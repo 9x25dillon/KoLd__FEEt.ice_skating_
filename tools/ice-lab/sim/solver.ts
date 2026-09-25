@@ -866,10 +866,12 @@ export function step(
     const takeoffDiag = p.diagTakeoffBalance === 3 ? (s.jump.pushFrom !== undefined ? 1 : 0)
       : p.diagTakeoffBalance > 0 && s.jump.phase === JUMP_PHASE.Load ? p.diagTakeoffBalance : 0;
     const aCmd = takeoffDiag === 1 ? g * tan(leanCmd) + noise
-      : g * tan(leanCmd)
-        + p.balanceKp * (s.lean - leanCmd)
-        + p.balanceKd * s.leanRate
-        + noise;
+      : takeoffDiag === 4 ? g * tan(leanCmd) + p.balanceKd * s.leanRate + noise
+        : takeoffDiag === 5 ? g * tan(leanCmd) + p.balanceKp * (s.lean - leanCmd) + noise
+          : g * tan(leanCmd)
+            + p.balanceKp * (s.lean - leanCmd)
+            + p.balanceKd * s.leanRate
+            + noise;
     const kappaMax = sin(pFatigue.maxTilt) / rhoSupport;
     const kappa = clamp(aCmd / v2sq, -kappaMax, kappaMax);
     let tiltTarget = asinClamped(kappa * rhoSupport);
