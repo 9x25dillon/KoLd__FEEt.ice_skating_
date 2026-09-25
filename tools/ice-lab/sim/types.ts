@@ -871,6 +871,8 @@ export interface TorqueBudget {
   /** The trunk's muscles on the upper body, and the hip's on the free leg. */
   trunk: number;
   leg: number;
+  /** The hip's torque its PD asked before any cap (freeLegSwingThroughMode's suppression, then freeLegTorqueMax). */
+  legAsked?: number;
   /** What the lower body needed from the ice to stay on the carve, and the most the edges can hold (pivotCapacity). */
   need: number;
   cap: number;

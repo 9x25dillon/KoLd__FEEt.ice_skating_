@@ -759,6 +759,20 @@ export interface Params {
   freeLegStiffness: number;
   freeLegDamping: number;
   freeLegTorqueMax: number;
+  /**
+   * The hip through a jump's push-off (pushOffMode). 0: the hip's PD tracks
+   * the asked swing as everywhere — so as the leg nears a pose that has
+   * stopped moving, its damping brakes it on the ice, and the gripping blade
+   * takes that momentum back before blade-off (test/free-leg-timing.ts). 1:
+   * swing-through — while the push is on the ice, the hip does not brake a
+   * leg swinging the way it is asked until the leg is past its own arc
+   * (freeLegArc, the joint's range): the PD's damper pulling it back toward
+   * the asked speed (none, once a pose is asked and held) and its spring past
+   * an overshot pose are dropped; what drives the swing, and braking past the
+   * arc, are as before, within freeLegTorqueMax. The leg leaves the ice
+   * still moving and the air inherits it. Nothing authored.
+   */
+  freeLegSwingThroughMode: number;
 
   // ── the arms' whip through the edge (torqueMode) ──────────────────────────
   /**
@@ -1160,6 +1174,7 @@ export const DEFAULT_PARAMS: Params = {
   freeLegStiffness: 150,
   freeLegDamping: 20,
   freeLegTorqueMax: 100,
+  freeLegSwingThroughMode: 0,
 
   armsWhipMode: 0,
   pushOffMode: 0,
@@ -1357,6 +1372,7 @@ export function validate(p: Params): string[] {
   if (!(p.freeLegMass > 0 && p.freeLegMass < 0.3 && p.freeLegReach > 0 && p.freeLegReach < 1 && p.freeLegArc > 0 && p.freeLegArc < Math.PI))
     errs.push("free leg mass share 0-0.3, reach 0-1 m, arc 0-π");
   if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
+  if (![0, 1].includes(p.freeLegSwingThroughMode)) errs.push("freeLegSwingThroughMode is 0 (the hip tracks the pose through a push-off) or 1 (it swings through to blade-off)");
   if (![0, 1].includes(p.pushOffMode)) errs.push("pushOffMode is 0 (leave the ice at the release) or 1 (push off through the blade first)");
   if (![0, 1].includes(p.normalLoadMode)) errs.push("normalLoadMode is 0 (a blade's mass is its load over g) or 1 (its share of the body's mass)");
   if (![0, 1].includes(p.pivotGrooveMode)) errs.push("pivotGrooveMode is 0 (the grip falls to the scrape's at once) or 1 (across the groove's angle)");
