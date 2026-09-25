@@ -662,15 +662,6 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
       // whatever the trigger asks. The standing leg's paddle does nothing.
       if (paddle(freeLegIndex === 0 ? "freeLegLeft" : "freeLegRight")) mapped.freeLeg = Math.max(mapped.freeLeg, 1);
     }
-    if (options.pumps && !mapped.push) {
-      const auto = autoCrossover(f, s, p);
-      if (auto) Object.assign(mapped, auto);
-    }
-    // An automatic crossover keeps both blades down through its push, unless
-    // X / B or a weight paddle asks for a foot this tick.
-    if (options.pumps && s.tick < (f.crossUntil ?? -1) && !down(1) && !down(2) && !paddle("weightLeft") && !paddle("weightRight")) mapped.weight = 0.5;
-    const paddleTurn = Number(paddle("feetClockwise")) - Number(paddle("feetAnticlockwise"));
-    if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options, paddleTurn));
     // A trigger per knee: LT the left leg, RT the right. The brake moves off LT
     // to D-pad ↑, free in this setup unless the profile has bound it, until
     // stops come from the blades themselves.
@@ -691,6 +682,22 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
       mapped.knee = (knees[0] + knees[1]) / 2;
       mapped.kneeSplit = (knees[1] - knees[0]) / 2;
     }
+    // A jump loading (the operator's choice, 2026-09-25): no automatic
+    // crossover starts, and one under way lets the loaded foot keep the
+    // weight, so a deep edge can be held through the load.
+    // The standing leg's knee, as the solver reads the load (sim/solver.ts legInput).
+    const standingKnee = mapped.knee + (mapped.kneeSplit ?? 0) * (2 * f.foot - 1);
+    const loading = s.jump.phase === JUMP_PHASE.Load || standingKnee >= p.jumpLoadKnee;
+    if (options.pumps && loading) f.crossUntil = -1;
+    if (options.pumps && !mapped.push && !loading) {
+      const auto = autoCrossover(f, s, p);
+      if (auto) Object.assign(mapped, auto);
+    }
+    // An automatic crossover keeps both blades down through its push, unless
+    // X / B or a weight paddle asks for a foot this tick.
+    if (options.pumps && s.tick < (f.crossUntil ?? -1) && !down(1) && !down(2) && !paddle("weightLeft") && !paddle("weightRight")) mapped.weight = 0.5;
+    const paddleTurn = Number(paddle("feetClockwise")) - Number(paddle("feetAnticlockwise"));
+    if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options, paddleTurn));
     // With the feet, stops come from the blades: D-pad up is the feet's, and
     // only the keyboard's X still brakes.
     const dpadUpBound = ACTIONS.some(a => (!options.manual || manualAction(a.id))
