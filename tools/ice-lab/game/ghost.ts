@@ -181,17 +181,20 @@ const CHECK_AT = 1.95;
 /**
  * A jump off foot `f`'s back outside edge: load its trigger fully with its
  * stick back (heel), X / B held (the weight, the arms out that side) for
- * 0.35 s, let go — the takeoff. In the air B, once the landing will have
+ * 0.35 s, let go — the takeoff. `edge` is held on the foot's stick, or on
+ * both sticks when `both` (a deeper lean: the body leans on the mean of the
+ * two). In the air B, once the landing will have
  * turned CHECK_AT: arms out, landing on the right foot. The run-out: B held,
  * and 0.15 s after the landing X too — the free foot down, knees at half.
  */
-export function jumpOff(f: number, edge: number, p: Params): Step[] {
+export function jumpOff(f: number, edge: number, p: Params, both = false): Step[] {
+  const hold = (h: ControllerHardware) => { h.axes[STICK[f]] = edge; if (both) h.axes[STICK[1 - f]] = edge; };
   return [
     { name: "load", for: 0.35,
-      pad: h => { h.axes[STICK[f]] = edge; h.axes[STICK[f] + 1] = f ? 1 : -1; h.buttons[TRIGGER[f]] = 1; h.buttons[WEIGHT[f]] = 1; } },
+      pad: h => { hold(h); h.axes[STICK[f] + 1] = f ? 1 : -1; h.buttons[TRIGGER[f]] = 1; h.buttons[WEIGHT[f]] = 1; } },
     { name: "air", max: 1.5,
       pad: (h, c) => {
-        if (c.tookAt < 0) { h.axes[STICK[f]] = edge; return; }
+        if (c.tookAt < 0) { hold(h); return; }
         h.buttons[7] = 0.7;
         if (c.mem.checked || landingTurns(c.s, p) >= CHECK_AT) { c.mem.checked = 1; h.buttons[1] = 1; }
       },
@@ -205,6 +208,16 @@ export function jumpOff(f: number, edge: number, p: Params): Step[] {
 }
 
 const EXPERIMENTAL = setupParams("experimental");
+/**
+ * Both sticks for the loop's held back outside edge: body lean -0.24..-0.28
+ * at a 4.9-6.6 m/s takeoff. MEASURED from 0-8 m/s player speeds: 0.6 lands
+ * as reliably as the old single-stick edge (-0.10..-0.15); 0.7 (lean to
+ * -0.40) landed from 19 of 33 starts, full sticks (to -0.8) from under half —
+ * short of rotation and down in the run-out — and 7 m/s backward was never
+ * reached from a three-turn entry (the turn costs ~1 m/s, and above ~8 m/s
+ * forward the blade barely takes the edge to turn on).
+ */
+const LOOP_EDGE = 0.5;
 
 export const TRICKS: readonly Trick[] = [
   {
@@ -238,11 +251,21 @@ export const TRICKS: readonly Trick[] = [
   },
   {
     // test/backjump.test.ts: a backward double loop, landed clean — here
-    // skated into: strokes on a left curve to 5 m/s, a right forward inside
-    // three-turn onto the back outside edge, then the takeoff.
-    id: "loop", name: "Backward double loop", setup: "experimental", speed: -7, duration: 16, entry: "stride",
-    how: "Experimental · stroke up (LT, RT…), B + right stick right: forward inside edge, A: three-turn onto the back outside edge; RT + B + right stick back (heel) for 0.35 s, let go to take off, B in the air to check",
-    pad: routine([...strokesTo(5, 0.5), ...threeTurn(1, 0.6, 0.3), ...jumpOff(1, 0.6, EXPERIMENTAL)]),
+    // skated into: strokes on a left curve to 6 m/s, a right forward inside
+    // three-turn onto the back outside edge, then the edge deepened on both
+    // sticks and held 1 s before the takeoff (the takeoff on a held edge, not
+    // the flat one the backjump script leaves from). MEASURED: see
+    // test/ghost.test.ts; deeper than this did not hold (the report on the
+    // PR, and LOOP_EDGE).
+    id: "loop", name: "Backward double loop", setup: "experimental", speed: -7, duration: 18, entry: "stride",
+    how: "Experimental · stroke up (LT, RT…), B + right stick right: forward inside edge, A: three-turn onto the back outside edge; both sticks left to deepen the edge and hold it; RT + B + right stick back (heel) for 0.35 s, let go to take off, B in the air to check",
+    pad: routine([
+      ...strokesTo(5.5, 0.5),
+      ...threeTurn(1, 0.6, 0),
+      { name: "deepen", for: 1,
+        pad: (h, c) => { if (c.pt >= 0.02) h.axes[0] = h.axes[2] = -LOOP_EDGE * Math.min(1, c.pt / 0.5); h.buttons[7] = 0.5; if (c.pt < 0.05) h.buttons[1] = 1; } },
+      ...jumpOff(1, -LOOP_EDGE, EXPERIMENTAL, true),
+    ]),
   },
   {
     // test/setups.test.ts: the pad snowplow on inside edges, standing.
@@ -279,12 +302,13 @@ export const TRICKS: readonly Trick[] = [
     ]),
   },
   {
-    // test/turns.test.ts's three-turn, RFO onto RBI, on the Experimental pad.
+    // test/turns.test.ts's LFO three-turn onto LBI — the salchow's entry —
+    // on the Experimental pad, out of strokes on a left curve.
     id: "three", name: "Three-turn", setup: "experimental", speed: 4, duration: 12, entry: "stride",
-    how: "Experimental · stroke up, B + right stick left: the right forward outside edge; tap A: the blade turns on the rocker and you skate on backward on the inside edge",
+    how: "Experimental · stroke up, X + left stick right: the left forward outside edge; tap A: the blade turns on the rocker and you skate on backward on the inside edge",
     pad: routine([
-      ...strokesTo(4, -0.5),
-      ...threeTurn(1, -0.6, 1.5),
+      ...strokesTo(4, 0.5),
+      ...threeTurn(0, 0.6, 1.5),
       { name: "glide", pad: () => {} },
     ]),
   },
