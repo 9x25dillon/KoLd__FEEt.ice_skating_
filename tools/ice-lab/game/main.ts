@@ -5,7 +5,7 @@ import { SIM_DT } from "../sim/params.ts";
 import { Pad } from "../app/pad.ts";
 import { newSchemeState, SCHEME } from "../app/schemes.ts";
 import type { GameScheme as Scheme } from "./controls.ts";
-import { FULL_SCHEME, ACTIONS, bindingLabel, loadControllerProfile, digStatus } from "./full-controls.ts";
+import { FULL_SCHEME, ACTIONS, BUTTON_NAMES, bindingLabel, loadControllerProfile, digStatus } from "./full-controls.ts";
 import type { GameControlState } from "./full-controls.ts";
 import { Ghost } from "./ghost.ts";
 import { MOVE, TURN_KIND, FALL, codeToString } from "../sim/types.ts";
@@ -20,12 +20,16 @@ import { Practice, LESSONS } from "./practice.ts";
 import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
 import { RookieCourse } from "./rookie.ts";
+import { Tutorial, STAGES, STEPS, tutorialGhost } from "./tutorial.ts";
+import type { HowContext } from "./tutorial.ts";
 import { resolveRinkCollision } from "./rink.ts";
 import { IceGrid } from "../sim/ice.ts";
 let careerMode = false, careerEvent = 0, choreography: Choreography | null = null;
 let career = new CareerState();
 try { career = CareerState.restore(localStorage.getItem("edgework-career-v1")); } catch { /* Storage is optional. */ }
 let courseMode = false, rookie: RookieCourse | null = null;
+/** The Tutorial (game/tutorial.ts): balance, edges, scrape & dig, air. */
+let tutorialMode = false, tutorial: Tutorial | null = null;
 import { EdgeAudio } from "../app/audio.ts";
 import type { EdgeEvent } from "../sim/types.ts";
 import { SAMPLE_PROFILES, applyProfile, TIERS } from "../sim/profile.ts";
@@ -136,7 +140,7 @@ let ghost: Ghost | null = null;
 function setGhost(on: boolean) {
   ghostOn = on; (el("ghost-toggle") as HTMLInputElement).checked = on;
   try { localStorage.setItem("edgework-ghost", on ? "on" : "off"); } catch { /* Session only. */ }
-  ghost = on ? new Ghost(skater) : null;
+  ghost = !on ? null : tutorial ? tutorialGhost(tutorial.step, null, skater, true) : new Ghost(skater);
 }
 /** A fresh sheet each run: resurfaced between skaters, the way a rink actually is. */
 let ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
@@ -166,6 +170,8 @@ function start() {
   document.body.dataset.career = String(careerMode);
   el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : "ON THE ICE / PRACTICE";
   coach = new BeginnerCoach(); playground = new Playground(); pendingTrick = false; rookie = courseMode ? new RookieCourse() : null;
+  tutorial = tutorialMode ? new Tutorial(setup) : null;
+  document.body.dataset.tutorial = String(tutorial !== null);
   recorder = new ReplayRecorder(params, 4.5); playback = null; replayJson = "";
   technical = 0; scoredTick = -1; replayNotice = "Recording your skating · first five minutes";
   skater = createState(params, 4.5); steering = newSchemeState(); run = new IceRun();
@@ -183,7 +189,7 @@ function start() {
   trail.forEach(t => t.length = 0); accumulator = 0; flash = 0; pendingPush = false; mode = "playing";
   pendingToe = false; cantilever = false; elapsedSkate = 0;
   practice = new Practice(); scene.reset(skater);
-  ghost = ghostOn ? new Ghost(skater) : null;
+  ghost = tutorial ? tutorialGhost(tutorial.step, null, skater, ghostOn) : ghostOn ? new Ghost(skater) : null;
   el("overlay").hidden = true; el("pause").hidden = false;
   // A run's tick zero is the beat grid's phase origin (sim/music.ts): the
   // track restarts from its own zero at the same moment, so the two stay in
@@ -221,9 +227,18 @@ function finish() {
 }
 el("start").addEventListener("click", () => mode === "paused" && !playback?.done ? resume() : start());
 el("pause").addEventListener("click", pause);
-el("free").addEventListener("click", () => { careerMode = false; freeSkate = true; courseMode = false; cruise = setup === null; start(); });
-el("rookie").addEventListener("click", () => { careerMode=false; freeSkate=true; courseMode=true; cruise=setup === null; start(); });
-el("timed").addEventListener("click", () => { careerMode = false; freeSkate = false; courseMode = false; cruise = false; start(); });
+el("free").addEventListener("click", () => { careerMode = false; freeSkate = true; courseMode = false; tutorialMode = false; cruise = setup === null; start(); });
+el("rookie").addEventListener("click", () => { careerMode=false; freeSkate=true; courseMode=true; tutorialMode = false; cruise=setup === null; start(); });
+el("timed").addEventListener("click", () => { careerMode = false; freeSkate = false; courseMode = false; tutorialMode = false; cruise = false; start(); });
+function startTutorial() { careerMode = false; freeSkate = true; courseMode = false; tutorialMode = true; cruise = false; start(); }
+el("tutorial").addEventListener("click", startTutorial);
+el("tutorial-skip").addEventListener("click", e => {
+  (e.currentTarget as HTMLButtonElement).blur(); // Space is the push: it must not press this again.
+  if (!tutorial || playback) return;
+  tutorial.skip();
+  ghost = tutorialGhost(tutorial.step, ghost, skater, ghostOn);
+  if (tutorial.done) finishTutorial();
+});
 el("controls").addEventListener("click", () => {
   resumeAfterGuide = mode === "playing"; pause(); guide.showModal();
 });
@@ -307,7 +322,7 @@ el("save-replay").addEventListener("click", () => {
   try {
     if(file.size > MAX_REPLAY_BYTES) throw new Error("Replay exceeds the 64 MiB limit");
     const json = await file.text(), clip = parseReplay(json);
-    careerMode = false; courseMode = false; start(); playback = new ReplayPlayer(clip); replayJson = json;
+    careerMode = false; courseMode = false; tutorialMode = false; start(); playback = new ReplayPlayer(clip); replayJson = json;
     skater = playback.state; params = playback.params; freeSkate = true;
     scene.reset(skater); resumeAfterGuide = false; guide.close();
     replayNotice = `Playing ${file.name} · inputs locked`;
@@ -343,7 +358,7 @@ function draw(_now: number) {
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode ? playground : null, !playback ? rookie : null, playback ? null : ghost);
+  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode && !tutorial ? playground : null, !playback ? rookie : null, playback ? null : ghost);
   const note = el("ghost-note");
   note.hidden = !ghost || !!playback;
   if (ghost && !playback) {
@@ -411,6 +426,7 @@ function draw(_now: number) {
   el("spin-level").textContent = lastSpinLabel;
   el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : footChangeFlash > 0 ? "Foot change!" : comboFlash > 0 ? `Combination ${comboLabel}!` : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
   drawCareer();
+  drawTutorial();
 }
 function frame(now: number) {
   const elapsed = Math.min((now - (last || now)) / 1000, 0.1); last = now;
@@ -421,6 +437,10 @@ function frame(now: number) {
   if (controls.cycleScheme) { setup = null; saveSetup(); scheme = ((scheme + 1) % 4) as Scheme; steering = newSchemeState(); schemeSelect.value = String(scheme); saveControlScheme(); renderFullBindings(); renderSetup(); start(); }
   if (controls.pause) { if (mode === "playing") pause(); else if (mode === "paused") resume(); }
   if (controls.reset && mode !== "ready") start();
+  // The pad's Y on the title screen starts the Tutorial (A starts a free skate).
+  const padY = navigator.getGamepads?.().find(g => g?.connected)?.buttons[3]?.pressed ?? false;
+  if (mode === "ready" && padY && !padYWas) startTutorial();
+  padYWas = padY;
   if (mode === "ready" && controls.push) start();
   if (mode === "playing") {
     accumulator += elapsed;
@@ -485,11 +505,17 @@ function frame(now: number) {
       wasSpinning = spinning;
       if (sound) audio.onTick(input, events, skater);
       practice.sample(skater, cantilever, SIM_DT);
-      if(freeSkate && !courseMode && !careerMode) {
+      if(freeSkate && !courseMode && !careerMode && !tutorial) {
         playground.sample(skater,SIM_DT);
         for (const reward of playground.rewards) scene.effects.reward(reward);
       }
       rookie?.sample(skater,SIM_DT);
+      if (tutorial && !playback) {
+        // It only watches: the pass conditions read the solver's state, nothing else.
+        tutorial.sample(skater, SIM_DT);
+        ghost = tutorialGhost(tutorial.step, ghost, skater, ghostOn);
+        if (tutorial.done) finishTutorial();
+      }
       scene.update(skater, SIM_DT);
       recorder.capture(input, params, skater, events, (["A","B","C","D"] as const)[scheme]);
       const wasUp = !skater.fallen;
@@ -542,7 +568,7 @@ function refreshCareer() {
       : i > career.medalCap ? "Complete the previous event to unlock"
       : `Train to ${TIERS[i].name} overall (${TIERS[i].floor}) to unlock`;
     button.addEventListener("click", () => {
-      careerEvent = i; careerMode = true; courseMode = false; freeSkate = true; cruise = true;
+      careerEvent = i; careerMode = true; courseMode = false; tutorialMode = false; freeSkate = true; cruise = true;
       resumeAfterCareer = false; careerBoard.close(); start();
     });
     card.append(title, details, routine, button); events.append(card);
@@ -602,5 +628,40 @@ function finishCareer() {
   el("help").hidden = true; el("start").textContent = "Retry this program →";
   el("overlay").hidden = false; el("pause").hidden = true; el("start").focus();
 }
-let pendingPush = false;
+/** The words for this setup's controls: the profile's own labels where it has them. */
+function howContext(): HowContext {
+  return { setup, push: bindingLabel(controllerProfile, "push"), three: bindingLabel(controllerProfile, "three"),
+    modifier: BUTTON_NAMES[controllerProfile.modifier], feet: controllerProfile.feet ?? "dpad" };
+}
+const setText = (id: string, text: string) => { if (el(id).textContent !== text) el(id).textContent = text; };
+function drawTutorial() {
+  el("tutorial-hud").hidden = !tutorial || !!playback;
+  if (!tutorial || playback) return;
+  const t = tutorial, now = t.step, c = howContext();
+  const stage = STAGES[Math.min(t.stage, STAGES.length - 1)];
+  setText("coach-label", now ? `TUTORIAL · ${stage.name.toUpperCase()}` : "TUTORIAL · COMPLETE");
+  setText("lesson-title", now?.title ?? "You trust the ice.");
+  setText("lesson-tip", now?.prose ?? "Everything you felt standing still is still there when you leave the ice.");
+  setText("tutorial-how", now ? now.how(c) : "");
+  setText("tutorial-keys", now?.keys?.(c) ?? "");
+  const stages = STAGES.map((g, i) => `<li data-state="${i < t.stage ? "done" : i === t.stage ? "current" : "next"}"${i === t.stage ? ' aria-current="step"' : ""}>${g.name}</li>`).join("");
+  if (el("tutorial-stages").innerHTML !== stages) el("tutorial-stages").innerHTML = stages;
+  (el("tutorial-meter") as HTMLProgressElement).value = t.fraction;
+  setText("tutorial-status", t.status);
+  setText("lesson-progress", `Step ${Math.min(t.index + 1, STEPS.length)} of ${STEPS.length}`);
+  el("combo-label").textContent = "Tutorial"; el("combo").textContent = `${Math.min(t.index, STEPS.length)}/${STEPS.length}`;
+  if (!skater.fallen) el("hint").textContent = t.toast > 0 ? `✓ ${t.message}` : now ? `${stage.name} · ${stage.line}` : "";
+}
+function finishTutorial() {
+  if (!tutorial) return;
+  const t = tutorial;
+  mode = "done"; musicEl.pause(); tutorialMode = false;
+  const passed = STEPS.length - t.skipped.length;
+  const skipped = t.skipped.map(id => STEPS.find(x => x.id === id)!.title).join(", ");
+  el("title").textContent = "You trust the ice.";
+  el("description").textContent = `Balance, edges, the scrape and the dig, the air — ${passed}/${STEPS.length} steps${t.falls ? `, and ${t.falls} fall${t.falls > 1 ? "s" : ""} you got up from` : ", without a fall"}. Everything you felt standing still is still there when you leave the ice.${skipped ? ` Skipped: ${skipped}.` : ""}`;
+  el("help").hidden = true; el("start").textContent = "Free skate →";
+  el("overlay").hidden = false; el("pause").hidden = true; el("start").focus();
+}
+let pendingPush = false, padYWas = false;
 requestAnimationFrame(frame);

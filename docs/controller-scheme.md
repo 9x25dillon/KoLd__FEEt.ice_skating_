@@ -304,3 +304,28 @@ With the paddles the thumbs never leave the sticks: from 6 m/s, both sticks held
 knees at 0.6, the top-left paddle turning the feet against the curve for a second scrapes the skater
 to 4.04 m/s at 4 s (straight feet: 5.05), the edges the sticks' throughout — a turn-and-scrape, not
 a full stop, which still needs the feet held square as the travel swings (`test/paddles.test.ts`).
+
+
+## Tutorial (the game, 2026-09-24)
+
+The title screen's **Tutorial** button (or **Y** on the pad there) starts a run that teaches in the
+operator's order — stability first, then released into the air: **Balance** (stand tall and glide;
+push, then be still again; soft knees), **Edges** (lean into a curve; the other edge; a three-turn to
+backward), **Scrape & dig** (snowplow to a stop; a dig that winds), **Air** (a first hop landed; a
+jump that turns half a revolution or more, landed clean). Each step is a condition *held* for a few
+seconds, read only from solver state (`game/tutorial.ts`, as `practice.ts` does); the words for what
+to do are the current setup's own bindings (the profile's push, three-turn and modifier labels, and
+its feet layout). A fall wipes the step's progress, and it counts again only after 1.5 s standing
+still — the re-drill. The AI ghost shows the steps it has a trick for (pushing: strokes; the
+snowplow; the dig; the turning jump: the backward double loop) and none otherwise. Blade Explorer,
+Full Repertoire and the custom mappings have no fore–aft pendulum, so no `digL`: they skip the dig,
+and their snowplow step accepts the brake (LT); Simulation's and Experimental's stops must scrape.
+"Skip step" moves on.
+
+Every step was played on the pad in Simulation and Experimental and its pass time pinned
+(`test/tutorial.test.ts`). What the measuring found: on Experimental, left on one foot after three
+strokes the skater drifts off balance and is down 2.7 s after the last push, so the push step ends
+with X + B, both feet down. A turning jump lands clean only with soft knees in the air (straight
+legs: a step-out); in Simulation, snapping the arms in after landing twists the skater off their feet
+1.7 s later, so the step says to bring them in slowly. Experimental's B + RT jump turns about two
+revolutions and lands clean when loaded 0.25–0.3 s; held 0.4 s it steps out and falls.
