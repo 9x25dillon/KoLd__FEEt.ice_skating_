@@ -403,8 +403,19 @@ export function jumpGround(
   J.t = 0;
   loseContact(s, events);
   s.strokeTime = 0;
-  s.leanRate = 0;
   s.legRate = 0;
+  if (p.airPostureMode >= 1) {
+    // Blade-off ends the ground's balance state; the body's own motion goes
+    // on. The lean's rate and the pitch's are the roll and pitch the takeoff
+    // launched — kept. What only the ice gives (lateral force, the edge's
+    // equilibrium, the arms' held share, the fall timers) is gone, and the
+    // takeoff's balance error survives only as a diagnostic.
+    J.takeoffBalanceError = s.balanceError;
+    s.latAccel = 0; s.intAccel = 0; s.intHeld = 0;
+    s.leanEq = 0; s.balanceError = 0; s.balanceErrorTime = 0;
+    if (s.pitchOffTime !== undefined) s.pitchOffTime = 0;
+    if (s.pitchAnkle !== undefined) s.pitchAnkle = 0;
+  } else s.leanRate = 0;
 }
 
 /**
@@ -448,6 +459,14 @@ export function jumpAir(
   J.vz -= p.gravity * dt;
   J.z += J.vz * dt;
   s.knee = moveToward(s.knee, clamp(finite(input.knee, 0.35), 0, 1), p.kneeRate * dt);
+  // airPostureMode 1: torque-free. Gravity acts through the centre of mass,
+  // so the roll and pitch turn on at the rates the takeoff left them — their
+  // inertias do not change with posture in this model, so conserved angular
+  // momentum is a conserved rate. The same clamp the pendulum has on the ice.
+  if (p.airPostureMode >= 1) {
+    s.lean = clamp(s.lean + s.leanRate * dt, -1.55, 1.55);
+    if (s.pitch !== undefined) s.pitch = clamp(s.pitch + (s.pitchRate ?? 0) * dt, -1.55, 1.55);
+  }
 
   if (J.z <= 0 && J.t > dt) land(s, input, p, events);
 }
@@ -545,7 +564,12 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   const absorb = saturate(finite(input.knee, 0.35));
   const edgeOK = kind === JUMP_NONE ? 1
     : foot === FOOT.Right && dir === DIR.Backward ? 1 - edgeMismatch(o, true) : 0;
-  const balance = saturate(Math.abs(s.balanceError) / Math.max(p.fallError, 1e-6));
+  // airPostureMode 1: touchdown starts a fresh contact, and the takeoff
+  // edge's balance error died with the takeoff. Whether the landing edge
+  // holds the lean the skater comes down with is not a score at this
+  // instant but the ice's to decide from the landing's own state — the
+  // solver's fall rules, from the next tick. 0: the error the takeoff left.
+  const balance = p.airPostureMode >= 1 ? 0 : saturate(Math.abs(s.balanceError) / Math.max(p.fallError, 1e-6));
   const landingQuality = saturate(1 - 0.90 * checkErr - 0.50 * (1 - absorb)
     - 0.35 * (1 - edgeOK) - 0.60 * balance
     - (twoFoot && kind !== JUMP_NONE ? TWO_FOOT_PENALTY : 0));
@@ -572,6 +596,7 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
 
   J.phase = JUMP_PHASE.None;
   if (J.takeoffTurn !== undefined) J.takeoffTurn = J.takeoffPivot = undefined;
+  if (J.takeoffBalanceError !== undefined) J.takeoffBalanceError = undefined;
   J.t = 0; J.z = 0; J.vz = 0; J.angMomentum = 0; J.inertia = p.inertiaOpen;
   J.armed = false; J.target = 0;
   s.yawRate = 0;
@@ -586,7 +611,8 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
     return;
   }
   // The impact the knee did not absorb goes into the balance loop, toward
-  // whichever way the body was already off.
+  // whichever way the body was already off. (airPostureMode 1: off the
+  // landing blade's equilibrium, which carries no lateral force yet — upright.)
   const off = s.lean - s.leanEq;
   s.leanRate += (off >= 0 ? 1 : -1) * p.landingShock * (1 - landingQuality);
 }

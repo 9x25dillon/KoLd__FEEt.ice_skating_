@@ -117,6 +117,8 @@ export interface JumpState {
   takeoffTurn?: number;
   /** rotationCallMode 1, through a takeoff: revolutions the feet have pivoted off the carve (yawDev) since the load began. */
   takeoffPivot?: number;
+  /** airPostureMode 1, blade-off to touchdown: the takeoff edge's balance error (lean less its equilibrium) as the blade left. Diagnostics only — never scored. */
+  takeoffBalanceError?: number;
   pushFrom?: number;
   pushLoad?: number;
   /** The support blade's edge code at the release tick. */
