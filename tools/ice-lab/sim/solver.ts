@@ -863,7 +863,8 @@ export function step(
       ? p.staminaBalanceNoiseBase * lerp(1, p.staminaBalanceNoiseMax, 1 - legsMul) * (2 * rng(s.tick)() - 1)
       : 0;
     // diagTakeoffBalance (test-only): the takeoff with the loop's counter-steer taken out, or not asked.
-    const takeoffDiag = p.diagTakeoffBalance > 0 && s.jump.phase === JUMP_PHASE.Load ? p.diagTakeoffBalance : 0;
+    const takeoffDiag = p.diagTakeoffBalance === 3 ? (s.jump.pushFrom !== undefined ? 1 : 0)
+      : p.diagTakeoffBalance > 0 && s.jump.phase === JUMP_PHASE.Load ? p.diagTakeoffBalance : 0;
     const aCmd = takeoffDiag === 1 ? g * tan(leanCmd) + noise
       : g * tan(leanCmd)
         + p.balanceKp * (s.lean - leanCmd)

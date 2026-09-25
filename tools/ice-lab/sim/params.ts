@@ -884,7 +884,8 @@ export interface Params {
    * balance loop does to a jump's takeoff. While a jump loads (and through a
    * push-off): 0, as always; 1, the loop's counter-steer — its lean-error and
    * lean-rate terms — is taken out, the lean's own feed-forward left; 2, the
-   * blade's edge command is held where it stands, the loop not asked at all.
+   * blade's edge command is held where it stands, the loop not asked at all;
+   * 3, the counter-steer out only through the push-off (pushOffMode).
    */
   diagTakeoffBalance: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
@@ -1325,7 +1326,7 @@ export function validate(p: Params): string[] {
   if (![0, 1].includes(p.toePickMode)) errs.push("toePickMode is 0 (the pick never trips) or 1 (a pick that bites going forward trips)");
   if (!(p.toePickEngage > 0 && p.toePickEngage < 0.5 * p.bladeLength)) errs.push("toePickEngage must lie between the blade's centre and its toe (0 .. bladeLength / 2)");
   if (!(p.toePickTripSpeed > 0)) errs.push("toePickTripSpeed must be positive");
-  if (![0, 1, 2].includes(p.diagTakeoffBalance)) errs.push("diagTakeoffBalance is a test-only diagnostic: 0, 1 (no counter-steer in a takeoff) or 2 (the edge held)");
+  if (![0, 1, 2, 3].includes(p.diagTakeoffBalance)) errs.push("diagTakeoffBalance is a test-only diagnostic: 0, 1 (no counter-steer in a takeoff), 2 (the edge held) or 3 (no counter-steer in the push-off)");
   if (![0, 1].includes(p.digOracle)) errs.push("digOracle is 0 (the dig pushes at the contact) or 1 (test oracle: at the asked contact)");
   if (![0, 1].includes(p.speedSpinMode)) errs.push("speedSpinMode is 0 (the block lifts) or 1 (it also turns the body)");
   if (![0, 1].includes(p.footMode)) errs.push("footMode is 0 (blades along the body) or 1 (each foot turns in its hip)");
