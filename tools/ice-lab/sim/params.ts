@@ -789,6 +789,20 @@ export interface Params {
    */
   pushOffMode: number;
   /**
+   * The push's mechanics (with pushOffMode 1). 0: the legs' upward speed is
+   * given — jumpImpulse, scaled by the load's timing and depth — and the
+   * leg itself barely extends through the push (the knee's rate limit):
+   * 2.44 m/s from ~2.5 cm of travel, which would take ~12 body weights, not
+   * the ~3 the blade carries. 1: the push drives the leg, at a constant
+   * force, from its loaded length to straight in the push's time (whole
+   * ticks of pushOffTime); the blade carries m (g + a) through the leg's
+   * own acceleration, and the takeoff leaves at the leg's speed as it
+   * straightens, 2 x travel / time from rest — plus the approach's vault
+   * as before. A deeper load is more travel, so more lift. Nothing authored:
+   * the travel is the leg's (comHeight, maxKneeCompression), the time the push's.
+   */
+  pushMechanicsMode: number;
+  /**
    * 0: once the trunk's torque is more than the edges can hold
    * (pivotCapacity), the feet pivot resisted only by the scrape's share of
    * it at once. 1: a pivoting blade still bears on the walls of the groove
@@ -1167,6 +1181,7 @@ export const DEFAULT_PARAMS: Params = {
   edgeCommitMode: 0,
   edgeCommitTime: 0.2,
   airPostureMode: 0,
+  pushMechanicsMode: 0,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -1358,6 +1373,8 @@ export function validate(p: Params): string[] {
   if (!(p.toePickTripSpeed > 0)) errs.push("toePickTripSpeed must be positive");
   if (![0, 1].includes(p.edgeCommitMode)) errs.push("edgeCommitMode is 0 (the loop trims a takeoff's edge) or 1 (the skater rides the committed edge)");
   if (!(p.edgeCommitTime > 0 && p.edgeCommitTime <= 1)) errs.push("edgeCommitTime is s of the load, more than 0 and at most 1");
+  if (![0, 1].includes(p.pushMechanicsMode)) errs.push("pushMechanicsMode is 0 (the legs' lift is given) or 1 (the push drives the leg straight)");
+  if (p.pushMechanicsMode === 1 && p.pushOffMode !== 1) errs.push("pushMechanicsMode 1 is the push-off's mechanics: it needs pushOffMode 1");
   if (![0, 1].includes(p.airPostureMode)) errs.push("airPostureMode is 0 (the lean frozen at blade-off) or 1 (torque-free flight, a fresh landing)");
   if (![0, 1, 2, 3, 4, 5].includes(p.diagTakeoffBalance)) errs.push("diagTakeoffBalance is a test-only diagnostic: 0, 1 (no counter-steer in a takeoff), 2 (the edge held), 3 (none in the push-off), 4 (no lean-error term) or 5 (no lean-rate term)");
   if (![0, 1].includes(p.digOracle)) errs.push("digOracle is 0 (the dig pushes at the contact) or 1 (test oracle: at the asked contact)");

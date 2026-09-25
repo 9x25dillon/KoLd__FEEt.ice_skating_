@@ -121,6 +121,15 @@ export interface JumpState {
   takeoffBalanceError?: number;
   pushFrom?: number;
   pushLoad?: number;
+  /**
+   * pushMechanicsMode 1, through a push-off: the leg's length (m) and rate
+   * (m/s) at the release, the push's constant acceleration of it (m/s^2),
+   * and the upward speed it straightens with at blade-off (m/s).
+   */
+  pushLeg0?: number;
+  pushLegRate0?: number;
+  pushAccel?: number;
+  pushLift?: number;
   /** The support blade's edge code at the release tick. */
   takeoffCode: number;
   /** JUMP index, or JUMP_NONE for a hop or an unrecognised takeoff. */
