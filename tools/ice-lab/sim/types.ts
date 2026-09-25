@@ -555,6 +555,13 @@ export interface SkaterState {
    */
   armsL?: number;
   /**
+   * Observability only, never set by createState: a tool that wants the
+   * trunk solve's torque budget attaches one (test/takeoff-budget.ts) and the
+   * solver fills it each tick the trunk is solved. Absent, nothing is written
+   * and no replay digest sees it.
+   */
+  torqueBudget?: TorqueBudget;
+  /**
    * pitchMode 1 only: the body's fore-aft lean, rad, + toward the support
    * blade's toe, and its rate; the contact's offset along the blade from its
    * centre, m, + toward the toe; and how long the pendulum's capture point
@@ -799,4 +806,26 @@ export interface EdgeEvent {
   prevDwell: number;
   /** Context: tilt at a change, slip speed at a skid, lean at a fall, TURN_KIND at a turn's cusp, revolutions at a twizzle's or a spin's end, seconds held at an Ina Bauer's end. */
   value: number;
+}
+
+/**
+ * One tick of the trunk solve (torqueMode), N m, counter-clockwise positive:
+ * what the body asked the ice for about the vertical and what it got.
+ */
+export interface TorqueBudget {
+  /** The shoulders' torque the whip asked, before armsWhipTorque caps it, and what they gave. */
+  armsAsked: number;
+  arms: number;
+  /** The trunk's muscles on the upper body, and the hip's on the free leg. */
+  trunk: number;
+  leg: number;
+  /** What the lower body needed from the ice to stay on the carve, and the most the edges can hold (pivotCapacity). */
+  need: number;
+  cap: number;
+  /** What the ice gave: all of `need` while it holds; the scrape's share of `cap` once the feet pivot. */
+  ice: number;
+  pivoting: boolean;
+  /** kg m^2: the lower and upper bodies this tick. */
+  Il: number;
+  Iu: number;
 }

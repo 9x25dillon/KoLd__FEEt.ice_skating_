@@ -198,6 +198,28 @@ export function armsWhip(J: JumpState, input: SkatingInput, p: Params, tick: num
 }
 
 /**
+ * rad/s: the body's spin about the vertical at inertiaOpen — what a takeoff
+ * now would leave with before the whip, the turn's carry and the quality —
+ * from the carve's rate and, with the trunk (torqueMode), each body's own
+ * spin past it, the free leg's and the arms' swing.
+ */
+export function bodyRate(s: SkaterState, p: Params, carriage: number): number {
+  let rate = p.jumpRotBias * s.yawRate;
+  if (s.twistRate !== undefined) {
+    const dev = s.yawDev ?? 0, Iu = upperInertia(p, carriage);
+    rate = p.jumpRotBias * (s.yawRate - dev) + ((p.lowerBodyInertia + Iu) * dev + Iu * s.twistRate) / p.inertiaOpen;
+    // The free leg (freeLegMode) leaves with its own swing too.
+    if (s.freeSwingRate !== undefined) {
+      const If = p.freeLegMass * p.mass * p.freeLegReach * p.freeLegReach;
+      rate += If * (dev + s.freeSwingRate) / p.inertiaOpen;
+    }
+    // And the arms (armsWhipMode) with what they swung up on the ice.
+    if (s.armsL !== undefined) rate += s.armsL / p.inertiaOpen;
+  }
+  return rate;
+}
+
+/**
  * On the ice, once per tick, after the carve solve: is the knee loading, and
  * has it just been released? A no-op unless jumpMode is on, so every recorded
  * measurement taken with it off still measures the same thing.
@@ -310,18 +332,7 @@ export function jumpGround(
   // each at its own inertia. A twist cannot make spin by itself — only the
   // ice holding the feet while the shoulders swing can — so a release that
   // pivots the feet instead leaves with nothing.
-  let rate = p.jumpRotBias * s.yawRate;
-  if (s.twistRate !== undefined) {
-    const dev = s.yawDev ?? 0, Iu = upperInertia(p, finite(input.carriage, 0));
-    rate = p.jumpRotBias * (s.yawRate - dev) + ((p.lowerBodyInertia + Iu) * dev + Iu * s.twistRate) / p.inertiaOpen;
-    // The free leg (freeLegMode) leaves with its own swing too.
-    if (s.freeSwingRate !== undefined) {
-      const If = p.freeLegMass * p.mass * p.freeLegReach * p.freeLegReach;
-      rate += If * (dev + s.freeSwingRate) / p.inertiaOpen;
-    }
-    // And the arms (armsWhipMode) with what they swung up on the ice.
-    if (s.armsL !== undefined) rate += s.armsL / p.inertiaOpen;
-  }
+  const rate = bodyRate(s, p, finite(input.carriage, 0));
   J.angMomentum = p.jumpMode >= JUMP_MODE.Full
     ? p.inertiaOpen * Math.max(0, rate + s.spinCarry + vaultSpin / p.inertiaOpen + p.jumpWhip * whip) * (0.80 + 0.20 * q)
     : 0;

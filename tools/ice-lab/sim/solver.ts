@@ -337,7 +337,7 @@ function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input
   const [heldRate, heldTau] = trunk(dt / Iu, twistRate + dev0);
   const need = heldTau + leg + arms - Il * dev0 / dt;
   const cap = pivotCapacity(s, p);
-  let dev: number, rate: number, pivoting = false;
+  let dev: number, rate: number, pivoting = false, trunkTau = heldTau, iceTau = need;
   if (Math.abs(need) <= cap) {
     dev = 0; rate = heldRate;
   } else {
@@ -349,7 +349,7 @@ function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input
     const [freeRate, freeTau] = trunk(dt * (1 / Iu + 1 / Il), twistRate - ice / Il * dt);
     dev = dev0 + (ice - freeTau) / Il * dt - (leg + arms) / (Il + Iu) * dt;
     rate = freeRate;
-    pivoting = true;
+    pivoting = true; trunkTau = freeTau; iceTau = ice;
   }
   // The leg's own rate, against the hips: its torque — and, when the body
   // pivots, the body's turn back under it, so angular momentum adds up.
@@ -358,6 +358,9 @@ function trunkTorque(s: SkaterState, p: Params, dt: number, steer: number, input
     s.freeSwing = (s.freeSwing ?? 0) + s.freeSwingRate * dt;
   }
   if (s.armsL !== undefined) s.armsL += arms * dt;
+  if (s.torqueBudget) Object.assign(s.torqueBudget, {
+    arms, trunk: trunkTau, leg, need, cap, ice: iceTau, pivoting, Il, Iu,
+  });
   s.yawDev = dev;
   s.twistRate = rate;
   s.twist = twist + rate * dt;
@@ -379,6 +382,7 @@ function armsWhipTorque(s: SkaterState, p: Params, input: SkatingInput, dt: numb
   if (s.jump.phase !== JUMP_PHASE.Load) { s.armsL = 0; return 0; }
   s.armsL ??= 0;
   const want = p.inertiaOpen * p.jumpWhip * armsWhip(s.jump, input, p, s.tick, dt, true);
+  if (s.torqueBudget) s.torqueBudget.armsAsked = (want - s.armsL) / dt;
   return clamp((want - s.armsL) / dt, -p.armsWhipTorque, p.armsWhipTorque);
 }
 
