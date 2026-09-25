@@ -1,6 +1,7 @@
 // The double loop against its measured envelope, like for like.
 //
 //   node test/loop-calibration.ts [--set key=value ...]
+//   node test/loop-calibration.ts push [--set key=value ...]   the push's time swept, pushMechanicsMode on
 //
 // The reference is the women's double loop of Frontiers in Sports and Active
 // Living 2025, "Comparisons of angular momentum at takeoff in six types of
@@ -64,10 +65,28 @@ export function measure(p: Params, height: number) {
 const CALL = ["clean", "q", "<", "<<"];
 const sd = (v: number, [m, s]: readonly [number, number]) => `${((v - m) / s >= 0 ? "+" : "")}${((v - m) / s).toFixed(1)} sd`;
 
+/**
+ * The push (pushMechanicsMode): the leg's travel is the body's own, so the
+ * push's time is what sets the lift. Swept 0.12-0.35 s — the youth axels of
+ * Frontiers in Bioengineering 2025 (PMC12434041) take 0.34-0.37 s from the
+ * lowest point to blade-off, the constant-force push is its idealisation.
+ */
+function printPushSweep(base: Params): void {
+  console.log("push s | body | vz m/s | flight s | L/(m h^2) x10^-3 | air deg | call");
+  for (const T of [0.12, 0.15, 0.2, 0.22, 0.25, 0.28, 0.3, 0.35]) {
+    const p = { ...base, pushMechanicsMode: 1, pushOffTime: T };
+    for (const [name, q, h] of [["production", p, statureOf(p)], ["cohort", cohortBody(p), COHORT.height]] as [string, Params, number][]) {
+      const m = measure(q, h);
+      console.log(`${T} | ${name} | ${m.vz.toFixed(2)} | ${m.flight.toFixed(3)} (${sd(m.flight, REFERENCE.flight)}) | ${(m.Lnorm * 1e3).toFixed(1)} (${sd(m.Lnorm, REFERENCE.Lnorm)}) | ${m.airDeg.toFixed(0)} | ${m.tookOff ? `${m.revolutions}Lo ${CALL[m.call]}${m.fell ? ", fell" : ""}` : "no takeoff"}`);
+    }
+  }
+}
+
 if (import.meta.main) {
   const base = { ...overridden(process.argv.slice(2)) };
   for (const k of ["pushOffMode", "normalLoadMode", "rotationCallMode"] as const)
     if (!process.argv.includes(`${k}=0`)) (base as unknown as Record<string, number>)[k] = 1;
+  if (process.argv[2] === "push") { printPushSweep(base); process.exit(0); }
   const bodies: [string, Params, number][] = [["production", base, statureOf(base)], ["cohort", cohortBody(base), COHORT.height]];
   console.log("body | kg | m | L | L/(m h^2) x10^-3 | flight s | air deg | air deg/s | mean I | vz m/s | impulse N s | edge deg | pivot deg | call");
   for (const [name, p, h] of bodies) {
