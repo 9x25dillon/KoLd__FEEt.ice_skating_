@@ -51,7 +51,18 @@ The goal is a double loop that emerges from the physics and lands, matched again
    `node test/loop-calibration.ts push`. **[operator]** the push time to canonicalise (0.12 stays the
    default until then). A longer push costs takeoff L with today's scripts (94 → 64 ×10⁻³ at 0.25 s: the free
    leg swings long before blade-off) — item 3's re-run is where the swing is re-timed.
-3. **Swing-through — the 2Lo's L reached (2026-09-25, branch `swing-through`).** Operator's decisions: the
+3a. **The landing chain, owned (2026-09-25, branch `landing-chain`; telemetry only).** `node test/landing-chain.ts`.
+   The takeoff (frozen, #49) leaves the body facing **exactly backward along its travel** — the edge turns
+   heading and travel together — so the measured 470° of air lands it **107° off its travel, crossways**
+   (check 0.375 s: 476°); a backward landing would need 720° in the air. The blade then scrubs 221 N s sideways
+   0.85 m below the CoM; the impact would change the lean's rate by +4.3 rad/s — **the model's contact applies
+   none of it** (the lean is a point mass; nothing in land() touches it) and **the touchdown deletes the air's
+   spin** (16.2 → 0; r × J accounts for 2.0). Where `landingShock` runs, it is +0.35-1.17 rad/s, opposite in sign
+   to the impact's prediction in 4 of 5 checks. **[operator]** which owner to take first: (1) the takeoff's
+   facing relative to travel — where a real loop's ~250° of on-ice turn relative to the CoM's path comes from
+   (needs a source); (2) the touchdown's contact physics (the impulse on the lean; the spin carried into the
+   landing edge instead of deleted); (3) `landingShock`, which physics (2) would replace.
+3. **Swing-through — the 2Lo's L reached (2026-09-25, branch `swing-through`, merged #49).** Operator's decisions: the
    free-leg actuator on the push's *time* clock (extension stays a diagnostic); the leg swings *through*
    blade-off; the hip ceiling unchanged and tagged AUTHORED, UNVALIDATED. `freeLegSwingThroughMode` 1 drops the
    hip PD's pose-completion braking (the damper toward a held pose's zero speed; the spring past an overshot
