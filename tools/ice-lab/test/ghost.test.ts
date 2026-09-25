@@ -87,8 +87,9 @@ test("a trick without a stride entry still spawns at its entry state, pad releas
 
 test("strokes: from the player's speed, LT, RT… for 3 s, standing — every heading", () => {
   // MEASURED at 0.8, 2.4 and -2.3 rad alike: 1 (a glide from a standstill)
-  // -> 2.475 m/s after 3 s of strokes; 3 -> 4.280; 5 -> 5.984; 7 -> 7.582.
-  for (const angle of ANGLES) for (const [v0, v3] of [[0, 2.475], [3, 4.280], [5, 5.984], [7, 7.582]]) {
+  // -> 2.447 m/s after 3 s of strokes; 3 -> 4.276; 5 -> 5.984; 7 -> 7.582.
+  // (2.475 and 4.280 before a push at a crawl landed on both feet.)
+  for (const angle of ANGLES) for (const [v0, v3] of [[0, 2.447], [3, 4.276], [5, 5.984], [7, 7.582]]) {
     const r = perform("strokes", angle, v0);
     assert.equal(r.s.fallen, false);
     assert.equal(r.respawned, false);
