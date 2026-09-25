@@ -234,13 +234,21 @@ export interface Params {
   callDowngrade: number;
   /**
    * 0: a jump is called from what it turned in the air alone. 1: at first
-   * touchdown, from the turn the takeoff made on the ice (from where the body
-   * faced as the load began) — credited up to callTakeoffCredit, past which
-   * it is a cheated takeoff — plus the air's; the takeoff's, air's and
-   * landing's rotation are reported apart (JumpResult).
+   * touchdown, from the turn the takeoff edge's own curve carried the body
+   * through on the ice (from where it faced as the load began) — credited
+   * up to callTakeoffCredit — plus the air's; the feet pivoting or skidding
+   * off the edge is never credited, and past a q's worth (callQuarter) is a
+   * cheated takeoff. The takeoff's, air's and landing's rotation are
+   * reported apart (JumpResult).
    */
   rotationCallMode: number;
-  /** rev. The most of a takeoff's turn on the ice the call credits. Authored: a quarter, the panel's usual tolerance for a pre-rotated takeoff. */
+  /**
+   * rev. The most of a takeoff edge's turn on the ice the call credits.
+   * Authored: half, the operator's choice (2026-09-25). A measured double
+   * loop turns 470 deg in the air (Frontiers in Sports and Active Living
+   * 2025), so a clean one is carried the rest of the way by its takeoff
+   * edge; a quarter would downgrade it.
+   */
   callTakeoffCredit: number;
   /** Takeoff-edge error that draws ! and e; the same file. */
   callEdgeUnclear: number;
@@ -965,7 +973,7 @@ export const DEFAULT_PARAMS: Params = {
   callUnder: 0.25,
   callDowngrade: 0.5,
   rotationCallMode: 0,
-  callTakeoffCredit: 0.25,
+  callTakeoffCredit: 0.5,
   callEdgeUnclear: 0.25,
   callEdgeWrong: 0.55,
   jumpAssist: 0.25,          // the operator's override of spec, like jumps themselves; 0 is the package

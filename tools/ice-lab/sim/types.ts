@@ -115,6 +115,8 @@ export interface JumpState {
    */
   entryHeading?: number;
   takeoffTurn?: number;
+  /** rotationCallMode 1, through a takeoff: revolutions the feet have pivoted off the carve (yawDev) since the load began. */
+  takeoffPivot?: number;
   pushFrom?: number;
   pushLoad?: number;
   /** The support blade's edge code at the release tick. */
@@ -168,12 +170,17 @@ export interface JumpResult {
   /**
    * rotationCallMode 1 only, kept apart: revolutions turned on the ice
    * through the takeoff (from where the body faced as the load began to the
-   * blade leaving), in the air (blade-off to first touchdown), and after
-   * touchdown over LANDING_SETTLE (never credited). The call is made at first
-   * touchdown from the takeoff's turn, credited up to callTakeoffCredit,
-   * plus the air's; past that credit the takeoff is cheated.
+   * blade leaving) — split into what the takeoff edge's own curve carried
+   * (takeoffEdge) and what the feet pivoted or skidded off it (takeoffPivot)
+   * — in the air (blade-off to first touchdown), and after touchdown over
+   * LANDING_SETTLE (never credited). The call is made at first touchdown
+   * from the edge's turn, credited up to callTakeoffCredit, plus the air's;
+   * a pivot past a q's worth, or an edge's turn past the credit, is a
+   * cheated takeoff.
    */
   takeoffTurn?: number;
+  takeoffEdge?: number;
+  takeoffPivot?: number;
   airborne?: number;
   residual?: number;
   cheatedTakeoff?: boolean;

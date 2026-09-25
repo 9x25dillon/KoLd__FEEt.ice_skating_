@@ -239,7 +239,7 @@ export function jumpGround(
   if (s.fallen || s.supportMode === 0) {
     J.phase = JUMP_PHASE.None;
     if (J.pushFrom !== undefined) J.pushFrom = J.pushLoad = undefined;
-    if (J.entryHeading !== undefined) J.entryHeading = undefined;
+    if (J.entryHeading !== undefined) J.entryHeading = J.takeoffPivot = undefined;
     return;
   }
 
@@ -265,7 +265,7 @@ export function jumpGround(
       J.phase = JUMP_PHASE.Load;
       J.t = 0; J.peakKnee = s.knee; J.preRotation = 0; J.setup = 0; J.toeInLoad = false;
       // rotationCallMode: the takeoff's reference — where the body faces as the load begins.
-      if (p.rotationCallMode >= 1) J.entryHeading = atan2(s.heading.y, s.heading.x);
+      if (p.rotationCallMode >= 1) { J.entryHeading = atan2(s.heading.y, s.heading.x); J.takeoffPivot = 0; }
     }
     return;
   }
@@ -273,13 +273,16 @@ export function jumpGround(
   // ── LOAD ──────────────────────────────────────────────────────────────────
   // Knee compression sets the vertical impulse. Hold too long and the edge
   // rotates underneath you before you leave the ice: pre-rotation.
+  // rotationCallMode: of the body's turn through the takeoff, what the feet
+  // pivoted off the carve (yawDev) — the rest is the takeoff edge's own curve.
+  if (J.takeoffPivot !== undefined) J.takeoffPivot += (s.yawDev ?? 0) * dt / (2 * Math.PI);
   if (J.pushFrom === undefined) {
     J.t += dt;
     J.peakKnee = Math.max(J.peakKnee, s.knee);
     J.setup += o * dt;
     if (input.toe) J.toeInLoad = true;
     if (J.t > IDEAL_LOAD * 1.6) J.preRotation += PRE_ROTATION_RATE * dt;
-    if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; if (J.entryHeading !== undefined) J.entryHeading = undefined; return; }
+    if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; if (J.entryHeading !== undefined) J.entryHeading = J.takeoffPivot = undefined; return; }
     if (kneeIn >= p.jumpReleaseKnee) return;
     // Mid-move the blade is not on an edge to leave from: the release waits for
     // the exit edge, and takes off from it (sim/moves.ts).
@@ -513,11 +516,15 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
 
   let kind = J.kind;
   // rotationCallMode 1: the jump is called at this first touchdown from the
-  // turn made through the takeoff on the ice, credited up to
-  // callTakeoffCredit, plus what was turned in the air; what turns after
-  // this instant never counts. 0: the air alone, as before.
+  // turn the takeoff edge carried the body through on the ice, credited up
+  // to callTakeoffCredit, plus what was turned in the air; what the feet
+  // pivoted or skidded off the edge is never credited, and past a q's worth
+  // it is a cheated takeoff; what turns after this instant never counts.
+  // 0: the air alone, as before.
   const takeoffTurn = p.rotationCallMode >= 1 ? J.takeoffTurn ?? 0 : 0;
-  const credited = Math.min(Math.max(takeoffTurn, 0), p.callTakeoffCredit);
+  const takeoffPivot = p.rotationCallMode >= 1 ? J.takeoffPivot ?? 0 : 0;
+  const takeoffEdge = takeoffTurn - takeoffPivot;
+  const credited = Math.min(Math.max(takeoffEdge, 0), p.callTakeoffCredit);
   const counted = turned + credited;
   // Where the body faces at touchdown, from the reference: every bit of the takeoff's turn.
   const facing = J.rotation + 2 * Math.PI * takeoffTurn;
@@ -552,7 +559,8 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
     height: J.height, airTime: J.t, peakOmega: J.peakOmega,
     twoFoot, stepOut: !fall && landingQuality < 0.34, fall, armed: J.armed,
     ...(p.rotationCallMode >= 1 ? {
-      takeoffTurn, airborne: turned, residual: 0, cheatedTakeoff: takeoffTurn > p.callTakeoffCredit,
+      takeoffTurn, takeoffEdge, takeoffPivot, airborne: turned, residual: 0,
+      cheatedTakeoff: takeoffPivot > p.callQuarter || takeoffEdge > p.callTakeoffCredit,
     } : {}),
   };
 
@@ -563,7 +571,7 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   });
 
   J.phase = JUMP_PHASE.None;
-  if (J.takeoffTurn !== undefined) J.takeoffTurn = undefined;
+  if (J.takeoffTurn !== undefined) J.takeoffTurn = J.takeoffPivot = undefined;
   J.t = 0; J.z = 0; J.vz = 0; J.angMomentum = 0; J.inertia = p.inertiaOpen;
   J.armed = false; J.target = 0;
   s.yawRate = 0;
