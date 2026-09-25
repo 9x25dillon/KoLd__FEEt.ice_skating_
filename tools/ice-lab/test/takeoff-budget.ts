@@ -6,6 +6,8 @@
 //   node test/takeoff-budget.ts transition [held|direct|pad] [--hook h] [--free-leg-at s]
 //                                                           L by segment through glide, load, push
 //   node test/takeoff-budget.ts hook [held|direct]          the hook's table, arc tightening 0-0.3
+//   node test/takeoff-budget.ts takeoff [held|...] [--hook h] [--free-leg-at s] [--free-leg-to 0|1]
+//                                                           the load to blade-off, tick by tick: headings, arc, steering
 //   node test/takeoff-budget.ts free-leg [held|direct]      the free leg's table, swung at +0-0.5 s into the load
 //   node test/takeoff-budget.ts sweep                       the shoulders' cap, 20-60 N m, one row each
 //   ... --set pushOffMode=1                                 either, on a candidate's Params
@@ -72,6 +74,10 @@ export interface Frame {
   seg: Segments | null;
   /** The push-off (pushOffMode) under way. */
   pushing: boolean; heading: number;
+  /** rad: the support blade's heading, the shoulders' (heading + twist), the centre of mass's travel. */
+  bladeHeading: number; shoulderHeading: number; travel: number;
+  /** m: the support blade's arc; 1/m: the curvature the balance loop asked for and the one the skater followed (yaw rate / speed). */
+  radius: number; kappaAsked: number; kappaActual: number; speed: number;
 }
 
 export interface Outcome {
@@ -131,9 +137,12 @@ const LOAD_AT = 1, LOAD_S = 0.5, SWING_AT = 0.2, SPEED = 6;
  * this much (toward -1) over the last HOOK_S of the load and through the
  * push — the arc tightening into the takeoff. freeLegAt: s after the load
  * begins that the free leg swings to freeLegTo (1 forward, the default; 0
- * back); otherwise it rests (0.5).
+ * back); otherwise it rests (0.5). toe: the contact asked toward the toe
+ * (pitch, 0..1) over the same last HOOK_S of the load and through the push —
+ * or, with toeAt, held from toeAt s after the load begins (the pendulum
+ * moves the contact the other way first: a lean onto the toe begins early).
  */
-export interface Variation { hook?: number; freeLegAt?: number; freeLegTo?: number }
+export interface Variation { hook?: number; freeLegAt?: number; freeLegTo?: number; toe?: number; toeAt?: number }
 const HOOK_S = 0.15;
 
 export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation = {}): Outcome {
@@ -159,9 +168,10 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
       const hooking = t >= LOAD_AT + LOAD_S - HOOK_S ? Math.min(1, (t - (LOAD_AT + LOAD_S - HOOK_S)) / HOOK_S) : 0;
       const lean = Math.max(-1, -0.8 - (v.hook ?? 0) * hooking);
       const freeLeg = v.freeLegAt !== undefined && t >= LOAD_AT + v.freeLegAt ? v.freeLegTo ?? 1 : 0.5;
+      const pitch = (v.toe ?? 0) * (v.toeAt !== undefined ? Number(t >= LOAD_AT + v.toeAt) : hooking);
       input = air
         ? { ...NEUTRAL_INPUT, knee: 0.35, weight: 1, carriage: sinceTakeoff >= check ? 1 : 0 }
-        : { ...NEUTRAL_INPUT, lean, weight: 1, knee: t >= LOAD_AT && t < LOAD_AT + LOAD_S ? 1 : 0.35, freeLeg,
+        : { ...NEUTRAL_INPUT, lean, pitch, weight: 1, knee: t >= LOAD_AT && t < LOAD_AT + LOAD_S ? 1 : 0.35, freeLeg,
             windup: t >= LOAD_AT ? windup : 0, carriage: t >= LOAD_AT ? Math.abs(windup) / 0.7 : 0 };
     }
     const events: EdgeEvent[] = [];
@@ -190,6 +200,9 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
       inertia: inAir ? s.jump.inertia : p.inertiaOpen, carriage,
       seg: inAir ? null : segments(s, p, carriage), pushing: s.jump.pushFrom !== undefined,
       heading: Math.atan2(s.heading.y, s.heading.x),
+      bladeHeading: Math.atan2(b.tangent.y, b.tangent.x), shoulderHeading: Math.atan2(s.heading.y, s.heading.x) + (s.twist ?? 0),
+      travel: Math.atan2(s.vel.y, s.vel.x), radius: b.turnRadius, kappaAsked: balance?.kappa ?? 0,
+      kappaActual: Math.hypot(s.vel.x, s.vel.y) > 0.1 ? s.yawRate / Math.hypot(s.vel.x, s.vel.y) : 0, speed: Math.hypot(s.vel.x, s.vel.y),
     });
   }
   return {
@@ -334,6 +347,37 @@ function printFreeLeg(base: Params, kind: Attempt): void {
   }
 }
 
+/** The takeoff tick by tick, from the load's start to the blade leaving (headings relative to the load's start, deg). */
+function printTakeoff(kind: Attempt, base: Params, v: Variation): void {
+  const r = attempt(kind, base, Infinity, v);
+  const ice = r.frames.filter(f => f.phase === JUMP_PHASE.Load && f.seg);
+  if (!ice.length) { console.log("no load"); return; }
+  const h0 = ice[0].heading, deg = (a: number) => fx(Math.atan2(Math.sin(a - h0), Math.cos(a - h0)) * 180 / Math.PI, 1);
+  console.log("t | push | body° | blade° | shoulder° | travel° | tilt | radius m | κ asked | κ actual | yaw rate | speed | contact | load N | yaw slip | freeLeg L | L");
+  for (const f of ice) console.log([fx(f.t, 3), f.pushing ? "P" : "", deg(f.heading), deg(f.bladeHeading), deg(f.shoulderHeading), deg(f.travel), fx(f.tilt),
+    fx(Math.min(f.radius, 99), 2), fx(f.kappaAsked, 3), fx(f.kappaActual, 3), fx(f.yawRate), fx(f.speed), fx(f.contactS), fx(f.load, 0), fx(f.yawSlip), fx(f.seg!.freeLeg, 1), fx(f.L, 1)].join(" | "));
+  const j = r.result;
+  console.log(`# takeoff L ${fx(r.L, 1)}; edge ${fx((j.takeoffEdge ?? 0) * 360, 0)}°, pivot ${fx((j.takeoffPivot ?? 0) * 360, 0)}°, air ${fx((j.airborne ?? j.turned) * 360, 0)}°, flight ${fx(j.airTime, 3)} s`);
+}
+
+/**
+ * The balance loop's A/B on the takeoff: the same held loop (free leg swung
+ * back 0.5 s in), the balance loop as always (A) or with diagTakeoffBalance
+ * 1 / 2 (B, diagnostic only), the contact kept mid-blade or rocked toward the
+ * toe over the last HOOK_S, with and without the hook.
+ */
+function printAB(base: Params): void {
+  console.log("balance | toe | hook | edge° | pivot° | air° | min radius m | max |yaw rate| | takeoff L | flight s | result");
+  console.log("(toe asked from the load's start; contact = the support blade's at blade-off, 0 heel .. 1 toe)");
+  for (const diag of [0, 1]) for (const toe of [0, 0.5, 1]) for (const hook of [0, 0.2]) {
+    const p = { ...base, diagTakeoffBalance: diag };
+    const r = attempt("held", p, Infinity, { freeLegAt: 0.5, freeLegTo: 0, toe, toeAt: 0, hook });
+    const ice = r.frames.filter(f => f.phase === JUMP_PHASE.Load && f.seg), j = r.result;
+    const minR = Math.min(...ice.map(f => f.radius)), maxYaw = Math.max(...ice.map(f => Math.abs(f.yawRate)));
+    console.log(`${["A", "B1 no counter-steer", "B2 edge held"][diag]} | ${toe} (contact ${fx(ice.at(-1)?.contactS ?? 0)}) | ${hook} | ${fx((j.takeoffEdge ?? 0) * 360, 0)} | ${fx((j.takeoffPivot ?? 0) * 360, 0)} | ${fx((j.airborne ?? j.turned) * 360, 0)} | ${fx(minR, 2)} | ${fx(maxYaw)} | ${fx(r.L, 1)} | ${fx(j.airTime, 3)} | ${r.takeoff < 0 ? (r.fallen ? "fell on the ice" : "no takeoff") : `${j.revolutions} rev ${["clean", "q", "<", "<<"][j.rotationCall]}${j.fall ? ", fell" : ""}`}`);
+  }
+}
+
 function printSweep(base: Params): void {
   for (const kind of ["direct", "pad"] as Attempt[]) {
     console.log(`\n${kind}: cap N m | peak grip N m | peak slip rad/s | slip rad | takeoff ω rad/s | takeoff L | air ω peak | tucked rev | best landing`);
@@ -356,7 +400,9 @@ if (import.meta.main) {
   const args = process.argv.slice(2), base = overridden(args);
   const [mode, kind, cap] = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
   const num = (flag: string) => { const i = args.indexOf(flag); return i >= 0 ? Number(args[i + 1]) : undefined; };
-  if (mode === "hook") printHook(base, (kind as Attempt) ?? "held");
+  if (mode === "takeoff") printTakeoff((kind as Attempt) ?? "held", base, { hook: num("--hook"), freeLegAt: num("--free-leg-at"), freeLegTo: num("--free-leg-to"), toe: num("--toe"), toeAt: num("--toe-at") });
+  else if (mode === "ab") printAB(base);
+  else if (mode === "hook") printHook(base, (kind as Attempt) ?? "held");
   else if (mode === "free-leg") printFreeLeg(base, (kind as Attempt) ?? "held");
   else if (mode === "transition") printTransition((kind as Attempt) ?? "held", base, { hook: num("--hook"), freeLegAt: num("--free-leg-at") });
   else if (mode === "balance") printBalance((kind as Attempt) ?? "held", base);

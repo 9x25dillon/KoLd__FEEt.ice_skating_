@@ -862,10 +862,13 @@ export function step(
     const noise = staminaOn
       ? p.staminaBalanceNoiseBase * lerp(1, p.staminaBalanceNoiseMax, 1 - legsMul) * (2 * rng(s.tick)() - 1)
       : 0;
-    const aCmd = g * tan(leanCmd)
-      + p.balanceKp * (s.lean - leanCmd)
-      + p.balanceKd * s.leanRate
-      + noise;
+    // diagTakeoffBalance (test-only): the takeoff with the loop's counter-steer taken out, or not asked.
+    const takeoffDiag = p.diagTakeoffBalance > 0 && s.jump.phase === JUMP_PHASE.Load ? p.diagTakeoffBalance : 0;
+    const aCmd = takeoffDiag === 1 ? g * tan(leanCmd) + noise
+      : g * tan(leanCmd)
+        + p.balanceKp * (s.lean - leanCmd)
+        + p.balanceKd * s.leanRate
+        + noise;
     const kappaMax = sin(pFatigue.maxTilt) / rhoSupport;
     const kappa = clamp(aCmd / v2sq, -kappaMax, kappaMax);
     let tiltTarget = asinClamped(kappa * rhoSupport);
@@ -897,7 +900,7 @@ export function step(
     const afterAngulation = tiltTarget;
     tiltTarget = clamp(tiltTarget, -pEff.maxTilt, pEff.maxTilt);
     const alpha = pEff.controlLatency > 1e-4 ? Math.min(1, dt / pEff.controlLatency) : 1;
-    s.tiltCmd += (tiltTarget - s.tiltCmd) * alpha;
+    if (takeoffDiag !== 2) s.tiltCmd += (tiltTarget - s.tiltCmd) * alpha;
     if (s.balanceBudget) Object.assign(s.balanceBudget, {
       leanCmd, lean: s.lean, leanRate: s.leanRate,
       gTan: g * tan(leanCmd), kp: p.balanceKp * (s.lean - leanCmd), kd: p.balanceKd * s.leanRate, noise, aCmd,
