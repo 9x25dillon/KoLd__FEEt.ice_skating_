@@ -568,6 +568,8 @@ export interface SkaterState {
    * and no replay digest sees it.
    */
   torqueBudget?: TorqueBudget;
+  /** Observability only, like torqueBudget: the balance controller's terms this tick (test/takeoff-budget.ts). */
+  balanceBudget?: BalanceBudget;
   /**
    * pivotGrooveMode 1 only: rad the lower body has pivoted off the carve
    * since its blades last held; 0 while they hold. Across the groove's angle
@@ -841,4 +843,22 @@ export interface TorqueBudget {
   /** kg m^2: the lower and upper bodies this tick. */
   Il: number;
   Iu: number;
+}
+
+/**
+ * One tick of the balance controller (sim/solver.ts section 2): how the lean
+ * asked for became the blade's edge. Accelerations m/s^2, angles rad.
+ */
+export interface BalanceBudget {
+  leanCmd: number; lean: number; leanRate: number;
+  /** aCmd's terms: g tan(leanCmd), balanceKp (lean - leanCmd), balanceKd leanRate, the fatigue noise. */
+  gTan: number; kp: number; kd: number; noise: number; aCmd: number;
+  /** m^2/s^2 the curvature is read against (speed squared, floored), the curvature asked and its clamp. */
+  v2: number; kappa: number; kappaMax: number;
+  /** m: the support blade's rocker radius at its contact. */
+  rho: number;
+  /** The tilt target at each stage: from the curvature, after the scrape's own rule, after angulation, after maxTilt. */
+  fromKappa: number; afterScrape: number; afterAngulation: number; target: number;
+  /** The blade command after the control latency, and which rules bit: 1 kappa clamp, 2 scrape rule, 4 angulation, 8 maxTilt. */
+  tiltCmd: number; clamps: number;
 }

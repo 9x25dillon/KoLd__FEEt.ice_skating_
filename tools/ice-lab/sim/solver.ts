@@ -854,6 +854,7 @@ export function step(
     const kappaMax = sin(pFatigue.maxTilt) / rhoSupport;
     const kappa = clamp(aCmd / v2sq, -kappaMax, kappaMax);
     let tiltTarget = asinClamped(kappa * rhoSupport);
+    const fromKappa = tiltTarget;
     // SCRAPING, the edge sets the scrape, not a curve: the skater digs in on
     // the side the scrape pushes toward, as deep as the lean needs, and never
     // offers it the other edge. Whether the body can get there is the
@@ -874,12 +875,22 @@ export function step(
         ? into * asinClamped(clamp((want - base) / perSin, 0, sin(pFatigue.maxTilt)))
         : 0;
     }
+    const afterScrape = tiltTarget;
     // Angulation: the blade may run deeper than the body leans, but only so
     // far. This gap is most of what "edge quality" means to a judge.
     tiltTarget = clamp(tiltTarget, s.lean - pEff.angulationLimit, s.lean + pEff.angulationLimit);
+    const afterAngulation = tiltTarget;
     tiltTarget = clamp(tiltTarget, -pEff.maxTilt, pEff.maxTilt);
     const alpha = pEff.controlLatency > 1e-4 ? Math.min(1, dt / pEff.controlLatency) : 1;
     s.tiltCmd += (tiltTarget - s.tiltCmd) * alpha;
+    if (s.balanceBudget) Object.assign(s.balanceBudget, {
+      leanCmd, lean: s.lean, leanRate: s.leanRate,
+      gTan: g * tan(leanCmd), kp: p.balanceKp * (s.lean - leanCmd), kd: p.balanceKd * s.leanRate, noise, aCmd,
+      v2: v2sq, kappa, kappaMax, rho: rhoSupport, fromKappa, afterScrape, afterAngulation, target: tiltTarget,
+      tiltCmd: s.tiltCmd,
+      clamps: (Math.abs(aCmd / v2sq) > kappaMax ? 1 : 0) | (afterScrape !== fromKappa ? 2 : 0)
+        | (afterAngulation !== afterScrape ? 4 : 0) | (tiltTarget !== afterAngulation ? 8 : 0),
+    });
   } else if (!turning) {
     s.tiltCmd += (0 - s.tiltCmd) * Math.min(1, dt / 0.3);
   }
