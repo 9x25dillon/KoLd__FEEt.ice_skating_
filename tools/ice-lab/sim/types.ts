@@ -103,6 +103,13 @@ export interface JumpState {
   armed: boolean;
   /** Radians the assist is flying the rotation to; 0 when it is not. */
   target: number;
+  /**
+   * pushOffMode 1 only, and only between a release and its takeoff: the
+   * tick the knee was released, and the load (N) above the body's weight
+   * the push puts through the blade until it leaves. Otherwise absent.
+   */
+  pushFrom?: number;
+  pushLoad?: number;
   /** The support blade's edge code at the release tick. */
   takeoffCode: number;
   /** JUMP index, or JUMP_NONE for a hop or an unrecognised takeoff. */
@@ -561,6 +568,12 @@ export interface SkaterState {
    * and no replay digest sees it.
    */
   torqueBudget?: TorqueBudget;
+  /**
+   * pivotGrooveMode 1 only: rad the lower body has pivoted off the carve
+   * since its blades last held; 0 while they hold. Across the groove's angle
+   * (rutWidth over the half chord) the blades still bear on its walls.
+   */
+  pivotSlip?: number;
   /**
    * pitchMode 1 only: the body's fore-aft lean, rad, + toward the support
    * blade's toe, and its rate; the contact's offset along the blade from its

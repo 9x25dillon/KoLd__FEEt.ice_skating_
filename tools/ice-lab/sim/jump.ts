@@ -197,6 +197,13 @@ export function armsWhip(J: JumpState, input: SkatingInput, p: Params, tick: num
   return whip;
 }
 
+/** The load's own quality, 0..1: its timing and depth, less its pre-rotation — the takeoff's before the edge and the pick. */
+function legQuality(J: JumpState): number {
+  const timingQ = saturate(1 - Math.abs(J.t - IDEAL_LOAD) / IDEAL_LOAD);
+  const depthQ = saturate(J.peakKnee / PEAK_KNEE_FULL);
+  return saturate(0.55 * timingQ + 0.45 * depthQ) * (1 - 0.40 * saturate(J.preRotation));
+}
+
 /**
  * rad/s: the body's spin about the vertical at inertiaOpen — what a takeoff
  * now would leave with before the whip, the turn's carry and the quality —
@@ -229,7 +236,7 @@ export function jumpGround(
 ): void {
   const J = s.jump;
   if (p.jumpMode <= JUMP_MODE.Off) return;
-  if (s.fallen || s.supportMode === 0) { J.phase = JUMP_PHASE.None; return; }
+  if (s.fallen || s.supportMode === 0) { J.phase = JUMP_PHASE.None; if (J.pushFrom !== undefined) J.pushFrom = J.pushLoad = undefined; return; }
 
   const kneeIn = finite(input.knee, 0.35);
   if (input.toe) J.toeTick = s.tick;
@@ -259,16 +266,32 @@ export function jumpGround(
   // ── LOAD ──────────────────────────────────────────────────────────────────
   // Knee compression sets the vertical impulse. Hold too long and the edge
   // rotates underneath you before you leave the ice: pre-rotation.
-  J.t += dt;
-  J.peakKnee = Math.max(J.peakKnee, s.knee);
-  J.setup += o * dt;
-  if (input.toe) J.toeInLoad = true;
-  if (J.t > IDEAL_LOAD * 1.6) J.preRotation += PRE_ROTATION_RATE * dt;
-  if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; return; }
-  if (kneeIn >= p.jumpReleaseKnee) return;
-  // Mid-move the blade is not on an edge to leave from: the release waits for
-  // the exit edge, and takes off from it (sim/moves.ts).
-  if (s.move !== MOVE.None) return;
+  if (J.pushFrom === undefined) {
+    J.t += dt;
+    J.peakKnee = Math.max(J.peakKnee, s.knee);
+    J.setup += o * dt;
+    if (input.toe) J.toeInLoad = true;
+    if (J.t > IDEAL_LOAD * 1.6) J.preRotation += PRE_ROTATION_RATE * dt;
+    if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; return; }
+    if (kneeIn >= p.jumpReleaseKnee) return;
+    // Mid-move the blade is not on an edge to leave from: the release waits for
+    // the exit edge, and takes off from it (sim/moves.ts).
+    if (s.move !== MOVE.None) return;
+    // THE PUSH-OFF (pushOffMode). The release is the leg beginning to
+    // drive the body up, not the blade leaving: for pushOffTime it stays on
+    // the ice, and the upward speed the takeoff leaves with — the legs'
+    // share, from this load's timing and depth — comes through it, m v / T
+    // on top of the body's weight (sim/solver.ts, legs -> normal load). That
+    // load is the grip the swing has to work against while it finishes. The
+    // load's timing, depth and toe are the release's.
+    if (p.pushOffMode >= 1) {
+      const legs = p.jumpImpulse * (0.62 + 0.38 * legQuality(J)) * (p.movesMode >= 1 ? 1 - p.jumpSpeedShare : 1);
+      J.pushFrom = s.tick; J.pushLoad = p.mass * legs / p.pushOffTime;
+      return;
+    }
+  } else if ((s.tick - J.pushFrom) * dt < p.pushOffTime - 1e-9) return;
+  const released = J.pushFrom ?? s.tick;
+  if (J.pushFrom !== undefined) J.pushFrom = J.pushLoad = undefined;
 
   // ── TAKEOFF ───────────────────────────────────────────────────────────────
   const foot = s.supportFoot;
@@ -276,7 +299,7 @@ export function jumpGround(
   const mean = J.setup / Math.max(J.t, dt);
   const side = (Math.abs(mean) >= SETUP_FLAT ? mean : o) >= 0 ? EDGE.Outside : EDGE.Inside;
   const toe = J.toeInLoad;
-  const struck = toe && J.toeTick >= 0 && (s.tick - J.toeTick) * dt <= p.toeWindow;
+  const struck = toe && J.toeTick >= 0 && (released - J.toeTick) * dt <= p.toeWindow;
 
   J.kind = p.jumpMode >= JUMP_MODE.Full ? identify(foot, dir, side, toe) : JUMP_NONE;
   J.edgeError = J.kind !== JUMP_NONE && JUMP_DEFS[J.kind].edgeCallable

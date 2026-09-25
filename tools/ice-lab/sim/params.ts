@@ -761,6 +761,31 @@ export interface Params {
    * doubles, about 15-17 kg m^2/s for 47 kg at 1.55 m).
    */
   armsWhipMode: number;
+  /**
+   * 0: a jump leaves the ice the tick the knee is released, and its upward
+   * speed is simply given it. 1: the release starts the push-off — the
+   * blade stays on the ice for pushOffTime, and the upward speed the legs
+   * give the takeoff comes through it, m v / pushOffTime on top of the
+   * body's weight — so the edge's grip, which scales with its load, is
+   * highest while the swing finishes. The ballistics are unchanged.
+   */
+  pushOffMode: number;
+  /**
+   * 0: once the trunk's torque is more than the edges can hold
+   * (pivotCapacity), the feet pivot resisted only by the scrape's share of
+   * it at once. 1: a pivoting blade still bears on the walls of the groove
+   * it cut until it has turned out of it — rutWidth over half its chord in
+   * the ice, a few degrees — and its grip falls to the scrape's share across
+   * that angle. Nothing authored: the groove is the rut's own geometry.
+   */
+  pivotGrooveMode: number;
+  /**
+   * s. How long a push-off (pushOffMode 1) stays on the ice. Authored: a
+   * jump's takeoff is a push of about 0.1-0.15 s; 0.12 s puts ~3 body
+   * weights through the blade for this skater's ~2.6 m/s from the legs.
+   * docs/open-constants.md.
+   */
+  pushOffTime: number;
   /** N m. The most the shoulders swing the arms round the body with. Authored: the trunk's own ceiling (twistTorqueMax). */
   armsWhipTorque: number;
 
@@ -1057,6 +1082,9 @@ export const DEFAULT_PARAMS: Params = {
   freeLegTorqueMax: 100,
 
   armsWhipMode: 0,
+  pushOffMode: 0,
+  pivotGrooveMode: 0,
+  pushOffTime: 0.12,
   armsWhipTorque: 60,
 
   pitchMode: 0,
@@ -1241,6 +1269,9 @@ export function validate(p: Params): string[] {
   if (!(p.freeLegMass > 0 && p.freeLegMass < 0.3 && p.freeLegReach > 0 && p.freeLegReach < 1 && p.freeLegArc > 0 && p.freeLegArc < Math.PI))
     errs.push("free leg mass share 0-0.3, reach 0-1 m, arc 0-π");
   if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
+  if (![0, 1].includes(p.pushOffMode)) errs.push("pushOffMode is 0 (leave the ice at the release) or 1 (push off through the blade first)");
+  if (![0, 1].includes(p.pivotGrooveMode)) errs.push("pivotGrooveMode is 0 (the grip falls to the scrape's at once) or 1 (across the groove's angle)");
+  if (!(p.pushOffTime > 0 && p.pushOffTime <= 0.3)) errs.push("pushOffTime is a takeoff's push, s: more than 0, at most 0.3");
   if (![0, 1].includes(p.armsWhipMode)) errs.push("armsWhipMode is 0 (the whip put in at takeoff) or 1 (the arms swing through the edge)");
   if (p.armsWhipMode === 1 && p.torqueMode !== 1) errs.push("armsWhipMode 1 needs torqueMode 1: the arms swing against the lower body the edge holds");
   if (!(p.armsWhipTorque > 0)) errs.push("armsWhipTorque must be positive");
