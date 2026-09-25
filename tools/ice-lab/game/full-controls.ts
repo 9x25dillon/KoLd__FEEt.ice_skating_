@@ -224,6 +224,8 @@ export interface FullState {
   arms?: number;
   /** Experimental: the tick an automatic crossover's push ends; both blades stay down until then. */
   crossUntil?: number;
+  /** Experimental: the bent stance the automatic crossovers hold the knees at, eased in and out (CROSS_STANCE_RATE). */
+  crossStance?: number;
   /**
    * Experimental: a pumped or stroked push in progress — both blades down
    * until `transferAt`, then the weight goes to `transferTo`, the other foot,
@@ -416,6 +418,16 @@ const STROKE_KNEE = 1;
  * harder), both blades down for the push. Pumps add on top.
  */
 const AUTO_CROSS_SPEED = 1.5;
+/**
+ * Experimental: the knee's bend (the solver's floor under a push, 0.35) the
+ * automatic crossovers skate in, and how fast the mapping eases into it and
+ * back out, per second. Every push floors the knees there; from a straight
+ * leg (the triggers released) each beat sank 0.35 of the knee in 0.1 s and
+ * left the blades 0.44 body weights for it — on a deep edge, not enough grip
+ * for the curve (normalLoadMode). Held bent between beats, a beat sinks
+ * nothing. The rate is authored: slow enough that easing in is no sink.
+ */
+const CROSS_STANCE = 0.35, CROSS_STANCE_RATE = 1;
 /** Experimental arms, X left / B right: how far they swing (wind-up) and how fast they get there, per second. */
 const ARMS_SWING = 0.7, ARMS_RATE = 3;
 /**
@@ -548,11 +560,16 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
   return out;
 }
 
+/** Experimental: skating backward on a deep enough curve, on the ice and in no move — where the crossovers run. */
+function crossingOver(s: SkaterState, p: Params): boolean {
+  if (s.fallen || s.move !== MOVE.None || s.jump.phase !== JUMP_PHASE.None) return false;
+  const back = dot(s.vel, s.heading) < -p.dirSpeedEps;
+  return back && Math.hypot(s.vel.x, s.vel.y) >= AUTO_CROSS_SPEED && Math.abs(s.lean) >= p.crossoverLean;
+}
+
 /** Experimental: a crossover stroke on the beat, when skating backward on a deep enough curve. */
 function autoCrossover(f: FullState, s: SkaterState, p: Params): Partial<SkatingInput> | null {
-  if (s.fallen || s.move !== MOVE.None || s.jump.phase !== JUMP_PHASE.None) return null;
-  const back = dot(s.vel, s.heading) < -p.dirSpeedEps;
-  if (!back || Math.hypot(s.vel.x, s.vel.y) < AUTO_CROSS_SPEED || Math.abs(s.lean) < p.crossoverLean) return null;
+  if (!crossingOver(s, p)) return null;
   const beat = beatOffset(p, s.tick);
   if (beat < 0 || beat >= SIM_DT) return null;
   f.crossUntil = s.tick + Math.round(p.strokeDuration / SIM_DT);
@@ -678,6 +695,11 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
         const stand = f.foot === 1 ? 1 : 0;
         if (knees[stand] >= PUMP_HIGH && s.tick - f.gestures.rise[stand] < GESTURE_TICKS)
           knees[stand] = Math.min(knees[stand], p.jumpLoadKnee - 0.01);
+      }
+      // The automatic crossovers' bent stance (CROSS_STANCE): no knee is straighter than it.
+      if (options.pumps) {
+        f.crossStance = moveToward(f.crossStance ?? 0, crossingOver(s, p) ? CROSS_STANCE : 0, CROSS_STANCE_RATE * SIM_DT);
+        for (let i = 0; i < 2; i++) knees[i] = Math.max(knees[i], f.crossStance);
       }
       mapped.knee = (knees[0] + knees[1]) / 2;
       mapped.kneeSplit = (knees[1] - knees[0]) / 2;
