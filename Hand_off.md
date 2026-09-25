@@ -42,15 +42,21 @@ The goal is a double loop that emerges from the physics and lands, matched again
    question), and what to do with `landingShock` (authored; under the mode it is the whole touchdown roll
    change, +1.0 rad/s, where the spec wants the contact's impulse). Deferred by the operator's word:
    in-air reorientation (only ever as segment motion), 3D tilt/precession (needs a transverse inertia).
-2. **Flight time.** 0.492 s against the measured 0.443 ± 0.025: the takeoff leaves at 2.44 m/s up, 0.443 s
-   needs 2.17 (`test/loop-calibration.ts`). It survives cohort scaling, so the vertical impulse
-   (`jumpImpulse` 2.94, the bible's, × quality, less `jumpSpeedShare`) is the axis — correct the push
-   mechanics, not the timing.
+2. **Flight time — mechanics built (branch `flight-time`, stacked on `air-posture`).** The lift was a
+   formula (the bible's triple 2.94 × quality) and the push extended the leg ~2.5 cm for 2.44 m/s (work-energy
+   off 4×). `pushMechanicsMode` 1 (operator's choice): the push drives the leg straight at constant force over
+   `pushOffTime`; N = m(g + a); the lift is the leg's speed, plus the vault. The travel is the body's (0.236 m),
+   so **`pushOffTime` is now the lift's lever**: 0.12 s flies a triple (vz 4.25); **~0.25 s matches the 2Lo**
+   (cohort 0.433 s, -0.4 sd); measured lowest-point-to-blade-off 0.34-0.37 s (PMC12434041, youth axels).
+   `node test/loop-calibration.ts push`. **[operator]** the push time to canonicalise (0.12 stays the
+   default until then). A longer push costs takeoff L with today's scripts (94 → 64 ×10⁻³ at 0.25 s: the free
+   leg swings long before blade-off) — item 3's re-run is where the swing is re-timed.
 3. **Re-run the double loop** (`node test/loop-calibration.ts --set edgeCommitMode=1`, and
    `node test/takeoff-budget.ts commit --set pushOffMode=1 --set normalLoadMode=1 --set rotationCallMode=1`,
    `node test/air-posture.ts`) with 1 and 2 in. Leave the tuck alone until then (§0.5).
 4. **Canonicalise once, then `/40` once** (operator: "avoid repeated golden churn"): turn on
-   `normalLoadMode`, `pushOffMode`, `rotationCallMode`, `edgeCommitMode`, `airPostureMode` — in the
+   `normalLoadMode`, `pushOffMode`, `rotationCallMode`, `edgeCommitMode`, `airPostureMode`,
+   `pushMechanicsMode` (with its `pushOffTime`) — in the
    setups or as defaults, the operator's call — run the whole suite, inspect every moved test, fix or re-pin
    with a measured note, then the contract bump: `/39 → /40` history note in `sim/replay.ts`,
    `node replay/rebase-fixture.ts`, pins in `docs/controller-scheme.md`, `validate.mjs --report`,
@@ -80,6 +86,7 @@ The goal is a double loop that emerges from the physics and lands, matched again
 | **Rotation call at first touchdown** (`rotationCallMode`, `callTakeoffCredit` 0.5 rev): takeoff turn (edge-carried vs pivot/skid), airborne, landing residual (0.3 s, never credited) kept apart in `JumpResult`; edge credited up to ½, pivot never, pivot > ⅛ = cheated takeoff | `sim/jump.ts` `land()`, `sim/types.ts` `JumpResult` | off |
 | **Edge commitment** (`edgeCommitMode`, `edgeCommitTime` 0.2 s): once a jump's load begins the balance loop's lean-error and lean-rate terms fade out together; the lean's feed-forward stays; the body answers the committed curve uncorrected | `sim/solver.ts` section 2 | off |
 | **Air posture** (`airPostureMode`): torque-free flight — lean and pitch turn at blade-off's rates, yaw L / I; blade-off clears the ground's balance state (takeoff error kept as `JumpState.takeoffBalanceError`, diagnostics only); touchdown has no balance score, the ice decides | `sim/jump.ts` takeoff, `jumpAir`, `land()` | off |
+| **Push mechanics** (`pushMechanicsMode`, needs `pushOffMode`): the push drives the leg from its loaded length to straight at constant acceleration over `pushOffTime`'s whole ticks; blade load m(g + a); lift = the leg's speed at blade-off + the vault | `sim/jump.ts` release/takeoff, `sim/solver.ts` §1 | off |
 | `diagTakeoffBalance` 1-5 — **test-only diagnostic, never in a setup** (counter-steer out / edge held / out in the push only / Kp only / Kd only) | `sim/solver.ts`, `sim/params.ts` | 0 |
 | Experimental controls: no automatic crossover while a jump loads; the automatic crossovers skate in a bent stance (`CROSS_STANCE` 0.35 eased at 1/s) so a beat no longer sinks the knee 0.35 in 0.1 s | `game/full-controls.ts` | on (Experimental, Dig Gate) |
 | Observability: `SkaterState.torqueBudget`, `balanceBudget` — attached only by tools, never by `createState`, so no digest sees them; `sim/jump.ts` `bodyRate` (the takeoff's own spin read, factored out unchanged) | `sim/types.ts` | — |
@@ -139,6 +146,9 @@ The goal is a double loop that emerges from the physics and lands, matched again
 ### 0.5 · Unresolved assumptions (authored or unmeasured — none are in `docs/open-constants.md` yet)
 
 - `pushOffTime` 0.12 s (a takeoff's push, ~0.1-0.15 s by the literature's description, not a sourced number).
+  Under `pushMechanicsMode` it sets the lift: ~0.25 s matches the 2Lo; the one sourced timing is 0.34-0.37 s
+  lowest point → blade-off (youth axels, PMC12434041). The constant-force push is an idealisation; stamina
+  now reaches only the vault's share (the leg's push has no fatigue term).
 - `callTakeoffCredit` 0.5 rev — the operator's policy; `LANDING_SETTLE` 0.3 s (the residual's window).
 - `edgeCommitTime` 0.2 s (any 0.05-0.3 behaves; measured as a range).
 - `CROSS_STANCE` 0.35 and its 1/s ease (Experimental controls).
