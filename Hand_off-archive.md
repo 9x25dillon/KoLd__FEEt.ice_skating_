@@ -1138,3 +1138,139 @@ built through five files before a probe showed it made clean jumps worse, which 
 second fixture re-record that briefly kept a deleted parameter key. The rule is the ninth session's
 again: **measure, then write.**
 
+---
+
+*Moved here unedited at the close of 2026-09-24 (nineteenth session): the eighteenth session's §0.*
+
+## 0 · Start here (written at the close of 2026-09-23, eighteenth session)
+
+**Check first.** Another agent session shares the main checkout (`/home/kill/KoLd__FEEt.ice_skating_`,
+on `phase17-assurance`, with that session's uncommitted Phase 17 work: `games/ice-run-godot/{README.md,
+bridge/engine.mjs,scripts/main.gd,tests/engine.test.mjs,tests/host.test.mjs}`,
+`tools/ice-lab/test/turns.test.ts`, untracked `docs/phase17-*.md` and
+`tools/ice-lab/test/phase17-replay.test.ts` — touch none without asking). Operator data, untracked on
+purpose: `E_W_replays_sessions_eng_bld/`, `Ice Lab — KoLd__FEEt edgework.html`, `session-notes/`.
+
+**This session worked in a worktree** so it never switched the shared checkout's branch:
+`/home/kill/KoLd__FEEt.pendulum`. Do the same — `git fetch && git worktree add -b <branch>
+../KoLd__FEEt.<name> origin/main` — then `git worktree list` shows every live one.
+
+`main` is at the merge of this hand-off (after `3b3e290`, PR #28). PRs this session: **#26** (the
+seventeenth session's work), **#27** the fore-aft pendulum, **#28** it switched on — all merged.
+
+At close: **596/596** browser/sim tests, **20/20** Godot bridge, typecheck clean (scratch TypeScript —
+memory `ice-lab-typecheck-toolchain`), native reference check, build. Replay contract
+**`ice-lab-f64/36`**. Fidelity gate: 8 pass / 0 fail, gate not met (unchanged).
+
+**One loose end, not ours:** the other session's untracked `tools/ice-lab/test/phase17-replay.test.ts`
+still pins `ice-lab-f64/35` — a one-line change to `/36` (plus its fixture pins, if any), with the
+operator's leave, as the seventeenth session did for `/22`→`/35`.
+
+### 0.1 · What exists now: the fore-aft pendulum (`pitchMode`)
+
+`tools/ice-lab/sim/solver.ts` `pitchTick`; `big_reffg.txt` §3.5 is the spec (the lateral pendulum's
+mirror). **On in Simulation and Experimental** (`game/setups.ts`, operator's choice), 0 in Blade
+Explorer and Full Repertoire; `DEFAULT_PARAMS.pitchMode` is 0, so mode-0 arithmetic is bit-identical
+(fixture digests unchanged at `/36`).
+
+- **Axis:** the support blade's tangent — not the body's heading. Across the blade the edge holds the
+  body; along it only the ankle can.
+- **Authority:** the contact `c` along the blade, clamped to half of `bladeLength` (0.14 m) — projected
+  over the loaded blades. `contactS` for the tick uses last tick's `c` (one-tick lag); `pitchSplit` still
+  splits the blades around it.
+- **Dynamics:** `L φ'' = g (sin φ − c/L) − aFwd cos φ`.
+- **Control:** capture point `ξ = L sin φ − (aFwd L/g) cos φ + L cos φ · φ'/√(g/L)`;
+  `c = clamp(ξ + pitchGain (ξ − asked))`, `asked = input.pitch × bladeLength/2` — so with no
+  acceleration the body settles over pitchMode 0's `contactS = 0.5 + 0.5 × pitch`.
+- **Fall:** `|ξ| > reach` held for `fallErrorTime` (0.35 s) → `FALL.Pitched` (6, "PITCHED").
+- **Which forces pitch the body** (the heart of it): only what the ice does *along the blade*. Excluded:
+  the stroke (section 5b: through the leg into the hips), drag and the rink's slope (on the body), the
+  carve's velocity rotation (the edge's force is square to the blade), and in section 5 everything but
+  glide friction (`muSkid` 0.35 g, the scrub, the brake, the Ina Bauer's trailing foot — across the blade).
+  The slip solve's scrape (slipMode 1) already has its real direction and is kept.
+- **Not modelled:** pivots and spins keep direct placement (`pitchOn = pitchMode === 1 && !turning`);
+  no hip strategy or arm authority fore-aft; no toe-pick trip.
+- **Measured** (`test/pitch.test.ts`): glides and strokes hold the contact within 1.5 cm; pitch 0.5
+  settles at contactS 0.75; the full inside snowplow from 5 m/s stops upright, leaning back 0.069 rad;
+  both outside edges caught from 2–5 m/s → pitched forward, down at 0.39 s.
+- **With it on in the setups** (re-pinned): hockey stop scrapes to 1 m/s in 1.47 s (1.60 without);
+  pad snowplow on outside edges pitches forward 0.35 s after the edges set; Experimental takeoffs
+  lose 1–2% spin (backward loop L 38.7 → 37.2, still clean); with `speedSpinMode` the lutz's block 2.26 → 1.08.
+- **Test bases:** `torque`, `slip`, `feet`, `pitch` strip stages B/C *and* the pendulum (`pitchMode: 0`) so
+  each measures only what it switches on — keep that pattern for every new mode.
+- **Hockey stop test** now pins `scraped` (first below 1 m/s). The old 0.3 m/s "standstill" was the
+  bot's glide: below ~1 m/s the bot stops holding the blades square in both modes.
+
+### 0.2 · How the design got there (four wrong turns — don't repeat them)
+
+1. Pitch along the body's heading → the spread eagle and hockey stop fell (feet turned 90° off the body
+   left no reach). → the support blade's tangent.
+2. A PD on the asked lean against true vertical saturated under any steady braking; aiming it at the
+   balancing lean made every stroke's acceleration step a target step. → capture-point control.
+3. Every velocity change pitched the body → strokes drove the contact end to end. → push, drag, slope and
+   the carve excluded.
+4. The lumped `muSkid` along the travel pitched a blunt blade's skid into falls. → only glide friction
+   counts along the blade.
+
+The lesson, for the next mode: **before coding a new body, list where each existing force is applied
+(which point, which direction) in `step`.** All four turns were that question answered late.
+
+### 0.3 · The queue, next (operator's order where given)
+
+1. **[operator] Play Simulation and Experimental on the Xbox pad**, export replays to
+   `E_W_replays_sessions_eng_bld/`. New to check: a hard snowplow, a hockey stop, deliberately catching
+   both outside edges (does the forward pitch at ~0.4 s feel fair?), and whether heel/toe on the stick
+   now feels laggy — the stick asks for a lean, the contact follows it (leaning toward the toe first
+   moves the contact toward the heel). Still open from before: (a) the pump and thumb-stroke thresholds
+   (60%/20%, 0.25 s, `SNAP_TICKS`); (b) which stick direction reads "knees in"; (c) both knees deep with
+   shared weight crossing the jump load (0.7).
+2. **The dig under the pendulum** — the dig (`test/torque.test.ts`) needs the contact at the toe or heel
+   *at once*; with the pendulum on it winds the body far less (tested with it forced on: toe dig L 1.01 → 0).
+   Options to measure and bring: accept it (the skater must lean early); a faster ankle (`pitchGain` > 1);
+   or the dig reading the asked contact. Operator's call.
+3. **Toe-pick trip** — `FALL.ToePickTrip` exists and nothing raises it; §3.5 specifies it (contact at
+   the pick with speed → trip). Braking can now run the contact to the toe, so it is reachable.
+4. **Fore-aft authority beyond the ankle** — the lateral pendulum has arms and the free leg
+   (`internalMax`); fore-aft has none, and pivots/spins bypass the pendulum.
+5. **Elite Series 2 paddles** (memory `controller-hardware-roadmap`): raw-button readout first.
+6. **Arms' whip vs physics** (`jump.ts` `jumpWhip`, ~38 of ~40 takeoff L, not through the ice) — operator's call.
+7. Tutorial (memory `tutorial-balance-then-release`); combining four setups into three (when asked);
+   SIXAXIS later.
+
+### 0.4 · Key decisions (this session)
+
+- **Operator:** the pendulum is on in Simulation and Experimental; Blade Explorer and Full Repertoire keep
+  pitchMode 0. Standing decisions from before still hold (every move through the blades; buttons ask;
+  four setups kept; delete nothing).
+- **Agent, reported, open to revision:** capture-point ankle over a PD; the support blade as the axis;
+  `fallErrorTime` reused for the pitch fall; the hockey-stop test's metric moved to the 1 m/s scrape.
+
+### 0.5 · Unresolved assumptions (all in `docs/open-constants.md` under `pitchMode`)
+
+- `pitchGain` 1 — authored.
+- Reach = half `bladeLength` (0.14 m) both ways: the ankle at the blade's centre. A real boot's ankle
+  sits behind centre — the heel side is shorter.
+- `fallErrorTime` 0.35 s, the lateral timeout's, reused.
+- The contact's torque linearised (`g c / L`); `aFwd` a raw per-tick difference, unfiltered; one-tick lag.
+- The push acts through the centre of mass (a real push leg's line of action is not exactly through it).
+- In slipMode 0, the skid's friction taken as all across the blade.
+- Fixed by: centre-of-pressure traces from instrumented skates (braking, stroking, snowplow).
+
+### 0.6 · Things that tripped this session (add to §5)
+
+- **Force a mode on to see its reach:** set `pitchMode: 1` in `DEFAULT_PARAMS` temporarily, run the whole
+  suite, restore (`grep -n "^  pitchMode" sim/params.ts`). It lists every test the mode touches.
+- **Fall reasons without editing tests:** a one-line hook in the solver's fall block,
+  `(globalThis as any).__probe?.(s, reason); // PROBE-TEMP`, plus `node --import <hook.mjs> --test …`
+  where the hook sets `globalThis.__probe`. Delete every `PROBE-TEMP` line before committing.
+- **Measuring a pinned test:** copy it to `test/_m_x.test.ts`, append a `MEASURE` test that logs, run
+  with `--test-name-pattern MEASURE`, delete the copy.
+- **Bot thresholds can measure the bot**, not the physics (the hockey stop's 0.3 m/s tail).
+- `sim/` must not call `Math.asin` etc. (`test/boundary.test.ts`) — use `sim/math.ts` (`asinClamped`,
+  `atan2`); `Math.sqrt` is allowed.
+- The fall-retry (`Object.assign(s, createState(p), …)`) does not clear optional state fields — a
+  mode's fields must be in `createState` or a retry inherits them (the pendulum re-fell at once).
+- `game/setups.ts` exports `SETUPS` (objects with `id`), not a list of ids.
+- The contract-bump checklist (§0.7 of the archived seventeenth §0) still holds: `rebase-fixture.ts`,
+  pins in `docs/controller-scheme.md`, `validate.mjs --report`, `setup-script.ts --write` (say why in
+  `test/setup-mapping.test.ts`'s header), Godot `prepare.mjs --engine-only`.
