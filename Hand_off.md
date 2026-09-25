@@ -20,28 +20,39 @@ at `/game/controller.html`). It is served from the worktree `/home/kill/KoLd__FE
 PORT=8130 npm run serve` (in the background). After every merge the operator plays, move `play` to the new
 main and restart. The operator said of today's build: "it feels like im really on the ice".
 
-### 0.1 · In flight — pick this up first
+### 0.1 · In flight — pick this up first (waiting on three operator decisions)
 
-**The arms' whip, grip-limited** (worktree `/home/kill/KoLd__FEEt.whipgrip`, branch `arms-whip-grip`,
-UNCOMMITTED at close — a subagent was mid-build). The operator's decision: option (b) — `armsWhipMode`,
-the arms' torque applied inside the trunk solve (grip-limited by the edge's pivot capacity; an over-hard
+**The arms' whip, grip-limited** — built but UNCOMMITTED in `/home/kill/KoLd__FEEt.whipgrip` (branch
+`arms-whip-grip`, merged up to main `d277613`). The agent stopped before committing, as instructed,
+because the showcase double loop cannot be made to land reliably from the Experimental pad.
+
+Built (uncommitted): `armsWhipMode` (the arms' torque inside the trunk solve, grip-limited; an over-hard
 whip pivots the feet; `armsWhipTorque` 60 = `twistTorqueMax`, authored) with the **sign fix** (arms wound
-against the jump take spin away; Experimental's `carriage = |arms|` counted either way) — PLUS
-**`inertiaTucked` 0.5** (from 0.95, the design bible's, authored; the Frontiers 2025 takeoff-L paper
-implies ~0.5) — both **only in the trunk setups** (Simulation, Explorer, Experimental, Dig Gate; Full
-Repertoire and the lab presets keep today's whip, which at 0.5 would over-rotate) — PLUS in Experimental
-/ Dig Gate **X/B move only the arms, not the weight, while a jump loads**. Measured by the agent before
-the inertia change: with (b) alone no double is reachable anywhere (best 1.35 rev: loading the knee drops
-the blade's load 540 → 330 N and its pivot grip 41 → 24 N m); at inertia 0.5 the best entry lands a clean
-2Lo (1.91 rev). Must re-script, so each still lands: `test/backjump.test.ts` (the showcase double loop —
-its current script holds B, arms wound against the jump: a hop under the sign fix), the ghost's loop
-(`game/ghost.ts`, takes off from an RFI→RBO three-turn with both sticks 0.5), the tutorial's Experimental
-"Turn in the air" step (`game/tutorial.ts`). The lab's `test/schemec-arms.test.ts` must NOT move. Then
-the full contract-bump pattern: `/39 → /40` with a history note in `sim/replay.ts`,
-`node replay/rebase-fixture.ts` (digests unchanged), pins in `docs/controller-scheme.md`,
-`validate.mjs --report`, `node test/setup-script.ts --write` (say why in `test/setup-mapping.test.ts`'s
-header), Godot `prepare.mjs --engine-only`. If no PR `arms-whip-grip` exists, read the worktree's diff and the
-agent's scratch scripts (`…/scratchpad/whip/`) and finish it; the decision stands.
+against the jump take spin away); a new **`jumpInertiaTucked`** (the tuck in the AIR only, 0.5 in the trunk
+setups, 0.95 default) — because lowering `inertiaTucked` itself to 0.5 broke skating (the trunk's upper
+body at arms-in became 0.1 kg m²: the hockey stop fell, ball-of-foot pivots stopped, 13 tests moved);
+X/B move only the arms while a jump loads (Experimental / Dig Gate). Suite: 686 pass, 7 fail — backjump
+(2), the ghost's loop, the tutorial's "Turn in the air" (Simulation, Experimental, and its duration
+test), the replay fixture (awaiting `/40`). The lab's scheme C arms tests did not move.
+
+Measured: direct inputs land a clean 2Lo (6 m/s, lean 0.8, arms 0.75, 1.91 rev at tuck 0.5), but a
+search of 432 Experimental pad scripts found at best a double called a quarter short (8 m/s, both
+sticks full, B from the start, RT at 1.5 s for 0.3 s, X from 1.7 s: L 15.2); most hop or fall. Why: the
+arms' request follows Experimental's eased pose (3/s), not the swing, so a B→X swing crosses zero during
+a 0.3 s load; deep edges don't hold on the Experimental pad (the automatic crossover beat puts both feet
+down and breaks the load; the tilt oscillates); the edge's grip dips while the knee loads (41 → 24 N m).
+The tutorial's air step jumps from a straight glide — nothing through the ice can turn that.
+
+**The operator must decide:** (1) confirm the air-only tuck (`jumpInertiaTucked`) instead of lowering
+`inertiaTucked`; (2) how Experimental's arms ask for the whip — a swing during the load asks the full
+whip whatever the eased pose, and/or suppress the automatic crossover beat while a jump loads so a deep
+held edge is possible (both are controls, not physics); or (3) accept singles as the Experimental
+showcase under this mode. Then finish: re-script backjump, the ghost's loop (`game/ghost.ts`) and the
+tutorial's air step onto an edge; the contract-bump pattern (`/39 → /40` with a history note in
+`sim/replay.ts`, `node replay/rebase-fixture.ts` (digests unchanged), pins in `docs/controller-scheme.md`,
+`validate.mjs --report`, `node test/setup-script.ts --write` with a header note, Godot
+`prepare.mjs --engine-only`, the native reference); `docs/open-constants.md` entries. Probe scripts in
+the session scratchpad (`…/scratchpad/whip/`) die with the session; the worktree's diff is the record.
 
 ### 0.2 · What exists now (all under `tools/ice-lab/`; details in `docs/controller-scheme.md`)
 
@@ -64,7 +75,7 @@ them into three later — bring options from all of them when asked.
 
 ### 0.3 · The queue, next (operator's order where given)
 
-1. **Finish the arms' whip** (§0.1).
+1. **Finish the arms' whip** (§0.1) — three operator decisions first.
 2. **Which paddle is which**: the paddle defaults assume b18 = top-right, b19 = bottom-right, b20 =
    top-left, b21 = bottom-left (Linux xpad order). The operator should press each on the probe card and
    say; then fix the defaults.
@@ -96,7 +107,8 @@ them into three later — bring options from all of them when asked.
 - Lab scheme C: arms on L3, physics frozen, hop hints HUD-only.
 - Paddles bindable with presets; Experimental + Simulation; never arms on the paddles.
 - The ghost: skates into its tricks; the tutorial uses it.
-- Arms' whip: (b) + `inertiaTucked` 0.5 + X/B arms-only while loading, trunk setups only (§0.1).
+- Arms' whip: (b) + a tuck of 0.5 + X/B arms-only while loading, trunk setups only (§0.1) — built, not
+  committed; the pad can't land the showcase double yet, three decisions open.
 
 ### 0.5 · Unresolved assumptions (authored or unmeasured — `docs/open-constants.md` has each)
 
