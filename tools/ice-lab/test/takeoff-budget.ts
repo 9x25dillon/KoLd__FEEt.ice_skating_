@@ -3,6 +3,7 @@
 //
 //   node test/takeoff-budget.ts trace [pad|direct] [cap]   one attempt, a CSV row per tick
 //   node test/takeoff-budget.ts sweep                       the shoulders' cap, 20-60 N m, one row each
+//   ... --set pushOffMode=1                                 either, on a candidate's Params
 //
 // Two attempts at a backward double loop on the Experimental setup, the arms'
 // whip through the edge (armsWhipMode) on:
@@ -42,6 +43,7 @@ import { setupParams, setupInput } from "../game/setups.ts";
 import { defaultControllerProfile } from "../game/full-controls.ts";
 import type { GameControlState } from "../game/full-controls.ts";
 import { newSchemeState } from "../app/schemes.ts";
+import { overridden } from "./loop-comparison.ts";
 import type { Controls, ControllerHardware } from "../app/pad.ts";
 
 export type Attempt = "pad" | "direct";
@@ -65,8 +67,8 @@ const blankBudget = (): TorqueBudget =>
   ({ armsAsked: 0, arms: 0, trunk: 0, leg: 0, need: 0, cap: 0, ice: 0, pivoting: false, Il: 0, Iu: 0 });
 
 /** The Experimental setup with the shoulders capped at `cap` N m (default: the setup's own). */
-export function budgetParams(cap?: number): Params {
-  const p = setupParams("experimental");
+export function budgetParams(cap?: number, base: Params = setupParams("experimental")): Params {
+  const p = { ...base };
   if (cap !== undefined) p.armsWhipTorque = cap;
   return p;
 }
@@ -92,7 +94,7 @@ export function attempt(kind: Attempt, p: Params, check = Infinity): Outcome {
       h.buttons.fill(0); h.axes = air ? [0, 0, 0, 0] : [0, 0, -1, 0];
       if (!air && (t < 0.02 || (t >= LOAD_AT && t < LOAD_AT + SWING_AT))) h.buttons[1] = 1;   // B: the weight right, the arms wound
       if (!air && t >= LOAD_AT && t < LOAD_AT + LOAD_S) h.buttons[7] = 1;                     // RT: load the right knee
-      if (!air && t >= LOAD_AT + SWING_AT && t < LOAD_AT + LOAD_S) h.buttons[2] = 1;          // X: swing the jump's way
+      if (!air && t >= LOAD_AT + SWING_AT) h.buttons[2] = 1;                                     // X: swing the jump's way, until the blade leaves
       if (air) { h.buttons[7] = 0.7; h.buttons[1] = sinceTakeoff >= check ? 1 : 0; }
       input = setupInput({ hardware: h } as Controls, s, "experimental", st, p, profile).input;
     } else {
@@ -132,8 +134,8 @@ export function attempt(kind: Attempt, p: Params, check = Infinity): Outcome {
 }
 
 /** The sweep's row for one cap. */
-export function sweepRow(kind: Attempt, cap: number) {
-  const p = budgetParams(cap);
+export function sweepRow(kind: Attempt, cap: number, base?: Params) {
+  const p = budgetParams(cap, base);
   const tucked = attempt(kind, p);
   const ice = tucked.frames.filter(f => f.phase !== JUMP_PHASE.Air && f.budget);
   const peakGrip = Math.max(0, ...ice.map(f => f.budget!.cap));
@@ -156,8 +158,8 @@ export function sweepRow(kind: Attempt, cap: number) {
 
 const fx = (v: number, d = 2) => v.toFixed(d);
 
-function printTrace(kind: Attempt, cap?: number): void {
-  const r = attempt(kind, budgetParams(cap));
+function printTrace(kind: Attempt, cap: number | undefined, base: Params): void {
+  const r = attempt(kind, budgetParams(cap, base));
   const cols = ["t", "phase", "armsAsked", "arms", "trunk", "leg", "need", "cap", "ice", "pivoting",
     "load", "latForce", "bite", "tilt", "regime", "contactS", "demand", "knee", "kneeRate", "lean", "pitchContact",
     "yawSlip", "latSlip", "yawRate", "L", "omega", "inertia", "carriage"];
@@ -172,10 +174,10 @@ function printTrace(kind: Attempt, cap?: number): void {
   console.log(`# takeoff ${fx(r.takeoff, 3)} s, L ${fx(r.L, 1)}; landed ${r.landed}, fallen ${r.fallen}, turned ${fx(r.turned)} (${r.revolutions} rev, call ${r.call}, kind ${r.kind})`);
 }
 
-function printSweep(): void {
+function printSweep(base: Params): void {
   for (const kind of ["direct", "pad"] as Attempt[]) {
     console.log(`\n${kind}: cap N m | peak grip N m | peak slip rad/s | slip rad | takeoff ω rad/s | takeoff L | air ω peak | tucked rev | best landing`);
-    const rows = [20, 25, 30, 35, 40, 45, 50, 55, 60].map(cap => sweepRow(kind, cap));
+    const rows = [20, 25, 30, 35, 40, 45, 50, 55, 60].map(cap => sweepRow(kind, cap, base));
     for (const r of rows) {
       const b = r.best;
       console.log(`${r.cap} | ${fx(r.peakGrip, 1)} | ${fx(r.peakSlip)} | ${fx(r.slipAngle, 3)} | ${fx(r.takeoffOmega)} | ${fx(r.takeoffL, 1)} | ${fx(r.peakAirOmega, 1)} | ${fx(r.tuckedTurns)} | ${fx(b.turned)} ${b.fallen ? "fell" : b.call === 0 ? "clean" : `call ${b.call}`}`);
@@ -191,7 +193,8 @@ function printSweep(): void {
 }
 
 if (import.meta.main) {
-  const [mode, kind, cap] = process.argv.slice(2);
-  if (mode === "trace") printTrace((kind as Attempt) ?? "pad", cap === undefined ? undefined : Number(cap));
-  else printSweep();
+  const args = process.argv.slice(2), base = overridden(args);
+  const [mode, kind, cap] = args.filter((a, i) => a !== "--set" && args[i - 1] !== "--set");
+  if (mode === "trace") printTrace((kind as Attempt) ?? "pad", cap === undefined ? undefined : Number(cap), base);
+  else printSweep(base);
 }
