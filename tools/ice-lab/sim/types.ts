@@ -103,6 +103,22 @@ export interface JumpState {
   armed: boolean;
   /** Radians the assist is flying the rotation to; 0 when it is not. */
   target: number;
+  /**
+   * pushOffMode 1 only, and only between a release and its takeoff: the
+   * tick the knee was released, and the load (N) above the body's weight
+   * the push puts through the blade until it leaves. Otherwise absent.
+   */
+  /**
+   * rotationCallMode 1 only: rad, where the body faced as this takeoff's load
+   * began (until the takeoff), and the revolutions it turned on the ice from
+   * there to the blade leaving (from the takeoff until the landing).
+   */
+  entryHeading?: number;
+  takeoffTurn?: number;
+  /** rotationCallMode 1, through a takeoff: revolutions the feet have pivoted off the carve (yawDev) since the load began. */
+  takeoffPivot?: number;
+  pushFrom?: number;
+  pushLoad?: number;
   /** The support blade's edge code at the release tick. */
   takeoffCode: number;
   /** JUMP index, or JUMP_NONE for a hop or an unrecognised takeoff. */
@@ -151,6 +167,23 @@ export interface JumpResult {
   fall: boolean;
   /** The jump was wound up, and the assist flew its arms. */
   armed: boolean;
+  /**
+   * rotationCallMode 1 only, kept apart: revolutions turned on the ice
+   * through the takeoff (from where the body faced as the load began to the
+   * blade leaving) — split into what the takeoff edge's own curve carried
+   * (takeoffEdge) and what the feet pivoted or skidded off it (takeoffPivot)
+   * — in the air (blade-off to first touchdown), and after touchdown over
+   * LANDING_SETTLE (never credited). The call is made at first touchdown
+   * from the edge's turn, credited up to callTakeoffCredit, plus the air's;
+   * a pivot past a q's worth, or an edge's turn past the credit, is a
+   * cheated takeoff.
+   */
+  takeoffTurn?: number;
+  takeoffEdge?: number;
+  takeoffPivot?: number;
+  airborne?: number;
+  residual?: number;
+  cheatedTakeoff?: boolean;
 }
 
 // ── moves ───────────────────────────────────────────────────────────────────
@@ -548,6 +581,28 @@ export interface SkaterState {
   /** freeLegMode 1 only: last tick's asked swing, rad, so the hip knows how fast it is being asked to move. */
   freeSwingTarget?: number;
   /**
+   * armsWhipMode 1 only: the angular momentum, kg m^2/s counter-clockwise
+   * positive, the arms have swung up round the body during this jump's load,
+   * every bit of it through the edge. It leaves with the takeoff; outside a
+   * load it is 0.
+   */
+  armsL?: number;
+  /**
+   * Observability only, never set by createState: a tool that wants the
+   * trunk solve's torque budget attaches one (test/takeoff-budget.ts) and the
+   * solver fills it each tick the trunk is solved. Absent, nothing is written
+   * and no replay digest sees it.
+   */
+  torqueBudget?: TorqueBudget;
+  /** Observability only, like torqueBudget: the balance controller's terms this tick (test/takeoff-budget.ts). */
+  balanceBudget?: BalanceBudget;
+  /**
+   * pivotGrooveMode 1 only: rad the lower body has pivoted off the carve
+   * since its blades last held; 0 while they hold. Across the groove's angle
+   * (rutWidth over the half chord) the blades still bear on its walls.
+   */
+  pivotSlip?: number;
+  /**
    * pitchMode 1 only: the body's fore-aft lean, rad, + toward the support
    * blade's toe, and its rate; the contact's offset along the blade from its
    * centre, m, + toward the toe; and how long the pendulum's capture point
@@ -792,4 +847,44 @@ export interface EdgeEvent {
   prevDwell: number;
   /** Context: tilt at a change, slip speed at a skid, lean at a fall, TURN_KIND at a turn's cusp, revolutions at a twizzle's or a spin's end, seconds held at an Ina Bauer's end. */
   value: number;
+}
+
+/**
+ * One tick of the trunk solve (torqueMode), N m, counter-clockwise positive:
+ * what the body asked the ice for about the vertical and what it got.
+ */
+export interface TorqueBudget {
+  /** The shoulders' torque the whip asked, before armsWhipTorque caps it, and what they gave. */
+  armsAsked: number;
+  arms: number;
+  /** The trunk's muscles on the upper body, and the hip's on the free leg. */
+  trunk: number;
+  leg: number;
+  /** What the lower body needed from the ice to stay on the carve, and the most the edges can hold (pivotCapacity). */
+  need: number;
+  cap: number;
+  /** What the ice gave: all of `need` while it holds; the scrape's share of `cap` once the feet pivot. */
+  ice: number;
+  pivoting: boolean;
+  /** kg m^2: the lower and upper bodies this tick. */
+  Il: number;
+  Iu: number;
+}
+
+/**
+ * One tick of the balance controller (sim/solver.ts section 2): how the lean
+ * asked for became the blade's edge. Accelerations m/s^2, angles rad.
+ */
+export interface BalanceBudget {
+  leanCmd: number; lean: number; leanRate: number;
+  /** aCmd's terms: g tan(leanCmd), balanceKp (lean - leanCmd), balanceKd leanRate, the fatigue noise. */
+  gTan: number; kp: number; kd: number; noise: number; aCmd: number;
+  /** m^2/s^2 the curvature is read against (speed squared, floored), the curvature asked and its clamp. */
+  v2: number; kappa: number; kappaMax: number;
+  /** m: the support blade's rocker radius at its contact. */
+  rho: number;
+  /** The tilt target at each stage: from the curvature, after the scrape's own rule, after angulation, after maxTilt. */
+  fromKappa: number; afterScrape: number; afterAngulation: number; target: number;
+  /** The blade command after the control latency, and which rules bit: 1 kappa clamp, 2 scrape rule, 4 angulation, 8 maxTilt. */
+  tiltCmd: number; clamps: number;
 }

@@ -13,7 +13,7 @@ export const BEGINNER_PARAMS: Params = {
 /** Predict rotation using the same fixed-step inertia and ballistic equations as the solver. */
 function touchdown(s: SkaterState, p: Params, carriage: number) {
   let z=s.jump.z, vz=s.jump.vz, inertia=s.jump.inertia, angle=s.jump.rotation;
-  const dt=1/120, wanted=p.inertiaTucked+(p.inertiaOpen-p.inertiaTucked)*carriage;
+  const dt=1/120, wanted=p.jumpInertiaTucked+(p.inertiaOpen-p.jumpInertiaTucked)*carriage;
   for(let i=0;i<240;i++) {
     inertia += Math.sign(wanted-inertia)*Math.min(Math.abs(wanted-inertia),p.inertiaPullRate*dt);
     angle += s.jump.angMomentum/inertia*dt;

@@ -224,6 +224,8 @@ export interface FullState {
   arms?: number;
   /** Experimental: the tick an automatic crossover's push ends; both blades stay down until then. */
   crossUntil?: number;
+  /** Experimental: the bent stance the automatic crossovers hold the knees at, eased in and out (CROSS_STANCE_RATE). */
+  crossStance?: number;
   /**
    * Experimental: a pumped or stroked push in progress — both blades down
    * until `transferAt`, then the weight goes to `transferTo`, the other foot,
@@ -416,6 +418,16 @@ const STROKE_KNEE = 1;
  * harder), both blades down for the push. Pumps add on top.
  */
 const AUTO_CROSS_SPEED = 1.5;
+/**
+ * Experimental: the knee's bend (the solver's floor under a push, 0.35) the
+ * automatic crossovers skate in, and how fast the mapping eases into it and
+ * back out, per second. Every push floors the knees there; from a straight
+ * leg (the triggers released) each beat sank 0.35 of the knee in 0.1 s and
+ * left the blades 0.44 body weights for it — on a deep edge, not enough grip
+ * for the curve (normalLoadMode). Held bent between beats, a beat sinks
+ * nothing. The rate is authored: slow enough that easing in is no sink.
+ */
+const CROSS_STANCE = 0.35, CROSS_STANCE_RATE = 1;
 /** Experimental arms, X left / B right: how far they swing (wind-up) and how fast they get there, per second. */
 const ARMS_SWING = 0.7, ARMS_RATE = 3;
 /**
@@ -548,11 +560,16 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
   return out;
 }
 
+/** Experimental: skating backward on a deep enough curve, on the ice and in no move — where the crossovers run. */
+function crossingOver(s: SkaterState, p: Params): boolean {
+  if (s.fallen || s.move !== MOVE.None || s.jump.phase !== JUMP_PHASE.None) return false;
+  const back = dot(s.vel, s.heading) < -p.dirSpeedEps;
+  return back && Math.hypot(s.vel.x, s.vel.y) >= AUTO_CROSS_SPEED && Math.abs(s.lean) >= p.crossoverLean;
+}
+
 /** Experimental: a crossover stroke on the beat, when skating backward on a deep enough curve. */
 function autoCrossover(f: FullState, s: SkaterState, p: Params): Partial<SkatingInput> | null {
-  if (s.fallen || s.move !== MOVE.None || s.jump.phase !== JUMP_PHASE.None) return null;
-  const back = dot(s.vel, s.heading) < -p.dirSpeedEps;
-  if (!back || Math.hypot(s.vel.x, s.vel.y) < AUTO_CROSS_SPEED || Math.abs(s.lean) < p.crossoverLean) return null;
+  if (!crossingOver(s, p)) return null;
   const beat = beatOffset(p, s.tick);
   if (beat < 0 || beat >= SIM_DT) return null;
   f.crossUntil = s.tick + Math.round(p.strokeDuration / SIM_DT);
@@ -592,7 +609,10 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   const trigger = (b: number) => Math.max(0, ((h.buttons[b] ?? 0) - profile.triggerDeadzone) / (1 - profile.triggerDeadzone));
   // Bumpers select and retain a foot — X and B in Experimental. Both explicitly select shared weight.
   // The weight paddles are the same choice; they do not swing the arms as X / B do.
-  const leftFoot = key("q") || down(options.experimental ? 2 : 4) || paddle("weightLeft"), rightFoot = key("e") || down(options.experimental ? 1 : 5) || paddle("weightRight");
+  // Experimental, while a jump loads: the loaded leg holds the weight, and X / B
+  // swing only the arms — so they can swing the jump's way (armsWhipMode).
+  const xbWeight = !(options.experimental && s.jump.phase === JUMP_PHASE.Load);
+  const leftFoot = key("q") || (xbWeight && down(options.experimental ? 2 : 4)) || paddle("weightLeft"), rightFoot = key("e") || (xbWeight && down(options.experimental ? 1 : 5)) || paddle("weightRight");
   if (leftFoot || rightFoot) f.foot = leftFoot && rightFoot ? 0.5 : leftFoot ? 0 : 1;
   // Experimental: a push has run its course — the weight goes to the other
   // foot and the leg that pushed is free. X / B during it keep their choice.
@@ -659,15 +679,6 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
       // whatever the trigger asks. The standing leg's paddle does nothing.
       if (paddle(freeLegIndex === 0 ? "freeLegLeft" : "freeLegRight")) mapped.freeLeg = Math.max(mapped.freeLeg, 1);
     }
-    if (options.pumps && !mapped.push) {
-      const auto = autoCrossover(f, s, p);
-      if (auto) Object.assign(mapped, auto);
-    }
-    // An automatic crossover keeps both blades down through its push, unless
-    // X / B or a weight paddle asks for a foot this tick.
-    if (options.pumps && s.tick < (f.crossUntil ?? -1) && !down(1) && !down(2) && !paddle("weightLeft") && !paddle("weightRight")) mapped.weight = 0.5;
-    const paddleTurn = Number(paddle("feetClockwise")) - Number(paddle("feetAnticlockwise"));
-    if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options, paddleTurn));
     // A trigger per knee: LT the left leg, RT the right. The brake moves off LT
     // to D-pad ↑, free in this setup unless the profile has bound it, until
     // stops come from the blades themselves.
@@ -685,9 +696,30 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
         if (knees[stand] >= PUMP_HIGH && s.tick - f.gestures.rise[stand] < GESTURE_TICKS)
           knees[stand] = Math.min(knees[stand], p.jumpLoadKnee - 0.01);
       }
+      // The automatic crossovers' bent stance (CROSS_STANCE): no knee is straighter than it.
+      if (options.pumps) {
+        f.crossStance = moveToward(f.crossStance ?? 0, crossingOver(s, p) ? CROSS_STANCE : 0, CROSS_STANCE_RATE * SIM_DT);
+        for (let i = 0; i < 2; i++) knees[i] = Math.max(knees[i], f.crossStance);
+      }
       mapped.knee = (knees[0] + knees[1]) / 2;
       mapped.kneeSplit = (knees[1] - knees[0]) / 2;
     }
+    // A jump loading (the operator's choice, 2026-09-25): no automatic
+    // crossover starts, and one under way lets the loaded foot keep the
+    // weight, so a deep edge can be held through the load.
+    // The standing leg's knee, as the solver reads the load (sim/solver.ts legInput).
+    const standingKnee = mapped.knee + (mapped.kneeSplit ?? 0) * (2 * f.foot - 1);
+    const loading = s.jump.phase === JUMP_PHASE.Load || standingKnee >= p.jumpLoadKnee;
+    if (options.pumps && loading) f.crossUntil = -1;
+    if (options.pumps && !mapped.push && !loading) {
+      const auto = autoCrossover(f, s, p);
+      if (auto) Object.assign(mapped, auto);
+    }
+    // An automatic crossover keeps both blades down through its push, unless
+    // X / B or a weight paddle asks for a foot this tick.
+    if (options.pumps && s.tick < (f.crossUntil ?? -1) && !down(1) && !down(2) && !paddle("weightLeft") && !paddle("weightRight")) mapped.weight = 0.5;
+    const paddleTurn = Number(paddle("feetClockwise")) - Number(paddle("feetAnticlockwise"));
+    if (options.feet) Object.assign(mapped, feetInput(f, layout, h, key, down, modified, left, blade, l, profile, options, paddleTurn));
     // With the feet, stops come from the blades: D-pad up is the feet's, and
     // only the keyboard's X still brakes.
     const dpadUpBound = ACTIONS.some(a => (!options.manual || manualAction(a.id))

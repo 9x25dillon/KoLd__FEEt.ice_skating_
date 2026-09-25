@@ -24,7 +24,7 @@ import { setupParams } from "../game/setups.ts";
 
 /** Simulation's athlete with slip and the pendulum on, the trunk, the feet and the toe pick off. */
 export const DIG_BASE: Params = {
-  ...setupParams("simulation"), slipMode: 1, torqueMode: 0, footMode: 0, pitchMode: 1, toePickMode: 0,
+  ...setupParams("simulation"), slipMode: 1, torqueMode: 0, armsWhipMode: 0, footMode: 0, pitchMode: 1, toePickMode: 0,
   pitchInternalMode: 0,
 };
 

@@ -31,7 +31,7 @@
 import { EDGE, DIR, FOOT, EDGE_CODE_NONE, REGIME, EVENT, FALL, MOVE, makeCode, codeDir } from "./types.ts";
 import type { SkaterState, SkatingInput, EdgeEvent, JumpState, JumpResult, Foot, Edge, Dir } from "./types.ts";
 import type { Params } from "./params.ts";
-import { clamp, saturate, lerp, moveToward, rotate, normalizeOr, wrapPi, dot, mul, len, add, perpLeft, sin } from "./math.ts";
+import { clamp, saturate, lerp, moveToward, rotate, normalizeOr, wrapPi, dot, mul, len, add, perpLeft, sin, atan2 } from "./math.ts";
 
 export const JUMP_MODE = { Off: 0, Hop: 1, Full: 2 } as const;
 
@@ -183,6 +183,50 @@ function loseContact(s: SkaterState, events: EdgeEvent[]): void {
 }
 
 /**
+ * The arms' whip, 0..1 of a full one: the carriage, and with a wound-up
+ * jump armed at least jumpAssist of the flick. With armsWhipMode 1 it is
+ * signed, -1..1: arms wound against the rotation (SkatingInput.windup
+ * clockwise, at windupThreshold or past) swing the other way, arms swung the
+ * jump's way or simply out swing with it.
+ */
+export function armsWhip(J: JumpState, input: SkatingInput, p: Params, tick: number, dt: number, signed: boolean): number {
+  let whip = saturate(finite(input.carriage, 0));
+  if (signed) whip *= clamp(1 - 2 * finite(input.windup, 0) / p.windupThreshold, -1, 1);
+  const armed = p.jumpMode >= JUMP_MODE.Full && J.windupTick >= 0 && (tick - J.windupTick) * dt <= p.windupWindow;
+  if (armed) whip = Math.max(whip, p.jumpAssist * J.windupPeak);
+  return whip;
+}
+
+/** The load's own quality, 0..1: its timing and depth, less its pre-rotation — the takeoff's before the edge and the pick. */
+function legQuality(J: JumpState): number {
+  const timingQ = saturate(1 - Math.abs(J.t - IDEAL_LOAD) / IDEAL_LOAD);
+  const depthQ = saturate(J.peakKnee / PEAK_KNEE_FULL);
+  return saturate(0.55 * timingQ + 0.45 * depthQ) * (1 - 0.40 * saturate(J.preRotation));
+}
+
+/**
+ * rad/s: the body's spin about the vertical at inertiaOpen — what a takeoff
+ * now would leave with before the whip, the turn's carry and the quality —
+ * from the carve's rate and, with the trunk (torqueMode), each body's own
+ * spin past it, the free leg's and the arms' swing.
+ */
+export function bodyRate(s: SkaterState, p: Params, carriage: number): number {
+  let rate = p.jumpRotBias * s.yawRate;
+  if (s.twistRate !== undefined) {
+    const dev = s.yawDev ?? 0, Iu = upperInertia(p, carriage);
+    rate = p.jumpRotBias * (s.yawRate - dev) + ((p.lowerBodyInertia + Iu) * dev + Iu * s.twistRate) / p.inertiaOpen;
+    // The free leg (freeLegMode) leaves with its own swing too.
+    if (s.freeSwingRate !== undefined) {
+      const If = p.freeLegMass * p.mass * p.freeLegReach * p.freeLegReach;
+      rate += If * (dev + s.freeSwingRate) / p.inertiaOpen;
+    }
+    // And the arms (armsWhipMode) with what they swung up on the ice.
+    if (s.armsL !== undefined) rate += s.armsL / p.inertiaOpen;
+  }
+  return rate;
+}
+
+/**
  * On the ice, once per tick, after the carve solve: is the knee loading, and
  * has it just been released? A no-op unless jumpMode is on, so every recorded
  * measurement taken with it off still measures the same thing.
@@ -192,7 +236,12 @@ export function jumpGround(
 ): void {
   const J = s.jump;
   if (p.jumpMode <= JUMP_MODE.Off) return;
-  if (s.fallen || s.supportMode === 0) { J.phase = JUMP_PHASE.None; return; }
+  if (s.fallen || s.supportMode === 0) {
+    J.phase = JUMP_PHASE.None;
+    if (J.pushFrom !== undefined) J.pushFrom = J.pushLoad = undefined;
+    if (J.entryHeading !== undefined) J.entryHeading = J.takeoffPivot = undefined;
+    return;
+  }
 
   const kneeIn = finite(input.knee, 0.35);
   if (input.toe) J.toeTick = s.tick;
@@ -215,6 +264,8 @@ export function jumpGround(
     if (kneeIn >= p.jumpLoadKnee) {
       J.phase = JUMP_PHASE.Load;
       J.t = 0; J.peakKnee = s.knee; J.preRotation = 0; J.setup = 0; J.toeInLoad = false;
+      // rotationCallMode: the takeoff's reference — where the body faces as the load begins.
+      if (p.rotationCallMode >= 1) { J.entryHeading = atan2(s.heading.y, s.heading.x); J.takeoffPivot = 0; }
     }
     return;
   }
@@ -222,16 +273,35 @@ export function jumpGround(
   // ── LOAD ──────────────────────────────────────────────────────────────────
   // Knee compression sets the vertical impulse. Hold too long and the edge
   // rotates underneath you before you leave the ice: pre-rotation.
-  J.t += dt;
-  J.peakKnee = Math.max(J.peakKnee, s.knee);
-  J.setup += o * dt;
-  if (input.toe) J.toeInLoad = true;
-  if (J.t > IDEAL_LOAD * 1.6) J.preRotation += PRE_ROTATION_RATE * dt;
-  if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; return; }
-  if (kneeIn >= p.jumpReleaseKnee) return;
-  // Mid-move the blade is not on an edge to leave from: the release waits for
-  // the exit edge, and takes off from it (sim/moves.ts).
-  if (s.move !== MOVE.None) return;
+  // rotationCallMode: of the body's turn through the takeoff, what the feet
+  // pivoted off the carve (yawDev) — the rest is the takeoff edge's own curve.
+  if (J.takeoffPivot !== undefined) J.takeoffPivot += (s.yawDev ?? 0) * dt / (2 * Math.PI);
+  if (J.pushFrom === undefined) {
+    J.t += dt;
+    J.peakKnee = Math.max(J.peakKnee, s.knee);
+    J.setup += o * dt;
+    if (input.toe) J.toeInLoad = true;
+    if (J.t > IDEAL_LOAD * 1.6) J.preRotation += PRE_ROTATION_RATE * dt;
+    if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; if (J.entryHeading !== undefined) J.entryHeading = J.takeoffPivot = undefined; return; }
+    if (kneeIn >= p.jumpReleaseKnee) return;
+    // Mid-move the blade is not on an edge to leave from: the release waits for
+    // the exit edge, and takes off from it (sim/moves.ts).
+    if (s.move !== MOVE.None) return;
+    // THE PUSH-OFF (pushOffMode). The release is the leg beginning to
+    // drive the body up, not the blade leaving: for pushOffTime it stays on
+    // the ice, and the upward speed the takeoff leaves with — the legs'
+    // share, from this load's timing and depth — comes through it, m v / T
+    // on top of the body's weight (sim/solver.ts, legs -> normal load). That
+    // load is the grip the swing has to work against while it finishes. The
+    // load's timing, depth and toe are the release's.
+    if (p.pushOffMode >= 1) {
+      const legs = p.jumpImpulse * (0.62 + 0.38 * legQuality(J)) * (p.movesMode >= 1 ? 1 - p.jumpSpeedShare : 1);
+      J.pushFrom = s.tick; J.pushLoad = p.mass * legs / p.pushOffTime;
+      return;
+    }
+  } else if ((s.tick - J.pushFrom) * dt < p.pushOffTime - 1e-9) return;
+  const released = J.pushFrom ?? s.tick;
+  if (J.pushFrom !== undefined) J.pushFrom = J.pushLoad = undefined;
 
   // ── TAKEOFF ───────────────────────────────────────────────────────────────
   const foot = s.supportFoot;
@@ -239,7 +309,7 @@ export function jumpGround(
   const mean = J.setup / Math.max(J.t, dt);
   const side = (Math.abs(mean) >= SETUP_FLAT ? mean : o) >= 0 ? EDGE.Outside : EDGE.Inside;
   const toe = J.toeInLoad;
-  const struck = toe && J.toeTick >= 0 && (s.tick - J.toeTick) * dt <= p.toeWindow;
+  const struck = toe && J.toeTick >= 0 && (released - J.toeTick) * dt <= p.toeWindow;
 
   J.kind = p.jumpMode >= JUMP_MODE.Full ? identify(foot, dir, side, toe) : JUMP_NONE;
   J.edgeError = J.kind !== JUMP_NONE && JUMP_DEFS[J.kind].edgeCallable
@@ -287,28 +357,21 @@ export function jumpGround(
   // unwinding is the whip, and the assist is how much of it happens for you.
   J.armed = p.jumpMode >= JUMP_MODE.Full && J.windupTick >= 0
     && (s.tick - J.windupTick) * dt <= p.windupWindow;
-  let whip = saturate(finite(input.carriage, 0));
-  if (J.armed) whip = Math.max(whip, p.jumpAssist * J.windupPeak);
+  // With armsWhipMode 1 the whip is not put in here: the arms have already
+  // swung it up through the edge during the load (s.armsL, sim/solver.ts).
+  const whip = s.armsL === undefined ? armsWhip(J, input, p, s.tick, dt, false) : 0;
   // With the trunk modelled (torqueMode) the body is two, each with its own
   // spin past the carve: the lower's yawDev, the upper's yawDev + twistRate,
   // each at its own inertia. A twist cannot make spin by itself — only the
   // ice holding the feet while the shoulders swing can — so a release that
   // pivots the feet instead leaves with nothing.
-  let rate = p.jumpRotBias * s.yawRate;
-  if (s.twistRate !== undefined) {
-    const dev = s.yawDev ?? 0, Iu = upperInertia(p, finite(input.carriage, 0));
-    rate = p.jumpRotBias * (s.yawRate - dev) + ((p.lowerBodyInertia + Iu) * dev + Iu * s.twistRate) / p.inertiaOpen;
-    // The free leg (freeLegMode) leaves with its own swing too.
-    if (s.freeSwingRate !== undefined) {
-      const If = p.freeLegMass * p.mass * p.freeLegReach * p.freeLegReach;
-      rate += If * (dev + s.freeSwingRate) / p.inertiaOpen;
-    }
-  }
+  const rate = bodyRate(s, p, finite(input.carriage, 0));
   J.angMomentum = p.jumpMode >= JUMP_MODE.Full
     ? p.inertiaOpen * Math.max(0, rate + s.spinCarry + vaultSpin / p.inertiaOpen + p.jumpWhip * whip) * (0.80 + 0.20 * q)
     : 0;
   J.windupTick = -1;
   J.windupPeak = 0;
+  if (s.armsL !== undefined) s.armsL = 0;
   J.inertia = p.inertiaOpen;
   J.rotation = 0; J.peakOmega = 0; J.z = 0;
   J.takeoffCode = b.code;
@@ -325,6 +388,13 @@ export function jumpGround(
     J.target = 2 * Math.PI * (Math.max(1, Math.round(reach - extra)) + extra);
   }
 
+  // rotationCallMode: the turn made on the ice through the takeoff, from the
+  // load's reference to the blade leaving, counter-clockwise positive (the
+  // jumps' rotation). Under half a turn, so the wrap is unambiguous.
+  if (J.entryHeading !== undefined) {
+    J.takeoffTurn = wrapPi(atan2(s.heading.y, s.heading.x) - J.entryHeading) / (2 * Math.PI);
+    J.entryHeading = undefined;
+  }
   events.push({
     tick: s.tick, type: EVENT.Takeoff, foot,
     prevCode: b.code, newCode: EDGE_CODE_NONE, prevDwell: J.t, value: J.vz,
@@ -357,7 +427,7 @@ export function jumpAir(
   let carriage = saturate(finite(input.carriage, 0));
   if (J.armed && J.target > 0 && p.jumpAssist > 0) carriage = lerp(carriage, assistedCarriage(J, p, dt), p.jumpAssist);
   const pull = 1 - carriage;
-  J.inertia = moveToward(J.inertia, lerp(p.inertiaOpen, p.inertiaTucked, pull), p.inertiaPullRate * dt);
+  J.inertia = moveToward(J.inertia, lerp(p.inertiaOpen, p.jumpInertiaTucked, pull), p.inertiaPullRate * dt);
   const omega = J.angMomentum / J.inertia;
   J.rotation += omega * dt;
   J.peakOmega = Math.max(J.peakOmega, omega);
@@ -390,7 +460,7 @@ export function jumpAir(
  * advanced for the tick it starts on.
  */
 export function rotationToLand(J: JumpState, p: Params, dt: number, carriage: number): number {
-  const goal = lerp(p.inertiaOpen, p.inertiaTucked, 1 - carriage);
+  const goal = lerp(p.inertiaOpen, p.jumpInertiaTucked, 1 - carriage);
   let inertia = J.inertia, z = J.z, vz = J.vz, t = J.t, turned = 0;
   for (let k = 0; k < 4096; k++) {
     inertia = moveToward(inertia, goal, p.inertiaPullRate * dt);
@@ -445,20 +515,33 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   const o = outsideness(foot, s.tiltCmd, p);
 
   let kind = J.kind;
+  // rotationCallMode 1: the jump is called at this first touchdown from the
+  // turn the takeoff edge carried the body through on the ice, credited up
+  // to callTakeoffCredit, plus what was turned in the air; what the feet
+  // pivoted or skidded off the edge is never credited, and past a q's worth
+  // it is a cheated takeoff; what turns after this instant never counts.
+  // 0: the air alone, as before.
+  const takeoffTurn = p.rotationCallMode >= 1 ? J.takeoffTurn ?? 0 : 0;
+  const takeoffPivot = p.rotationCallMode >= 1 ? J.takeoffPivot ?? 0 : 0;
+  const takeoffEdge = takeoffTurn - takeoffPivot;
+  const credited = Math.min(Math.max(takeoffEdge, 0), p.callTakeoffCredit);
+  const counted = turned + credited;
+  // Where the body faces at touchdown, from the reference: every bit of the takeoff's turn.
+  const facing = J.rotation + 2 * Math.PI * takeoffTurn;
   let revolutions = 0, shortBy = 0, target: number;
-  if (kind !== JUMP_NONE && turned - (kind === JUMP.Axel ? 0.5 : 0) < MIN_JUMP_REVS) kind = JUMP_NONE;
+  if (kind !== JUMP_NONE && counted - (kind === JUMP.Axel ? 0.5 : 0) < MIN_JUMP_REVS) kind = JUMP_NONE;
   if (kind !== JUMP_NONE) {
-    ({ revolutions, shortBy } = calledRevolutions(turned, kind, p));
+    ({ revolutions, shortBy } = calledRevolutions(counted, kind, p));
     target = 2 * Math.PI * (revolutions + (kind === JUMP.Axel ? 0.5 : 0));
   } else {
     // A hop, a waltz jump, or a takeoff no jump leaves from: land it facing
     // whichever half-turn it is nearest.
-    target = Math.PI * Math.round(J.rotation / Math.PI);
+    target = Math.PI * Math.round(facing / Math.PI);
   }
 
   // Landing quality: did you open on time, present the right edge, and absorb
   // the impact with the knee? Every jump lands RBO; a hop can land on anything.
-  const checkErr = Math.abs(wrapPi(J.rotation - target)) / Math.PI;
+  const checkErr = Math.abs(wrapPi(facing - target)) / Math.PI;
   const absorb = saturate(finite(input.knee, 0.35));
   const edgeOK = kind === JUMP_NONE ? 1
     : foot === FOOT.Right && dir === DIR.Backward ? 1 - edgeMismatch(o, true) : 0;
@@ -475,6 +558,10 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
     toe: J.toeInLoad, takeoffQuality: J.quality, landingQuality,
     height: J.height, airTime: J.t, peakOmega: J.peakOmega,
     twoFoot, stepOut: !fall && landingQuality < 0.34, fall, armed: J.armed,
+    ...(p.rotationCallMode >= 1 ? {
+      takeoffTurn, takeoffEdge, takeoffPivot, airborne: turned, residual: 0,
+      cheatedTakeoff: takeoffPivot > p.callQuarter || takeoffEdge > p.callTakeoffCredit,
+    } : {}),
   };
 
   const side = o > 0 ? EDGE.Outside : o < 0 ? EDGE.Inside : EDGE.Flat;
@@ -484,6 +571,7 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   });
 
   J.phase = JUMP_PHASE.None;
+  if (J.takeoffTurn !== undefined) J.takeoffTurn = J.takeoffPivot = undefined;
   J.t = 0; J.z = 0; J.vz = 0; J.angMomentum = 0; J.inertia = p.inertiaOpen;
   J.armed = false; J.target = 0;
   s.yawRate = 0;

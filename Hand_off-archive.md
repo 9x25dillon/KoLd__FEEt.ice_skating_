@@ -5,6 +5,7 @@ Superseded checkpoints and the fifteenth session's §0, moved out of `Hand_off.m
 read it for history and the reasoning behind decisions, never as current state.
 
 The seventeenth session's §0 (2026-09-23) was moved here, unedited, at the close of the eighteenth.
+The nineteenth session's §0 (2026-09-24) was moved here, unedited, at the close of the twentieth (2026-09-25).
 
 ## 0 (seventeenth) · Start here (written at the close of 2026-09-23, seventeenth session)
 
@@ -1274,3 +1275,153 @@ The lesson, for the next mode: **before coding a new body, list where each exist
 - The contract-bump checklist (§0.7 of the archived seventeenth §0) still holds: `rebase-fixture.ts`,
   pins in `docs/controller-scheme.md`, `validate.mjs --report`, `setup-script.ts --write` (say why in
   `test/setup-mapping.test.ts`'s header), Godot `prepare.mjs --engine-only`.
+
+## 0 (nineteenth) · Start here (written at the close of 2026-09-24, nineteenth session)
+
+**Check first.** `git fetch`, `git log --oneline -1 origin/main` (this was written at `324da81`, PR #43),
+`git worktree list`. Another agent session shares the main checkout (`/home/kill/KoLd__FEEt.ice_skating_`,
+on `phase17-assurance`, uncommitted work in `games/ice-run-godot/…`, `tools/ice-lab/{app/draw.ts,
+game/full-controls.ts, game/setups.ts, sim/*}` and untracked `docs/phase17-*.md`) — **touch none of it**.
+Work in a worktree off `origin/main` (`git worktree add -b <branch> ../KoLd__FEEt.<name> origin/main`).
+Operator data, untracked on purpose: `E_W_replays_sessions_eng_bld/` (today's four session cards were
+copied in as `2026-09-24-*.json`), `Ice Lab — KoLd__FEEt edgework.html`, `session-notes/`.
+
+At close: `main` **703/703** tests, Godot bridge 20/20, typecheck clean (scratch TypeScript — memory
+`ice-lab-typecheck-toolchain`), replay contract **`ice-lab-f64/39`**. PRs merged today: #30–#43.
+
+**The operator plays at `http://localhost:8130/game/`** (the Ice Lab at `/app/`, the controller workshop
+at `/game/controller.html`). It is served from the worktree `/home/kill/KoLd__FEEt.play`, detached at
+`origin/main`; the server was a background task of this session and dies with it. To bring it back:
+`cd /home/kill/KoLd__FEEt.play && git fetch && git checkout --detach origin/main && cd tools/ice-lab &&
+PORT=8130 npm run serve` (in the background). After every merge the operator plays, move `play` to the new
+main and restart. The operator said of today's build: "it feels like im really on the ice".
+
+### 0.1 · In flight — pick this up first (waiting on three operator decisions)
+
+**The arms' whip, grip-limited** — built but UNCOMMITTED in `/home/kill/KoLd__FEEt.whipgrip` (branch
+`arms-whip-grip`, merged up to main `d277613`). The agent stopped before committing, as instructed,
+because the showcase double loop cannot be made to land reliably from the Experimental pad.
+
+Built (uncommitted): `armsWhipMode` (the arms' torque inside the trunk solve, grip-limited; an over-hard
+whip pivots the feet; `armsWhipTorque` 60 = `twistTorqueMax`, authored) with the **sign fix** (arms wound
+against the jump take spin away); a new **`jumpInertiaTucked`** (the tuck in the AIR only, 0.5 in the trunk
+setups, 0.95 default) — because lowering `inertiaTucked` itself to 0.5 broke skating (the trunk's upper
+body at arms-in became 0.1 kg m²: the hockey stop fell, ball-of-foot pivots stopped, 13 tests moved);
+X/B move only the arms while a jump loads (Experimental / Dig Gate). Suite: 686 pass, 7 fail — backjump
+(2), the ghost's loop, the tutorial's "Turn in the air" (Simulation, Experimental, and its duration
+test), the replay fixture (awaiting `/40`). The lab's scheme C arms tests did not move.
+
+Measured: direct inputs land a clean 2Lo (6 m/s, lean 0.8, arms 0.75, 1.91 rev at tuck 0.5), but a
+search of 432 Experimental pad scripts found at best a double called a quarter short (8 m/s, both
+sticks full, B from the start, RT at 1.5 s for 0.3 s, X from 1.7 s: L 15.2); most hop or fall. Why: the
+arms' request follows Experimental's eased pose (3/s), not the swing, so a B→X swing crosses zero during
+a 0.3 s load; deep edges don't hold on the Experimental pad (the automatic crossover beat puts both feet
+down and breaks the load; the tilt oscillates); the edge's grip dips while the knee loads (41 → 24 N m).
+The tutorial's air step jumps from a straight glide — nothing through the ice can turn that.
+
+**The operator must decide:** (1) confirm the air-only tuck (`jumpInertiaTucked`) instead of lowering
+`inertiaTucked`; (2) how Experimental's arms ask for the whip — a swing during the load asks the full
+whip whatever the eased pose, and/or suppress the automatic crossover beat while a jump loads so a deep
+held edge is possible (both are controls, not physics); or (3) accept singles as the Experimental
+showcase under this mode. Then finish: re-script backjump, the ghost's loop (`game/ghost.ts`) and the
+tutorial's air step onto an edge; the contract-bump pattern (`/39 → /40` with a history note in
+`sim/replay.ts`, `node replay/rebase-fixture.ts` (digests unchanged), pins in `docs/controller-scheme.md`,
+`validate.mjs --report`, `node test/setup-script.ts --write` with a header note, Godot
+`prepare.mjs --engine-only`, the native reference); `docs/open-constants.md` entries. Probe scripts in
+the session scratchpad (`…/scratchpad/whip/`) die with the session; the worktree's diff is the record.
+
+### 0.2 · What exists now (all under `tools/ice-lab/`; details in `docs/controller-scheme.md`)
+
+**Five setups** (`game/setups.ts`; memory `four-setups-kept`): Simulation, Blade Explorer, Experimental,
+**Dig Gate** (new: Experimental + a phase-gated dig on LB+RB), Full Repertoire. The operator will combine
+them into three later — bring options from all of them when asked.
+
+| Today | What it does | Where |
+| --- | --- | --- |
+| Toe-pick trip | `toePickMode`; built, then **off in every setup** — the operator: "not working at all", "makes pumping completely useless". Keep off unless asked. | `sim/solver.ts` `toePickCatch`, `test/toepick.test.ts` |
+| Dig under the pendulum | lean early (operator); asked vs actual contact as telemetry (`contactAsked`, `digL`, CSV columns, lab overlay); `digOracle` test-only; `pitchGain` sweep + fingerprint test | `test/dig.test.ts`, `test/pitch-gain-sweep.ts`, `test/pendulum-fingerprint.test.ts` |
+| Arms fore-aft | `pitchInternalMode` (on with the pendulum), `pitchAnkleTau` 0.16 s (1 Hz ankle/hip crossover, authored) | `test/arms.test.ts` |
+| Strokes | a push is the standing leg's, both blades down through it, then across; **below 3.5 m/s it lands on both feet** (`ONE_FOOT_SPEED`), next push still the other leg's; below 1 m/s a snap is always a push (`STANDSTILL_SPEED`); thumb strokes push from a full bend (`STROKE_KNEE`), forgiving accuracy (`STROKE_*`); the free leg's trigger waits out a 0.25 s snap before swinging | `game/full-controls.ts`, `test/setups.test.ts` |
+| Standing-leg pushes on A | Simulation / Explorer / Repertoire (`standingPush`) | same |
+| AI ghost | a second skater on the same solver playing a virtual pad through the same mapping; skates into its tricks from the player's stride; strokes, dig, double loop, snowplow, spin, three-turn; `/` toggles | `game/ghost.ts`, `test/ghost.test.ts` |
+| Tutorial | "Tutorial · trust the ice" (title screen, or Y): Balance → Edges → Scrape & dig → Air, 10 steps read only from solver state, a fall resets the step, the ghost demonstrates | `game/tutorial.ts`, `test/tutorial.test.ts` |
+| Elite Series 2 paddles | Firefox exposes them as buttons **18–21**; bindable paddle layer with presets (Skating/stops, Weight shift, Toe picks); Experimental and Simulation only; D-pad still works | `game/full-controls.ts`, `test/paddles.test.ts`, probe card `game/pad-probe.ts` |
+| Lab scheme C | L3 + right stick = arms (the right blade holds); L3 no longer switches courses (G does); hop hints on the HUD | `app/schemes.ts`, `app/hophint.ts` |
+| Compact HUD | panels ~70%; `` ` `` hides it | `game/index.html` |
+
+### 0.3 · The queue, next (operator's order where given)
+
+1. **Finish the arms' whip** (§0.1) — three operator decisions first.
+2. **Which paddle is which**: the paddle defaults assume b18 = top-right, b19 = bottom-right, b20 =
+   top-left, b21 = bottom-left (Linux xpad order). The operator should press each on the probe card and
+   say; then fix the defaults.
+3. **[operator] Play the tutorial and Dig Gate on the pad**; export replays into
+   `E_W_replays_sessions_eng_bld/` (never analyse `~/Downloads` — memory `play-data-provenance`). Today's
+   four cards were the Ice Lab on scheme C with the `spec` preset — none of the game setups' features.
+4. Tutorial loose ends: never run as one continuous skate with the boards; keyboard wording unverified;
+   Explorer/Repertoire wording only partly checked.
+5. Dig Gate forward digs fall (10/10) — the gate waits for backward travel; a forward dig is open.
+6. The ghost's lutz was dropped (skated in, 7–13/30 land); a dig can't feed a double (L ~6.5 vs ~37).
+7. The game's old "Two-foot control" scheme got L3 arms as a side effect of the lab change (harmless).
+8. Combining setups into three (when asked); SIXAXIS motion for the console build (later).
+9. The other session's untracked `tools/ice-lab/test/phase17-replay.test.ts` still pins an old contract
+   (`/35`); main is at `/39` (and `/40` after the whip). A one-line change, with the operator's leave.
+
+### 0.4 · Key decisions today (the operator's unless marked)
+
+- Toe-pick trip: built, on for a morning, **off everywhere** by the operator's word.
+- The dig: **lean early** (no physics change); from the other options keep only telemetry, a test
+  oracle, the gain sweep and a fingerprint.
+- Experimental: the thumb-stroke trip kept as a skill with forgiving accuracy (moot since the trip went
+  off); strokes switch feet; a snap is a push at a standstill; at a crawl land on both feet.
+- Standing-leg pushes extended to Simulation, Explorer and Repertoire.
+- Dig Gate as a **fifth setup** on LB+RB; kept from the pasted design: intent buffer, phase gate, gating
+  on the actual contact, telemetry; left out: controller-applied impulses/torques, a separate ankle gain,
+  0.1–0.2 s windows. Backward only (forward digs fell 10/10).
+- Arms in the fore-aft pendulum (`pitchInternalMode`) on with the pendulum; `pitchAnkleTau` 0.16 (agent,
+  measured sweep).
+- Lab scheme C: arms on L3, physics frozen, hop hints HUD-only.
+- Paddles bindable with presets; Experimental + Simulation; never arms on the paddles.
+- The ghost: skates into its tricks; the tutorial uses it.
+- Arms' whip: (b) + a tuck of 0.5 + X/B arms-only while loading, trunk setups only (§0.1) — built, not
+  committed; the pad can't land the showcase double yet, three decisions open.
+
+### 0.5 · Unresolved assumptions (authored or unmeasured — `docs/open-constants.md` has each)
+
+- `ONE_FOOT_SPEED` 3.5 and `STANDSTILL_SPEED` 1 m/s — measured with scripted inputs, not play.
+- `pitchAnkleTau` 0.16 s — the 1 Hz crossover is authored; the ankle still moves the contact in one tick.
+- `STROKE_KNEE` 1, `STROKE_EDGE` 0.5, `STROKE_FULL` 1.2, `STROKE_WOBBLE` 0.2, `STROKE_SNAP_TICKS` 12 — authored.
+- Dig Gate `DIG_*` (0.4 toe, 0.5 s ease in, 1.5 s timeout, 0.5 s dig, 1 s ease out) — measured on scripts.
+- Paddle index → position (xpad order), unconfirmed.
+- `armsWhipTorque` 60 and `inertiaTucked` 0.5 (§0.1); the air's open inertia 4.0 is still the bible's.
+- The toe pick's `toePickEngage` 0.11 / `toePickTripSpeed` 1.5 (big_reffg.txt's, authored) — mode off.
+- At low speed on one foot the model has no balance authority (steering ∝ v², no stance on one blade,
+  the arms wash out): the controls now avoid it; the physics hasn't changed.
+
+### 0.6 · How this session worked, and what tripped it (add to §5)
+
+- **Subagents in parallel worked** when each brief carried: its own worktree off `origin/main`, the hard
+  rules (delete nothing, never the shared checkout, never port 8130, don't merge), **file ownership**
+  (which files other agents are changing), measure-before-pinning, and the exact verify commands. Verify
+  every agent PR yourself (merge-tree against main and the other open PRs, run the suite) before relaying.
+- **Agents hit the usage limit mid-work**; resume them with SendMessage (context intact) and tell them to
+  check their worktree's `git status`/`git diff` first. One said it had never actually stopped.
+- **Never `pkill -f` a pattern**: an agent stopped its own server with `pkill -f "node app/serve.mjs"` and
+  took the operator's 8130 server with it. Put "never stop servers you didn't start" in every brief.
+- **`!` runs a command only at the very start of the operator's message**; mid-text it's just text.
+- **Stacked PRs**: merging the upper PR merges into its base branch, not main; GitHub retargets only
+  when the base branch is deleted — otherwise `gh pr edit <n> --base main`. Prefer unstacked PRs.
+- **A physics estimate from a ledger is not the physics**: the whip's first "(b) lands a double" came
+  from a cap bolted on at takeoff; built inside the trunk solve, the knee's load dip took the grip away and
+  no double was reachable. Build it in the dynamics before asking the operator to choose.
+- **Switching a mode on needs everyday inputs measured, not just its showcase**: the toe pick passed its
+  own tests and still broke releasing a lean and pumping. Sweep release, pump, stroke, snowplow, rock-back
+  with the mode forced on before proposing it for a setup.
+- **Pin heading, not only speed**, in stroke tests: the free-leg snap spun the skater right round while
+  the speed checks passed.
+- Keyboard keys: check `game/full-controls.ts` ACTIONS keys and `app/pad.ts` before binding one (G was
+  Choctaw and the lab's game toggle; H is Mohawk).
+- The setup-mapping golden's encoding now writes a field that disappears as `null` (a push's `pushFoot`).
+- `experiment()` in `test/setups.test.ts` reads `input.pushPower!` — an automatic crossover's push has none.
+- Headless Firefox screenshots fail while the operator's Firefox is open; agents used headless Chromium on
+  another port.

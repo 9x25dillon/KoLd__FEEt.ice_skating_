@@ -211,6 +211,17 @@ export interface Params {
   /** kg m^2 about the vertical, arms open and drawn in. Bible: 4.0 and 0.95. */
   inertiaOpen: number;
   inertiaTucked: number;
+  /**
+   * kg m^2. The tightest a jump draws in to in the air — arms crossed, legs
+   * wrapped — which ω = L / I turns into revolutions. inertiaTucked is the
+   * arms drawn in on the ice (the trunk's upper body, a spin's floor); the
+   * air's tuck is tighter. The bible's 0.95 in every preset. 0.5 in the
+   * trunk setups (2026-09-25, with armsWhipMode): what the angular momentum
+   * a skater measurably takes off with, ~19-21 kg m^2/s scaled to this
+   * skater (Frontiers in Sports and Active Living 2025), needs at the
+   * ~30 rad/s doubles turn at. docs/open-constants.md.
+   */
+  jumpInertiaTucked: number;
   /** kg m^2 / s the arms can be drawn in or opened at. */
   inertiaPullRate: number;
   /** s either side of the release a toe strike counts as the pick. Bible: 90 ms. */
@@ -221,6 +232,24 @@ export interface Params {
   callQuarter: number;
   callUnder: number;
   callDowngrade: number;
+  /**
+   * 0: a jump is called from what it turned in the air alone. 1: at first
+   * touchdown, from the turn the takeoff edge's own curve carried the body
+   * through on the ice (from where it faced as the load began) — credited
+   * up to callTakeoffCredit — plus the air's; the feet pivoting or skidding
+   * off the edge is never credited, and past a q's worth (callQuarter) is a
+   * cheated takeoff. The takeoff's, air's and landing's rotation are
+   * reported apart (JumpResult).
+   */
+  rotationCallMode: number;
+  /**
+   * rev. The most of a takeoff edge's turn on the ice the call credits.
+   * Authored: half, the operator's choice (2026-09-25). A measured double
+   * loop turns 470 deg in the air (Frontiers in Sports and Active Living
+   * 2025), so a clean one is carried the rest of the way by its takeoff
+   * edge; a quarter would downgrade it.
+   */
+  callTakeoffCredit: number;
   /** Takeoff-edge error that draws ! and e; the same file. */
   callEdgeUnclear: number;
   callEdgeWrong: number;
@@ -731,6 +760,63 @@ export interface Params {
   freeLegDamping: number;
   freeLegTorqueMax: number;
 
+  // ── the arms' whip through the edge (torqueMode) ──────────────────────────
+  /**
+   * 0: the arms' whip is put into the jump at takeoff — inertiaOpen x
+   * jumpWhip x the carriage (JumpResolver.cpp), whichever way the arms are
+   * swung, and it passes through nothing. 1, with torqueMode: the arms swing
+   * round the body while the knee loads, driven toward that same angular
+   * momentum at up to armsWhipTorque, and the swing's reaction lands on the
+   * lower body like the trunk's and the free leg's. The ice answers it only
+   * as far as the edge's pivot grip can (pivotCapacity), shared with the
+   * trunk: over a deep held edge the swing becomes spin, over a flat or
+   * skidding blade it pivots the feet the other way and nets almost nothing.
+   * Arms wound against the jump (SkatingInput.windup clockwise) swing the
+   * other way and take spin away. Takeoff angular momentum is generated on
+   * the ice through the approach and the takeoff (Frontiers in Sports and
+   * Active Living 2025, "Comparisons of angular momentum at takeoff in six
+   * types of jumps in women's figure skating": 0.133-0.152 m h^2 for
+   * doubles, about 15-17 kg m^2/s for 47 kg at 1.55 m).
+   */
+  armsWhipMode: number;
+  /**
+   * 0: a jump leaves the ice the tick the knee is released, and its upward
+   * speed is simply given it. 1: the release starts the push-off — the
+   * blade stays on the ice for pushOffTime, and the upward speed the legs
+   * give the takeoff comes through it, m v / pushOffTime on top of the
+   * body's weight — so the edge's grip, which scales with its load, is
+   * highest while the swing finishes. The ballistics are unchanged.
+   */
+  pushOffMode: number;
+  /**
+   * 0: once the trunk's torque is more than the edges can hold
+   * (pivotCapacity), the feet pivot resisted only by the scrape's share of
+   * it at once. 1: a pivoting blade still bears on the walls of the groove
+   * it cut until it has turned out of it — rutWidth over half its chord in
+   * the ice, a few degrees — and its grip falls to the scrape's share across
+   * that angle. Nothing authored: the groove is the rut's own geometry.
+   */
+  pivotGrooveMode: number;
+  /**
+   * The normal force is not the weight. 0: the mass a blade carries round a
+   * curve is its load over g, so a knee's bend took force off the curve and
+   * a jump's push put three times as much on, throwing the lean upright. 1:
+   * a blade carries its share of the body's mass (sim/solver.ts bladeMass):
+   * a bend or a push changes the grip, not the force the curve needs. The
+   * lean tips under g either way — the leg pushes along itself, through the
+   * centre of mass.
+   */
+  normalLoadMode: number;
+  /**
+   * s. How long a push-off (pushOffMode 1) stays on the ice. Authored: a
+   * jump's takeoff is a push of about 0.1-0.15 s; 0.12 s puts ~3 body
+   * weights through the blade for this skater's ~2.6 m/s from the legs.
+   * docs/open-constants.md.
+   */
+  pushOffTime: number;
+  /** N m. The most the shoulders swing the arms round the body with. Authored: the trunk's own ceiling (twistTorqueMax). */
+  armsWhipTorque: number;
+
   // ── the fore-aft pendulum ─────────────────────────────────────────────────
   /**
    * 0: SkatingInput.pitch puts the contact on the rocker directly, and the
@@ -793,6 +879,27 @@ export interface Params {
    * under the pendulum it pushes where the blade is not meeting the ice.
    */
   digOracle: number;
+  /**
+   * TEST-ONLY diagnostic, never in a setup (test/takeoff-budget.ts): what the
+   * balance loop does to a jump's takeoff. While a jump loads (and through a
+   * push-off): 0, as always; 1, the loop's counter-steer — its lean-error and
+   * lean-rate terms — is taken out, the lean's own feed-forward left; 2, the
+   * blade's edge command is held where it stands, the loop not asked at all;
+   * 3, the counter-steer out only through the push-off (pushOffMode); 4,
+   * only its lean-error term out; 5, only its lean-rate term out.
+   */
+  diagTakeoffBalance: number;
+  /**
+   * 0: through a jump's load the balance loop trims the edge to the lean it
+   * holds, as on any edge — and so counter-steers against the takeoff edge
+   * deepening and curling on the rocker (test/takeoff-budget.ts 'ab'). 1:
+   * edge commitment — once the load begins the loop's feedback fades out
+   * over edgeCommitTime and the skater rides the curve the asked lean
+   * carves (its feed-forward), uncorrected, until the blade leaves.
+   */
+  edgeCommitMode: number;
+  /** s of the load over which edge commitment (edgeCommitMode) fades the balance loop's feedback out. Authored; measured over a range. */
+  edgeCommitTime: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -879,12 +986,15 @@ export const DEFAULT_PARAMS: Params = {
   jumpRotBias: 1.0,
   inertiaOpen: 4.0,
   inertiaTucked: 0.95,
+  jumpInertiaTucked: 0.95,
   inertiaPullRate: 11.0,     // JumpResolver.cpp
   toeWindow: 0.09,
   landingShock: 1.5,
   callQuarter: 0.125,
   callUnder: 0.25,
   callDowngrade: 0.5,
+  rotationCallMode: 0,
+  callTakeoffCredit: 0.5,
   callEdgeUnclear: 0.25,
   callEdgeWrong: 0.55,
   jumpAssist: 0.25,          // the operator's override of spec, like jumps themselves; 0 is the package
@@ -1022,6 +1132,13 @@ export const DEFAULT_PARAMS: Params = {
   freeLegDamping: 20,
   freeLegTorqueMax: 100,
 
+  armsWhipMode: 0,
+  pushOffMode: 0,
+  pivotGrooveMode: 0,
+  normalLoadMode: 0,
+  pushOffTime: 0.12,
+  armsWhipTorque: 60,
+
   pitchMode: 0,
   pitchGain: 1,
   pitchInternalMode: 0,
@@ -1031,6 +1148,9 @@ export const DEFAULT_PARAMS: Params = {
   toePickEngage: 0.11,
   toePickTripSpeed: 1.5,
   digOracle: 0,
+  diagTakeoffBalance: 0,
+  edgeCommitMode: 0,
+  edgeCommitTime: 0.2,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -1090,6 +1210,8 @@ export function validate(p: Params): string[] {
     errs.push("inertiaTucked must be positive and no more than inertiaOpen");
   if (!(p.callQuarter < p.callUnder && p.callUnder < p.callDowngrade))
     errs.push("rotation call thresholds must rise q < under < downgrade");
+  if (![0, 1].includes(p.rotationCallMode)) errs.push("rotationCallMode is 0 (the air alone) or 1 (the takeoff's turn and the air's, called at touchdown)");
+  if (!(p.callTakeoffCredit >= 0 && p.callTakeoffCredit <= 0.5)) errs.push("callTakeoffCredit is 0-0.5 of a revolution");
   if (p.callEdgeUnclear >= p.callEdgeWrong)
     errs.push("callEdgeUnclear must be below callEdgeWrong");
   if (p.jumpAssist > 1) errs.push("jumpAssist is a share of the arms, 0..1");
@@ -1187,6 +1309,8 @@ export function validate(p: Params): string[] {
     errs.push("staminaJumpImpulseMin is a multiplier on jumpImpulse, in (0, 1]");
   if (p.staminaInertiaFloorMax < p.inertiaTucked)
     errs.push("staminaInertiaFloorMax must be at least inertiaTucked: fatigue cannot pull in tighter than fresh");
+  if (!(p.jumpInertiaTucked > 0 && p.jumpInertiaTucked <= p.inertiaOpen && p.jumpInertiaTucked <= p.staminaInertiaFloorMax))
+    errs.push("jumpInertiaTucked must be positive, no more than inertiaOpen, and no looser than a tired skater's floor (staminaInertiaFloorMax)");
   if (p.staminaMaxLeanLoss < 0) errs.push("staminaMaxLeanLoss cannot be negative");
   if (p.staminaMaxLeanLoss > p.maxLean) errs.push("staminaMaxLeanLoss cannot exceed maxLean itself");
   if (p.staminaBalanceNoiseBase < 0) errs.push("staminaBalanceNoiseBase cannot be negative");
@@ -1202,6 +1326,13 @@ export function validate(p: Params): string[] {
   if (!(p.freeLegMass > 0 && p.freeLegMass < 0.3 && p.freeLegReach > 0 && p.freeLegReach < 1 && p.freeLegArc > 0 && p.freeLegArc < Math.PI))
     errs.push("free leg mass share 0-0.3, reach 0-1 m, arc 0-π");
   if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
+  if (![0, 1].includes(p.pushOffMode)) errs.push("pushOffMode is 0 (leave the ice at the release) or 1 (push off through the blade first)");
+  if (![0, 1].includes(p.normalLoadMode)) errs.push("normalLoadMode is 0 (a blade's mass is its load over g) or 1 (its share of the body's mass)");
+  if (![0, 1].includes(p.pivotGrooveMode)) errs.push("pivotGrooveMode is 0 (the grip falls to the scrape's at once) or 1 (across the groove's angle)");
+  if (!(p.pushOffTime > 0 && p.pushOffTime <= 0.3)) errs.push("pushOffTime is a takeoff's push, s: more than 0, at most 0.3");
+  if (![0, 1].includes(p.armsWhipMode)) errs.push("armsWhipMode is 0 (the whip put in at takeoff) or 1 (the arms swing through the edge)");
+  if (p.armsWhipMode === 1 && p.torqueMode !== 1) errs.push("armsWhipMode 1 needs torqueMode 1: the arms swing against the lower body the edge holds");
+  if (!(p.armsWhipTorque > 0)) errs.push("armsWhipTorque must be positive");
   if (![0, 1].includes(p.pitchMode)) errs.push("pitchMode is 0 (the input sets the contact) or 1 (the ankle balances a fore-aft lean)");
   if (!(p.pitchGain > 0)) errs.push("pitchGain must be positive");
   if (![0, 1].includes(p.pitchInternalMode)) errs.push("pitchInternalMode is 0 (the ankle alone) or 1 (the arms and trunk as well)");
@@ -1209,6 +1340,9 @@ export function validate(p: Params): string[] {
   if (![0, 1].includes(p.toePickMode)) errs.push("toePickMode is 0 (the pick never trips) or 1 (a pick that bites going forward trips)");
   if (!(p.toePickEngage > 0 && p.toePickEngage < 0.5 * p.bladeLength)) errs.push("toePickEngage must lie between the blade's centre and its toe (0 .. bladeLength / 2)");
   if (!(p.toePickTripSpeed > 0)) errs.push("toePickTripSpeed must be positive");
+  if (![0, 1].includes(p.edgeCommitMode)) errs.push("edgeCommitMode is 0 (the loop trims a takeoff's edge) or 1 (the skater rides the committed edge)");
+  if (!(p.edgeCommitTime > 0 && p.edgeCommitTime <= 1)) errs.push("edgeCommitTime is s of the load, more than 0 and at most 1");
+  if (![0, 1, 2, 3, 4, 5].includes(p.diagTakeoffBalance)) errs.push("diagTakeoffBalance is a test-only diagnostic: 0, 1 (no counter-steer in a takeoff), 2 (the edge held), 3 (none in the push-off), 4 (no lean-error term) or 5 (no lean-rate term)");
   if (![0, 1].includes(p.digOracle)) errs.push("digOracle is 0 (the dig pushes at the contact) or 1 (test oracle: at the asked contact)");
   if (![0, 1].includes(p.speedSpinMode)) errs.push("speedSpinMode is 0 (the block lifts) or 1 (it also turns the body)");
   if (![0, 1].includes(p.footMode)) errs.push("footMode is 0 (blades along the body) or 1 (each foot turns in its hip)");

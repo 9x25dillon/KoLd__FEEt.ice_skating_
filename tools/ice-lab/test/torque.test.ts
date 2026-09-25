@@ -16,7 +16,7 @@ import { dot } from "../sim/math.ts";
 import { setupParams } from "../game/setups.ts";
 
 // The Simulation athlete with stages B/C and the fore-aft pendulum switched off: each test switches on what it measures.
-const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, footMode: 0, pitchMode: 0 };
+const SIM = { ...setupParams("simulation"), slipMode: 0, torqueMode: 0, armsWhipMode: 0, footMode: 0, pitchMode: 0 };
 const ON = { ...SIM, slipMode: 1, torqueMode: 1 };
 /** Signed angle of the blades against the travel, degrees, counter-clockwise positive. */
 const slipDeg = (s: SkaterState): number =>

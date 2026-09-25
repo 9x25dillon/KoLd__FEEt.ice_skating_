@@ -419,13 +419,14 @@ function crossing(v0: number, lean: number, knees: number) {
 test("experimental: skating backward on a deep enough curve, the crossovers come by themselves, on the beat", () => {
   // MEASURED from 3 m/s backward, sticks 0.65, knees 0.6: 20 crossovers in 8 s,
   // every one on the beat (128 bpm), 3 -> 6.133 m/s, no pumping. Knees 0.3:
-  // 4.590 — the bend is the push. Before the pushes were on the beat, a
+  // 4.613 — the bend is the push (4.590 before the crossovers held their bent
+  // stance, CROSS_STANCE 0.35: a lighter bend now crosses over at it). Before the pushes were on the beat, a
   // player's own crossover pumps were chopped to 45% (bible §2.6) and a curve
   // built 5.7 m/s where the straight built 8.55.
   const deep = crossing(-3, 0.65, 0.6), light = crossing(-3, 0.65, 0.3);
   assert.equal(deep.fallen, false);
   assert.ok(deep.crossovers === 20 && deep.offBeat === 0, `${deep.crossovers} crossovers, ${deep.offBeat} off the beat`);
-  assert.ok(near(deep.v, 6.133) && near(light.v, 4.590), `${deep.v.toFixed(2)} / ${light.v.toFixed(2)} m/s`);
+  assert.ok(near(deep.v, 6.133) && near(light.v, 4.613), `${deep.v.toFixed(2)} / ${light.v.toFixed(2)} m/s`);
 });
 
 test("experimental: no automatic crossovers forward, straight, or too slow", () => {

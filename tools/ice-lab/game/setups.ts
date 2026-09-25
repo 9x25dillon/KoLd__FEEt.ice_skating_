@@ -31,6 +31,11 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   // the trunk, the feet in the hips. Explorer: the same with the blades kept
   // parallel. Repertoire keeps its dedicated moves on the carve as it was.
   if (setup !== "repertoire") { p.slipMode = 1; p.torqueMode = 1; }
+  // The arms' whip through the edge (armsWhipMode), and the tucked inertia a
+  // measured takeoff's angular momentum needs in the air (jumpInertiaTucked 0.5, the bible's
+  // 0.95 elsewhere): the operator's choice, 2026-09-25. Every jump in these
+  // setups now turns on what the ice gave it (docs/open-constants.md).
+  if (setup !== "repertoire") { p.armsWhipMode = 1; p.jumpInertiaTucked = 0.5; }
   // The fore-aft pendulum (pitchMode) with the feet: the operator's choice, 2026-09-23.
   // The toe-pick trip (toePickMode) was on here from the morning of
   // 2026-09-24 and switched off that afternoon, on the operator's word after
