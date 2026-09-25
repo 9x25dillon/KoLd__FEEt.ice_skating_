@@ -1550,7 +1550,14 @@ export function step(
     if (sinceElement > p.flowDeadAirTime && s.jump.phase === JUMP_PHASE.None)
       s.flow = clamp(s.flow - p.flowDeadAirLoss * dt, 0, 1);
   }
+  // rotationCallMode: what the body turns on the ice after touchdown, over
+  // LANDING_SETTLE — reported with the landing, never credited to the call.
+  if (s.landed.residual !== undefined && s.tick > s.landed.tick && (s.tick - s.landed.tick) * dt <= LANDING_SETTLE)
+    s.landed.residual += s.yawRate * dt / (2 * Math.PI);
 }
+
+/** s after a landing's first touchdown over which its residual rotation is measured (JumpResult.residual). */
+const LANDING_SETTLE = 0.3;
 
 /**
  * Sections 11 & 13: musical credit (sim/music.ts, bible §2.1, §2.6) for a

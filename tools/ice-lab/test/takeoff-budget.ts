@@ -43,7 +43,7 @@ import { SIM_DT } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import { createState, step } from "../sim/solver.ts";
 import { EVENT, NEUTRAL_INPUT } from "../sim/types.ts";
-import type { BalanceBudget, EdgeEvent, SkaterState, SkatingInput, TorqueBudget } from "../sim/types.ts";
+import type { BalanceBudget, EdgeEvent, JumpResult, SkaterState, SkatingInput, TorqueBudget } from "../sim/types.ts";
 import { bodyRate, JUMP_PHASE, upperInertia } from "../sim/jump.ts";
 import { dot, perpLeft } from "../sim/math.ts";
 import { setupParams, setupInput } from "../game/setups.ts";
@@ -77,6 +77,8 @@ export interface Frame {
 export interface Outcome {
   frames: Frame[]; takeoff: number; contactLost: number; landed: boolean; fallen: boolean;
   L: number; turned: number; revolutions: number; call: number; kind: number;
+  /** The landing as the solver called it (JumpResult), residual still accruing if the loop stopped at touchdown. */
+  result: JumpResult;
 }
 
 /**
@@ -193,6 +195,7 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
   return {
     frames, takeoff, contactLost, landed, fallen: s.fallen, L,
     turned: s.landed.turned, revolutions: s.landed.revolutions, call: s.landed.rotationCall, kind: s.landed.kind,
+    result: { ...s.landed },
   };
 }
 

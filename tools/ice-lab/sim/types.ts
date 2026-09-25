@@ -108,6 +108,13 @@ export interface JumpState {
    * tick the knee was released, and the load (N) above the body's weight
    * the push puts through the blade until it leaves. Otherwise absent.
    */
+  /**
+   * rotationCallMode 1 only: rad, where the body faced as this takeoff's load
+   * began (until the takeoff), and the revolutions it turned on the ice from
+   * there to the blade leaving (from the takeoff until the landing).
+   */
+  entryHeading?: number;
+  takeoffTurn?: number;
   pushFrom?: number;
   pushLoad?: number;
   /** The support blade's edge code at the release tick. */
@@ -158,6 +165,18 @@ export interface JumpResult {
   fall: boolean;
   /** The jump was wound up, and the assist flew its arms. */
   armed: boolean;
+  /**
+   * rotationCallMode 1 only, kept apart: revolutions turned on the ice
+   * through the takeoff (from where the body faced as the load began to the
+   * blade leaving), in the air (blade-off to first touchdown), and after
+   * touchdown over LANDING_SETTLE (never credited). The call is made at first
+   * touchdown from the takeoff's turn, credited up to callTakeoffCredit,
+   * plus the air's; past that credit the takeoff is cheated.
+   */
+  takeoffTurn?: number;
+  airborne?: number;
+  residual?: number;
+  cheatedTakeoff?: boolean;
 }
 
 // ── moves ───────────────────────────────────────────────────────────────────

@@ -232,6 +232,16 @@ export interface Params {
   callQuarter: number;
   callUnder: number;
   callDowngrade: number;
+  /**
+   * 0: a jump is called from what it turned in the air alone. 1: at first
+   * touchdown, from the turn the takeoff made on the ice (from where the body
+   * faced as the load began) — credited up to callTakeoffCredit, past which
+   * it is a cheated takeoff — plus the air's; the takeoff's, air's and
+   * landing's rotation are reported apart (JumpResult).
+   */
+  rotationCallMode: number;
+  /** rev. The most of a takeoff's turn on the ice the call credits. Authored: a quarter, the panel's usual tolerance for a pre-rotated takeoff. */
+  callTakeoffCredit: number;
   /** Takeoff-edge error that draws ! and e; the same file. */
   callEdgeUnclear: number;
   callEdgeWrong: number;
@@ -954,6 +964,8 @@ export const DEFAULT_PARAMS: Params = {
   callQuarter: 0.125,
   callUnder: 0.25,
   callDowngrade: 0.5,
+  rotationCallMode: 0,
+  callTakeoffCredit: 0.25,
   callEdgeUnclear: 0.25,
   callEdgeWrong: 0.55,
   jumpAssist: 0.25,          // the operator's override of spec, like jumps themselves; 0 is the package
@@ -1166,6 +1178,8 @@ export function validate(p: Params): string[] {
     errs.push("inertiaTucked must be positive and no more than inertiaOpen");
   if (!(p.callQuarter < p.callUnder && p.callUnder < p.callDowngrade))
     errs.push("rotation call thresholds must rise q < under < downgrade");
+  if (![0, 1].includes(p.rotationCallMode)) errs.push("rotationCallMode is 0 (the air alone) or 1 (the takeoff's turn and the air's, called at touchdown)");
+  if (!(p.callTakeoffCredit >= 0 && p.callTakeoffCredit <= 0.5)) errs.push("callTakeoffCredit is 0-0.5 of a revolution");
   if (p.callEdgeUnclear >= p.callEdgeWrong)
     errs.push("callEdgeUnclear must be below callEdgeWrong");
   if (p.jumpAssist > 1) errs.push("jumpAssist is a share of the arms, 0..1");

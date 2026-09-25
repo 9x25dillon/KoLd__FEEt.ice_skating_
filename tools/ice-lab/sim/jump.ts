@@ -31,7 +31,7 @@
 import { EDGE, DIR, FOOT, EDGE_CODE_NONE, REGIME, EVENT, FALL, MOVE, makeCode, codeDir } from "./types.ts";
 import type { SkaterState, SkatingInput, EdgeEvent, JumpState, JumpResult, Foot, Edge, Dir } from "./types.ts";
 import type { Params } from "./params.ts";
-import { clamp, saturate, lerp, moveToward, rotate, normalizeOr, wrapPi, dot, mul, len, add, perpLeft, sin } from "./math.ts";
+import { clamp, saturate, lerp, moveToward, rotate, normalizeOr, wrapPi, dot, mul, len, add, perpLeft, sin, atan2 } from "./math.ts";
 
 export const JUMP_MODE = { Off: 0, Hop: 1, Full: 2 } as const;
 
@@ -236,7 +236,12 @@ export function jumpGround(
 ): void {
   const J = s.jump;
   if (p.jumpMode <= JUMP_MODE.Off) return;
-  if (s.fallen || s.supportMode === 0) { J.phase = JUMP_PHASE.None; if (J.pushFrom !== undefined) J.pushFrom = J.pushLoad = undefined; return; }
+  if (s.fallen || s.supportMode === 0) {
+    J.phase = JUMP_PHASE.None;
+    if (J.pushFrom !== undefined) J.pushFrom = J.pushLoad = undefined;
+    if (J.entryHeading !== undefined) J.entryHeading = undefined;
+    return;
+  }
 
   const kneeIn = finite(input.knee, 0.35);
   if (input.toe) J.toeTick = s.tick;
@@ -259,6 +264,8 @@ export function jumpGround(
     if (kneeIn >= p.jumpLoadKnee) {
       J.phase = JUMP_PHASE.Load;
       J.t = 0; J.peakKnee = s.knee; J.preRotation = 0; J.setup = 0; J.toeInLoad = false;
+      // rotationCallMode: the takeoff's reference — where the body faces as the load begins.
+      if (p.rotationCallMode >= 1) J.entryHeading = atan2(s.heading.y, s.heading.x);
     }
     return;
   }
@@ -272,7 +279,7 @@ export function jumpGround(
     J.setup += o * dt;
     if (input.toe) J.toeInLoad = true;
     if (J.t > IDEAL_LOAD * 1.6) J.preRotation += PRE_ROTATION_RATE * dt;
-    if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; return; }
+    if (J.t > p.jumpLoadMax) { J.phase = JUMP_PHASE.None; if (J.entryHeading !== undefined) J.entryHeading = undefined; return; }
     if (kneeIn >= p.jumpReleaseKnee) return;
     // Mid-move the blade is not on an edge to leave from: the release waits for
     // the exit edge, and takes off from it (sim/moves.ts).
@@ -378,6 +385,13 @@ export function jumpGround(
     J.target = 2 * Math.PI * (Math.max(1, Math.round(reach - extra)) + extra);
   }
 
+  // rotationCallMode: the turn made on the ice through the takeoff, from the
+  // load's reference to the blade leaving, counter-clockwise positive (the
+  // jumps' rotation). Under half a turn, so the wrap is unambiguous.
+  if (J.entryHeading !== undefined) {
+    J.takeoffTurn = wrapPi(atan2(s.heading.y, s.heading.x) - J.entryHeading) / (2 * Math.PI);
+    J.entryHeading = undefined;
+  }
   events.push({
     tick: s.tick, type: EVENT.Takeoff, foot,
     prevCode: b.code, newCode: EDGE_CODE_NONE, prevDwell: J.t, value: J.vz,
@@ -498,20 +512,29 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   const o = outsideness(foot, s.tiltCmd, p);
 
   let kind = J.kind;
+  // rotationCallMode 1: the jump is called at this first touchdown from the
+  // turn made through the takeoff on the ice, credited up to
+  // callTakeoffCredit, plus what was turned in the air; what turns after
+  // this instant never counts. 0: the air alone, as before.
+  const takeoffTurn = p.rotationCallMode >= 1 ? J.takeoffTurn ?? 0 : 0;
+  const credited = Math.min(Math.max(takeoffTurn, 0), p.callTakeoffCredit);
+  const counted = turned + credited;
+  // Where the body faces at touchdown, from the reference: every bit of the takeoff's turn.
+  const facing = J.rotation + 2 * Math.PI * takeoffTurn;
   let revolutions = 0, shortBy = 0, target: number;
-  if (kind !== JUMP_NONE && turned - (kind === JUMP.Axel ? 0.5 : 0) < MIN_JUMP_REVS) kind = JUMP_NONE;
+  if (kind !== JUMP_NONE && counted - (kind === JUMP.Axel ? 0.5 : 0) < MIN_JUMP_REVS) kind = JUMP_NONE;
   if (kind !== JUMP_NONE) {
-    ({ revolutions, shortBy } = calledRevolutions(turned, kind, p));
+    ({ revolutions, shortBy } = calledRevolutions(counted, kind, p));
     target = 2 * Math.PI * (revolutions + (kind === JUMP.Axel ? 0.5 : 0));
   } else {
     // A hop, a waltz jump, or a takeoff no jump leaves from: land it facing
     // whichever half-turn it is nearest.
-    target = Math.PI * Math.round(J.rotation / Math.PI);
+    target = Math.PI * Math.round(facing / Math.PI);
   }
 
   // Landing quality: did you open on time, present the right edge, and absorb
   // the impact with the knee? Every jump lands RBO; a hop can land on anything.
-  const checkErr = Math.abs(wrapPi(J.rotation - target)) / Math.PI;
+  const checkErr = Math.abs(wrapPi(facing - target)) / Math.PI;
   const absorb = saturate(finite(input.knee, 0.35));
   const edgeOK = kind === JUMP_NONE ? 1
     : foot === FOOT.Right && dir === DIR.Backward ? 1 - edgeMismatch(o, true) : 0;
@@ -528,6 +551,9 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
     toe: J.toeInLoad, takeoffQuality: J.quality, landingQuality,
     height: J.height, airTime: J.t, peakOmega: J.peakOmega,
     twoFoot, stepOut: !fall && landingQuality < 0.34, fall, armed: J.armed,
+    ...(p.rotationCallMode >= 1 ? {
+      takeoffTurn, airborne: turned, residual: 0, cheatedTakeoff: takeoffTurn > p.callTakeoffCredit,
+    } : {}),
   };
 
   const side = o > 0 ? EDGE.Outside : o < 0 ? EDGE.Inside : EDGE.Flat;
@@ -537,6 +563,7 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   });
 
   J.phase = JUMP_PHASE.None;
+  if (J.takeoffTurn !== undefined) J.takeoffTurn = undefined;
   J.t = 0; J.z = 0; J.vz = 0; J.angMomentum = 0; J.inertia = p.inertiaOpen;
   J.armed = false; J.target = 0;
   s.yawRate = 0;
