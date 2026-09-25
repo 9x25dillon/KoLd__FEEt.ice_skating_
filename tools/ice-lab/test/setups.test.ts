@@ -483,3 +483,61 @@ test("experimental: strokes switch feet — each push is the standing leg's, the
   const hold = experiment((i, h) => { B(i, h); h.buttons[7] = i >= 20 && i < 90 ? 1 : 0; }, 200);
   assert.equal(hold.took, true, "held: the jump");
 });
+
+test("experimental: from a standstill a snap of either trigger is a push — RT first too — and a held RT is still the jump", () => {
+  // MEASURED (2026-09-24), from rest, weight on the right as a session
+  // starts, a snap (8 ticks) every 0.5 s for 4 s. Before: RT first — the
+  // standing leg's — loaded a jump (0.22 m, unnamed) and the skater fell
+  // (lean exceeded) with no push; LT first pushed. Now, under
+  // STANDSTILL_SPEED (1 m/s) the standing trigger's knee is held short of the
+  // jump's load until the press outlasts the gesture window, as while
+  // stroking: RT first pushes, the strokes alternate, 0 -> 1.951 m/s; LT
+  // first as before, 1.979. Held 0.5 s from rest RT still loads and takes
+  // off: a 0.41 m hop that, as before the change, falls on landing (no jump
+  // from the standing trigger lands under 2.5 m/s).
+  const fromRest = (setup: "experimental" | "diggate", plan: (i: number, h: ControllerHardware) => void, ticks = 490) => {
+    const r = rig(setup, 0); r.h.buttons[7] = 0; const feet: string[] = [];
+    let took = false;
+    for (let i = 0; i < ticks && !r.s.fallen; i++) {
+      r.h.buttons.fill(0); r.h.axes = [0, 0, 0, 0]; plan(i, r.h);
+      const before = r.s.jump.phase, { input } = r.tick();
+      if (input.push) feet.push(String(input.pushFoot));
+      if (before !== JUMP_PHASE.Air && r.s.jump.phase === JUMP_PHASE.Air) took = true;
+    }
+    return { v: Math.hypot(r.s.vel.x, r.s.vel.y), feet: feet.join(""), took, fallen: r.s.fallen };
+  };
+  const snaps = (first: number) => (i: number, h: ControllerHardware) => {
+    const n = Math.floor((i - 10) / 60);
+    if (i >= 10 && (i - 10) % 60 < 8) h.buttons[n % 2 ? 13 - first : first] = 1;
+  };
+  for (const setup of ["experimental", "diggate"] as const) {
+    const rt = fromRest(setup, snaps(7)), lt = fromRest(setup, snaps(6));
+    for (const [name, r] of [["RT first", rt], ["LT first", lt]] as const) {
+      assert.equal(r.took, false, `${setup}, ${name}: no takeoff`);
+      assert.equal(r.fallen, false, `${setup}, ${name}: standing`);
+      assert.equal(r.feet, "10101010", `${setup}, ${name}: the standing leg pushes, then the other`);
+    }
+    assert.ok(near(rt.v, 1.951) && near(lt.v, 1.979), `${setup}: ${rt.v.toFixed(3)} / ${lt.v.toFixed(3)} m/s at 4 s`);
+    const held = fromRest(setup, (i, h) => { h.buttons[7] = i >= 10 && i < 70 ? 1 : 0; }, 200);
+    assert.equal(held.took, true, `${setup}: RT held from rest is the jump`);
+    assert.equal(held.feet, "", `${setup}: and not a push`);
+  }
+});
+
+test("experimental: the standstill's snap ends at 1 m/s — above it the standing trigger loads the jump at once, as from a glide", () => {
+  // The first tick of an RT snap, weight on the right, never having pushed:
+  // under STANDSTILL_SPEED the knee waits short of the jump's load; at or
+  // above it the knee is the trigger's, as it always was. Above it every
+  // mapped input is unchanged: the setup-mapping golden (every SkatingInput
+  // field, every tick, Experimental and Dig Gate's RT load and takeoff from
+  // 5 m/s included) and the stroking tests from 3 m/s pass untouched.
+  const firstTick = (v: number) => {
+    const r = rig("experimental", v); r.h.buttons[7] = 0;
+    r.tick();
+    r.h.buttons[7] = 1;
+    return { input: r.tick().input, p: r.p };
+  };
+  const slow = firstTick(0.9), fast = firstTick(1.1);
+  assert.equal(slow.input.knee + (slow.input.kneeSplit ?? 0), slow.p.jumpLoadKnee - 0.01, "0.9 m/s: held short of the load");
+  assert.equal(fast.input.knee + (fast.input.kneeSplit ?? 0), 1, "1.1 m/s: the trigger's own knee");
+});
