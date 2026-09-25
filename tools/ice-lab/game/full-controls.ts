@@ -354,12 +354,32 @@ export function digStatus(f: FullState | undefined): string {
  * leg's — strokes alternate feet as a skater's do. The standing trigger is
  * also the jump's load: while stroking (within STROKING_S of the last push)
  * it loads only once held past GESTURE_TICKS, so a snap is the next push and
- * a hold is a jump; from a glide it loads at once, as it always did
- * (fullInput). With shared weight each trigger pushes its own leg.
+ * a hold is a jump; so too from a standstill (under STANDSTILL_SPEED), so
+ * the first push can be either trigger's; from a glide it loads at once, as
+ * it always did (fullInput). With shared weight each trigger pushes its own leg.
  */
 const PUMP_HIGH = 0.6, PUMP_LOW = 0.2, GESTURE_TICKS = 30, PAIR_TICKS = 15, SNAP_TICKS = 6;
 /** s after a push that the skater is still stroking: a snap of the standing trigger is the next push, not a jump. Authored. */
 const STROKING_S = 1;
+/**
+ * m/s under which the skater is starting from a standstill: a snap of the
+ * standing trigger is a push, as while stroking (the operator's call,
+ * 2026-09-24: from rest RT snapped first loaded a jump and the skater fell;
+ * LT first pushed). MEASURED (Experimental, weight on the right as a session
+ * starts): one push from rest peaks at 0.29 m/s; pushing once a second, just
+ * outside STROKING_S, the skater is at 0.21, 0.42, 0.63 m/s before the 2nd,
+ * 3rd, 4th push — a start-up at any cadence is under 1 m/s for its first
+ * pushes. A jump from the standing trigger lifts the same at any speed (the
+ * legs' alone: 0.22 m snapped, 0.44 m held 0.3 s, 0 to 3 m/s) and lands from
+ * 2.5 m/s backward, 3 m/s forward at the soonest (snapped or held, sticks
+ * centred or ±0.3 / ±0.6); under that every one falls. So under 1 m/s a
+ * snapped jump is never one that lands, and 1 m/s leaves margin to the
+ * slowest that does. A held press still loads the jump here, once it
+ * outlasts the gesture window. The solver's dirSpeedEps (0.15) was too low:
+ * a single push from rest stays above it for 1.8 s, so a pause after the first
+ * push and a snap of the standing trigger would still have been a jump.
+ */
+const STANDSTILL_SPEED = 1;
 const STROKE_EDGE = 0.5, STROKE_FULL = 1.2, STROKE_WOBBLE = 0.2, STROKE_SNAP_TICKS = 12;
 /**
  * The bend a thumb stroke's push extends from (SkatingInput.pushKnee): a full
@@ -628,12 +648,14 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     // stops come from the blades themselves.
     if (h.connected && !key("shift")) {
       const kneeL = trigger(6), kneeR = trigger(7), knees = [kneeL, kneeR];
-      // Experimental, on one foot, while stroking: the standing trigger is the
-      // push's and the jump's. Until the press has been held past the gesture
-      // window it is a snap — the next push — and the knee stays short of the
-      // jump's load. From a glide the load is the jump's at once.
+      // Experimental, on one foot, while stroking or starting from a
+      // standstill (STANDSTILL_SPEED): the standing trigger is the push's and
+      // the jump's. Until the press has been held past the gesture window it
+      // is a snap — the next push, or the first — and the knee stays short of
+      // the jump's load. From a glide the load is the jump's at once.
       const stroking = s.tick - (f.lastPush ?? -1e9) < STROKING_S / SIM_DT;
-      if (options.pumps && stroking && f.foot !== 0.5 && !pushing && f.gestures?.rise) {
+      const standstill = Math.hypot(s.vel.x, s.vel.y) < STANDSTILL_SPEED;
+      if (options.pumps && (stroking || standstill) && f.foot !== 0.5 && !pushing && f.gestures?.rise) {
         const stand = f.foot === 1 ? 1 : 0;
         if (knees[stand] >= PUMP_HIGH && s.tick - f.gestures.rise[stand] < GESTURE_TICKS)
           knees[stand] = Math.min(knees[stand], p.jumpLoadKnee - 0.01);
