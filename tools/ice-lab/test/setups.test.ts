@@ -350,11 +350,12 @@ test("experimental: thumb strokes get the skater going from a standstill as trig
     assert.equal(strokes.fallen, false, setup);
     assert.equal(strokes.feet, "10101010", `${setup}: strokes alternate feet`);
     assert.ok(strokes.knees.every(k => k === 1), `${setup}: each from a full bend`);
-    assert.ok(near(strokes.v, 1.977), `${setup}: ${strokes.v.toFixed(3)} m/s at 4 s (was 0.509)`);
+    // 1.994 since a push at a crawl lands on both feet (ONE_FOOT_SPEED); 1.977 on one foot; 0.509 before the full bend.
+    assert.ok(near(strokes.v, 1.994), `${setup}: ${strokes.v.toFixed(3)} m/s at 4 s (was 1.977, and 0.509)`);
   }
   let n = 0;
   const snaps = standstill("diggate", (k, h) => { if (k === 0) n++; h.buttons[n % 2 ? 6 : 7] = k < 8 ? 1 : 0; });
-  assert.ok(near(snaps.v, 1.978), `alternating snaps ${snaps.v.toFixed(3)}`);
+  assert.ok(near(snaps.v, 1.966), `alternating snaps ${snaps.v.toFixed(3)} (1.978 before a push at a crawl landed on both feet)`);
 });
 
 test("experimental: pumping the legs in turn builds real speed, and never reads as a jump; loading both and letting go does", () => {
@@ -448,7 +449,10 @@ test("experimental: the free leg's trigger swings it — released it rests — a
   assert.deepEqual(r.pushes, [], "a held swing released is a swing, not a push");
   const snap = experiment((i, h) => { if (i >= 2 && i < 4) h.buttons[1] = 1; h.buttons[6] = i >= 20 && i < 26 ? 1 : 0; }, 90);
   assert.deepEqual(snap.pushes, ["1@1.00"], "snapped: the standing leg pushes");
-  assert.equal(snap.st.full!.foot, 0, "and the weight goes across");
+  // At 3 m/s, under ONE_FOOT_SPEED (3.5), the push lands on both feet and the
+  // next push is due from the left (before 2026-09-24's two-feet rule: onto the left foot).
+  assert.equal(snap.st.full!.foot, 0.5, "at a crawl, onto both feet");
+  assert.equal(snap.st.full!.nextPushFoot, 0, "and the next push is the other leg's");
   const shared = experiment(() => {}, 5);
   assert.equal(shared.inputs[4].freeLeg, undefined, "both feet down: no free leg");
 });
@@ -458,8 +462,10 @@ test("experimental: strokes switch feet — each push is the standing leg's, the
   // 2.5 s, starting on the free (left) leg's trigger: the pushes alternate
   // right, left, right…, both blades down through each push, straight down
   // the ice, and none reads as a jump — while stroking, a snap of the
-  // standing trigger is the next push. LT alone 4.087 m/s; alternating LT, RT
-  // 4.090; gliding 2.731. (Before the free leg waited out a snap, its swing
+  // standing trigger is the next push. LT alone 4.081 m/s; alternating LT, RT
+  // 4.084; gliding 2.731. Under 3.5 m/s (ONE_FOOT_SPEED) each push lands on
+  // both feet and the next is still the other leg's; past it, foot to foot.
+  // (Before the two-feet rule, onto one foot every time: 4.087 and 4.090.) (Before the free leg waited out a snap, its swing
   // spun the skater right round: 4.017 and 3.047, heading reversed.) From a glide the standing trigger is the jump's load at once, as
   // it was: RT snapped first takes off. Held 0.6 s, it takes off.
   const B = (i: number, h: ControllerHardware) => { if (i >= 2 && i < 4) h.buttons[1] = 1; };
@@ -473,10 +479,9 @@ test("experimental: strokes switch feet — each push is the standing leg's, the
     assert.equal(r.took, false, "a snap while stroking is never a jump");
     assert.equal(r.fallen, false);
   }
-  assert.ok(near(lt.v, 4.087) && near(alt.v, 4.090), [lt, alt].map(r => r.v.toFixed(3)).join(" / "));
-  for (const r of [lt, alt]) assert.ok(Math.abs(r.st.full!.foot - 0.5) === 0.5, "on one foot between strokes");
-  const weights = lt.inputs.slice(10, 70).map(x => x.weight);
-  assert.ok(weights.includes(0.5) && weights.at(-1) === 0, "both down through the push, then onto the left foot");
+  assert.ok(near(lt.v, 4.081) && near(alt.v, 4.084), [lt, alt].map(r => r.v.toFixed(3)).join(" / "));
+  for (const r of [lt, alt]) assert.ok(Math.abs(r.st.full!.foot - 0.5) === 0.5, "on one foot once past 3.5 m/s");
+  assert.deepEqual([70, 130, 250, 299].map(i => lt.inputs[i].weight), [0.5, 0.5, 1, 0], "both feet at a crawl, then foot to foot");
   const standingFirst = snaps(() => 7);
   assert.equal(standingFirst.took, true, "from a glide the standing trigger's snap is the jump's load");
   assert.deepEqual(standingFirst.pushes, []);
@@ -491,8 +496,8 @@ test("experimental: from a standstill a snap of either trigger is a push — RT 
   // (lean exceeded) with no push; LT first pushed. Now, under
   // STANDSTILL_SPEED (1 m/s) the standing trigger's knee is held short of the
   // jump's load until the press outlasts the gesture window, as while
-  // stroking: RT first pushes, the strokes alternate, 0 -> 1.951 m/s; LT
-  // first as before, 1.979. Held 0.5 s from rest RT still loads and takes
+  // stroking: RT first pushes, the strokes alternate, 0 -> 1.961 m/s; LT
+  // first 1.956 (1.951 and 1.979 before a push at a crawl landed on both feet). Held 0.5 s from rest RT still loads and takes
   // off: a 0.41 m hop that, as before the change, falls on landing (no jump
   // from the standing trigger lands under 2.5 m/s).
   const fromRest = (setup: "experimental" | "diggate", plan: (i: number, h: ControllerHardware) => void, ticks = 490) => {
@@ -517,7 +522,7 @@ test("experimental: from a standstill a snap of either trigger is a push — RT 
       assert.equal(r.fallen, false, `${setup}, ${name}: standing`);
       assert.equal(r.feet, "10101010", `${setup}, ${name}: the standing leg pushes, then the other`);
     }
-    assert.ok(near(rt.v, 1.951) && near(lt.v, 1.979), `${setup}: ${rt.v.toFixed(3)} / ${lt.v.toFixed(3)} m/s at 4 s`);
+    assert.ok(near(rt.v, 1.961) && near(lt.v, 1.956), `${setup}: ${rt.v.toFixed(3)} / ${lt.v.toFixed(3)} m/s at 4 s`);
     const held = fromRest(setup, (i, h) => { h.buttons[7] = i >= 10 && i < 70 ? 1 : 0; }, 200);
     assert.equal(held.took, true, `${setup}: RT held from rest is the jump`);
     assert.equal(held.feet, "", `${setup}: and not a push`);
