@@ -607,6 +607,8 @@ export interface SkaterState {
   torqueBudget?: TorqueBudget;
   /** Observability only, like torqueBudget: the balance controller's terms this tick (test/takeoff-budget.ts). */
   balanceBudget?: BalanceBudget;
+  /** Observability only, like torqueBudget: a touchdown's states as land() resolves it (test/landing-chain.ts). */
+  landingBudget?: LandingBudget;
   /**
    * pivotGrooveMode 1 only: rad the lower body has pivoted off the carve
    * since its blades last held; 0 while they hold. Across the groove's angle
@@ -888,6 +890,27 @@ export interface TorqueBudget {
  * One tick of the balance controller (sim/solver.ts section 2): how the lean
  * asked for became the blade's edge. Accelerations m/s^2, angles rad.
  */
+/**
+ * A touchdown as sim/jump.ts land() resolves it, in three states: before any
+ * contact (pre), after what the contact itself does to the body (the blade
+ * scrubbing the velocity it does not point along, the spin stopped), and
+ * after landingShock's kick to the lean. Filled only when a tool attaches it.
+ */
+export interface LandingBudget {
+  tick: number;
+  /** Before contact: the CoM's horizontal velocity (m/s), the vertical speed arriving (m/s, down negative), the heading. */
+  velPre: Vec2; vz: number; heading: Vec2;
+  lean: number; leanRatePre: number; pitch: number; pitchRate: number; legLength: number; knee: number;
+  /** The air's yaw: angular momentum (kg m^2/s), inertia (kg m^2), rate (rad/s), rotation (rad). */
+  L: number; inertia: number; omega: number; rotation: number;
+  /** After the contact: the velocity the blade keeps; the yaw rate the model leaves (the spin stopped). */
+  velPost: Vec2; yawRatePost: number;
+  /** The landing's score and its terms. */
+  checkErr: number; absorb: number; edgeOK: number; balance: number; twoFoot: boolean; landingQuality: number; fall: boolean;
+  /** The lean's rate after landingShock (unchanged if it fell at the touchdown). */
+  leanRatePost: number;
+}
+
 export interface BalanceBudget {
   leanCmd: number; lean: number; leanRate: number;
   /** aCmd's terms: g tan(leanCmd), balanceKp (lean - leanCmd), balanceKd leanRate, the fatigue noise. */
