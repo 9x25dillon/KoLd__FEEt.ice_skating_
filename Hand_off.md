@@ -51,7 +51,17 @@ The goal is a double loop that emerges from the physics and lands, matched again
    `node test/loop-calibration.ts push`. **[operator]** the push time to canonicalise (0.12 stays the
    default until then). A longer push costs takeoff L with today's scripts (94 → 64 ×10⁻³ at 0.25 s: the free
    leg swings long before blade-off) — item 3's re-run is where the swing is re-timed.
-3. **Re-run the double loop** (`node test/loop-calibration.ts --set edgeCommitMode=1`, and
+3. **Free leg timed by the push — measured (2026-09-25, branch `swing-phase`).** Operator's decisions: push
+   0.25 s for the 2Lo calibration only (0.12 stays the default); takeoff roll not fixed yet; `landingShock`
+   frozen. `node test/free-leg-timing.ts [--time-clock]`: the stack together on the cohort body; the swing
+   phase-locked (start 0.2, end 0.9, peak swept). **Result:** vz 2.16, flight 0.433 s, L 114 ×10⁻³ (-2.3 sd,
+   up from 64 with the old wall-clock swing and 94 legacy), air 428°, no slip; still 2Lo `<<`, falls; blade-off
+   roll -0.51 at 1.35 rad/s. **The hip saturates** (76.5 N m cohort, 10-14 of 31 push ticks), so the peak
+   sweep barely matters, and **a swing still moving at blade-off carries more L than one completed on the
+   ice** (the braking hands L back through the gripping blade) — in tension with the spec's "nearly complete
+   by blade-off" criterion. The extension clock is (t/T)², so its 20% is 45% of the time. **[operator]**
+   which clock and completion criterion; whether the free leg's hip ceiling (100 N m, authored) is measured.
+   Earlier text for this item, kept: **Re-run the double loop** (`node test/loop-calibration.ts --set edgeCommitMode=1`, and
    `node test/takeoff-budget.ts commit --set pushOffMode=1 --set normalLoadMode=1 --set rotationCallMode=1`,
    `node test/air-posture.ts`) with 1 and 2 in. Leave the tuck alone until then (§0.5).
 4. **Canonicalise once, then `/40` once** (operator: "avoid repeated golden churn"): turn on

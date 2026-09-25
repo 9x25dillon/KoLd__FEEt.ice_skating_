@@ -69,6 +69,14 @@ export interface Frame {
   knee: number; kneeRate: number; lean: number; pitchContact: number;
   /** rad/s: the lean's rate; rad and rad/s: the fore-aft pitch (pitchMode); rad: the lean the lateral force balances, and the lean less it. */
   leanRate: number; pitch: number; pitchRate: number; leanEq: number; balanceError: number;
+  /**
+   * 0..1 through a push-off, -1 outside one: how far the support leg has
+   * straightened (pushMechanicsMode's extension clock), and how much of
+   * pushOffTime has passed (both after this tick); the free leg's command
+   * (SkatingInput.freeLeg) this tick, and the phase it was asked on — the
+   * clock in use as the tick began, -1 when no phase-locked swing is asking.
+   */
+  pushPhase: number; timePhase: number; freeLegCmd: number; swingPhase: number;
   yawSlip: number; latSlip: number; yawRate: number;
   /** kg m^2/s: on the ice, what a takeoff now would read (before quality); in the air, the jump's. */
   L: number; omega: number; inertia: number; carriage: number;
@@ -86,6 +94,8 @@ export interface Outcome {
   frames: Frame[]; takeoff: number; contactLost: number; landed: boolean; fallen: boolean;
   /** s: the touchdown and the fall (-1 for none), and why it fell (FALL). */
   landedAt: number; fallAt: number; fallReason: number;
+  /** A phase-locked swing (Variation.swing) ran on the time clock because the push had no extension to read. */
+  phaseFallback: boolean;
   L: number; turned: number; revolutions: number; call: number; kind: number;
   /** The landing as the solver called it (JumpResult), residual still accruing if the loop stopped at touchdown. */
   result: JumpResult;
@@ -155,6 +165,45 @@ const LOAD_AT = 1, LOAD_S = 0.5, SWING_AT = 0.2, SPEED = 6;
 export interface Variation {
   hook?: number; freeLegAt?: number; freeLegTo?: number; toe?: number; toeAt?: number;
   rideOut?: number; landLean?: number; landKnee?: number; atTakeoff?: (s: SkaterState) => void;
+  /** The free leg phase-locked to the push instead of freeLegAt's clock (see `SwingPhase`). */
+  swing?: SwingPhase;
+}
+
+/**
+ * The free leg's swing timed by the push, not the clock: it rests (0.5)
+ * until the push is `start` of the way through, moves to `to` (default 0,
+ * swung back) with its asked rate peaking at `peak` and back to nothing by
+ * `end`, and holds there to blade-off. Phases are the support leg's
+ * extension (pushMechanicsMode: how far it has straightened from the
+ * release) — or, with clock "time" or no extension to read, pushOffTime's
+ * elapsed share. Choreography: it says when the existing hip (freeLegMode,
+ * torque-limited) is asked to move, and adds nothing to it.
+ */
+export interface SwingPhase { start: number; peak: number; end: number; to?: number; clock?: "extension" | "time" }
+
+/** 0..1: the push's extension phase and its time phase, each -1 outside a push; extension -1 without pushMechanicsMode. */
+export function pushPhases(s: SkaterState, p: Params): { extension: number; time: number } {
+  const J = s.jump;
+  if (J.pushFrom === undefined) return { extension: -1, time: -1 };
+  const time = Math.min(1, Math.max(0, (s.tick - J.pushFrom) * SIM_DT / p.pushOffTime));
+  if (J.pushLeg0 === undefined) return { extension: -1, time };
+  const span = p.comHeight - J.pushLeg0;
+  return { extension: span <= 1e-9 ? 1 : Math.min(1, Math.max(0, (s.legLength - J.pushLeg0) / span)), time };
+}
+
+/**
+ * 0..1 of the swing done at `phase`: the integral of an asked rate that
+ * rises as a quarter sine from `start` to its peak at `peak` and falls as a
+ * quarter cosine to nothing at `end` — continuous, one peak, normalised.
+ */
+export function swingProgress(phase: number, sw: SwingPhase): number {
+  if (phase <= sw.start) return 0;
+  if (phase >= sw.end) return 1;
+  const x = (phase - sw.start) / (sw.end - sw.start), xp = (sw.peak - sw.start) / (sw.end - sw.start);
+  const done = x <= xp
+    ? xp * (1 - Math.cos(Math.PI * x / (2 * xp)))
+    : xp + (1 - xp) * Math.sin(Math.PI * (x - xp) / (2 * (1 - xp)));
+  return done;
 }
 const HOOK_S = 0.15;
 
@@ -164,11 +213,12 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
   const profile = defaultControllerProfile(), st: GameControlState = newSchemeState();
   const h: ControllerHardware = { axes: [0, 0, 0, 0], buttons: Array(22).fill(0), keys: [], connected: true };
   const frames: Frame[] = [];
-  let takeoff = -1, contactLost = -1, landed = false, landedAt = -1, fallAt = -1, L = 0;
+  let takeoff = -1, contactLost = -1, landed = false, landedAt = -1, fallAt = -1, L = 0, phaseFallback = false, swingPhase = -1;
   const ticks = 600 + Math.ceil((v.rideOut ?? 0) / SIM_DT);
   for (let i = 0; i < ticks && !s.fallen && (!landed || (v.rideOut !== undefined && i * SIM_DT - landedAt <= v.rideOut)); i++) {
     const t = i * SIM_DT, air = takeoff >= 0, sinceTakeoff = air ? t - takeoff : 0;
     let input: SkatingInput;
+    swingPhase = -1;
     if (kind === "pad") {
       h.buttons.fill(0); h.axes = air ? [0, 0, 0, 0] : [0, 0, -1, 0];
       if (!air && (t < 0.02 || (t >= LOAD_AT && t < LOAD_AT + SWING_AT))) h.buttons[1] = 1;   // B: the weight right, the arms wound
@@ -181,7 +231,14 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
       const u = Math.min(1, Math.max(0, (t - LOAD_AT) / LOAD_S)), windup = kind === "held" ? 0 : -0.7 * u;
       const hooking = t >= LOAD_AT + LOAD_S - HOOK_S ? Math.min(1, (t - (LOAD_AT + LOAD_S - HOOK_S)) / HOOK_S) : 0;
       const lean = Math.max(-1, -0.8 - (v.hook ?? 0) * hooking);
-      const freeLeg = v.freeLegAt !== undefined && t >= LOAD_AT + v.freeLegAt ? v.freeLegTo ?? 1 : 0.5;
+      let freeLeg = v.freeLegAt !== undefined && t >= LOAD_AT + v.freeLegAt ? v.freeLegTo ?? 1 : 0.5;
+      if (v.swing) {
+        const ph = pushPhases(s, p), useTime = v.swing.clock === "time" || ph.extension < 0;
+        if (ph.time >= 0 && useTime && v.swing.clock !== "time") phaseFallback = true;
+        const phase = useTime ? ph.time : ph.extension;
+        swingPhase = phase;
+        freeLeg = phase < 0 ? 0.5 : 0.5 + ((v.swing.to ?? 0) - 0.5) * swingProgress(phase, v.swing);
+      }
       const pitch = (v.toe ?? 0) * (v.toeAt !== undefined ? Number(t >= LOAD_AT + v.toeAt) : hooking);
       input = landed
         ? { ...NEUTRAL_INPUT, lean: v.landLean ?? 0, knee: v.landKnee ?? 0.35, weight: 1, carriage: sinceTakeoff >= check ? 1 : 0 }
@@ -212,6 +269,7 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
       contactS: b.contactS, demand: b.demandRatio,
       knee: s.knee, kneeRate: (s.knee - kneeBefore) / SIM_DT, lean: s.lean, pitchContact: s.pitchContact ?? 0,
       leanRate: s.leanRate, pitch: s.pitch ?? 0, pitchRate: s.pitchRate ?? 0, leanEq: s.leanEq, balanceError: s.balanceError,
+      pushPhase: pushPhases(s, p).extension, timePhase: pushPhases(s, p).time, freeLegCmd: input.freeLeg ?? 0.5, swingPhase,
       yawSlip: s.yawDev ?? 0, latSlip: b.inContact ? dot(s.vel, perpLeft(b.tangent)) : 0, yawRate: s.yawRate,
       L: inAir ? s.jump.angMomentum : p.inertiaOpen * bodyRate(s, p, carriage),
       omega: inAir ? s.jump.angMomentum / s.jump.inertia : bodyRate(s, p, carriage),
@@ -224,7 +282,7 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
     });
   }
   return {
-    frames, takeoff, contactLost, landed, fallen: s.fallen, landedAt, fallAt, fallReason: s.fallReason, L,
+    frames, takeoff, contactLost, landed, fallen: s.fallen, landedAt, fallAt, fallReason: s.fallReason, phaseFallback, L,
     turned: s.landed.turned, revolutions: s.landed.revolutions, call: s.landed.rotationCall, kind: s.landed.kind,
     result: { ...s.landed },
   };
