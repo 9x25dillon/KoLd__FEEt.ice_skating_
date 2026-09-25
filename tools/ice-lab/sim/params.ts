@@ -780,6 +780,16 @@ export interface Params {
    */
   pivotGrooveMode: number;
   /**
+   * The normal force is not the weight. 0: the mass a blade carries round a
+   * curve is its load over g, so a knee's bend took force off the curve and
+   * a jump's push put three times as much on, throwing the lean upright. 1:
+   * a blade carries its share of the body's mass (sim/solver.ts bladeMass):
+   * a bend or a push changes the grip, not the force the curve needs. The
+   * lean tips under g either way — the leg pushes along itself, through the
+   * centre of mass.
+   */
+  normalLoadMode: number;
+  /**
    * s. How long a push-off (pushOffMode 1) stays on the ice. Authored: a
    * jump's takeoff is a push of about 0.1-0.15 s; 0.12 s puts ~3 body
    * weights through the blade for this skater's ~2.6 m/s from the legs.
@@ -1084,6 +1094,7 @@ export const DEFAULT_PARAMS: Params = {
   armsWhipMode: 0,
   pushOffMode: 0,
   pivotGrooveMode: 0,
+  normalLoadMode: 0,
   pushOffTime: 0.12,
   armsWhipTorque: 60,
 
@@ -1270,6 +1281,7 @@ export function validate(p: Params): string[] {
     errs.push("free leg mass share 0-0.3, reach 0-1 m, arc 0-π");
   if (!(p.freeLegStiffness > 0 && p.freeLegDamping >= 0 && p.freeLegTorqueMax > 0)) errs.push("the hip's stiffness, damping and torque must be positive");
   if (![0, 1].includes(p.pushOffMode)) errs.push("pushOffMode is 0 (leave the ice at the release) or 1 (push off through the blade first)");
+  if (![0, 1].includes(p.normalLoadMode)) errs.push("normalLoadMode is 0 (a blade's mass is its load over g) or 1 (its share of the body's mass)");
   if (![0, 1].includes(p.pivotGrooveMode)) errs.push("pivotGrooveMode is 0 (the grip falls to the scrape's at once) or 1 (across the groove's angle)");
   if (!(p.pushOffTime > 0 && p.pushOffTime <= 0.3)) errs.push("pushOffTime is a takeoff's push, s: more than 0, at most 0.3");
   if (![0, 1].includes(p.armsWhipMode)) errs.push("armsWhipMode is 0 (the whip put in at takeoff) or 1 (the arms swing through the edge)");

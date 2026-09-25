@@ -100,6 +100,21 @@ const legKnees = (input: SkatingInput, floor = 0): [number, number] => {
 const supportKnee = ([l, r]: [number, number], weightR: number): number => l + weightR * (r - l);
 
 /**
+ * kg: the body this blade carries round a curve and stops sliding sideways.
+ * normalLoadMode 0 reads it off the load, normalLoad / g, which is the mass
+ * only while nothing moves vertically: a knee bending took mass off the
+ * curve and a push put it on (three body weights in a push-off tripled the
+ * force the carve holds the body in with, and threw the lean upright).
+ * normalLoadMode 1: the blade's share of the weight, weight x mass — the
+ * load still sets the grip (biteCapacity), not what the grip is asked for.
+ * The lean still tips under g (section 7): the leg pushes along itself,
+ * through the centre of mass, so its push loads the blade without tipping
+ * the body. Where g is the only vertical acceleration the two are the same.
+ */
+const bladeMass = (b: SkaterState["blade"][number], p: Params): number =>
+  p.normalLoadMode === 1 ? b.weight * p.mass : b.normalLoad / p.gravity;
+
+/**
  * The share of its grip a blade keeps once it slides: muSkid at scrapeRefTilt.
  * Scaled on biteCapacity, so sharpness, ice and load move a scrape as they
  * move a carve.
@@ -177,7 +192,7 @@ function slipSolveFeet(
     dv = add(dv, mul(f, dt / p.mass));
     force = add(force, f);
     if (sliding || spin !== 0) dL += (r.x * f.y - r.y * f.x) * dt;
-    b.latSlipAccel = sliding ? scrape / Math.max(b.normalLoad / p.gravity, 1e-6) : 0;
+    b.latSlipAccel = sliding ? scrape / Math.max(bladeMass(b, p), 1e-6) : 0;
     if (sliding && b.regime !== REGIME.Brake) b.regime = REGIME.Skid;
     const isSkid = b.regime === REGIME.Skid;
     if (isSkid && !wasSkid[i]) events.push({
@@ -244,7 +259,7 @@ function slipSolve(
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
-    b.latSlipAccel = sliding ? scrapes[i] / Math.max(b.normalLoad / p.gravity, 1e-6) : 0;
+    b.latSlipAccel = sliding ? scrapes[i] / Math.max(bladeMass(b, p), 1e-6) : 0;
     if (sliding && b.regime !== REGIME.Brake) b.regime = REGIME.Skid;
     const isSkid = b.regime === REGIME.Skid;
     if (isSkid && !wasSkid[i]) events.push({
@@ -933,7 +948,7 @@ export function step(
         if (i !== s.strokeFoot && s.blade[i].inContact) crossLoad += s.blade[i].normalLoad;
       }
       if (crossLoad > 0) {
-        pushMass = pb.normalLoad / g;
+        pushMass = bladeMass(pb, p);
         if (s.crossover) {
           const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? p.backPushScale : 1;
           crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * pushKnee() * p.mass * back * (s.strokeScale ?? 1),
@@ -1003,7 +1018,7 @@ export function step(
       const nFlat = perpLeft(b.tangent);
       const vLatFlat = dot(s.vel, nFlat);
       const capFlat = biteCapacity(b.normalLoad, b.tilt, p, condAt(b.contact));
-      const wanted = Math.abs(vLatFlat) * (b.normalLoad / g);
+      const wanted = Math.abs(vLatFlat) * bladeMass(b, p);
       const allowed = Math.min(wanted, capFlat * dt);
       // With slip on, the body-level slip solve in section 4 does this.
       if (!slipOn) flatImpulse = add(flatImpulse, mul(nFlat, -sign(vLatFlat) * allowed));
@@ -1022,7 +1037,7 @@ export function step(
     }
 
     const rGeo = carveRadius(b.tilt, rhoEff);
-    const massShare = b.normalLoad / g;      // kg this blade answers for
+    const massShare = bladeMass(b, p);      // kg this blade answers for
     // In a crossover, a blade carving toward the push's centre also answers
     // for its share of the pushing leg, and is spared its share of the push.
     // Outside one, both are zero and the carve is exactly as it was,
