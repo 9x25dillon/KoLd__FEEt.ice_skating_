@@ -755,7 +755,7 @@ export interface Params {
   freeLegReach: number;
   /** rad. Half the free leg's arc round the body, behind to in front. Authored (~70°). */
   freeLegArc: number;
-  /** The hip's PD toward the asked swing (N m/rad, N m s/rad) and its ceiling (N m). Authored. */
+  /** The hip's PD toward the asked swing (N m/rad, N m s/rad) and its ceiling (N m). Authored; the ceiling is unvalidated (docs/open-constants.md) — do not tune it to a jump. */
   freeLegStiffness: number;
   freeLegDamping: number;
   freeLegTorqueMax: number;
