@@ -132,11 +132,12 @@ test("paddles, experimental: the free leg's trigger still swings it, a snap on i
   assert.equal(both.inputs[39].freeLeg, trigger.inputs[39].freeLeg, "before the paddle, the trigger's swing");
   assert.equal(both.inputs[50].freeLeg, 1, "the paddle's full swing is the stronger");
   // A snap of LT (the free leg's trigger) with the paddle held: the standing
-  // leg pushes, as without it, and the weight goes across.
+  // leg pushes, as without it — at 3 m/s, under ONE_FOOT_SPEED, onto both feet
+  // (before the two-feet rule, 2026-09-24: across to the left foot).
   const snap = elite("experimental", (i, h) => { onRight(i, h); if (i >= 20 && i < 26) h.buttons[6] = 1; if (i >= 15 && i < 30) h.buttons[BOTTOM_LEFT] = 1; }, 90);
   const pushes = snap.inputs.filter(x => x.push).map(x => `${x.pushFoot}@${x.pushPower!.toFixed(2)}`);
   assert.deepEqual(pushes, ["1@1.00"]);
-  assert.equal(snap.feet.at(-1), 0);
+  assert.equal(snap.feet.at(-1), 0.5);
 });
 
 test("paddles: a weight paddle selects and keeps a foot — X / B in Experimental (without the arms), LB / RB in Simulation", () => {

@@ -52,7 +52,10 @@ needs hands-on testing.
 
 **Pushing (Simulation, Blade Explorer, Full Repertoire, since 2026-09-24):** A pushes from the leg you
 stand on; both blades are down through the push, then the weight goes to the other foot, so the next
-push is the other leg's — the same rule as Experimental's strokes. From a standstill, A every 0.5 s:
+push is the other leg's — the same rule as Experimental's strokes. **Below 3.5 m/s a push lands on both
+feet** instead (every pushing setup, Experimental and Dig Gate included), and the next push is still the
+other leg's: measured hands-off after one push, one foot fell within 2.3–3.5 s at any speed up to 3 m/s
+(no steering authority at a crawl, no stance on one blade), both feet held at every speed. From a standstill, A every 0.5 s:
 about 1.1 m/s after 4 s with the knees straight, 2.5 m/s with them bent to 0.65 (a deeper knee is a
 stronger push). The bumpers still choose a foot.
 
