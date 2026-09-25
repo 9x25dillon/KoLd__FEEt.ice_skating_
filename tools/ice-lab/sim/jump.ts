@@ -239,6 +239,7 @@ export function jumpGround(
   if (s.fallen || s.supportMode === 0) {
     J.phase = JUMP_PHASE.None;
     if (J.pushFrom !== undefined) J.pushFrom = J.pushLoad = undefined;
+    if (J.pushAccel !== undefined) J.pushLeg0 = J.pushLegRate0 = J.pushAccel = J.pushLift = undefined;
     if (J.entryHeading !== undefined) J.entryHeading = J.takeoffPivot = undefined;
     return;
   }
@@ -295,6 +296,19 @@ export function jumpGround(
     // load is the grip the swing has to work against while it finishes. The
     // load's timing, depth and toe are the release's.
     if (p.pushOffMode >= 1) {
+      if (p.pushMechanicsMode >= 1) {
+        // pushMechanicsMode: the push drives the leg straight at a constant
+        // force over its whole ticks (the takeoff below leaves on the first
+        // tick at or past pushOffTime); sim/solver.ts moves the leg by it.
+        let n = 1;
+        while (n * dt < p.pushOffTime - 1e-9) n++;
+        const T = n * dt, travel = Math.max(0, p.comHeight - s.legLength);
+        J.pushFrom = s.tick;
+        J.pushLeg0 = s.legLength; J.pushLegRate0 = s.legRate;
+        J.pushAccel = 2 * (travel - s.legRate * T) / (T * T);
+        J.pushLift = s.legRate + J.pushAccel * T;
+        return;
+      }
       const legs = p.jumpImpulse * (0.62 + 0.38 * legQuality(J)) * (p.movesMode >= 1 ? 1 - p.jumpSpeedShare : 1);
       J.pushFrom = s.tick; J.pushLoad = p.mass * legs / p.pushOffTime;
       return;
@@ -302,6 +316,9 @@ export function jumpGround(
   } else if ((s.tick - J.pushFrom) * dt < p.pushOffTime - 1e-9) return;
   const released = J.pushFrom ?? s.tick;
   if (J.pushFrom !== undefined) J.pushFrom = J.pushLoad = undefined;
+  // pushMechanicsMode: the legs' lift is the leg's own speed as it straightens.
+  const legLift = J.pushLift;
+  if (J.pushAccel !== undefined) J.pushLeg0 = J.pushLegRate0 = J.pushAccel = J.pushLift = undefined;
 
   // ── TAKEOFF ───────────────────────────────────────────────────────────────
   const foot = s.supportFoot;
@@ -333,7 +350,7 @@ export function jumpGround(
   if (p.movesMode >= 1 && J.kind !== JUMP_NONE) {
     const vh = len(s.vel), before = s.vel;
     const vault = !JUMP_DEFS[J.kind].toe || struck ? vh / ENTRY_SPEED[J.kind] : 0;
-    const legs = J.vz * (1 - p.jumpSpeedShare);
+    const legs = legLift ?? J.vz * (1 - p.jumpSpeedShare);
     J.vz = legs + J.vz * p.jumpSpeedShare * vault;
     const left = vh * vh - (J.vz * J.vz - legs * legs);
     if (vh > 1e-6) s.vel = mul(s.vel, Math.sqrt(Math.max(0, left)) / vh);
@@ -344,7 +361,7 @@ export function jumpGround(
       const dp = mul(add(s.vel, mul(before, -1)), p.mass);
       vaultSpin = r.x * dp.y - r.y * dp.x;
     }
-  }
+  } else if (legLift !== undefined) J.vz = legLift;
   J.airTime = 2 * J.vz / p.gravity;
   J.height = J.vz * J.vz / (2 * p.gravity);
 

@@ -763,10 +763,22 @@ export function step(
   // has to produce the load, since the vertical axis belongs to the jump
   // package. legAccel enters N because pressing down loads the blade.
   const legTarget = p.comHeight * (1 - p.maxKneeCompression * knee);
-  const legAccel = p.kneeSpring * (legTarget - s.legLength) - p.kneeDamping * s.legRate;
-  s.legRate += legAccel * dt;
-  s.legLength += s.legRate * dt;
-  s.legLength = clamp(s.legLength, 0.3, p.comHeight * 1.05);
+  let legAccel: number;
+  const J = s.jump;
+  if (J.pushAccel !== undefined && J.pushFrom !== undefined) {
+    // pushMechanicsMode: the push, not the knee's spring, drives the leg —
+    // at a constant acceleration from its length and rate at the release to
+    // straight at blade-off (sim/jump.ts). Its acceleration is the load's.
+    const tau = (s.tick - J.pushFrom) * dt;
+    legAccel = J.pushAccel;
+    s.legRate = J.pushLegRate0! + legAccel * tau;
+    s.legLength = J.pushLeg0! + J.pushLegRate0! * tau + 0.5 * legAccel * tau * tau;
+  } else {
+    legAccel = p.kneeSpring * (legTarget - s.legLength) - p.kneeDamping * s.legRate;
+    s.legRate += legAccel * dt;
+    s.legLength += s.legRate * dt;
+    s.legLength = clamp(s.legLength, 0.3, p.comHeight * 1.05);
+  }
 
   // A jump's push-off (pushOffMode): the takeoff's upward speed goes through the blade.
   const nTotal = Math.max(0, p.mass * (g + legAccel)) + (s.jump.pushLoad ?? 0);
