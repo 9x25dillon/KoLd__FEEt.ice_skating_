@@ -234,6 +234,12 @@ export interface FullState {
   transferTo?: number;
   /** Experimental: the tick the last pumped or stroked push began. */
   lastPush?: number;
+  /**
+   * The leg the next push is due from, set when a push lands the skater on
+   * both feet at a crawl (ONE_FOOT_SPEED): strokes still go foot to foot.
+   * Cleared when X / B or the bumpers choose the weight.
+   */
+  nextPushFoot?: number;
   /** Dig Gate: the phase-gated dig (digGate). */
   dig?: DigGate;
 }
@@ -380,6 +386,17 @@ const STROKING_S = 1;
  * push and a snap of the standing trigger would still have been a jump.
  */
 const STANDSTILL_SPEED = 1;
+/**
+ * m/s below which a push lands on BOTH feet rather than the other foot (the
+ * operator's call, 2026-09-24). MEASURED hands-off after one push, in
+ * Simulation and Experimental alike: on one foot the skater fell within
+ * 2.3-3.5 s at every speed tried from 0 to 3 m/s (steering buys no sideways
+ * push at a crawl, v^2 kappa, one blade has no stance, and the arms' help
+ * washes out); from 3.5 m/s up the one-foot glide held 12 s; on both feet
+ * it held at every speed, standstill included. So at a crawl a push lands
+ * on two feet, and once there is speed the strokes go foot to foot.
+ */
+const ONE_FOOT_SPEED = 3.5;
 const STROKE_EDGE = 0.5, STROKE_FULL = 1.2, STROKE_WOBBLE = 0.2, STROKE_SNAP_TICKS = 12;
 /**
  * The bend a thumb stroke's push extends from (SkatingInput.pushKnee): a full
@@ -473,7 +490,7 @@ function feetInput(
  * go while a jump is loading is the jump's release, not a pump; in the air
  * nothing pushes.
  */
-function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x: number; y: number }[], connected: boolean, freeLeg = -1): Partial<SkatingInput> {
+function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x: number; y: number }[], connected: boolean, freeLeg = -1, due = -1): Partial<SkatingInput> {
   const none = () => [-1e9, -1e9];
   const g = f.gestures ??= { high: none(), peak: [0, 0], pump: none(), pumpPower: [0, 0],
     low: none(), lowY: [0, 0], sideSum: [0, 0], samples: [0, 0], stroke: none(), strokePower: [0, 0],
@@ -524,7 +541,8 @@ function pumpInput(f: FullState, s: SkaterState, triggers: number[], sticks: { x
       const bend = Math.max(pumped ? g.extend[i].peak : 0, stroked ? Math.max(triggers[i], STROKE_KNEE) : 0);
       // On one foot the standing leg pushes, whichever gesture asked: off the
       // ice the free leg has nothing to push against.
-      out = { push: true, pushFoot: freeLeg >= 0 ? 1 - freeLeg : i, pushPower: clamp(pump + stroke, 0, 1), pushKnee: Math.max(bend, 0.35) };
+      // On both feet after a push at a crawl, the leg that did not push last.
+      out = { push: true, pushFoot: freeLeg >= 0 ? 1 - freeLeg : due >= 0 ? due : i, pushPower: clamp(pump + stroke, 0, 1), pushKnee: Math.max(bend, 0.35) };
     }
   }
   return out;
@@ -579,7 +597,14 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
   // Experimental: a push has run its course — the weight goes to the other
   // foot and the leg that pushed is free. X / B during it keep their choice.
   if (f.transferTo !== undefined && (leftFoot || rightFoot)) f.transferTo = undefined;
-  if (f.transferTo !== undefined && s.tick >= (f.transferAt ?? 0)) { f.foot = f.transferTo; f.transferTo = undefined; }
+  if (leftFoot || rightFoot) f.nextPushFoot = undefined;
+  if (f.transferTo !== undefined && s.tick >= (f.transferAt ?? 0)) {
+    const quick = Math.hypot(s.vel.x, s.vel.y) >= ONE_FOOT_SPEED;
+    f.foot = quick ? f.transferTo : 0.5;
+    // At a crawl on both feet, the next push is still the other leg's.
+    f.nextPushFoot = quick ? undefined : f.transferTo;
+    f.transferTo = undefined;
+  }
   const pushing = f.transferTo !== undefined;
   const kx = Number(key("d") || key("arrowright")) - Number(key("a") || key("arrowleft"));
   const ky = Number(key("w") || key("arrowup")) - Number(key("s") || key("arrowdown"));
@@ -613,7 +638,7 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     // Experimental: with the weight on one foot the other leg is free — its
     // trigger swings it forward (released, it rests), and it does not pump.
     const freeLegIndex = options.pumps && f.foot !== 0.5 && !pushing ? (f.foot === 1 ? 0 : 1) : -1;
-    if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l, arms ? f.bladeRight! : r], h.connected, freeLegIndex));
+    if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l, arms ? f.bladeRight! : r], h.connected, freeLegIndex, f.foot === 0.5 ? f.nextPushFoot ?? -1 : -1));
     // A push begins: both blades down through it, then the weight goes across.
     if (options.pumps && mapped.push && (mapped.pushFoot === 0 || mapped.pushFoot === 1) && !(leftFoot || rightFoot)) {
       f.transferAt = s.tick + Math.round(p.strokeDuration / SIM_DT);
