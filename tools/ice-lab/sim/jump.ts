@@ -541,6 +541,12 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   // does not point along is scrubbed off in the landing. An under-rotated
   // jump comes down crossways and loses most of its flow here.
   const t = s.heading;
+  const LB = s.landingBudget;
+  if (LB) Object.assign(LB, {
+    tick: s.tick, velPre: { x: s.vel.x, y: s.vel.y }, vz: J.vz, heading: { x: t.x, y: t.y },
+    lean: s.lean, leanRatePre: s.leanRate, pitch: s.pitch ?? 0, pitchRate: s.pitchRate ?? 0, legLength: s.legLength, knee: s.knee,
+    L: J.angMomentum, inertia: J.inertia, omega: s.yawRate, rotation: J.rotation,
+  });
   const vLong = dot(s.vel, t);
   s.vel = mul(t, vLong);
 
@@ -592,6 +598,7 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
     - (twoFoot && kind !== JUMP_NONE ? TWO_FOOT_PENALTY : 0));
 
   const fall = landingQuality < 0.18 || shortBy > 0.70;
+  if (LB) Object.assign(LB, { checkErr, absorb, edgeOK, balance, twoFoot, landingQuality, fall, velPost: { x: s.vel.x, y: s.vel.y }, leanRatePost: s.leanRate });
   s.landed = {
     tick: s.tick, kind, revolutions, turned, shortBy,
     rotationCall: kind === JUMP_NONE ? ROTATION_CALL.Clean : rotationCall(shortBy, p),
@@ -617,6 +624,7 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   J.t = 0; J.z = 0; J.vz = 0; J.angMomentum = 0; J.inertia = p.inertiaOpen;
   J.armed = false; J.target = 0;
   s.yawRate = 0;
+  if (LB) LB.yawRatePost = s.yawRate;
 
   if (fall) {
     s.fallen = true;
@@ -632,4 +640,5 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   // landing blade's equilibrium, which carries no lateral force yet — upright.)
   const off = s.lean - s.leanEq;
   s.leanRate += (off >= 0 ? 1 : -1) * p.landingShock * (1 - landingQuality);
+  if (LB) LB.leanRatePost = s.leanRate;
 }
