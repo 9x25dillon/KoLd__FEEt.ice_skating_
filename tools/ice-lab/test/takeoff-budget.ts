@@ -67,6 +67,8 @@ export interface Frame {
   freeSwing: number; freeSwingRate: number; twistRate: number;
   load: number; latForce: number; bite: number; tilt: number; regime: number; contactS: number; demand: number;
   knee: number; kneeRate: number; lean: number; pitchContact: number;
+  /** rad/s: the lean's rate; rad and rad/s: the fore-aft pitch (pitchMode); rad: the lean the lateral force balances, and the lean less it. */
+  leanRate: number; pitch: number; pitchRate: number; leanEq: number; balanceError: number;
   yawSlip: number; latSlip: number; yawRate: number;
   /** kg m^2/s: on the ice, what a takeoff now would read (before quality); in the air, the jump's. */
   L: number; omega: number; inertia: number; carriage: number;
@@ -82,6 +84,8 @@ export interface Frame {
 
 export interface Outcome {
   frames: Frame[]; takeoff: number; contactLost: number; landed: boolean; fallen: boolean;
+  /** s: the touchdown and the fall (-1 for none), and why it fell (FALL). */
+  landedAt: number; fallAt: number; fallReason: number;
   L: number; turned: number; revolutions: number; call: number; kind: number;
   /** The landing as the solver called it (JumpResult), residual still accruing if the loop stopped at touchdown. */
   result: JumpResult;
@@ -142,7 +146,16 @@ const LOAD_AT = 1, LOAD_S = 0.5, SWING_AT = 0.2, SPEED = 6;
  * or, with toeAt, held from toeAt s after the load begins (the pendulum
  * moves the contact the other way first: a lean onto the toe begins early).
  */
-export interface Variation { hook?: number; freeLegAt?: number; freeLegTo?: number; toe?: number; toeAt?: number }
+/**
+ * rideOut: s past the touchdown to keep skating (the attempt otherwise stops
+ * there), on landLean and landKnee (0 and 0.35 — the air's input — unless
+ * given; landKnee is asked from the check on, so the touchdown absorbs with it). atTakeoff: called on the state at the blade-off tick, before any
+ * air — a probe's counterfactual (test/air-posture.ts).
+ */
+export interface Variation {
+  hook?: number; freeLegAt?: number; freeLegTo?: number; toe?: number; toeAt?: number;
+  rideOut?: number; landLean?: number; landKnee?: number; atTakeoff?: (s: SkaterState) => void;
+}
 const HOOK_S = 0.15;
 
 export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation = {}): Outcome {
@@ -151,8 +164,9 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
   const profile = defaultControllerProfile(), st: GameControlState = newSchemeState();
   const h: ControllerHardware = { axes: [0, 0, 0, 0], buttons: Array(22).fill(0), keys: [], connected: true };
   const frames: Frame[] = [];
-  let takeoff = -1, contactLost = -1, landed = false, L = 0;
-  for (let i = 0; i < 600 && !s.fallen && !landed; i++) {
+  let takeoff = -1, contactLost = -1, landed = false, landedAt = -1, fallAt = -1, L = 0;
+  const ticks = 600 + Math.ceil((v.rideOut ?? 0) / SIM_DT);
+  for (let i = 0; i < ticks && !s.fallen && (!landed || (v.rideOut !== undefined && i * SIM_DT - landedAt <= v.rideOut)); i++) {
     const t = i * SIM_DT, air = takeoff >= 0, sinceTakeoff = air ? t - takeoff : 0;
     let input: SkatingInput;
     if (kind === "pad") {
@@ -169,8 +183,10 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
       const lean = Math.max(-1, -0.8 - (v.hook ?? 0) * hooking);
       const freeLeg = v.freeLegAt !== undefined && t >= LOAD_AT + v.freeLegAt ? v.freeLegTo ?? 1 : 0.5;
       const pitch = (v.toe ?? 0) * (v.toeAt !== undefined ? Number(t >= LOAD_AT + v.toeAt) : hooking);
-      input = air
-        ? { ...NEUTRAL_INPUT, knee: 0.35, weight: 1, carriage: sinceTakeoff >= check ? 1 : 0 }
+      input = landed
+        ? { ...NEUTRAL_INPUT, lean: v.landLean ?? 0, knee: v.landKnee ?? 0.35, weight: 1, carriage: sinceTakeoff >= check ? 1 : 0 }
+        : air
+        ? { ...NEUTRAL_INPUT, knee: sinceTakeoff >= check ? v.landKnee ?? 0.35 : 0.35, weight: 1, carriage: sinceTakeoff >= check ? 1 : 0 }
         : { ...NEUTRAL_INPUT, lean, pitch, weight: 1, knee: t >= LOAD_AT && t < LOAD_AT + LOAD_S ? 1 : 0.35, freeLeg,
             windup: t >= LOAD_AT ? windup : 0, carriage: t >= LOAD_AT ? Math.abs(windup) / 0.7 : 0 };
     }
@@ -179,9 +195,10 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
     s.torqueBudget = blankBudget();
     s.balanceBudget = blankBalance();
     step(s, input, p, SIM_DT, events);
-    if (events.some(e => e.type === EVENT.Takeoff)) { takeoff = t; L = s.jump.angMomentum; }
+    if (events.some(e => e.type === EVENT.Takeoff)) { takeoff = t; L = s.jump.angMomentum; v.atTakeoff?.(s); }
     if (events.some(e => e.type === EVENT.EdgeLost) && takeoff >= 0 && contactLost < 0) contactLost = t;
-    if (events.some(e => e.type === EVENT.Landing)) landed = true;
+    if (events.some(e => e.type === EVENT.Landing)) { landed = true; landedAt = t; }
+    if (s.fallen && fallAt < 0) fallAt = t;
     if (t < LOAD_AT - 0.2) continue;
     const b = s.blade[s.supportFoot], inAir = s.jump.phase === JUMP_PHASE.Air;
     const budget = s.torqueBudget.Il > 0 ? { ...s.torqueBudget } : null;
@@ -194,6 +211,7 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
       load: b.normalLoad, latForce: b.latForce, bite: b.biteCapacity, tilt: b.tilt, regime: b.regime,
       contactS: b.contactS, demand: b.demandRatio,
       knee: s.knee, kneeRate: (s.knee - kneeBefore) / SIM_DT, lean: s.lean, pitchContact: s.pitchContact ?? 0,
+      leanRate: s.leanRate, pitch: s.pitch ?? 0, pitchRate: s.pitchRate ?? 0, leanEq: s.leanEq, balanceError: s.balanceError,
       yawSlip: s.yawDev ?? 0, latSlip: b.inContact ? dot(s.vel, perpLeft(b.tangent)) : 0, yawRate: s.yawRate,
       L: inAir ? s.jump.angMomentum : p.inertiaOpen * bodyRate(s, p, carriage),
       omega: inAir ? s.jump.angMomentum / s.jump.inertia : bodyRate(s, p, carriage),
@@ -206,7 +224,7 @@ export function attempt(kind: Attempt, p: Params, check = Infinity, v: Variation
     });
   }
   return {
-    frames, takeoff, contactLost, landed, fallen: s.fallen, L,
+    frames, takeoff, contactLost, landed, fallen: s.fallen, landedAt, fallAt, fallReason: s.fallReason, L,
     turned: s.landed.turned, revolutions: s.landed.revolutions, call: s.landed.rotationCall, kind: s.landed.kind,
     result: { ...s.landed },
   };

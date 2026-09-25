@@ -900,6 +900,21 @@ export interface Params {
   edgeCommitMode: number;
   /** s of the load over which edge commitment (edgeCommitMode) fades the balance loop's feedback out. Authored; measured over a range. */
   edgeCommitTime: number;
+  /**
+   * 0: the lean and the fore-aft pitch stop at blade-off — the lean's rate
+   * is zeroed at takeoff, both are frozen through the air — and the landing
+   * scores the balance error the takeoff edge left. 1: torque-free flight.
+   * Gravity acts through the centre of mass, so nothing in the air turns
+   * the body about it: the roll and pitch the takeoff launched keep their
+   * angular momentum. The model has no roll or pitch inertia that posture
+   * changes (the tuck moves the yaw inertia alone), so here that is their
+   * rates, carried unchanged; the yaw is L / I, as always. Blade-off ends
+   * the ground's balance state (its timers, the arms' held share); the
+   * takeoff's balance error is kept for diagnostics only; touchdown starts
+   * a fresh contact, and whether the landing holds is the ice's to decide
+   * from the landing's own state. No righting, no damping, no snap.
+   */
+  airPostureMode: number;
   /** Local wear a single pass adds, saturating at 1. No data file gives a
    *  rate for this — authored to visibly dull a sheet over a session's worth
    *  of laps, not a single stroke. */
@@ -1151,6 +1166,7 @@ export const DEFAULT_PARAMS: Params = {
   diagTakeoffBalance: 0,
   edgeCommitMode: 0,
   edgeCommitTime: 0.2,
+  airPostureMode: 0,
 
   mass: 55.0,
   comHeight: 0.95,
@@ -1342,6 +1358,7 @@ export function validate(p: Params): string[] {
   if (!(p.toePickTripSpeed > 0)) errs.push("toePickTripSpeed must be positive");
   if (![0, 1].includes(p.edgeCommitMode)) errs.push("edgeCommitMode is 0 (the loop trims a takeoff's edge) or 1 (the skater rides the committed edge)");
   if (!(p.edgeCommitTime > 0 && p.edgeCommitTime <= 1)) errs.push("edgeCommitTime is s of the load, more than 0 and at most 1");
+  if (![0, 1].includes(p.airPostureMode)) errs.push("airPostureMode is 0 (the lean frozen at blade-off) or 1 (torque-free flight, a fresh landing)");
   if (![0, 1, 2, 3, 4, 5].includes(p.diagTakeoffBalance)) errs.push("diagTakeoffBalance is a test-only diagnostic: 0, 1 (no counter-steer in a takeoff), 2 (the edge held), 3 (none in the push-off), 4 (no lean-error term) or 5 (no lean-rate term)");
   if (![0, 1].includes(p.digOracle)) errs.push("digOracle is 0 (the dig pushes at the contact) or 1 (test oracle: at the asked contact)");
   if (![0, 1].includes(p.speedSpinMode)) errs.push("speedSpinMode is 0 (the block lifts) or 1 (it also turns the body)");

@@ -28,20 +28,29 @@ yesterday's physics plus the two Experimental control fixes (§0.2).
 The goal is a double loop that emerges from the physics and lands, matched against a measured one — not
 720° of air, not a stronger blade. What is proven so far is in §0.3.
 
-1. **Air posture — the blocker now.** Every landing in the calibration runs scores 0 and falls: the model
-   carries the lean at blade-off unchanged through the air into the touchdown (`land()` in `sim/jump.ts`
-   scores the balance error). A skater comes upright in the air. Model the lean relaxing toward vertical in
-   flight from what is physically there (the air's angular momentum about a tilted axis, the body's
-   uprighting), behind a mode; do not simply zero the lean at touchdown.
+1. **Air posture — first pass built (2026-09-25, later the same day; branch `air-posture`).**
+   `airPostureMode` 1: torque-free flight (the roll and pitch keep the rates blade-off launched — the takeoff
+   used to zero the lean's rate and the air froze both; yaw stays L / I), blade-off ends the ground's
+   balance state, touchdown scores no balance term (the stale takeoff error was what zeroed every landing)
+   and the ice decides. The operator's spec: a physics-truth mode — no righting, no damping, no snap, no new
+   constant; let it fall. `node test/air-posture.ts` answers "doomed at blade-off, or on the ice?":
+   **the toe+hook takeoffs are doomed at blade-off** — roll 2.00 / 1.27 rad/s and pitch ~0.3 rad/s toward
+   the toe put them down 158-350 ms after touchdown whatever the landing asks; the calibration takeoff's
+   roll (0.59) rights it -0.67 → -0.38 and helps. Every best-check landing is still a 2Lo `<<`, so landing
+   recovery cannot be judged until the rotation is there (items 2-3). **Next fork (operator):** the
+   takeoff's launched roll and pitch (the committed edge throws the body up and over — a takeoff-mechanics
+   question), and what to do with `landingShock` (authored; under the mode it is the whole touchdown roll
+   change, +1.0 rad/s, where the spec wants the contact's impulse). Deferred by the operator's word:
+   in-air reorientation (only ever as segment motion), 3D tilt/precession (needs a transverse inertia).
 2. **Flight time.** 0.492 s against the measured 0.443 ± 0.025: the takeoff leaves at 2.44 m/s up, 0.443 s
    needs 2.17 (`test/loop-calibration.ts`). It survives cohort scaling, so the vertical impulse
    (`jumpImpulse` 2.94, the bible's, × quality, less `jumpSpeedShare`) is the axis — correct the push
    mechanics, not the timing.
 3. **Re-run the double loop** (`node test/loop-calibration.ts --set edgeCommitMode=1`, and
-   `node test/takeoff-budget.ts commit --set pushOffMode=1 --set normalLoadMode=1 --set rotationCallMode=1`)
-   with 1 and 2 in. Leave the tuck alone until then (§0.5).
+   `node test/takeoff-budget.ts commit --set pushOffMode=1 --set normalLoadMode=1 --set rotationCallMode=1`,
+   `node test/air-posture.ts`) with 1 and 2 in. Leave the tuck alone until then (§0.5).
 4. **Canonicalise once, then `/40` once** (operator: "avoid repeated golden churn"): turn on
-   `normalLoadMode`, `pushOffMode`, `rotationCallMode`, `edgeCommitMode` (and the air posture) — in the
+   `normalLoadMode`, `pushOffMode`, `rotationCallMode`, `edgeCommitMode`, `airPostureMode` — in the
    setups or as defaults, the operator's call — run the whole suite, inspect every moved test, fix or re-pin
    with a measured note, then the contract bump: `/39 → /40` history note in `sim/replay.ts`,
    `node replay/rebase-fixture.ts`, pins in `docs/controller-scheme.md`, `validate.mjs --report`,
@@ -70,10 +79,11 @@ The goal is a double loop that emerges from the physics and lands, matched again
 | **Normal force ≠ weight** (`normalLoadMode`): a blade carries its share of the body's *mass* round a curve; its load sets the grip, not the demand. The lean still tips under g (the leg pushes along itself) | `sim/solver.ts` `bladeMass` | off — the edge-flattening fix, §0.3 |
 | **Rotation call at first touchdown** (`rotationCallMode`, `callTakeoffCredit` 0.5 rev): takeoff turn (edge-carried vs pivot/skid), airborne, landing residual (0.3 s, never credited) kept apart in `JumpResult`; edge credited up to ½, pivot never, pivot > ⅛ = cheated takeoff | `sim/jump.ts` `land()`, `sim/types.ts` `JumpResult` | off |
 | **Edge commitment** (`edgeCommitMode`, `edgeCommitTime` 0.2 s): once a jump's load begins the balance loop's lean-error and lean-rate terms fade out together; the lean's feed-forward stays; the body answers the committed curve uncorrected | `sim/solver.ts` section 2 | off |
+| **Air posture** (`airPostureMode`): torque-free flight — lean and pitch turn at blade-off's rates, yaw L / I; blade-off clears the ground's balance state (takeoff error kept as `JumpState.takeoffBalanceError`, diagnostics only); touchdown has no balance score, the ice decides | `sim/jump.ts` takeoff, `jumpAir`, `land()` | off |
 | `diagTakeoffBalance` 1-5 — **test-only diagnostic, never in a setup** (counter-steer out / edge held / out in the push only / Kp only / Kd only) | `sim/solver.ts`, `sim/params.ts` | 0 |
 | Experimental controls: no automatic crossover while a jump loads; the automatic crossovers skate in a bent stance (`CROSS_STANCE` 0.35 eased at 1/s) so a beat no longer sinks the knee 0.35 in 0.1 s | `game/full-controls.ts` | on (Experimental, Dig Gate) |
 | Observability: `SkaterState.torqueBudget`, `balanceBudget` — attached only by tools, never by `createState`, so no digest sees them; `sim/jump.ts` `bodyRate` (the takeoff's own spin read, factored out unchanged) | `sim/types.ts` | — |
-| Tools: `test/takeoff-budget.ts` (`trace`, `sweep`, `balance`, `transition`, `hook`, `free-leg`, `takeoff`, `ab`, `commit`; attempts `pad`/`direct`/`held`; `--set key=value`), `test/loop-comparison.ts` (the nine-scenario comparison set every candidate must pass), `test/loop-calibration.ts` (production vs a cohort-sized skater vs the published 2Lo) | `test/` | — |
+| Tools: `test/air-posture.ts` (blade-off → +1 s timeline, roll/pitch-out counterfactuals, landing-input sweep; `attempt()` now takes `rideOut`, `landLean`, `landKnee`, `atTakeoff`), `test/takeoff-budget.ts` (`trace`, `sweep`, `balance`, `transition`, `hook`, `free-leg`, `takeoff`, `ab`, `commit`; attempts `pad`/`direct`/`held`; `--set key=value`), `test/loop-comparison.ts` (the nine-scenario comparison set every candidate must pass), `test/loop-calibration.ts` (production vs a cohort-sized skater vs the published 2Lo) | `test/` | — |
 
 ### 0.3 · What was measured (the evidence behind the decisions)
 
@@ -142,6 +152,12 @@ The goal is a double loop that emerges from the physics and lands, matched again
 - The pendulum is non-minimum-phase: a lean onto the toe must begin early (moves heelward first).
 - A stroke on the only loaded foot zeroes the curve's lateral support for 0.25 s (pre-existing; it is what
   kills the 170° scheme-B reversal under `normalLoadMode`).
+- No roll or pitch inertia in the model (point-mass pendulum; the tuck moves only the yaw inertia), so
+  under `airPostureMode` conserved roll/pitch momentum is a conserved rate. A real tuck changes the frontal
+  inertia somewhat; unmodelled. No accessible measured take-off tilt (Frontiers 2025 is vertical-axis only;
+  MDPI Proc. 49:124 returned 403).
+- `landingShock` 1.5 (authored) is, under `airPostureMode`, the whole touchdown roll change; its direction
+  is now off upright (the landing blade carries no lateral force yet).
 - At a crawl the carve has no authority to right a lean (known limit; it is what the hockey-stop bot's
   glide hits under `normalLoadMode`).
 
