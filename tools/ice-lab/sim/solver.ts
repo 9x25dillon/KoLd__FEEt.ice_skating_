@@ -865,7 +865,16 @@ export function step(
     // diagTakeoffBalance (test-only): the takeoff with the loop's counter-steer taken out, or not asked.
     const takeoffDiag = p.diagTakeoffBalance === 3 ? (s.jump.pushFrom !== undefined ? 1 : 0)
       : p.diagTakeoffBalance > 0 && s.jump.phase === JUMP_PHASE.Load ? p.diagTakeoffBalance : 0;
-    const aCmd = takeoffDiag === 1 ? g * tan(leanCmd) + noise
+    // EDGE COMMITMENT (edgeCommitMode). Once a jump's load has begun the
+    // skater rides the edge the asked lean carves instead of trimming it to
+    // their balance: the loop's lean-error and lean-rate terms fade out
+    // together over edgeCommitTime of the load, and stay out through the
+    // push-off. The body answers the committed curve uncorrected — lifted up
+    // and over a curling edge, or into the ice off a bad one.
+    const commit = p.edgeCommitMode >= 1 && s.jump.phase === JUMP_PHASE.Load
+      ? (s.jump.pushFrom !== undefined ? 0 : Math.max(0, 1 - s.jump.t / p.edgeCommitTime)) : 1;
+    const aCmd = commit < 1 ? g * tan(leanCmd) + commit * (p.balanceKp * (s.lean - leanCmd) + p.balanceKd * s.leanRate) + noise
+      : takeoffDiag === 1 ? g * tan(leanCmd) + noise
       : takeoffDiag === 4 ? g * tan(leanCmd) + p.balanceKd * s.leanRate + noise
         : takeoffDiag === 5 ? g * tan(leanCmd) + p.balanceKp * (s.lean - leanCmd) + noise
           : g * tan(leanCmd)

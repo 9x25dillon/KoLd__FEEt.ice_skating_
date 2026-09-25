@@ -378,6 +378,18 @@ function printAB(base: Params): void {
   }
 }
 
+/** Edge commitment's fade, over a range: the held loop's variants, and the comparison set's failures, per edgeCommitTime. */
+function printCommit(base: Params): void {
+  console.log("edgeCommitTime s | toe | hook | edge° | air° | min radius m | max yaw rate | takeoff L | L/(m h^2) | lean at blade-off | result");
+  for (const time of [0.05, 0.1, 0.2, 0.3, 0.5, 1]) for (const toe of [0, 1]) for (const hook of [0, 0.2]) {
+    const p = { ...base, edgeCommitMode: 1, edgeCommitTime: time };
+    const r = attempt("held", p, Infinity, { freeLegAt: 0.5, freeLegTo: 0, toe, toeAt: 0, hook });
+    const ice = r.frames.filter(f => f.phase === JUMP_PHASE.Load && f.seg), j = r.result, off = ice.at(-1);
+    const h = p.comHeight / 0.55;
+    console.log(`${time} | ${toe} | ${hook} | ${fx((j.takeoffEdge ?? 0) * 360, 0)} | ${fx((j.airborne ?? j.turned) * 360, 0)} | ${fx(Math.min(...ice.map(f => f.radius)), 2)} | ${fx(Math.max(...ice.map(f => Math.abs(f.yawRate))))} | ${fx(r.L, 1)} | ${fx(r.L / (p.mass * h * h) * 1e3, 0)} | ${fx(off?.balance?.lean ?? 0)} | ${r.takeoff < 0 ? (r.fallen ? "fell on the ice" : "no takeoff") : `${j.revolutions} rev ${["clean", "q", "<", "<<"][j.rotationCall]}${j.fall ? ", fell" : ""}`}`);
+  }
+}
+
 function printSweep(base: Params): void {
   for (const kind of ["direct", "pad"] as Attempt[]) {
     console.log(`\n${kind}: cap N m | peak grip N m | peak slip rad/s | slip rad | takeoff ω rad/s | takeoff L | air ω peak | tucked rev | best landing`);
@@ -402,6 +414,7 @@ if (import.meta.main) {
   const num = (flag: string) => { const i = args.indexOf(flag); return i >= 0 ? Number(args[i + 1]) : undefined; };
   if (mode === "takeoff") printTakeoff((kind as Attempt) ?? "held", base, { hook: num("--hook"), freeLegAt: num("--free-leg-at"), freeLegTo: num("--free-leg-to"), toe: num("--toe"), toeAt: num("--toe-at") });
   else if (mode === "ab") printAB(base);
+  else if (mode === "commit") printCommit(base);
   else if (mode === "hook") printHook(base, (kind as Attempt) ?? "held");
   else if (mode === "free-leg") printFreeLeg(base, (kind as Attempt) ?? "held");
   else if (mode === "transition") printTransition((kind as Attempt) ?? "held", base, { hook: num("--hook"), freeLegAt: num("--free-leg-at") });
