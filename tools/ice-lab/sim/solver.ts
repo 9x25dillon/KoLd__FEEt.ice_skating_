@@ -442,8 +442,23 @@ function freeLegTorque(s: SkaterState, p: Params, input: SkatingInput, dt: numbe
   // merely following a moving target would drag the foot round.
   const wanted = (target - (s.freeSwingTarget ?? target)) / dt;
   s.freeSwingTarget = target;
-  return clamp(p.freeLegStiffness * (target - s.freeSwing) + p.freeLegDamping * (wanted - s.freeSwingRate),
-    -p.freeLegTorqueMax, p.freeLegTorqueMax);
+  if (p.freeLegSwingThroughMode < 1) {
+    if (s.torqueBudget) s.torqueBudget.legAsked = p.freeLegStiffness * (target - s.freeSwing) + p.freeLegDamping * (wanted - s.freeSwingRate);
+    return clamp(p.freeLegStiffness * (target - s.freeSwing) + p.freeLegDamping * (wanted - s.freeSwingRate),
+      -p.freeLegTorqueMax, p.freeLegTorqueMax);
+  }
+  const spring = p.freeLegStiffness * (target - s.freeSwing), damper = p.freeLegDamping * (wanted - s.freeSwingRate);
+  if (s.torqueBudget) s.torqueBudget.legAsked = spring + damper;
+  // freeLegSwingThroughMode: through a push-off the hip does not brake a leg
+  // swinging the way it is asked (from rest, 0, toward the target) while it
+  // is inside its arc. Term by term: the damper's pull back toward the asked
+  // speed (nothing, once the pose is asked and held) and the spring's past an
+  // overshot pose are only the pose being reached; what drives the swing
+  // stays, and past the arc the braking is the joint's and stays too.
+  const dir = Math.sign(target);
+  if (s.jump.pushFrom !== undefined && dir !== 0 && s.freeSwingRate * dir > 0 && Math.abs(s.freeSwing) < p.freeLegArc)
+    return clamp((spring * dir > 0 ? spring : 0) + (damper * dir > 0 ? damper : 0), -p.freeLegTorqueMax, p.freeLegTorqueMax);
+  return clamp(spring + damper, -p.freeLegTorqueMax, p.freeLegTorqueMax);
 }
 
 /**

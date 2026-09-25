@@ -135,6 +135,7 @@ These are structures S2, S4 and S5 in [gate §4.2](fidelity-gate.md#42--how-the-
   - `freeLegReach` `0.4` m — the leg's centre from the body's axis, swung out. Authored
   - `freeLegArc` `1.2` rad — half its arc round the body. Authored
   - `freeLegStiffness` `150`, `freeLegDamping` `20`, `freeLegTorqueMax` `100` — the hip's PD (damping on the difference from the asked swing speed) and ceiling. Authored
+  - **`freeLegTorqueMax` status: AUTHORED, UNVALIDATED** (operator, 2026-09-25). 100 N m; 76.5 N m on the cohort calibration body (1.63 N m/kg). It saturates for 45-74% of the 2Lo's 0.25 s push under `freeLegSwingThroughMode` (`test/swing-through.ts`); saturation alone does not show it is too low. Operator-cited context, not yet checked here: dynamic hip-flexion torques in trained sprinters ~1.65-1.98 N m/kg (a different motion), and ~275 N m peak hip moments in a skating jump's support-leg push (not the free leg). Do not raise or lower it before free-leg hip kinetics in skating are sourced.
   - When the foot pivots, the leg's reaction turns the braced torso with the hips (lower + upper as one body); a light lower body alone was kicked into a skid by a gentle swing
   - Measured (7 m/s, lean 0.9, eased 0.5 s swing): salchow (right leg free) L 10.58 → 12.08; loop (left leg free, swings clockwise) 10.58 → 9.08; the same swing over 0.3 s twists the blade loose and falls; over a shallow edge (lean 0.5) any swing skids it
   - Fixed by: free-leg angular velocity at takeoff from motion capture, against the takeoff edge's depth

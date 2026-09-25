@@ -177,9 +177,11 @@ export interface Variation {
  * extension (pushMechanicsMode: how far it has straightened from the
  * release) — or, with clock "time" or no extension to read, pushOffTime's
  * elapsed share. Choreography: it says when the existing hip (freeLegMode,
- * torque-limited) is asked to move, and adds nothing to it.
+ * torque-limited) is asked to move, and adds nothing to it. With `step` the
+ * whole swing is asked at `start` and held — the hip's own ceiling paces it
+ * (peak and end unused).
  */
-export interface SwingPhase { start: number; peak: number; end: number; to?: number; clock?: "extension" | "time" }
+export interface SwingPhase { start: number; peak: number; end: number; to?: number; clock?: "extension" | "time"; step?: boolean }
 
 /** 0..1: the push's extension phase and its time phase, each -1 outside a push; extension -1 without pushMechanicsMode. */
 export function pushPhases(s: SkaterState, p: Params): { extension: number; time: number } {
@@ -197,6 +199,7 @@ export function pushPhases(s: SkaterState, p: Params): { extension: number; time
  * quarter cosine to nothing at `end` — continuous, one peak, normalised.
  */
 export function swingProgress(phase: number, sw: SwingPhase): number {
+  if (sw.step) return phase >= sw.start ? 1 : 0;
   if (phase <= sw.start) return 0;
   if (phase >= sw.end) return 1;
   const x = (phase - sw.start) / (sw.end - sw.start), xp = (sw.peak - sw.start) / (sw.end - sw.start);

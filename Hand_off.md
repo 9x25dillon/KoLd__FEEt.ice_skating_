@@ -51,7 +51,18 @@ The goal is a double loop that emerges from the physics and lands, matched again
    `node test/loop-calibration.ts push`. **[operator]** the push time to canonicalise (0.12 stays the
    default until then). A longer push costs takeoff L with today's scripts (94 → 64 ×10⁻³ at 0.25 s: the free
    leg swings long before blade-off) — item 3's re-run is where the swing is re-timed.
-3. **Free leg timed by the push — measured (2026-09-25, branch `swing-phase`).** Operator's decisions: push
+3. **Swing-through — the 2Lo's L reached (2026-09-25, branch `swing-through`).** Operator's decisions: the
+   free-leg actuator on the push's *time* clock (extension stays a diagnostic); the leg swings *through*
+   blade-off; the hip ceiling unchanged and tagged AUTHORED, UNVALIDATED. `freeLegSwingThroughMode` 1 drops the
+   hip PD's pose-completion braking (the damper toward a held pose's zero speed; the spring past an overshot
+   pose) inside the leg's arc through the push; joint braking past the arc stays. `node test/swing-through.ts
+   [--ticks]`: start 0/0.1/0.2/0.3 T → L 96.5 / 112.2 / 127.9 / **143.6 ×10⁻³ (+0.3 sd)**, no slip, vz and roll
+   unchanged; the optimum is the leg reaching its arc's end at blade-off (earlier: the joint brakes it on the
+   ice; later: too little hip time). Preferred SWING-30. Still falls at touchdown (tucked to the ice, air 539°)
+   — per the operator's rule, **yaw work stops here**; next is the landing chain: takeoff roll (-0.51 at 1.35
+   rad/s) → torque-free air → the touchdown impulse → `landingShock`. **[operator]** whether to open that
+   chain now, and the free-leg hip ceiling's sourcing.
+   Earlier: **Free leg timed by the push — measured (branch `swing-phase`, merged #48).** Operator's decisions: push
    0.25 s for the 2Lo calibration only (0.12 stays the default); takeoff roll not fixed yet; `landingShock`
    frozen. `node test/free-leg-timing.ts [--time-clock]`: the stack together on the cohort body; the swing
    phase-locked (start 0.2, end 0.9, peak swept). **Result:** vz 2.16, flight 0.433 s, L 114 ×10⁻³ (-2.3 sd,
@@ -66,7 +77,7 @@ The goal is a double loop that emerges from the physics and lands, matched again
    `node test/air-posture.ts`) with 1 and 2 in. Leave the tuck alone until then (§0.5).
 4. **Canonicalise once, then `/40` once** (operator: "avoid repeated golden churn"): turn on
    `normalLoadMode`, `pushOffMode`, `rotationCallMode`, `edgeCommitMode`, `airPostureMode`,
-   `pushMechanicsMode` (with its `pushOffTime`) — in the
+   `pushMechanicsMode` (with its `pushOffTime`), `freeLegSwingThroughMode` — in the
    setups or as defaults, the operator's call — run the whole suite, inspect every moved test, fix or re-pin
    with a measured note, then the contract bump: `/39 → /40` history note in `sim/replay.ts`,
    `node replay/rebase-fixture.ts`, pins in `docs/controller-scheme.md`, `validate.mjs --report`,
