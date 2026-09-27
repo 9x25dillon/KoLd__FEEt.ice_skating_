@@ -60,9 +60,10 @@ test("a turn's own kind reaches snapshot().move — the bridge used to say the b
  assert.equal(e.snapshot().move,'Counter');
 });
 
-test('a jump taken straight off the last landing edge reaches snapshot().combo, then decays',()=>{
+test('a physical combination reaches the HUD, then the finished Composer protocol without career rewards',()=>{
  // tools/ice-lab/test/combo.test.ts's recipe, at the toe loop's 6.8 m/s, through engine.tick().
  const e=new IceEngine();
+ e.start({mode:'composer',sequence:['step']});
  e.state=createState(e.params,-6.8);
  let load=180,n=0,last=-1;const seen=new Set();
  for(let i=0;i<900;i++){
@@ -74,6 +75,20 @@ test('a jump taken straight off the last landing edge reaches snapshot().combo, 
  }
  assert.deepEqual([...seen],['4T+3T<'],'the game params rise higher than the lab preset: a quad, then an under-rotated triple');
  assert.equal(e.snapshot().combo,'','the flash must decay rather than stick forever');
+ // End the rehearsal at the next sample, after the real physical landings.
+ e.routine.elapsed=e.routine.event.seconds-1/120;
+ e.tick({...NEUTRAL_INPUT});
+ const protocol=e.snapshot().result.protocol;
+ assert.equal(e.result.complete,false);
+ assert.deepEqual(protocol.lines,['4T+3T<'],'one combination stays one element, with its under-rotation call intact');
+ assert.ok(protocol.tes>0);
+ assert.equal(protocol.tes,e.routine.sheet.tes);
+ assert.equal(protocol.deductions,e.routine.deductions);
+ assert.ok(Math.abs(protocol.tes+protocol.pcs-protocol.deductions-protocol.total)<.011);
+ assert.equal(e.result.xp,0);
+ assert.equal(e.career.profile.xp,0);
+ e.start({mode:'free'});
+ assert.equal(e.snapshot().result,null,'a fresh skate must not retain the previous sheet');
 });
 
 test('a foot change mid-spin reaches snapshot().footChange as a brief flash, then decays',()=>{
@@ -102,11 +117,12 @@ test('bridge runs full physical choreography and persists earned progression',()
  assert.equal(e.routine.index,3);assert.equal(e.result.complete,true);assert.equal(e.career.medals[0],3);
  // sim/pcs.ts's own score, never reached the bridge snapshot before this.
  assert.ok(e.snapshot().routine.pcsScore.total>0,'a finished career routine must carry a real PCS score');
- assert.match(e.result.detail,/PCS \d+\.\d\d/,"the finished routine's own result text must carry it too");
- // sim/sheet.ts's protocol: TES, the fall deduction and the segment total, TES + PCS - deductions.
- const m=/TES (\d+\.\d\d) · PCS (\d+\.\d\d) · −(\d+\.\d\d) falls · Total (-?\d+\.\d\d)/.exec(e.result.detail);
- assert.ok(m,e.result.detail);
- assert.ok(Math.abs(Number(m[1])+Number(m[2])-Number(m[3])-Number(m[4]))<0.011,e.result.detail);
+ const protocol=e.snapshot().result.protocol;
+ assert.deepEqual(protocol.lines,[],'the opening routine has no jumps; presentation must handle an empty sheet');
+ assert.equal(protocol.tes,0);
+ assert.equal(protocol.pcs,e.routine.pcsScore.total);
+ assert.equal(protocol.deductions,0);
+ assert.equal(protocol.total,protocol.pcs);
  const restored=new IceEngine(e.career.serialize());assert.equal(restored.career.unlocked,1);
  restored.train('balance');assert.equal(restored.career.profile.stats.balance,51);
  assert.throws(()=>restored.start({mode:'career',event:3}),/previous/);
@@ -125,7 +141,7 @@ test('a step sequence is a real, composer-authorable element (sim/stepLevel.ts)'
  const hello=e.catalog();
  assert.ok(Object.hasOwn(hello.elements,'step'),'ELEMENTS.step must reach the catalog the Composer picker reads');
  // Costumes are the browser's own SKINS data, not a Godot copy: scripts/skater.gd recolours from these.
- assert.deepEqual(hello.skins.map(k=>k.id),['violet','aurora','solstice']);
+ assert.deepEqual(hello.skins.map(k=>k.id),['violet','aurora','solstice','northlight']);
  for(const k of hello.skins)for(const f of ['bodice','skirt','sleeve','trim','hair','skin','tights'])assert.match(k[f],/^#[0-9a-f]{6}$/,`${k.id}.${f}`);
  const snap=e.start({mode:'composer',sequence:['step']});
  assert.equal(snap.routine.sequence[0],'step');
@@ -186,7 +202,7 @@ test('controller profiles validate before replacing settings and raw payloads ar
  assert.throws(()=>e.advance({},2));
 });
 
-for(const setup of ['simulation','explorer','repertoire']) test(`${setup} raw controls match browser mapping in batched Godot ticks`,async()=>{
+for(const setup of ['simulation','explorer','experimental','repertoire']) test(`${setup} raw controls match browser mapping in batched Godot ticks`,async()=>{
  const {setupInput}=await import('../runtime/game/setups.js');
  const {newSchemeState}=await import('../runtime/app/schemes.js');
  const e=new IceEngine();e.configure({setup,assistance:.75,beginner:false,cruise:false});e.start({mode:'free'});
@@ -212,4 +228,11 @@ test('simulation rejects extra gameplay assistance and setup validation is nonmu
  assert.equal(e.beginner,false);assert.equal(e.cruise,false);assert.equal(e.params.jumpAssist,0);assert.equal(e.params.hypeMode,0);
  assert.throws(()=>e.configure({setup:'explorer',assistance:NaN}));assert.equal(e.setup,'simulation');
  assert.throws(()=>e.configure({setup:'unknown'}));assert.equal(e.setup,'simulation');
+});
+
+test('experimental keeps trigger-driven strokes when a saved preference requests Cruise',()=>{
+ const e=new IceEngine();
+ e.configure({setup:'experimental',beginner:true,cruise:true});e.start();
+ assert.equal(e.beginner,false);assert.equal(e.cruise,false);
+ assert.equal(e.snapshot().setup,'experimental');
 });

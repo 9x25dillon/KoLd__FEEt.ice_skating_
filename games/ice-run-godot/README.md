@@ -1,9 +1,50 @@
-# EDGEWORK / Ice Run — Godot edition
+# EDGEWORK / Grand Prix — Native 3D edition
 
 A playable 3D skating prototype with career choreography, authored programs,
 replays and the original Ice Lab simulation. Godot handles the rink, rigged skater,
 cameras, sound and interface. A local Node process runs Ice Lab at 120 simulation
 ticks per second; no network service is involved.
+
+## Northlight presentation rebuild · 2026-09-27
+
+![Northlight Arena gameplay](../../docs/presentation/grand-prix-gameplay.png)
+
+A PS3-era sports presentation direction: a cool competition arena with champagne
+accents, satin and crystal costumes, persistent blade cuts, and restrained broadcast
+information. These are actual game captures, not concept art.
+
+- **Arena:** four raked spectator banks with instanced seats and spectators,
+  structural columns, triangulated roof trusses, luminaires, event banners,
+  rink boards and a centre-hung scoreboard. The physical rink dimensions remain
+  the solver's rounded-square boundary.
+- **Athlete:** a new editable Blender competition model with continuous weighted
+  elbows/knees, shaped anatomy, fingers, facial features, braided bun, embroidery,
+  two-layer skirt, laces, leather soles, curved steel blades and toe picks.
+  The original Violet and Berserker models remain selectable.
+- **Materials:** procedural ice grain and grooming marks, a venue reflection probe,
+  satin weave, restrained skirt flutter, a soft
+  contact shadow and slip-driven ice particles. Dynamic poses reflect actual
+  blade contacts, knee pressure, trunk twist, jumps, camel/sit spins and spirals.
+- **Broadcast:** technical total, speed, left/right support loads, knee pressure,
+  wind and leg stamina, spin level, a local rink path, and landing announcements.
+- **Cameras:** Tracking, Broadcast, Rink and Blade. View / V cycles cameras;
+  airborne camera changes remain locked. The menu uses an orbiting athlete view.
+- **Sound/input:** filtered blade scrape, a quiet synthetic crowd bed, landing
+  thuds and crowd swells, optional landing vibration, disconnect-to-pause,
+  native Elite paddle presets, and F11 fullscreen.
+- **Wardrobe:** Northlight joins Violet, Aurora and Solstice in the shared costume
+  catalog. Saved costume choices are preserved; new native sessions use Northlight.
+
+![Native game menu](../../docs/presentation/grand-prix-menu.png)
+
+All four existing control setups remain available. Experimental retains its
+trigger-driven strokes and cannot accidentally enable Cruise through a saved setting.
+Select **Controls, music & assists** to review bindings. Native paddle presets are
+Paddle 1–4 → LB/RB/A/R3 (Footwork) or X/B/A/Y (Moves); leave them on the controller's
+own profile unless the driver actually exposes separate paddle inputs.
+
+Build from the repository root with `npm run build:native`, or launch the source
+project with `npm start`. The browser game is now `npm run start:browser`.
 
 ## Play
 
@@ -35,6 +76,13 @@ Gold requires no falls; silver permits two; completing the routine earns
 bronze. Improved medals earn training XP and unlock the next event. Rehearsals
 and replay playback cannot earn career rewards.
 
+Career and Composer results show the jump protocol in program order, with a
+numbered row per element and separate TES, PCS, fall deduction and segment total
+rows. Combinations remain one row (`+`); invalid repeats retain their `*` mark.
+Programs without scored jumps say so explicitly. Scroll the results to read long
+sheets and reach the replay/retry controls; keyboard focus follows those controls.
+These are the simulation's existing scores, and medals still depend on falls.
+
 Free Skate, the guided Rookie course and the 90-second light course are also
 available. Controls, music and assists includes five tracks and free-skate
 profiles; career uses its own trained profile.
@@ -60,8 +108,8 @@ R3 is toe pick/foot change, and J/D-pad up requests a loop turn.
 | Toe pick | F | Tap left trigger |
 | Ina Bauer | I | Both shoulders |
 | Bracket | N | Right stick click |
-| Pause / restart | Esc / R | Start / Back |
-| Camera | V | — |
+| Pause / restart | Esc / R | Menu / restart through menu |
+| Camera | V | View |
 
 The lower-left HUD carries a running jump TES total and, once you finish one,
 the ISU level your last spin actually reached ("Last spin: level 2", or
@@ -77,9 +125,10 @@ atomically to `career-v1.json`. Both are in Godot's user data directory (normall
 screen also exports the current replay and session measurements to that directory.
 Smoke tests and screenshot captures use separate per-process test saves.
 
-The combined solver uses replay identity `ice-lab-f64/9`. Earlier `/8` game
-replays require checkout `23e3e49`; earlier fidelity-branch `/8` clips require
-`a1b4278`. Those incompatible formats are rejected, not silently migrated.
+The combined solver uses replay identity `ice-lab-f64/35`. The rocker/counter
+exit-lobe correction changed solver arithmetic after `/21`; older replays need
+their original solver or must be re-recorded. Incompatible formats are rejected,
+not silently migrated.
 Career saves retain their existing version and are unaffected by this replay change.
 
 ## Build and verify
@@ -138,7 +187,7 @@ smoke test fails if fewer than all seven slots take the costume; `--capture --co
 
 ## Design direction and current limits
 
-The requested roughly 75% design-bible adherence is a direction for this rebuild,
+The requested design-bible adherence is a direction for this rebuild,
 not a claim that 75% of the full production specification has shipped. The bible
 itself remains the reference; the user authorized Godot in place of Unreal.
 
@@ -150,10 +199,25 @@ itself remains the reference; the user authorized Godot in place of Unreal.
 | Restrained theatrical presentation | 3D arena, procedural skeletal posing, thin edge ribbon, five music tracks and three cameras; no camera switch during an airborne jump |
 | Career progression | Five events, medals, unlocks and four trainable skills; one shared arena, no season simulation or economy yet |
 
-All 44 current Ice Lab TypeScript modules are prepared without rewriting their
+All current Ice Lab TypeScript modules (54 in this build) are prepared without rewriting their
 logic. The host invokes the solver and gameplay modules; copying the browser app
 modules does not make every browser UI feature a Godot feature. This is a Godot
 presentation around the original engine, **not a native GDScript/C++ physics port**.
 The character uses a small procedural rig, not motion-captured animation. Full
-cloth, photorealistic character art, planar reflections, persistent ice physics,
-stamina/flow/hype systems and the complete judging model remain future work.
+cloth simulation, photorealistic character art, planar reflections, and the complete
+judging model remain future work. Stamina is exposed in the HUD; existing enabled
+flow and ice systems remain owned by Ice Lab. The reflected fixture highlights are
+procedural plus a venue reflection probe, not a live planar mirror.
+
+## Rebuild the competition athlete
+
+```sh
+blender --background --python games/ice-run-godot/tools/build_competition_skater.py
+```
+
+The source is `assets/source/skater-competition.blend`; the runtime asset is
+`assets/generated/skater-competition.glb`. This authoring script leaves the
+original two character assets intact. The new shaders are in `shaders/`; the
+venue and broadcast display are authored in `scripts/arena.gd` and
+`scripts/broadcast.gd`. See [delivery notes](../../docs/grand-prix-build.md) for
+verification and research boundaries.

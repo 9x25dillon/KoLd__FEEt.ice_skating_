@@ -2,6 +2,16 @@
 
 ## Play Ice Run
 
+From the repository root, **`npm run start:browser`** builds and serves the game at
+**http://localhost:8123/game/** with no install step. Xbox-style controllers can
+navigate the opening, pause, career, outfit and controls menus: D-pad / left stick
+to focus, A to select, B to return, Menu to pause/resume. Left/right adjusts a
+focused setting. A disconnected controller pauses the run. The opening screen's
+**Controls / Elite 2 setup** explains paddle profiles and links to the signal monitor.
+
+See the [root quick start](../../README.md#xbox-elite-series-2)
+for the current default setup and controller bindings.
+
 The game's sports-anime presentation pairs an original illustrated opening screen
 with procedural cel-shaded skaters: ink outlines, angular hair, directional faces,
 geometric costume panels, two-tone fabric shadows, and restrained action strokes

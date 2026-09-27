@@ -3,6 +3,7 @@ import { xpToRaise } from "../sim/profile.ts";
 import { createState, step } from "../sim/solver.ts";
 import { SIM_DT } from "../sim/params.ts";
 import { Pad } from "../app/pad.ts";
+import { MenuInput, navigateMenu } from "./menu.ts";
 import { newSchemeState, SCHEME } from "../app/schemes.ts";
 import type { GameScheme as Scheme } from "./controls.ts";
 import { FULL_SCHEME, ACTIONS, BUTTON_NAMES, bindingLabel, loadControllerProfile, digStatus } from "./full-controls.ts";
@@ -48,6 +49,7 @@ const el = (id: string) => document.getElementById(id)!;
 const canvas = el("rink") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const pad = new Pad();
+const menuInput = new MenuInput();
 let profileIndex = 0;
 let beginner = true;
 let params = { ...BEGINNER_PARAMS };
@@ -242,6 +244,9 @@ el("tutorial-skip").addEventListener("click", e => {
 el("controls").addEventListener("click", () => {
   resumeAfterGuide = mode === "playing"; pause(); guide.showModal();
 });
+el("opening-controls").addEventListener("click", () => el("controls").click());
+el("opening-sound").addEventListener("click", () => el("sound").click());
+el("opening-camera").addEventListener("click", () => el("camera").click());
 // The wardrobe's own buttons, built from SKINS rather than hand-authored per
 // costume (appearance.ts's own header explains why): a future costume is one
 // entry there, nothing here or in index.html needs to change to show it.
@@ -401,7 +406,7 @@ function draw(_now: number) {
   el("trick").textContent=beginner ? speed<2.5 ? "Build speed to spin jump" : "J · Launch a spin jump" : "Simulation · manual jumps";
   const next = practice.next;
   el("lesson-title").textContent = rookie && !playback ? rookie.title : beginner && freeSkate ? "Stay up. Get fast. Send it." : freeSkate ? next < 0 ? "You have the moves." : LESSONS[next][0] : "Chase the gold lights";
-  el("lesson-tip").textContent = rookie && !playback ? rookie.hint : beginner && freeSkate ? "A / D to carve. Cruise builds speed as you stay upright. J / D-pad up launches a spin jump; Y holds a spin. Collect snowflakes and bump pucks into gold circles." : freeSkate ? next < 0 ? "Try linking back crossovers, a jump and a spin. Make it your own." : LESSONS[next][1] : "Start turning before each light. Keep pickups within 8 seconds to build your chain.";
+  el("lesson-tip").textContent = rookie && !playback ? rookie.hint : beginner && freeSkate && scheme !== FULL_SCHEME ? "A / D or left stick to carve; Space / A to push. J / D-pad up launches a coached spin jump; Y holds a spin. Collect snowflakes and bump pucks into gold circles." : freeSkate ? next < 0 ? "Try linking back crossovers, a jump and a spin. Make it your own." : LESSONS[next][1] : "Start turning before each light. Keep pickups within 8 seconds to build your chain.";
   el("lesson-progress").textContent = rookie && !playback ? `${rookie.index}/8 gates · ${rookie.cleared} clean` : freeSkate ? practice.done.map(v => v ? "●" : "○").join("  ") : "90 SECOND TIME ATTACK";
   el("charge").style.width = `${skater.knee * 100}%`;
   el("charge-label").textContent = skater.jump.phase === JUMP_PHASE.Load ? skater.jump.t < 0.18 ? "Loading…" : skater.jump.t < 0.6 ? "Release to jump" : "Load held too long" : "Knee pressure";
@@ -431,17 +436,42 @@ function draw(_now: number) {
 function frame(now: number) {
   const elapsed = Math.min((now - (last || now)) / 1000, 0.1); last = now;
   const controls = pad.read(true, ","); // U remains the game's low pose; comma winds up.
-  if (guide.open || wardrobe.open || careerBoard.open) { pendingPush = false; pendingToe = false; pendingTrick=false; draw(now); requestAnimationFrame(frame); return; }
+  const menu = menuInput.read(controls.hardware, now);
+  const connected = controls.hardware?.connected ?? false;
+  document.body.classList.toggle("using-controller", connected);
+  const connection = connected ? "Controller connected · D-pad to navigate · A select · B back · Menu pause"
+    : "Xbox Elite Series 2 · connect by USB or Bluetooth, then press A. Keyboard also supported.";
+  if (el("controller-status").textContent !== connection) el("controller-status").textContent = connection;
+  el("opening-sound").textContent = sound ? "Sound on" : "Sound off";
+  if (menu.disconnected) {
+    const wasPlaying = mode === "playing";
+    pause(); pendingPush = false; pendingToe = false; pendingTrick = false;
+    if (wasPlaying) el("description").textContent = "Controller disconnected. Your run is paused. Reconnect and press Menu to resume, or continue with the keyboard.";
+  }
+  const padY = (controls.hardware?.buttons[3] ?? 0) > 0.5;
+  const tutorialPressed = padY && !padYWas;
+  padYWas = padY;
+  const dialog = guide.open ? guide : wardrobe.open ? wardrobe : careerBoard.open ? careerBoard : null;
+  if (dialog || mode !== "playing") {
+    if (dialog) {
+      if (menu.back || menu.start) dialog.close();
+      else if (connected) navigateMenu(dialog, menu);
+    } else if (mode === "ready" && tutorialPressed) {
+      startTutorial();
+    } else if (controls.reset && mode !== "ready") {
+      start();
+    } else if (menu.start || (menu.back && mode === "paused") || (controls.pause && mode === "paused")) {
+      el("start").click();
+    } else if (connected) navigateMenu(el("overlay"), menu);
+    else if (controls.push) el("start").click();
+    pendingPush = false; pendingToe = false; pendingTrick = false;
+    draw(now); requestAnimationFrame(frame); return;
+  }
   if (controls.cycleView && !lowHeld && !(navigator.getGamepads?.().find(g => g?.connected)?.buttons[13]?.pressed)) scene.overview = !scene.overview;
   if (controls.zoom) scene.zoom = Math.max(0.65, Math.min(1.8, scene.zoom * Math.pow(1.15, controls.zoom)));
   if (controls.cycleScheme) { setup = null; saveSetup(); scheme = ((scheme + 1) % 4) as Scheme; steering = newSchemeState(); schemeSelect.value = String(scheme); saveControlScheme(); renderFullBindings(); renderSetup(); start(); }
-  if (controls.pause) { if (mode === "playing") pause(); else if (mode === "paused") resume(); }
-  if (controls.reset && mode !== "ready") start();
-  // The pad's Y on the title screen starts the Tutorial (A starts a free skate).
-  const padY = navigator.getGamepads?.().find(g => g?.connected)?.buttons[3]?.pressed ?? false;
-  if (mode === "ready" && padY && !padYWas) startTutorial();
-  padYWas = padY;
-  if (mode === "ready" && controls.push) start();
+  if (controls.pause) pause();
+  if (controls.reset) start();
   if (mode === "playing") {
     accumulator += elapsed;
     // A press lasts one simulation tick. Preserve it if this display frame has no tick.

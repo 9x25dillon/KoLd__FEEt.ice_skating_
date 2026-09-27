@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "build");
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".csv": "text/csv" };
 const port = Number(process.env.PORT ?? 8123);
+const entry = process.env.ICE_ENTRY === "/game/" ? "/game/" : "/app/";
 
 createServer(async (req, res) => {
   const rel = normalize(decodeURIComponent((req.url ?? "/").split("?")[0]));
@@ -20,8 +21,8 @@ createServer(async (req, res) => {
   // /lab.js and 404s, so the rink comes up blank with no error anywhere the
   // user can see. Redirecting keeps every relative path in the page honest:
   // ./lab.js -> /app/lab.js, and lab.js's own ../sim/params.js -> /sim/params.js.
-  if (rel === "/" || rel === "/app") {
-    res.writeHead(302, { location: "/app/" }).end();
+  if (rel === "/" || rel === "/app" || rel === "/game") {
+    res.writeHead(302, { location: rel === "/" ? entry : `${rel}/` }).end();
     return;
   }
   const path = join(root, rel.endsWith("/") ? join(rel, "index.html") : rel);
@@ -36,4 +37,4 @@ createServer(async (req, res) => {
   } catch {
     res.writeHead(404).end("not found");
   }
-}).listen(port, () => console.log(`ice lab -> http://localhost:${port}/`));
+}).listen(port, "127.0.0.1", () => console.log(`Ready to skate → http://localhost:${port}${entry}\nPress Ctrl+C to stop.`));

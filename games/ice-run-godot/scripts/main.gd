@@ -3,12 +3,14 @@ const EngineLink = preload("res://scripts/engine_link.gd")
 const Arena = preload("res://scripts/arena.gd")
 const Skater = preload("res://scripts/skater.gd")
 const Ribbon = preload("res://scripts/ribbon.gd")
+const Broadcast = preload("res://scripts/broadcast.gd")
 # Purely a local presentation choice: skater.gd poses whichever glb this
 # points at by bone name, so any entry here just needs to answer to the same
 # eleven bones (see tools/build_skater.py and tools/build_berserker.py).
 const CHARACTERS: Array[Dictionary] = [
-	{"name": "Violet", "path": "res://assets/generated/skater.glb"},
+	{"name": "Competition athlete", "path": "res://assets/generated/skater-competition.glb"},
 	{"name": "Black Berserker", "path": "res://assets/generated/skater-berserker.glb"},
+	{"name": "Original Violet", "path": "res://assets/generated/skater.glb"},
 ]
 var link: Node
 var arena: Node3D
@@ -32,6 +34,16 @@ var hud_move: Label
 var hud_technical: Label
 var notice: Label
 var ribbon: Control
+var broadcast: Control
+var presentation_clock := 0.0
+var last_landing_tick := -1
+var controller_status: Label
+var rumble_enabled := true
+var paddle_layout := 0
+var blade_filter := 0.0
+var crowd_filter := 0.0
+var crowd_swell := 0.0
+var landing_envelope := 0.0
 var catalog: Dictionary = {}
 var frame: Dictionary = {}
 var playing := false
@@ -51,7 +63,7 @@ var saved_controller_profile: Dictionary = {}
 var track := 0
 var profile := 0
 var character := 0
-var costume := 0
+var costume := 3
 var cruise := false
 var push_pending := false
 var toe_pending := false
@@ -86,7 +98,7 @@ func _ready() -> void:
 		scheme = 3
 		if skating_setup != "repertoire":
 			beginner = false
-		if skating_setup == "simulation":
+		if skating_setup in ["simulation","experimental"]:
 			cruise = false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--costume="):
@@ -97,7 +109,7 @@ func _ready() -> void:
 	skater.model_path = CHARACTERS[character].path
 	add_child(skater)
 	camera = Camera3D.new()
-	camera.fov = 43
+	camera.fov = 40
 	camera.near = .08
 	camera.far = 170
 	camera.position = Vector3(7,4.0,-11)
@@ -117,6 +129,9 @@ func _ready() -> void:
 		blade_audio.play()
 		generator = blade_audio.get_stream_playback()
 	build_ui()
+	Input.joy_connection_changed.connect(func(_device: int, connected: bool):
+		if not connected and playing: pause_game()
+		update_controller_status())
 	link = EngineLink.new()
 	link.received.connect(on_engine)
 	link.failed.connect(on_error)
@@ -142,10 +157,10 @@ func button(text: String, action: Callable, primary: bool = false) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	b.custom_minimum_size.y = 43
+	b.custom_minimum_size.y = 48
 	b.add_theme_font_size_override("font_size",16)
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color("cbd8dc") if primary else Color("15222f")
+	normal.bg_color = Color("d5c29a") if primary else Color(.06,.10,.15,.86)
 	normal.content_margin_left = 17
 	normal.content_margin_right = 17
 	normal.content_margin_top = 9
@@ -154,11 +169,17 @@ func button(text: String, action: Callable, primary: bool = false) -> Button:
 	normal.border_color = Color("354653")
 	b.add_theme_stylebox_override("normal",normal)
 	var hover: StyleBoxFlat = normal.duplicate()
-	hover.bg_color = Color("e2e9e7") if primary else Color("273b4b")
+	hover.bg_color = Color("f0dfbd") if primary else Color("273f52")
 	b.add_theme_stylebox_override("hover",hover)
 	b.add_theme_stylebox_override("pressed",hover)
 	b.add_theme_color_override("font_color",Color("152430") if primary else Color("dce7e9"))
 	b.add_theme_color_override("font_hover_color",Color("152430") if primary else Color("ffffff"))
+	b.add_theme_color_override("font_focus_color",Color("152430") if primary else Color("ffffff"))
+	var focused := StyleBoxFlat.new()
+	focused.bg_color = Color(0,0,0,0)
+	focused.border_width_left = 3
+	focused.border_color = Color("d9bc84")
+	b.add_theme_stylebox_override("focus",focused)
 	b.pressed.connect(action)
 	return b
 
@@ -185,7 +206,7 @@ func build_ui() -> void:
 	var brand := label("E D G E W O R K",19)
 	brand.position = Vector2(40,27)
 	root.add_child(brand)
-	var edition := label("ICE RUN     /     THE GODOT EDITION",10,Color("9aacb8"))
+	var edition := label("GRAND PRIX     /     FIGURE SKATING",10,Color("d5c29a"))
 	edition.position = Vector2(42,57)
 	root.add_child(edition)
 	var top_buttons := HBoxContainer.new()
@@ -223,10 +244,16 @@ func build_ui() -> void:
 	hud_technical.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	hud_technical.position = Vector2(42,-78)
 	root.add_child(hud_technical)
+	hud_move.hide()
+	hud_technical.hide()
+	broadcast = Broadcast.new()
+	broadcast.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(broadcast)
 	ribbon = Ribbon.new()
 	ribbon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(ribbon)
+	ribbon.hide()
 	notice = label("",13,Color("e6c8a3"))
 	notice.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	notice.position = Vector2(-620,-55)
@@ -235,7 +262,9 @@ func build_ui() -> void:
 	root.add_child(notice)
 	overlay = ColorRect.new()
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	overlay.color = Color(.017,.032,.049,.89)
+	var menu_material := ShaderMaterial.new()
+	menu_material.shader = load("res://shaders/menu.gdshader")
+	overlay.material = menu_material
 	root.add_child(overlay)
 	var layout := MarginContainer.new()
 	layout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -252,18 +281,23 @@ func build_ui() -> void:
 	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	identity.add_theme_constant_override("separation",17)
 	columns.add_child(identity)
-	identity.add_child(label("EDGEWORK  /  SEASON 01",13,Color("c6b293")))
-	var title := label("Grace is\nphysics,\nheld.",67)
+	identity.add_child(label("THE GRAND PRIX COLLECTION    /    01",12,Color("c6b293")))
+	var title := label("EDGEWORK",67)
 	title.add_theme_font_override("font",load("res://assets/fonts/title.ttf"))
 	identity.add_child(title)
-	identity.add_child(paragraph("The ice remembers every line.\nBuild a program. Find your edge.\nMake the performance your own.",18))
+	identity.add_child(label("FIGURE SKATING",19,Color("d5c29a")))
+	identity.add_child(paragraph("Precision. Presence. A perfect edge.\nThe ice remembers every line.",17))
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	identity.add_child(spacer)
-	identity.add_child(paragraph("A / D   carve     Space   push\nShift   load & release     Y   spin\nB   turn     Z   twizzle     U   low pose\nC   open arms     X   brake\nJ   assisted jump (Beginner only)",13))
-	identity.add_child(label("120 Hz skating · original Ice Lab simulation",11,Color("728b9d")))
+	identity.add_child(label("N O R T H L I G H T   A R E N A",13,Color("d5c29a")))
+	identity.add_child(paragraph("A season on the edge of possibility.\nChoose your discipline. Compose your signature.",14))
+	controller_status = paragraph("",12)
+	identity.add_child(controller_status)
+	update_controller_status()
 	menu_scroll = ScrollContainer.new()
 	menu_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	menu_scroll.follow_focus = true
 	menu_scroll.custom_minimum_size.x = 450
 	menu_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	columns.add_child(menu_scroll)
@@ -271,6 +305,11 @@ func build_ui() -> void:
 	menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	menu.add_theme_constant_override("separation",12)
 	menu_scroll.add_child(menu)
+
+func update_controller_status() -> void:
+	if controller_status == null: return
+	var devices := Input.get_connected_joypads()
+	controller_status.text = "XBOX CONTROLS  /  A select · B back · Menu pause\nD-pad navigate · View change camera" if not devices.is_empty() else "KEYBOARD  /  Enter select · Esc pause\nA / D carve · Space push · Shift load / release"
 
 func clear_menu(title: String, subtitle: String) -> void:
 	for child in menu.get_children():
@@ -281,11 +320,20 @@ func clear_menu(title: String, subtitle: String) -> void:
 	menu.add_child(HSeparator.new())
 	menu_scroll.scroll_vertical = 0
 
+func focus_menu() -> void:
+	if not overlay.visible: return
+	for child in menu.get_children():
+		if child is Button and not child.disabled:
+			child.grab_focus()
+			return
+
 func show_page(page: String) -> void:
 	current_page = page
 	overlay.show()
 	playing = false
 	music.stream_paused = true
+	broadcast.hide()
+	get_tree().create_timer(.05).timeout.connect(focus_menu)
 	if page == "home":
 		clear_menu("Your time on the ice", "One rink. Every edge. A season to make your own.")
 		if not frame.is_empty() and not frame.finished and int(frame.state.tick)>0:
@@ -375,9 +423,13 @@ func show_page(page: String) -> void:
 			menu.add_child(button("Landing coach: "+("On" if beginner else "Off"),func():beginner=not beginner;show_page("settings")))
 		menu.add_child(button("Legacy override: "+["Lean & load","Assisted steering","Two-foot control","Full repertoire"][scheme],func():skating_setup="";scheme=(scheme+1)%4;show_page("settings")))
 		menu.add_child(button("Controller tuning & bindings",func():show_page("controller")))
-		if skating_setup != "simulation":
+		if skating_setup not in ["simulation","experimental"]:
 			menu.add_child(button("Cruise: "+("On" if cruise else "Off"),func():cruise=not cruise;show_page("settings")))
 		menu.add_child(button("Music: "+("On" if music_enabled else "Off"),func():music_enabled=not music_enabled;show_page("settings")))
+		menu.add_child(button("Controller vibration: "+("On" if rumble_enabled else "Off"),func():rumble_enabled=not rumble_enabled;show_page("settings")))
+		menu.add_child(button("Elite paddles: "+["Controller's own profile","Footwork · LB / RB / A / R3","Moves · X / B / A / Y"][paddle_layout],func():paddle_layout=(paddle_layout+1)%3;show_page("settings")))
+		menu.add_child(paragraph("Native paddle presets apply only when the driver exposes separate paddles. Otherwise use your controller's stored Xbox Accessories profile. View changes camera; Menu pauses.",12))
+		menu.add_child(button("Display: "+("Fullscreen" if DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN else "Windowed")+" · F11",toggle_fullscreen))
 		menu.add_child(label("Skater",16))
 		var character_picker := OptionButton.new()
 		for entry in CHARACTERS:
@@ -385,7 +437,7 @@ func show_page(page: String) -> void:
 		character_picker.selected = character
 		character_picker.item_selected.connect(func(index: int):character=index;show_page("settings"))
 		menu.add_child(character_picker)
-		if not catalog.is_empty() and character == 0:
+		if not catalog.is_empty() and character != 1:
 			menu.add_child(label("Costume",16))
 			var costume_picker := OptionButton.new()
 			for entry in catalog.skins:
@@ -408,7 +460,9 @@ func show_page(page: String) -> void:
 			profile_picker.selected = profile
 			profile_picker.item_selected.connect(func(index: int):profile=index)
 			menu.add_child(profile_picker)
-		if skating_setup in ["simulation","explorer"]:
+		if skating_setup == "experimental":
+			menu.add_child(paragraph("Experimental: one trigger per leg. Pump to push, load and release the skating leg to jump. Sticks shape each blade. X/B shift weight; L3/R3 toe pick. A requests turns; Y requests rotation; bumpers change the move family. D-pad adjusts the feet.",14))
+		elif skating_setup in ["simulation","explorer"]:
 			menu.add_child(paragraph("Manual turns: tap B for three-turn; transfer foot for mohawk; hold B for loop; reverse lean for rocker. Transfer and reverse for choctaw. D-pad down requests bracket; hold and reverse lean for counter. X twizzles; Y spins; R3 plants the toe. RT loads/releases; LT brakes. LB/RB retain foot selection. Modifier + X/Y/A: Ina Bauer/spiral/cantilever. Simulation uses one stick per blade; hold the modifier for right-stick arms. Explorer uses left-stick lean and pressure, right-stick arms.",14))
 		else:
 			menu.add_child(paragraph("Full repertoire: dedicated turns and glides. Open Controller tuning & bindings for your current layout. RT loads/releases jumps; LT only brakes. Bumpers retain the chosen foot.\n\n" if scheme == 3 else "Controller: left stick steers; RT loads the knee; A pushes; Y spins; B turns; X twizzles; LT taps the toe, holds the brake; bumpers choose the foot; right stick opens the arms. D-pad up requests the Beginner jump; down holds the low pose.\n\nKeyboard: Q/E choose the foot; W/S move the rocker; F plants the toe; comma winds up a jump; I holds Ina Bauer; N requests a bracket. R restarts. Esc pauses.",14))
@@ -446,6 +500,8 @@ func show_page(page: String) -> void:
 		menu.add_child(button("← Settings",func():show_page("settings")))
 	elif page == "result":
 		clear_menu(str(frame.result.title),str(frame.result.detail))
+		if frame.result.get("protocol") != null:
+			show_protocol(frame.result.protocol)
 		if frame.result.has("xp"):
 			menu.add_child(label("+%d training XP" % int(frame.result.xp),22,Color("d5bd96")))
 		menu.add_child(paragraph("Your lines remain on the ice. Take another run, or carry what you learned into the next program."))
@@ -453,6 +509,40 @@ func show_page(page: String) -> void:
 		menu.add_child(button("Skate again",func():start_game(active_mode,event_index)))
 		menu.add_child(button("Save performance replay",func():link.send("export")))
 		menu.add_child(button("Return to the rink menu",func():show_page("home")))
+
+func show_protocol(protocol: Dictionary) -> void:
+	menu.add_child(label("Jump protocol",21))
+	var elements := VBoxContainer.new()
+	elements.name = "ProtocolElements"
+	elements.add_theme_constant_override("separation",10)
+	menu.add_child(elements)
+	if protocol.lines.is_empty():
+		elements.add_child(paragraph("No scored jump elements.",14))
+	else:
+		for i in protocol.lines.size():
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation",16)
+			row.add_child(label("%02d" % (i+1),15,Color("9eafb9")))
+			var element := paragraph(str(protocol.lines[i]),16)
+			element.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(element)
+			elements.add_child(row)
+		menu.add_child(paragraph("+ links jumps in one element. * marks a repeat that scores zero.",12))
+	menu.add_child(HSeparator.new())
+	protocol_total("TES", "%.2f" % float(protocol.tes))
+	protocol_total("PCS", "Not available" if protocol.pcs == null else "%.2f" % float(protocol.pcs))
+	protocol_total("Fall deduction", "−%.2f" % float(protocol.deductions))
+	protocol_total("Segment total", "%.2f" % float(protocol.total),true)
+	menu.add_child(HSeparator.new())
+
+func protocol_total(title: String, value: String, emphasis: bool = false) -> void:
+	var row := HBoxContainer.new()
+	var color := Color("d5bd96") if emphasis else Color("e6edef")
+	var caption := label(title,18 if emphasis else 15,color)
+	caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(caption)
+	row.add_child(label(value,18 if emphasis else 15,color))
+	menu.add_child(row)
 
 func routine_names(ids: Array) -> String:
 	var names := PackedStringArray()
@@ -488,8 +578,10 @@ func on_engine(op: String, data: Dictionary) -> void:
 		if boot_test:
 			for page in ["career","composer","settings","controller","home"]:
 				show_page(page)
-		if boot_test or screenshot_test:
+		if boot_test:
 			start_game("career")
+		elif screenshot_test:
+			start_game("free")
 		return
 	if op == "controller":
 		controller_profile = data.profile
@@ -516,18 +608,32 @@ func on_engine(op: String, data: Dictionary) -> void:
 		arena.set_course(str(frame.mode),catalog)
 		skater.apply_frame(frame,true)
 		last_result_tick = -1
+		last_landing_tick = -1
 		music.stream = load("res://assets/generated/audio/"+str(catalog.tracks[int(frame.track)].file))
 		if DisplayServer.get_name() != "headless":
 			music.play()
 		music.stream_paused = not music_enabled
 		playing = true
 		overlay.hide()
+		broadcast.show()
+		broadcast.announce("TAKE THE ICE", "Northlight Arena  /  "+active_mode.capitalize())
 		notice.text = ""
 	else:
 		skater.apply_frame(frame)
 	arena.add_traces(frame.trace)
 	arena.update_course(frame)
 	ribbon.update_state(frame)
+	broadcast.update_state(frame,skating_setup if not skating_setup.is_empty() else "custom",["TRACKING","BROADCAST","RINK","BLADE"][camera_mode])
+	var landed: Dictionary = frame.state.landed
+	if int(landed.tick)>last_landing_tick and int(landed.tick)>=0:
+		last_landing_tick = int(landed.tick)
+		var clean := not bool(landed.fall) and not bool(landed.stepOut)
+		landing_envelope = .32
+		crowd_swell = 1.0 if clean else .35
+		broadcast.announce("CLEAN LANDING" if clean else "FIND YOUR EDGE", "%.2f rotations   /   Jump TES %.2f" % [float(landed.turned),float(frame.get("technical",0))])
+		var pads := Input.get_connected_joypads()
+		if rumble_enabled and not pads.is_empty():
+			Input.start_joy_vibration(pads[0],.18 if clean else .48,.30 if clean else .7,.16 if clean else .28)
 	update_hud()
 	if frame.finished and last_result_tick != int(frame.state.tick):
 		last_result_tick = int(frame.state.tick)
@@ -555,12 +661,13 @@ func resume_game() -> void:
 		return
 	overlay.hide()
 	playing = true
+	broadcast.show()
 	music.stream_paused = not music_enabled
 
 func cycle_camera() -> void:
 	if not frame.is_empty() and int(frame.state.jump.phase)==2:
 		return
-	camera_mode = (camera_mode+1)%3
+	camera_mode = (camera_mode+1)%4
 
 func update_hud() -> void:
 	var s: Dictionary = frame.state
@@ -604,6 +711,14 @@ func update_hud() -> void:
 		coach_tip.text = "Carve toward the next marker. Push through the curve and keep your line."
 		coach_progress.text = "%d lights · %d points" % [int(frame.run.collected),int(frame.run.score)]
 		hud_time.text = "%.1f s" % float(frame.run.seconds)
+	elif frame.mode == "free":
+		coach_title.text = str(frame.lesson.title)
+		coach_tip.text = str(frame.lesson.hint)
+		var learned := 0
+		for done in frame.lesson.done:
+			if done: learned += 1
+		coach_progress.text = "%02d / 07  practice elements" % learned
+		hud_time.text = "%02d:%02d" % [int(frame.elapsed)/60,int(frame.elapsed)%60]
 	if bool(s.fallen):
 		coach_title.text = "Find your feet."
 		coach_tip.text = "A fall is part of skating. Tap Space / A to get up and continue."
@@ -612,6 +727,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
 		return
 	match event.physical_keycode:
+		KEY_F11: toggle_fullscreen()
 		KEY_ESCAPE, KEY_P: pause_game()
 		KEY_V: cycle_camera()
 		KEY_R:
@@ -624,6 +740,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func pressed(key: Key) -> bool:
 	return Input.is_physical_key_pressed(key)
+
+func toggle_fullscreen() -> void:
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 func shaped_stick(raw: Vector2) -> Vector2:
 	var length := minf(raw.length(),1.0)
@@ -674,6 +793,11 @@ func full_hardware(joy: int) -> Dictionary:
 				buttons[i]=1.0 if pad(joy,codes[i]) else 0.0
 		buttons[6]=maxf(0,Input.get_joy_axis(joy,JOY_AXIS_TRIGGER_LEFT))
 		buttons[7]=maxf(0,Input.get_joy_axis(joy,JOY_AXIS_TRIGGER_RIGHT))
+		if paddle_layout>0:
+			var destinations := [4,5,0,11] if paddle_layout==1 else [2,1,0,3]
+			var paddles := [JOY_BUTTON_PADDLE1,JOY_BUTTON_PADDLE2,JOY_BUTTON_PADDLE3,JOY_BUTTON_PADDLE4]
+			for i in 4:
+				if Input.is_joy_button_pressed(joy,paddles[i]): buttons[destinations[i]]=1.0
 	var keys: Array = []
 	var mapping := {KEY_A:"a",KEY_D:"d",KEY_W:"w",KEY_S:"s",KEY_Q:"q",KEY_E:"e",KEY_SHIFT:"shift",KEY_SPACE:" ",KEY_X:"x",KEY_C:"c",KEY_COMMA:",",KEY_B:"b",KEY_N:"n",KEY_Z:"z",KEY_Y:"y",KEY_F:"f",KEY_J:"j",KEY_K:"k",KEY_L:"l",KEY_H:"h",KEY_I:"i",KEY_O:"o",KEY_U:"u",KEY_LEFT:"arrowleft",KEY_RIGHT:"arrowright",KEY_UP:"arrowup",KEY_DOWN:"arrowdown"}
 	for code in mapping:
@@ -710,14 +834,22 @@ func pad(joy: int, code: JoyButton) -> bool:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton and event.pressed:
+		if overlay.visible:
+			if event.button_index == JOY_BUTTON_B:
+				if current_page == "home": resume_game()
+				else: show_page("home")
+				get_viewport().set_input_as_handled()
+			elif event.button_index == JOY_BUTTON_START:
+				resume_game()
+				get_viewport().set_input_as_handled()
+			return
 		match event.button_index:
 			JOY_BUTTON_A: push_pending = true
 			JOY_BUTTON_DPAD_UP:
 				if scheme != 3: trick_pending = true
 			JOY_BUTTON_START: pause_game()
 			JOY_BUTTON_BACK:
-				if playing:
-					start_game(active_mode,event_index)
+				cycle_camera()
 
 func _physics_process(dt: float) -> void:
 	if not playing or link == null or not link.operational:
@@ -740,19 +872,31 @@ func _physics_process(dt: float) -> void:
 		else:
 			c.kx = -1.0 if index==1 else 0.0
 			low = index==2
+	if screenshot_test:
+		c = {"hardware":{"axes":[.28,0.0,0.0,0.0],"buttons":[1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"keys":[],"connected":true}}
 	link.send("frame",{"controls":c,"ticks":ticks,"low":low})
 	push_pending = false
 	toe_pending = false
 	trick_pending = false
 
 func _process(dt: float) -> void:
+	presentation_clock += dt
+	skater.effects_active = playing
 	if not frame.is_empty():
 		update_camera(dt)
 		fill_audio()
+		coach_title.visible = not overlay.visible
+		coach_tip.visible = not overlay.visible
+		coach_progress.visible = not overlay.visible
+		hud_time.visible = not overlay.visible
 	if boot_test:
 		test_seconds += dt
-		if not frame.is_empty() and frame.finished:
+		if not frame.is_empty() and frame.finished and test_stage == 0:
+			test_stage = 1
 			if frame.routine != null and int(frame.routine.index)==3:
+				if not await smoke_protocol_ui():
+					get_tree().quit(1)
+					return
 				print("GODOT_SMOKE_PASS: live Ice Lab completed the three-element career routine; traces=",arena.trace_count)
 				get_tree().quit(0)
 			else:
@@ -767,33 +911,92 @@ func _process(dt: float) -> void:
 			screenshot_saved = true
 			capture()
 
+# Exercise real controls and layout at the end of the existing live smoke run.
+# Synthetic long sheets test scrolling only; bridge tests cover physical scoring.
+func smoke_protocol_ui() -> bool:
+	var result: Dictionary = frame.result
+	var elements := menu.get_node_or_null("ProtocolElements")
+	if elements == null or elements.get_child_count() != 1 or not elements.get_child(0) is Label:
+		push_error("Finished empty protocol did not render its placeholder")
+		return false
+	frame.result = result.duplicate(true)
+	frame.result.protocol.lines = []
+	for i in 32:
+		frame.result.protocol.lines.append("3Lz+3T<*" if i == 31 else "2A")
+	show_page("result")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	elements = menu.get_node("ProtocolElements")
+	var scroll := menu_scroll.get_v_scroll_bar()
+	if elements.get_child_count() != 32 or scroll.max_value <= scroll.page:
+		push_error("Long protocol did not render every element in a scrollable sheet")
+		return false
+	var last_row: HBoxContainer = elements.get_child(31)
+	if last_row.get_child(0).text != "32" or last_row.get_child(1).text != "3Lz+3T<*":
+		push_error("Protocol lost element numbering or scoring calls")
+		return false
+	var last_button: Button = menu.get_child(menu.get_child_count()-1)
+	last_button.grab_focus()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var viewport_rect := menu_scroll.get_global_rect()
+	if menu_scroll.scroll_vertical <= 0 or not viewport_rect.encloses(last_button.get_global_rect()):
+		push_error("Result controls are not reachable below a long protocol")
+		return false
+	frame.result = result
+	show_page("result")
+	print("GODOT_PROTOCOL_PASS: empty sheet, 32 numbered elements, calls, and focus scrolling")
+	return true
+
 func capture() -> void:
 	playing = false
 	await RenderingServer.frame_post_draw
 	var image := get_viewport().get_texture().get_image()
 	image.save_png("/tmp/edgework-godot-rink.png")
+	for view in [1,2,3]:
+		camera_mode = view
+		await get_tree().create_timer(1.5).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-camera-%d.png" % view)
 	for page in ["home","career","composer","settings"]:
 		show_page(page)
+		await get_tree().create_timer(1.2).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-%s.png" % ("menu" if page == "home" else page))
 	print("GODOT_CAPTURE_PASS")
 	get_tree().quit()
 
 func update_camera(dt: float) -> void:
+	camera.cull_mask = 1 if camera_mode==2 and not overlay.visible else 3
 	var s: Dictionary = frame.state
 	var velocity := Vector3(float(s.vel.x),0,float(s.vel.y))
 	if velocity.length()>.5 and int(s.jump.phase)!=2:
 		follow_direction = follow_direction.lerp(velocity.normalized(),1-exp(-dt*1.8)).normalized()
 	var focus: Vector3 = skater.position+Vector3(0,.9,0)
-	var desired := focus-follow_direction*6.8+Vector3(0,2.0,0)+follow_direction.cross(Vector3.UP)*1.5
+	var desired := focus-follow_direction*4.7+Vector3(0,.9,0)+follow_direction.cross(Vector3.UP)*1.15
+	var look := focus+follow_direction*.6
+	var fov := 46.0
 	if camera_mode == 1:
-		desired = Vector3(33,23,30)
+		desired = Vector3(clampf(focus.x*.45,-18,18),7.8,31.5)
+		fov = clampf(160.0/desired.distance_to(focus)*10,28,48)
 	elif camera_mode == 2:
-		desired = focus+Vector3(0,24,.01)
+		desired = Vector3(39,44,43)
+		look = Vector3.ZERO
+		fov = 58
+	elif camera_mode == 3:
+		desired = focus-follow_direction*3.5+follow_direction.cross(Vector3.UP)*1.8+Vector3(0,-.25,0)
+		look = focus+Vector3(0,-.3,0)
+		fov = 46
 	if overlay.visible:
-		desired = focus+Vector3(4.7,2.2,5.0)
+		var a := .38+sin(presentation_clock*.09)*.22
+		var front := Vector3(float(s.heading.x),0,float(s.heading.y))
+		var showcase := front.rotated(Vector3.UP,a)
+		desired = skater.position+showcase*4.2+Vector3(0,1.35,0)
+		look = skater.position+Vector3(0,1.1,0)-showcase.cross(Vector3.UP)*.85
+		fov = 38
 	camera.position = camera.position.lerp(desired,1-exp(-dt*3.0))
-	camera.look_at(focus+follow_direction*.7)
+	camera.fov = lerpf(camera.fov,fov,1-exp(-dt*2.5))
+	camera.look_at(look)
 
 func fill_audio() -> void:
 	if generator == null:
@@ -803,8 +1006,16 @@ func fill_audio() -> void:
 	var level := clampf(speed/12.0,0,.55) if playing and int(s.jump.phase)!=2 and not bool(s.fallen) else 0.0
 	for i in mini(generator.get_frames_available(),4096):
 		audio_phase += .045+speed*.0008
-		var sample := (rng.randf_range(-1,1)*.55+sin(audio_phase)*.08)*level
-		generator.push_frame(Vector2(sample,sample))
+		var noise := rng.randf_range(-1,1)
+		blade_filter = lerpf(blade_filter,noise,.25)
+		crowd_filter = lerpf(crowd_filter,noise,.014)
+		crowd_swell = maxf(0,crowd_swell-1.0/22050.0/4.0)
+		landing_envelope = maxf(0,landing_envelope-1.0/22050.0)
+		var scrape := clampf(float(s.blade[0].latSlipAccel)+float(s.blade[1].latSlipAccel),0,4)*.08
+		var blade := (noise-blade_filter)*level*(.35+scrape)
+		var crowd := crowd_filter*(.16+crowd_swell*2.3) if playing else 0.0
+		var thud := sin(audio_phase*.7)*landing_envelope*1.5 if playing else 0.0
+		generator.push_frame(Vector2(blade+crowd+thud,blade*.92+crowd+thud))
 
 func _exit_tree() -> void:
 	if music:
@@ -822,7 +1033,7 @@ func load_preferences() -> void:
 	if not saved is Dictionary:
 		return
 	skating_setup = str(saved.get("setup",""))
-	if skating_setup not in ["simulation","explorer","repertoire"]:
+	if skating_setup not in ["simulation","explorer","experimental","repertoire"]:
 		skating_setup = ""
 	assistance = clampf(float(saved.get("assistance",.75)),.5,1)
 	beginner = bool(saved.get("beginner",true))
@@ -835,6 +1046,8 @@ func load_preferences() -> void:
 	costume = maxi(int(saved.get("costume",0)),0)
 	cruise = bool(saved.get("cruise",true))
 	music_enabled = bool(saved.get("music",true))
+	rumble_enabled = bool(saved.get("rumble",true))
+	paddle_layout = clampi(int(saved.get("paddles",0)),0,2)
 	var ids = saved.get("sequence",[])
 	if ids is Array and ids.size()>0 and ids.size()<=16:
 		var valid := true
@@ -848,6 +1061,6 @@ func save_preferences() -> void:
 		return
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"sequence":sequence}))
+		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"rumble":rumble_enabled,"paddles":paddle_layout,"sequence":sequence}))
 	else:
 		on_error("Preferences could not be saved.")

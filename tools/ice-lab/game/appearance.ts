@@ -31,6 +31,10 @@ export const SKINS = [
     bodice: "#b5652a", highlight: "#e2a468", trim: "#f6dcb8", sleeve: "#c98a52", sleeveShade: "#96551f",
     skirt: "#7a2733", skirtShade: "#551a22", tights: "#3a2b22", tightsShade: "#241a15",
     hair: "#4a2a1c", skin: "#c98a5c", bun: false },
+  { id: "northlight", name: "Northlight", description: "Midnight satin · champagne embroidery · competition bun",
+    bodice: "#17364f", highlight: "#456b89", trim: "#e8cca0", sleeve: "#97796f", sleeveShade: "#69514d",
+    skirt: "#26465f", skirtShade: "#182e43", tights: "#b28c75", tightsShade: "#89634f",
+    hair: "#241d1b", skin: "#d4a68b", bun: true },
 ] as const;
 export type Skin = typeof SKINS[number];
 export function skinById(id: unknown): Skin { return SKINS.find(skin => skin.id === id) ?? SKINS[0]; }

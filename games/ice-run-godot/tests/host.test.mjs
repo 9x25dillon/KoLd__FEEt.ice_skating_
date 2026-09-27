@@ -37,6 +37,9 @@ test('real host saves a career, reloads training and replays without awarding XP
     assert.equal(reply.saveError, null);
   }
   assert.equal(reply.data.result.complete, true);
+  assert.deepEqual(reply.data.result.protocol.lines, []);
+  assert.ok(reply.data.result.protocol.pcs > 0, 'structured scoring must survive the real JSON host boundary');
+  assert.equal(reply.data.result.protocol.total, reply.data.result.protocol.pcs);
   assert.equal(reply.data.career.medals[0], 3);
   await send('train', {stat: 'balance'});
   const saved = readFileSync(join(dir, 'career-v1.json'), 'utf8');
