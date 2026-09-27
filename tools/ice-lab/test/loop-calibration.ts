@@ -27,6 +27,10 @@ import { overridden } from "./loop-comparison.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 
 export const COHORT = { mass: 46.9, height: 1.55 };
+// airDeg/airOmegaDeg measure the SHOULDERS (paper §2.3). The current air
+// model freezes relative trunk twist, so heading rotation is only a proxy;
+// these values do not specify blade pre-rotation or takeoff facing. See
+// docs/takeoff-orientation.md and test/takeoff-orientation.ts.
 export const REFERENCE = {
   flight: [0.443, 0.025], airDeg: [470.5, 23.9], airOmegaDeg: [1063.9, 54.7], Lnorm: [140.2e-3, 11.2e-3],
 } as const;
