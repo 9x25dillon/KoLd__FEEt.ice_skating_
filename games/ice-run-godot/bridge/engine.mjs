@@ -76,7 +76,7 @@ export class IceEngine {
   if(o.cruise!==undefined)this.cruise=Boolean(o.cruise);
   if(o.track!==undefined){if(!Number.isInteger(o.track)||!tracks[o.track])throw Error('Unknown track');this.track=o.track;}
   if(o.profile!==undefined){if(!Number.isInteger(o.profile)||!SAMPLE_PROFILES[o.profile])throw Error('Unknown profile');this.profile=o.profile;}
-  if(this.setup){this.scheme=3;if(this.setup!=='repertoire')this.beginner=false;if(this.setup==='simulation')this.cruise=false;}
+  if(this.setup){this.scheme=3;if(this.setup!=='repertoire')this.beginner=false;if(this.setup==='simulation'||this.setup==='experimental')this.cruise=false;}
  }
  advance(controls={},ticks=2,low=false) {
   if(!Number.isInteger(ticks)||ticks<1||ticks>12)throw Error('Tick batches must contain 1–12 ticks');
@@ -133,10 +133,10 @@ export class IceEngine {
   if(this.routine)this.routine.sample(this.state,this.low,SIM_DT,events);
   if(this.routine?.done) {
    const r=this.routine,xp=this.mode==='career'?this.career.award(r):0;
-   // sim/pcs.ts's own score, never shown here before — silently absent (not a misleading "0.00")
-   // whenever finalizePcs left it null, the same as game/main.ts's own equivalent line.
-   const pcs=r.pcsScore?` · PCS ${r.pcsScore.total.toFixed(2)}`:'';
-   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls`+(r.sheet?` · Jumps ${r.sheet.lines.join(', ')||'none'} · TES ${r.technicalScore.toFixed(2)}${pcs} · −${r.deductions.toFixed(2)} falls · Total ${r.segmentScore.toFixed(2)}`:` · ${this.technical.toFixed(2)} jump TES${pcs}`),xp,complete:r.complete};
+   // Forward the existing sheet and totals; Godot formats them without parsing
+   // prose or recalculating scores. Null PCS remains distinguishable from zero.
+   const protocol=r.sheet?{lines:r.sheet.lines,tes:r.technicalScore,pcs:r.pcsScore?.total??null,deductions:r.deductions,total:r.segmentScore}:null;
+   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls`,protocol,xp,complete:r.complete};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
  }
  replay(json){const clip=parseReplay(json);this.start({mode:'free'});this.player=new ReplayPlayer(clip);this.state=this.player.state;this.params=this.player.params;return this.snapshot();}

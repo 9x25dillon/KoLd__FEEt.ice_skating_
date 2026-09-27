@@ -12,19 +12,60 @@ you take is written permanently into the ice beneath you. There is no jump butto
 > [`Hand_off.md`](Hand_off.md) — current state, conventions, artifact URLs, and the three
 > things most likely to trip you up.
 
-## Play the Godot prototype
+## Play EDGEWORK: Grand Prix
 
-The [Godot edition of Ice Run](games/ice-run-godot/README.md) adds a 3D rink and
-rigged skater around the original Ice Lab engine, with career choreography,
-an ordered program editor, training, music and replay playback.
+The native 3D game is now the default entry point:
 
 ```sh
-./games/ice-run-godot/run.sh
+npm start
 ```
 
-Requires Godot 4 (tested on 4.7.2), Node 24+ and FFmpeg. The project includes the
-Blender skater source and a Linux export workflow. This is a playable prototype;
-the full production design below remains a larger target.
+Requires Godot 4 (tested with 4.7.2), Node 24.19+ or 26, and FFmpeg. No npm
+packages need installing. The launcher prepares the existing simulation and
+opens **Northlight Arena**. For an already exported Linux build, run:
+
+```sh
+./games/ice-run-godot/exports/linux/ice-run.x86_64
+```
+
+The executable needs Node on PATH and its adjacent `bridge/`, `runtime/` and
+`ice-run.pck`. Rebuild it with `npm run build:native`.
+
+The presentation includes a new competition athlete, four costumes, a seated
+crowd, roof trusses, event boards, reflective ice, blade tracings and spray,
+four cameras, a broadcast HUD, and landing feedback. Your existing 120 Hz solver,
+career, Composer, technical scoring, training, music and replay systems remain
+the foundation. See the [native game guide](games/ice-run-godot/README.md) and
+[art direction / delivery notes](docs/grand-prix-build.md).
+
+### Xbox Elite Series 2
+
+- **A:** select; **B:** back; **D-pad:** menu navigation; **Menu:** pause/resume.
+- **View:** cycle Tracking, Broadcast, Rink and Blade cameras. **F11:** fullscreen.
+- **Blade Explorer** starts with left-stick lean, A strokes, RT knee loading,
+  LT braking, B turns, X twizzles, Y spins, LB/RB foot selection and right-stick arms.
+- **Simulation**, **Blade Explorer**, **Experimental**, and **Full Repertoire**
+  remain selectable in Settings. Their physical controls differ; read the chosen
+  setup's description. Experimental saves correctly between sessions.
+- **Elite paddles:** keep the controller's own profile, or select a native
+  Footwork / Moves preset when your driver exposes independent paddle buttons.
+- Disconnecting the controller pauses the game. Landing vibration is optional.
+
+### Browser game and physics lab
+
+The browser edition remains available:
+
+```sh
+npm run start:browser
+```
+
+Open **http://localhost:8123/game/**; the physics lab is at
+**http://localhost:8123/app/**. Browser controls include controller menu navigation,
+keyboard fallback, replay import/export and the controller workshop.
+Use `PORT=8124 npm run start:browser` for another port.
+
+`npm run build` rebuilds the browser; `npm test` runs the simulation/game suite.
+
 ## Status
 
 **Pre-production. One person, no funding.** The work is

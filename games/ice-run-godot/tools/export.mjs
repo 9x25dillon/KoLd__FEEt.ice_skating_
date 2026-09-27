@@ -17,7 +17,13 @@ for (const folder of ['bridge', 'runtime']) {
     filter: source => !source.endsWith('.import') && !source.endsWith('.translation'),
   });
 }
-writeFileSync(join(out, 'README.txt'), `EDGEWORK / Ice Run — Linux development build
+for (const name of ['LICENSE', 'LICENSE-CODE']) cpSync(join(root, '../..', name), join(out, name));
+cpSync(join(root, 'assets/fonts/LICENSE'), join(out, 'LICENSE-font.txt'));
+mkdirSync(join(out, 'docs'), {recursive: true});
+cpSync(join(root, '../../docs/grand-prix-build.md'), join(out, 'docs/grand-prix-build.md'));
+cpSync(join(root, '../../docs/presentation'), join(out, 'docs/presentation'), {recursive: true});
+cpSync(join(root, '../../tools/ice-lab/game/audio/README.md'), join(out, 'docs/audio.md'));
+writeFileSync(join(out, 'README.txt'), `EDGEWORK / Grand Prix — Northlight Arena
 
 Run ./ice-run.x86_64. Requires Node.js 24 or newer on PATH.
 Set ICE_RUN_NODE to an absolute Node executable path if needed.
@@ -25,6 +31,13 @@ Keep ice-run.pck, bridge/ and runtime/ alongside the executable.
 The Node runtime is not bundled. No network connection is needed to play.
 
 Career, authored programs and settings save in Godot's user data directory.
-This is a playable prototype, with procedural animation and a single rink.
+Xbox: A select, B back, D-pad navigate, Menu pause, View change camera.
+Keyboard: A/D carve, Space push, Shift load/release, Esc pause, V camera, F11 fullscreen.
+Start with Blade Explorer. Select Simulation, Experimental or Full Repertoire in Settings.
+Native paddle presets and landing vibration are in Settings.
+
+New competition athlete and Northlight outfit; four cameras; broadcast HUD;
+spectator arena; ice tracings and spray; career, Composer, training and replays.
+This is a playable development build with procedural animation and a single rink.
 `);
 console.log(`Linux build ready: ${out}/ice-run.x86_64`);

@@ -2,13 +2,13 @@ import { MOVE } from "../sim/types.ts";
 import type { SkaterState } from "../sim/types.ts";
 
 export const LESSONS = [
-  ["Find an edge", "Hold A or D for a smooth curve. Cruise supplies your pushes."],
-  ["Cross your feet", "Keep carving and press Space / A to push across the curve."],
-  ["Skate backward", "While carving, tap B. Keep gliding after the turn."],
-  ["Land a jump", "Hold Shift / RT for a short count, release, then bend again in the air."],
-  ["Hold a spin", "At speed, hold Y for a full rotation. Release to exit."],
-  ["Open the glide", "Gliding forward, hold I / both bumpers for an Ina Bauer."],
-  ["Get low", "Glide and hold U / D-pad down for the cantilever pose."],
+  ["Find an edge", "Build speed with a few strokes, then hold a gentle lean for a smooth curve."],
+  ["Cross your feet", "Keep carving and add a stroke across the curve. Watch your feet cross."],
+  ["Skate backward", "Ask for a turn while carving. Keep your weight on the skating foot and glide out backward."],
+  ["Land a jump", "Load the skating knee, release to take off, then bend again to cushion your landing."],
+  ["Hold a spin", "Build speed on an edge, then hold your spin input for a full rotation. Release to exit."],
+  ["Open the glide", "Glide forward into an Ina Bauer. Pause and open Controls for your setup’s binding."],
+  ["Get low", "Hold a low cantilever pose while gliding. Pause and open Controls for your setup’s binding."],
 ] as const;
 
 /** Practice achievements only read what the solver actually did. */
