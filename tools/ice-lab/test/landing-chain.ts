@@ -99,12 +99,18 @@ export function touchdown(lb: LandingBudget, p: Params) {
 }
 
 /** deg: how far the body faces from skating backward along its travel (0 = a backward landing's facing), signed. */
-export function offBackward(f: Frame): number {
+export function offBackward(f: Pick<Frame, "heading" | "travel">): number {
   const back = Math.atan2(-Math.sin(f.travel), -Math.cos(f.travel));
   let d = f.heading - back;
   while (d > Math.PI) d -= 2 * Math.PI;
   while (d < -Math.PI) d += 2 * Math.PI;
   return d * 180 / Math.PI;
+}
+
+/** First contact, before land() projects away lateral velocity. The last air
+ * frame is a tick early; the touchdown Frame's velocity is already scrubbed. */
+export function contactOffBackward(lb: LandingBudget): number {
+  return offBackward({ heading: Math.atan2(lb.heading.y, lb.heading.x), travel: Math.atan2(lb.velPre.y, lb.velPre.x) });
 }
 
 const fx = (v: number | null | undefined, d = 2) => v === null || v === undefined || !Number.isFinite(v) ? " —" : (v >= 0 ? " " : "") + v.toFixed(d);
@@ -140,14 +146,15 @@ if (import.meta.main) {
   console.log("\ncheck s | air deg | at the check deg | added opening deg | I_yaw at check -> TD | omega at check -> TD | H_yaw drift | flags | call | landing");
   let chosen = CHECKS[0] as number, best = Infinity;
   for (const check of CHECKS) {
-    const { r } = chainRun(p, check);
+    const { r, lb } = chainRun(p, check);
     const e = events(r), j = r.result, air = (j.airborne ?? j.turned) * 360;
     const airF = r.frames.filter(f => f.phase === JUMP_PHASE.Air);
     const drift = airF.length ? Math.max(...airF.map(f => Math.abs(f.L - airF[0].L))) : NaN;
-    const rotAtCheck = e.prep ? airF.filter(f => f.t <= e.prep!.t).reduce((a, f) => a + f.omega * (1 / 120), 0) * 180 / Math.PI : NaN;
+    // The blade-off frame has an omega but has not advanced through the air.
+    const rotAtCheck = e.prep ? airF.slice(1).filter(f => f.t <= e.prep!.t).reduce((a, f) => a + f.omega * (1 / 120), 0) * 180 / Math.PI : NaN;
     const flag = e.prep && e.last && e.last.inertia > e.prep.inertia && Math.abs(e.last.omega) >= Math.abs(e.prep.omega) ? "OPENING_DID_NOT_SLOW_ROTATION" : "—";
     const landing = r.landedAt < 0 ? "no touchdown" : !r.fallen ? "rode out" : r.fallAt - r.landedAt < 1e-9 ? "fell at touchdown" : `fell +${((r.fallAt - r.landedAt) * 1000).toFixed(0)} ms ${FALL_NAME[r.fallReason]}`;
-    console.log(`${check} | ${air.toFixed(0)} (${sd(air, REFERENCE.airDeg)}) | ${fx(rotAtCheck, 0)} | ${fx(e.prep ? air - rotAtCheck : NaN, 0)} | ${fx(e.prep?.inertia)} -> ${fx(e.last?.inertia)} | ${fx(e.prep?.omega, 1)} -> ${fx(e.last?.omega, 1)} | ${drift.toExponential(1)} | ${flag} | ${r.takeoff < 0 ? "no takeoff" : `${j.revolutions}Lo ${CALL[j.rotationCall]}`} | ${landing}`);
+    console.log(`${check} | ${air.toFixed(0)} (${sd(air, REFERENCE.airDeg)}) | ${fx(rotAtCheck, 0)} | ${fx(e.prep ? air - rotAtCheck : NaN, 0)} | ${fx(e.prep?.inertia)} -> ${fx(lb?.inertia)} | ${fx(e.prep?.omega, 1)} -> ${fx(lb?.omega, 1)} | ${drift.toExponential(1)} | ${flag} | ${r.takeoff < 0 ? "no takeoff" : `${j.revolutions}Lo ${CALL[j.rotationCall]}`} | ${landing}`);
     if (Math.abs(air - REFERENCE.airDeg[0]) < best) { best = Math.abs(air - REFERENCE.airDeg[0]); chosen = check; }
   }
   console.log(`the chain below: check ${chosen} s — the airborne rotation nearest ${REFERENCE.airDeg[0]} deg`);
@@ -159,7 +166,7 @@ if (import.meta.main) {
     if (!lb) { console.log(`${check} | no touchdown`); continue; }
     const T = touchdown(lb, p), e = events(r);
     const outcome = !r.fallen ? "rode out" : r.fallAt - r.landedAt < 1e-9 ? "fell at the score" : `fell +${((r.fallAt - r.landedAt) * 1000).toFixed(0)} ms ${FALL_NAME[r.fallReason]}`;
-    console.log(`${check} | ${fx(e.bo ? offBackward(e.bo) : NaN, 0)} / ${fx(e.last ? offBackward(e.last) : NaN, 0)} | ${fx(T.vPre.n)} | ${fx(T.J.n, 0)} | ${fx(lb.leanRatePre)} | ${fx(T.dLeanPred)} | ${fx(T.dLeanContact)} | ${lb.fall ? " — (not reached)" : fx(T.dLeanShock)} | ${fx(T.rJLean, 1)} | ${lb.landingQuality.toFixed(2)} (${lb.checkErr.toFixed(2)}) | ${outcome}`);
+    console.log(`${check} | ${fx(e.bo ? offBackward(e.bo) : NaN, 0)} / ${fx(contactOffBackward(lb), 0)} | ${fx(T.vPre.n)} | ${fx(T.J.n, 0)} | ${fx(lb.leanRatePre)} | ${fx(T.dLeanPred)} | ${fx(T.dLeanContact)} | ${lb.fall ? " — (not reached)" : fx(T.dLeanShock)} | ${fx(T.rJLean, 1)} | ${lb.landingQuality.toFixed(2)} (${lb.checkErr.toFixed(2)}) | ${outcome}`);
   }
 
   // ── the chain at the chosen check, and with landingShock 0 ──────────────
@@ -219,7 +226,7 @@ if (import.meta.main) {
   const flags: string[] = [];
   if (Math.abs(T.dLeanPred - T.dLeanContact) > 0.5) flags.push(`TOUCHDOWN_ANGULAR_IMPULSE_MISMATCH (lean): the impact predicts ${fx(T.dLeanPred)} rad/s, the contact applies ${fx(T.dLeanContact)}`);
   if (Math.abs(-lb.L - T.rJYaw) > 1) flags.push(`TOUCHDOWN_ANGULAR_IMPULSE_MISMATCH (yaw): the contact removes ${lb.L.toFixed(1)} kg m^2/s of spin, r x J accounts for ${fx(T.rJYaw, 1)}`);
-  const off = e.last ? offBackward(e.last) : NaN;
+  const off = contactOffBackward(lb);
   if (Math.abs(off) > 45) flags.push(`CROSSWAYS_TOUCHDOWN: ${off.toFixed(0)} deg off a backward landing, ${fx(T.vPre.n)} m/s across the blade`);
   for (const f of flags) console.log(`  FLAG ${f}`);
   console.log(`  owner: the skater leaves facing ${fx(e.bo ? offBackward(e.bo) : NaN, 0)} deg off backward along its travel, rolling ${fx(e.bo?.lean)} at ${fx(e.bo?.leanRate)} rad/s; torque-free flight carries the roll to ${fx(lb.lean)} at ${fx(lb.leanRatePre)}; ${((j.airborne ?? j.turned) * 360).toFixed(0)} deg of air lands it ${off.toFixed(0)} deg off its travel; the blade's impulse would change the lean's rate by ${fx(T.dLeanPred)} rad/s and the model applies ${fx(T.dLeanContact)}; landingShock ${lb.fall ? "never runs (the touchdown's score falls it first)" : `adds ${fx(T.dLeanShock)}`}; ${r.fallen ? (r.fallAt - r.landedAt < 1e-9 ? "it falls at the touchdown's score" : `it falls +${((r.fallAt - r.landedAt) * 1000).toFixed(0)} ms (${FALL_NAME[r.fallReason]})`) : "it rides out"}.`);

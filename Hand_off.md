@@ -1,5 +1,200 @@
 # Hand-off
 
+## Start here · close of 2026-09-27
+
+**This section is authoritative for today's work.** Older sessions remain below
+as history; their counts, touchdown angle, tool restrictions and open decisions
+may have been superseded. Read this section, then
+[today's technical audit](docs/takeoff-orientation.md) and
+[session review](docs/session-review-2026-09-27.md).
+
+### Objective and current stopping point
+
+Build a double loop that emerges from the skating physics and lands, assessed
+against measured skating. Today resumed **takeoff facing relative to travel**.
+We fixed the experiment's contact timing and arrival-alignment score. The physical
+double loop is **not solved** and still falls at touchdown.
+
+The next investigation is the mechanism that changes body/blade facing relative
+to travel before blade-off. Do not substitute a prescribed angular offset, extra
+spin, a stronger blade, or a tighter tuck for that mechanism.
+
+### Repository, delivery and ownership
+
+- Repository: `9x25dillon/KoLd__FEEt.ice_skating_`.
+- Today's worktree: `/home/kill/KoLd__FEEt.yaw`, branch `takeoff-yaw`, based on
+  main `df2d5ec` (PR #50).
+- Code commits: `1c58b7f` (orientation diagnostics) and `2a75c4b` (experimental
+  arrival-alignment correction). The review, audit and handoff follow in a docs
+  commit. The user explicitly requested **commit, push and merge** at close,
+  after being told about the eight known failures.
+- Establish actual publication state rather than relying on a stale branch:
+
+  ```sh
+  git fetch origin
+  git status --short --branch
+  git log -6 --oneline origin/main
+  git worktree list
+  gh pr list --head takeoff-yaw --state all
+  git merge-base --is-ancestor 2a75c4b origin/main
+  ```
+
+- The shared checkout `/home/kill/KoLd__FEEt.ice_skating_` is on
+  `phase17-assurance` with unrelated uncommitted work. Use a clean worktree off
+  the verified current main for the next change. Inspect existing edits before
+  writing; preserve other sessions' work.
+- Keep operator data in `E_W_replays_sessions_eng_bld/`, `session-notes/` and the
+  root saved HTML. Preserve prior notes and artifacts; archive when necessary.
+- Play checkout: `/home/kill/KoLd__FEEt.play`; usual URL
+  `http://localhost:8130/game/`. Today's investigation did not update or restart
+  it. Check its branch/status and server owner before changing it. Never stop
+  servers by a broad process-name pattern.
+
+### What is established
+
+The baseline load-to-blade-off turn is **87.151° for both body and travel**. It
+leaves **0° off backward** along its velocity. Its **475.957°** of airborne body
+rotation puts it **115.957° off backward at first contact**. The old report's
+107.280° was the previous tick; another 8.677° rotates before contact.
+
+The paper's 470.5° reference measures **shoulder rotation**. The air currently
+freezes trunk twist, making that equal to body rotation in this simplified model.
+The reference does not establish a 249.5° turn of the blade on the ice; endpoints
+and shoulder–blade offsets matter. Sources and the toe+hook comparison are in
+the audit.
+
+`rotationCallMode: 1` now checks landing alignment against **incoming velocity
+before projection**. Named jumps expect backward alignment; hops may align
+either way. The element's rotation credit/call stays separate. A diagnostic
+pose rotation can align contact without changing the flight or improving its
+under-rotation call. That test is not a reachable skating move or a shipped fix
+to the takeoff.
+
+### Decisions, constraints and unresolved assumptions
+
+- Keep blade grip, free-leg hip ceiling, tuck and `landingShock` unchanged during
+  the next transition experiment. Introduce new physical behavior behind an
+  explicit default-off mode and measure its everyday-input behavior as well as
+  its showcase before enabling it.
+- Contact-point velocity, pivot/slip and segment motion are candidate owners.
+  The present held carve rotates body and travel together when `yawDev = 0`.
+  No replacement contact law or measured takeoff facing target is established.
+- A physical turn toward forward before blade-off can conflict with the current
+  direction-at-blade-off classifier. Preserve the backward approach history
+  when investigating loop identity; do not silently turn it into another jump.
+- Airborne relative twist is frozen; real shoulder/blade endpoint differences
+  remain unmodelled. Do not infer a blade target from shoulder rotation alone.
+- Touchdown still scrubs lateral velocity, zeroes yaw and omits the predicted
+  contact impulse on lean. Arrival scoring is repaired; contact mechanics are
+  not. Its score remains authored, not an externally validated impact model.
+- The hip torque ceiling, air tuck, cohort scaling, takeoff-credit policy and
+  pivot treatment retain the assumptions listed in the audit and older queue.
+- Replay is still the deliberately unfinished **`ice-lab-f64/39`**. Include this
+  experimental score change in the previously agreed single canonicalisation
+  to `/40`. Do not regenerate goldens merely to silence the known failure.
+
+### Next session: a bounded first experiment
+
+1. Reproduce `node test/takeoff-orientation.ts`; use `--ticks` when identifying
+   where heading and travel begin to separate. Define the observable as the
+   blade/body angle relative to incoming velocity at first contact.
+2. Trace `solver.ts` §4, `trunkTorque`, and `slipSolveFeet`. Account for velocity
+   at the contact point, the body's angular motion and segment-relative motion.
+   Separate what the implementation proves from what needs external evidence.
+3. Test one explicit contact/segment hypothesis with the existing grip and body
+   parameters. Record body, blade, shoulders, travel, momentum and slip before
+   and after; retain a mode-off comparison. Keep jump identity tied to the
+   observed entry when a physical transition changes the final blade direction.
+4. Require a continuous, physically produced transition, preserved momentum
+   accounting, measured regressions, and an honest landing outcome. An aligned
+   test-only pose or an improved score is insufficient proof of a solved loop.
+5. Report whether the takeoff is now physically reachable and whether touchdown
+   contact is the next failure owner. Then continue the existing queue: contact
+   impulse/spin carry, canonicalisation, backjump/ghost/tutorial re-scripts and
+   controller demonstrations. Do not tune all of them in one experiment.
+
+### Verified checks and useful commands
+
+All commands below use this worktree, not the shared checkout. From `tools/ice-lab`:
+
+```sh
+node test/takeoff-orientation.ts
+node --test test/*.test.ts
+node app/build.mjs
+node native/export-reference.mjs native/reference --check
+```
+
+Focused tests used today (42 pass):
+
+```sh
+node --test test/takeoff-orientation.test.ts test/landing-chain.test.ts test/air-posture.test.ts test/swing-through.test.ts test/takeoff-budget.test.ts test/free-leg-timing.test.ts test/jump.test.ts
+```
+
+From the repository root:
+
+```sh
+node games/ice-run-godot/tools/prepare.mjs --engine-only
+node --test games/ice-run-godot/tests/*.test.mjs
+```
+
+Results: **729/737 full-suite tests pass; eight known failures** — backjump (2),
+ghost loop (2), tutorial air step (3), replay fixture missing
+`jumpInertiaTucked` (1). **20/20 bridge tests**, browser build, TypeScript and
+9 pinned native-reference artifacts pass. No new failures were found.
+
+The available TypeScript 7.0.2 / Node 26 types were reused without installing
+dependencies in this repository. From `tools/ice-lab`, the command was:
+
+```sh
+node /home/kill/astro-aae/frontend/node_modules/typescript/lib/tsc.js --noEmit -p . --typeRoots /home/kill/astro-aae/frontend/node_modules/@types
+```
+
+Recheck that toolchain path next time. The native-reference check validates a
+pinned oracle, not a native solver. Three new tests fail against the old landing
+code; the complete mode-off run remains byte-identical (277,945 bytes).
+
+### Avoid repeating today's overhead
+
+Start with the exact worktree and bounded reads; broad searches of `/home/kill`
+and large file dumps produced truncated output. Keep the normal isolated test
+runner for full-suite comparisons. A no-isolation diagnostic run introduced
+shared-state failures and is not the baseline. This sandbox blocked subprocesses
+(`spawnSync git EPERM`) and distorted test output; the unrestricted normal run
+gave the actual 729/737 result. Follow the environment's escalation procedure
+when a necessary check is blocked; do not label a sandbox failure a model defect.
+
+For the working brief, use **outcome, starting point, constraints, completion
+evidence, delivery**. Two useful terms: **observable** (exactly what is measured)
+and **invariant** (what must remain unchanged). The session review includes three
+concrete paired efficiency lessons and example prompts.
+
+## Follow-up · 2026-09-27, takeoff facing relative to travel
+
+On branch `takeoff-yaw`, based on main `df2d5ec`. The operator resumed the takeoff
+orientation investigation. See [the audit and sources](docs/takeoff-orientation.md)
+and run `node test/takeoff-orientation.ts` from `tools/ice-lab`.
+
+The held takeoff turns body and travel by the same **87.151°**, leaves facing
+backward, and its 475.957° of air reaches contact **115.957° off backward**. The
+previous report's 107° was a tick early; `landing-chain.ts` now uses the actual
+pre-impulse contact record. The published 470.5° is **shoulder** rotation, not a
+measured takeoff-blade angle; do not turn 720 minus that into a prescribed pose.
+
+Fixed `rotationCallMode: 1`'s landing alignment score to use incoming velocity,
+separately from the element's rotation ledger. Three new regressions fail before
+the correction. Mode-off full trace/result/budget are byte-identical. No takeoff
+or contact impulse changed, no constants tuned, no modes enabled. The double loop
+still falls. Next: the contact/segment mechanism that changes facing relative to
+travel, while retaining loop identity from its backward approach. Details and
+remaining limits are in the audit.
+
+Verified: 42 focused tests, typecheck, browser build, 20 Godot bridge tests, pinned
+native reference. Full suite outside the subprocess-restricted sandbox: **729
+passed / 8 failed**, the eight known backjump/ghost/tutorial/replay failures below.
+Contract remains `/39`, pending the previously agreed canonicalisation. The play
+checkout/server was not changed. The twentieth-session queue below is historical;
+read this correction before its landing-chain numbers.
+
 ## 0 · Start here (written at the close of 2026-09-25, twentieth session)
 
 **Check first.** `git fetch`, `git log --oneline -1 origin/main` (this session's work merged as the
