@@ -26,7 +26,9 @@ test("the landing budget is observability: attached, the run is the run", () => 
 });
 
 test("the three touchdown states: the contact keeps only the velocity along the blade and stops the spin; the shock moves only the lean's rate", () => {
-  const { lb } = chainRun(p, 0.25);
+  // MEASURED after the arrival-alignment fix: 0.25 s faces 110 degrees off
+  // backward and fails its score; 0.275 s passes, exercising landingShock.
+  const { lb } = chainRun(p, 0.275);
   assert.ok(lb && !lb.fall, "a landing that passes its score");
   const along = (v: { x: number; y: number }) => v.x * lb.heading.x + v.y * lb.heading.y;
   assert.ok(Math.abs(lb.velPost.x - lb.heading.x * along(lb.velPre)) < 1e-12 && Math.abs(lb.velPost.y - lb.heading.y * along(lb.velPre)) < 1e-12);

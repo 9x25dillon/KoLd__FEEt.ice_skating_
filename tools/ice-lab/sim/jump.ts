@@ -548,6 +548,13 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
     L: J.angMomentum, inertia: J.inertia, omega: s.yawRate, rotation: J.rotation,
   });
   const vLong = dot(s.vel, t);
+  // rotationCallMode: count the element from its rotation ledger, but check
+  // the landing against the incoming travel. An entry curve turns both the
+  // body and the travel; its world-space turn is not a landing misalignment.
+  // Read this BEFORE projecting away the sideways velocity. At a standstill
+  // there is no travel direction to check (edgeOK still reads Stationary).
+  const arrivalError = p.rotationCallMode >= 1 && len(s.vel) > p.dirSpeedEps
+    ? Math.abs(atan2(dot(s.vel, perpLeft(t)), -vLong)) : 0;
   s.vel = mul(t, vLong);
 
   const weightR = clamp(finite(input.weight, 0.5), 0, 1);
@@ -583,7 +590,9 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
 
   // Landing quality: did you open on time, present the right edge, and absorb
   // the impact with the knee? Every jump lands RBO; a hop can land on anything.
-  const checkErr = Math.abs(wrapPi(facing - target)) / Math.PI;
+  const checkErr = p.rotationCallMode >= 1
+    ? (kind === JUMP_NONE ? Math.min(arrivalError, Math.PI - arrivalError) : arrivalError) / Math.PI
+    : Math.abs(wrapPi(facing - target)) / Math.PI;
   const absorb = saturate(finite(input.knee, 0.35));
   const edgeOK = kind === JUMP_NONE ? 1
     : foot === FOOT.Right && dir === DIR.Backward ? 1 - edgeMismatch(o, true) : 0;
