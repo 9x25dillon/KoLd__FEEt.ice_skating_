@@ -24,7 +24,7 @@ mechanics.
    bindings; move them if they collide.
 3. Look at the partner: model choice (currently Berserker glb), spacing, lift
    height. Capture a screenshot or replay clip; do not judge by tests alone.
-4. Add a pairs stage to the Godot `--smoke-test` (enter mode, hold, lift, quit).
+4. ~~Add a pairs stage to the Godot `--smoke-test`~~ **Done** (PR #54, `089d7ac`): partner presented and hand offer reaches the bridge; lift deliberately not covered (needs a steady glide, would be flaky).
 5. Draw partner traces on the rink with their own `previous` state in `arena.gd`.
 6. Run `npm test` and compare the eight inherited failures.
 
