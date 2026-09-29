@@ -20,6 +20,8 @@ var smooth_lean := 0.0
 var effects_active := true
 var cloth_materials: Array[ShaderMaterial] = []
 var contact_shadow: MeshInstance3D
+# Pairs: the partner's supported-lift height, presented above the solver's ground plane.
+var lift_height := 0.0
 
 func _ready() -> void:
 	load_model(model_path)
@@ -152,7 +154,7 @@ func aim_bone(name: String, head: Vector3, tail: Vector3) -> void:
 func _process(dt: float) -> void:
 	if state.is_empty() or skeleton == null:
 		return
-	var target := Vector3(state.pos.x,maxf(0,float(state.jump.z)),float(state.pos.y)-18)
+	var target := Vector3(state.pos.x,maxf(0,float(state.jump.z))+lift_height,float(state.pos.y)-18)
 	var motion := clampf(Vector2(state.vel.x,state.vel.y).length()*.12+absf(float(state.yawRate))*.08,0,1)
 	for cloth in cloth_materials:
 		cloth.set_shader_parameter("motion",motion if effects_active else .08)

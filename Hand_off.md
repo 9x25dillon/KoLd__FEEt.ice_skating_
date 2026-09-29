@@ -1,3 +1,46 @@
+# Hand-off — EDGEWORK / Pairs skating
+
+## Newest close: 28 September 2026 (pairs)
+
+Read [the pairs session review](docs/session-review-2026-09-28-pairs.md) first;
+the Grand Prix hand-off below it remains authoritative for build and repository
+mechanics.
+
+### State
+
+- Branch `pairs-skating` (worktree `/home/kill/KoLd__FEEt.ice_skating_/.delivery/pairs`),
+  based on main `6154e62` (PR #52). Pairs work: `dfcfeb2` plus the docs commit.
+- Delivered: partner sim (`tools/ice-lab/game/pairs.ts`), bridge mode `pairs`
+  (+ `pairsChallenge`, replay `edgework-pairs/1`), Godot menu/controls/HUD,
+  `games/ice-run-godot/tests/pairs.test.mjs`. Bridge 28/28, Godot smoke passes.
+- Verify publication before assuming anything:
+  `git fetch origin; gh pr list --head pairs-skating --state all; git log -3 origin/main`.
+
+### Next steps, in order
+
+1. **Playtest pairs** (operator plays; Firefox for browser, Godot for native).
+   Record notes as timestamped list: hold, lift, spin, drift, fall recovery.
+2. Check G/T and D-pad left/right against Full-repertoire and Experimental
+   bindings; move them if they collide.
+3. Look at the partner: model choice (currently Berserker glb), spacing, lift
+   height. Capture a screenshot or replay clip; do not judge by tests alone.
+4. Add a pairs stage to the Godot `--smoke-test` (enter mode, hold, lift, quit).
+5. Draw partner traces on the rink with their own `previous` state in `arena.gd`.
+6. Run `npm test` and compare the eight inherited failures.
+
+### Rules that still apply
+
+- No deletes, resets, cleans, force pushes or overwrites. Additive edits only.
+- Keep pairs points separate from ISU protocol scoring; the lift is assisted, not
+  a validated two-body model — do not claim otherwise.
+- New worktree shortcuts: fresh worktrees need `node games/ice-run-godot/tools/prepare.mjs`
+  and `godot4 --headless --path games/ice-run-godot --import` before any smoke run.
+- Codex's own history/goals live in `~/.codex` (`history.jsonl`, `goals_1.sqlite`);
+  check them first when asked to continue its work.
+- `gh pr merge` may be blocked for the assistant; ask the operator for `!`.
+
+---
+
 # Hand-off — EDGEWORK / Grand Prix
 
 ## Authoritative close: 27 September 2026
