@@ -933,9 +933,25 @@ func _process(dt: float) -> void:
 					get_tree().quit(1)
 					return
 				print("GODOT_SMOKE_PASS: live Ice Lab completed the three-element career routine; traces=",arena.trace_count)
-				get_tree().quit(0)
+				# Second stage: the same live engine, in pairs mode.
+				test_stage = 2
+				test_seconds = 0.0
+				start_game("pairs")
 			else:
 				push_error("Career smoke test did not finish the routine")
+				get_tree().quit(1)
+		elif test_stage == 2 and not frame.is_empty() and frame.mode == "pairs":
+			var pairs = frame.get("pairs")
+			if pairs == null or not partner.visible:
+				push_error("Pairs smoke test: no partner was presented")
+				get_tree().quit(1)
+			elif test_seconds > 1.0 and not pair_hold_pending and not bool(pairs.holdRequested):
+				pair_hold_pending = true
+			elif bool(pairs.holdRequested):
+				print("GODOT_PAIRS_PASS: partner presented, hand offered through the live bridge; distance=%.2f m" % float(pairs.distance))
+				get_tree().quit(0)
+			elif test_seconds > 10.0:
+				push_error("Pairs smoke test: the hand offer never reached the partner")
 				get_tree().quit(1)
 		elif test_seconds>60:
 			push_error("Godot smoke test timed out")
