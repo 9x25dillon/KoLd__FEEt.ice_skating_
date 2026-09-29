@@ -15,6 +15,9 @@ const CHARACTERS: Array[Dictionary] = [
 var link: Node
 var arena: Node3D
 var skater: Node3D
+var partner: Node3D
+var pair_hold_pending := false
+var pair_lift_pending := false
 var camera: Camera3D
 var music: AudioStreamPlayer
 var blade_audio: AudioStreamPlayer
@@ -108,6 +111,10 @@ func _ready() -> void:
 	skater = Skater.new()
 	skater.model_path = CHARACTERS[character].path
 	add_child(skater)
+	partner = Skater.new()
+	partner.model_path = CHARACTERS[1].path
+	partner.visible = false
+	add_child(partner)
 	camera = Camera3D.new()
 	camera.fov = 40
 	camera.near = .08
@@ -341,6 +348,8 @@ func show_page(page: String) -> void:
 		menu.add_child(button("The Season   /   Career →",func():show_page("career"),true))
 		menu.add_child(button("The Composer   /   Author a program",func():show_page("composer")))
 		menu.add_child(button("Free Skate   /   Quiet ice",func():start_game("free")))
+		menu.add_child(button("Pairs   /   Skate with a partner",func():start_game("pairs")))
+		menu.add_child(button("Pairs challenge   /   90 seconds",func():start_game("pairs",0,true)))
 		menu.add_child(button("Rookie course   /   Learn the line",func():start_game("rookie")))
 		menu.add_child(button("Ice Run   /   90-second light course",func():start_game("timed")))
 		menu.add_child(button("Controls, music & assists",func():show_page("settings")))
@@ -550,7 +559,7 @@ func routine_names(ids: Array) -> String:
 		names.append(catalog.elements[id].title)
 	return " → ".join(names)
 
-func start_game(mode: String, index: int = 0) -> void:
+func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
 	if not link.operational:
 		on_error("The skating engine is still starting.")
 		return
@@ -558,8 +567,9 @@ func start_game(mode: String, index: int = 0) -> void:
 	event_index = index
 	playing = false
 	skater.load_model(CHARACTERS[character].path)
+	partner.visible = false
 	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile}})
-	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null}})
+	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge}})
 
 func on_engine(op: String, data: Dictionary) -> void:
 	if op == "hello":
@@ -607,6 +617,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		arena.clear_traces()
 		arena.set_course(str(frame.mode),catalog)
 		skater.apply_frame(frame,true)
+		apply_partner(true)
 		last_result_tick = -1
 		last_landing_tick = -1
 		music.stream = load("res://assets/generated/audio/"+str(catalog.tracks[int(frame.track)].file))
@@ -620,6 +631,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		notice.text = ""
 	else:
 		skater.apply_frame(frame)
+		apply_partner(false)
 	arena.add_traces(frame.trace)
 	arena.update_course(frame)
 	ribbon.update_state(frame)
@@ -638,6 +650,14 @@ func on_engine(op: String, data: Dictionary) -> void:
 	if frame.finished and last_result_tick != int(frame.state.tick):
 		last_result_tick = int(frame.state.tick)
 		show_page("result")
+
+func apply_partner(snap: bool) -> void:
+	var pairs = frame.get("pairs")
+	partner.visible = pairs != null
+	if pairs == null:
+		return
+	partner.lift_height = float(pairs.lift.height)
+	partner.apply_frame(pairs,snap)
 
 func on_error(message: String) -> void:
 	notice.text = message
@@ -706,6 +726,13 @@ func update_hud() -> void:
 		coach_title.text = frame.rookie.title
 		coach_tip.text = frame.rookie.hint
 		coach_progress.text = "%d / 8 gates · %d clean" % [int(frame.rookie.index),int(frame.rookie.cleared)]
+	elif frame.mode == "pairs" and frame.get("pairs") != null:
+		var pr: Dictionary = frame.pairs
+		coach_title.text = str(pr.title)
+		coach_tip.text = str(pr.hint)
+		coach_progress.text = "%s   ·   phrase %d / %d\n%s" % [str(pr.status),mini(int(pr.phrase)+1,int(pr.phrases)),int(pr.phrases),str(pr.message)]
+		hud_time.text = "%.0f s" % float(pr.seconds) if bool(pr.challenge) else "%02d:%02d" % [int(frame.elapsed)/60,int(frame.elapsed)%60]
+		hud_technical.text = "Pairs %d   ·   unison %.0f%%" % [int(pr.score),float(pr.sync)*100.0]
 	elif frame.mode == "timed":
 		coach_title.text = "Follow the lights"
 		coach_tip.text = "Carve toward the next marker. Push through the curve and keep your line."
@@ -735,6 +762,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				start_game(active_mode,event_index)
 		KEY_SPACE: push_pending = true
 		KEY_F: toe_pending = true
+		KEY_G: pair_hold_pending = true
+		KEY_T: pair_lift_pending = true
 		KEY_J:
 			if scheme != 3: trick_pending = true
 
@@ -847,6 +876,8 @@ func _input(event: InputEvent) -> void:
 			JOY_BUTTON_A: push_pending = true
 			JOY_BUTTON_DPAD_UP:
 				if scheme != 3: trick_pending = true
+			JOY_BUTTON_DPAD_LEFT: pair_hold_pending = true
+			JOY_BUTTON_DPAD_RIGHT: pair_lift_pending = true
 			JOY_BUTTON_START: pause_game()
 			JOY_BUTTON_BACK:
 				cycle_camera()
@@ -874,10 +905,14 @@ func _physics_process(dt: float) -> void:
 			low = index==2
 	if screenshot_test:
 		c = {"hardware":{"axes":[.28,0.0,0.0,0.0],"buttons":[1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"keys":[],"connected":true}}
+	c["pairHold"] = pair_hold_pending
+	c["pairLift"] = pair_lift_pending
 	link.send("frame",{"controls":c,"ticks":ticks,"low":low})
 	push_pending = false
 	toe_pending = false
 	trick_pending = false
+	pair_hold_pending = false
+	pair_lift_pending = false
 
 func _process(dt: float) -> void:
 	presentation_clock += dt
