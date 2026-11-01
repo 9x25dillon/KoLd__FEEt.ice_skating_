@@ -20,9 +20,15 @@ The native 3D game is now the default entry point:
 npm start
 ```
 
-Requires Godot 4 (tested with 4.7.2), Node 24.19+ or 26, and FFmpeg. No npm
-packages need installing. The launcher prepares the existing simulation and
-opens **Northlight Arena**. For an already exported Linux build, run:
+![Current build: a deep edge, a spin with the arms drawn in, and the broadcast camera](docs/presentation/edgework-now.png)
+
+*Real renders from the current build. [Watch the same passage in motion](docs/presentation/edgework-now.mp4),
+or [compared with where this rebuild started](docs/presentation/start-vs-now.mp4), an earlier render of it.*
+
+Requires Godot 4 (tested with 4.7.2), Node 24.19+ or 26, FFmpeg, and a GPU that runs
+Godot's Forward+ renderer (Vulkan or D3D12). No npm packages need installing. The launcher
+prepares the existing simulation and opens **Northlight Arena**. For an already exported
+Linux build, run:
 
 ```sh
 ./games/ice-run-godot/exports/linux/ice-run.x86_64
@@ -31,11 +37,24 @@ opens **Northlight Arena**. For an already exported Linux build, run:
 The executable needs Node on PATH and its adjacent `bridge/`, `runtime/` and
 `ice-run.pck`. Rebuild it with `npm run build:native`.
 
-The presentation includes a new competition athlete, four costumes, a seated
-crowd, roof trusses, event boards, reflective ice, blade tracings and spray,
-four cameras, a broadcast HUD, and landing feedback. Your existing 120 Hz solver,
-career, Composer, technical scoring, training, music and replay systems remain
-the foundation. See the [native game guide](games/ice-run-godot/README.md) and
+**What you see is driven by the simulation.** The hips, lean and boot roll come straight
+from the solver's state, so a deep edge really rolls the boot over, and drawing the arms in
+during a spin is the same event that speeds it up (about 9 to 33 rad/s in the test passage).
+Arms, the free leg and shapes like camel and sit are still authored. There is no motion capture.
+
+- **Athlete:** built on MakeHuman's CC0 anatomy and skin, with a dress, boots and blades made
+  for it, and a skirt on sprung panels that swings, flares and rides over the legs.
+- **Rink:** ice with real reflectance, pools of light from the roof, painted markings, tracings
+  that stay readable from the high camera, and live reflections of the skater and boards.
+- **Crowd:** seated people who watch the skater and react to clean landings.
+- **Cameras:** Tracking, Broadcast, Rink and Blade. Tracking changes its framing by move: wide for
+  a jump, low for footwork, steady for a spin.
+- **Career:** choose what your arms do most: **Function**, **Shared** or **Expression**. Expression
+  earns Presentation marks and gives up balance; 45-second drills shrink that trade-off. Other modes
+  get full balance and the expressive look. The numbers are authored and not yet tuned from play.
+
+The 120 Hz solver, Composer, technical scoring, training, music and replay systems remain the
+foundation. See the [native game guide](games/ice-run-godot/README.md) and
 [art direction / delivery notes](docs/grand-prix-build.md).
 
 ### Xbox Elite Series 2
@@ -88,12 +107,15 @@ not fidelity, and the difference is the whole of the next phase.
 - **The instrument.** A deterministic 120 Hz blade–ice solver in TypeScript with zero
   dependencies: carve, balance, stroke and skid, three control schemes on keyboard and gamepad,
   telemetry, session metrics, and a skater profile layer. Jumps — with a single-jump score read
-  from `data/` — and the moves (crossovers, the three-turn and mohawk, twizzles, spins, the Ina
-  Bauer, jumps from their entries) are in, and **off by default**, each behind its own switch. A jump
+  from `data/` — and the moves (crossovers, three-turns, mohawks, brackets, loops, rockers, counters
+  and choctaws, twizzles, spins, the Ina Bauer, jumps from their entries) are in, each behind its own
+  switch: **off in the lab's presets, on in the games**. So are spin and step levels, combinations,
+  program components, stamina, and an ice sheet that wears under the blades and reads back into
+  friction and bite. A jump
   wound up with a flick against the rotation has its arms partly flown from its own geometry, more on
   the assisted presets, moving only the moment of inertia.
 - **Replay.** Capture a run, verify it headlessly in another JavaScript engine, and get the first
-  tick where two runs diverge. The replay contract is `ice-lab-f64/9` after reconciling the two historical `/8` branches.
+  tick where two runs diverge. The replay contract is `ice-lab-f64/39`, and is deliberately unfinished while the landing work goes on.
 - **Simulation, gameplay and Godot bridge tests**; see the current [handoff](Hand_off.md) for verified counts.
 - **A public build** at **<https://9x25dillon.github.io/KoLd__FEEt.ice_skating_/>**, deployed by
   [`pages.yml`](.github/workflows/pages.yml) on every push to `main` that touches the instrument.
@@ -114,9 +136,14 @@ not fidelity, and the difference is the whole of the next phase.
 - **External evidence.** The validator (`node tools/ice-lab/validate.mjs`, run in CI on every push), a
   case corpus (`data/validation/`) and the generated [fidelity report](docs/fidelity-report.md) exist.
   Every case that needs published measurement or footage is still a stub, so the gate is not met.
-- **Parts of the model.** Rockers, counters and choctaws; spin levels; combinations and
-  sequences; stamina. Tracings are drawn but do not yet feed friction or bite back into the solver
-  as the bible's §05 requires. The stroke is the bible's semi-analytic push, not a leg model.
+- **A solved double loop.** Physical double-loop landings are unresolved, and that is most of why
+  **8 tests currently fail and CI is red**: the inherited double-loop, turning-jump tutorial and
+  replay-fixture cases. They are left failing, not rewritten to pass.
+- **Parts of the model.** The stroke is the bible's semi-analytic push by default, not a leg model; a
+  leg-driven push exists behind a switch. Many of the numbers are authored, and labelled so.
+- **Motion capture.** None. Every pose comes from the sim or from hand-authored targets.
+- **Controller acceptance.** The recent native work has been tested by scripts and renders, not yet
+  by sustained play on a physical pad, and there is no sustained frame-rate benchmark.
 - **The runtime.** `KoLdSimCore` is unbuilt, and `src/reference/` is non-compiling specification
   code by design.
 
@@ -290,6 +317,7 @@ different things.
 | `docs/` — the design bible and all prose | [**CC BY-NC-ND 4.0**](LICENSE) | Read it, share it, quote it with attribution. You may not use it commercially or publish modified versions. |
 | `src/` and `data/` | [**Apache-2.0**](LICENSE-CODE) | Use it freely, including commercially. Includes an express patent grant, which matters for physics and scoring algorithms. |
 | `tools/` — Ice Lab, the working solver and its tuned constants | [**Apache-2.0**](tools/ice-lab/LICENSE) | Same terms as `src/`. The instrument is meant to be run, checked and corrected by anyone, and a licence cannot fence off the constants anyway — they are numbers, and every build ships them to the browser. |
+| `games/ice-run-godot/assets/source/makehuman/` — third-party body, skin, eye, brow, lash and hair data | [**CC0 1.0**](games/ice-run-godot/assets/source/makehuman/LICENSE.ASSETS.md) | MakeHuman's released assets, data only. See its [README](games/ice-run-godot/assets/source/makehuman/README.md). |
 
 **Why not MIT or Apache for everything?** Because the design bible is the asset. Licensing it
 permissively would let anyone build and sell this game from the blueprint. The reference code

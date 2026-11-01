@@ -12,6 +12,10 @@ var mirror_view: SubViewport
 var mirror_camera: Camera3D
 var trace_count := 0
 var previous: Array = [null, null]
+var trace_heading: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
+var trace_steps := 0
+# Metres sideways off a blade's own line, between two trace samples, that no edge can carve.
+const TRACE_STEP := .05
 var markers: Node3D
 var targets: Array[Node3D] = []
 const CAPACITY := 18000
@@ -302,6 +306,7 @@ func clear_traces() -> void:
 	trace_count = 0
 	trace_mesh.visible_instance_count = 0
 	previous = [null,null]
+	trace_heading = [Vector3.ZERO,Vector3.ZERO]
 
 # A reaction rises fast and takes a few seconds to die away.
 func react(amount: float) -> void:
@@ -354,12 +359,21 @@ func add_traces(frames: Array) -> void:
 			if b.contact and previous[i] != null:
 				var delta: Vector3 = point-previous[i]
 				var length := delta.length()
-				if length > .015 and length < 1.5:
-					# Stretched along the groove's own length, then turned onto its heading.
+				# A real blade cannot step sideways on the ice, but the solver moves a
+				# contact in one tick when the support changes, two feet to one. That is
+				# a foot set down, not a cut, so the line ends and a new one starts.
+				var stepped: bool = trace_heading[i] != Vector3.ZERO and absf(delta.cross(trace_heading[i]).y)>TRACE_STEP
+				if stepped:
+					trace_heading[i] = Vector3.ZERO
+					trace_steps += 1
+				elif length > .015 and length < 1.5:
 					var transform := Transform3D(Basis(Vector3.UP,atan2(delta.x,delta.z))*Basis.from_scale(Vector3(1,1,length)),(point+previous[i])*.5)
 					trace_mesh.set_instance_transform(trace_count % CAPACITY,transform)
 					trace_count += 1
 					trace_mesh.visible_instance_count = mini(trace_count,CAPACITY)
+					trace_heading[i] = delta/length
+			if not b.contact:
+				trace_heading[i] = Vector3.ZERO
 			previous[i] = point if b.contact else null
 
 func set_course(mode: String, catalog: Dictionary) -> void:

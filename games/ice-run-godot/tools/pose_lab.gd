@@ -227,6 +227,7 @@ func report() -> void:
 	var result := {"frames":render,"samples":samples.get("roll_deg",[]).size(),"two_foot_frames":two_foot,"crossed_frames":crossed,"wrong_way_frames":wrong_way,"max_foot_step_m":snappedf(pop,.001),"skirt_leg_push_m":snappedf(skirt_worst,.001),"skirt_reach_m":snappedf(skirt_reach,.01)}
 	for name in ["skirt_sag_m","roll_deg","foot_off_line_m","foot_along_line_m","hip_m","lean_deg","lag_m","jerk"]:
 		result[name] = snappedf(rms(name),.001)
+	if arena: result["trace_steps"] = arena.trace_steps
 	print("POSE_LAB ",JSON.stringify(result))
 	if args.has("check"):
 		for name in LIMITS:
