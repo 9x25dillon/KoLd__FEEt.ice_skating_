@@ -19,10 +19,12 @@ void fragment() {
  float grooming=pow(abs(sin(p.x*3.2+p.y*.018)),75.0);
  float scratches=pow(noise(p*vec2(180.0,2.0)),18.0);
  vec3 base=mix(vec3(.48,.63,.70),vec3(.83,.90,.91),cloud*.45+.42);
- float center=1.0-smoothstep(.018,.045,abs(p.y));
- float circle=1.0-smoothstep(.025,.065,abs(length(p)-5.0));
+ // Lines keep at least a pixel's width, or far off they break up into dots.
+ float pixel=fwidth(p.x)+fwidth(p.y);
+ float center=(1.0-smoothstep(.018,.045+pixel,abs(p.y)))*min(1.0,.06/pixel);
+ float circle=(1.0-smoothstep(.025,.065+pixel,abs(length(p)-5.0)))*min(1.0,.09/pixel);
  float medallion=1.0-smoothstep(2.8,2.83,length(p));
- float diamond=1.0-smoothstep(.018,.065,abs(abs(p.x)+abs(p.y)-1.9));
+ float diamond=(1.0-smoothstep(.018,.065+pixel,abs(abs(p.x)+abs(p.y)-1.9)))*min(1.0,.09/pixel);
  // The markings are painted under the ice: blue, and slightly soft through it.
  base*=vec3(1.2,1.3,1.36);
  vec3 paint=vec3(.10,.27,.46);

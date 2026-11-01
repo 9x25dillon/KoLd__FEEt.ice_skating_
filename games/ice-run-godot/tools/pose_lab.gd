@@ -30,6 +30,7 @@ var camera: Camera3D
 var follow := Vector3(1,0,0)
 var shots: Array = []
 var last_trace := -1
+var was_airborne := false
 var skirt_worst := 0.0
 var skirt_reach := 0.0
 var skirt_rest := []
@@ -117,6 +118,9 @@ func frame_camera(s: Dictionary) -> void:
 	camera.position = camera.position.lerp(focus-follow*3.3+Vector3(0,.3,0),1-exp(-DT*10)) if render>1 else focus-follow*3.3+Vector3(0,.3,0)
 	camera.look_at(focus)
 	if not args.has("no-mirror"): arena.update_mirror(camera)
+	if was_airborne and int(s.jump.phase)!=2: arena.react(1.0)
+	was_airborne = int(s.jump.phase)==2
+	arena.update_crowd(skater.position,DT)
 	var pieces := []
 	while last_trace+4<=delivered:
 		last_trace += 4

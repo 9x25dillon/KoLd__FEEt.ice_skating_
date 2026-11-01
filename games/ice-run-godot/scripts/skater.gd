@@ -33,6 +33,9 @@ const BODY_WEIGHT := 540.0 # N, the support load the sim reports gliding on one 
 # Presentation-only easing, for what the sim does not state: authored poses
 # (camel, sit, low, fallen), arms, and a foot leaving or rejoining the ice.
 const POSE_RATE := 12.0
+# sim/params.ts inertiaTucked and inertiaOpen: the range a body's inertia moves through.
+const INERTIA_TUCKED := .95
+const INERTIA_OPEN := 4.0
 const ARM_RATE := 14.0
 const FOOT_RATE := 16.0
 # Draws the skater into the arena's reflection (arena.gd MIRROR_LAYER) too.
@@ -62,6 +65,12 @@ var skirt_dirty := true
 var skirt_pushed := 0.0
 var skirt_clock := 0.0
 var skirt_pivots_last: Array[Vector3] = []
+var skirt_centre_last := Vector3.ZERO
+var skirt_yaw_last := 0.0
+# The share of the true outward pull a spin puts on the cloth at each radius.
+const SKIRT_FLARE := .6
+# How close to level with the waist a flared hem may ride, in metres below it.
+const SKIRT_TOP := -.07
 # Metres the hem trails per m/s of travel: air on the cloth, capped.
 const SKIRT_TRAIL := .012
 const SKIRT_TRAIL_MAX := .07
@@ -201,7 +210,8 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 	if skirt_dirty or skirt_tips.size()!=count or skirt_tips[0].distance_to(rests[0])>1.2:
 		skirt_tips = rests.duplicate()
 		skirt_last = rests.duplicate()
-		skirt_pivots_last = pivots.duplicate()
+		skirt_centre_last = to_global(hip)
+		skirt_yaw_last = rotation.y
 		skirt_dirty = false
 	var wind := -SimSpace.direction(state.vel.x,state.vel.y)*SKIRT_TRAIL
 	wind = wind.limit_length(SKIRT_TRAIL_MAX)
@@ -209,6 +219,12 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 	var step := SKIRT_STEP
 	skirt_clock = minf(skirt_clock+dt,SKIRT_STEP*8)
 	var waiting := floori(skirt_clock/SKIRT_STEP)
+	var centre := to_global(hip)
+	var carried := (centre-skirt_centre_last)/maxi(1,waiting)
+	# The cloth turns with the body and flares outward by an explicit force. Left to
+	# lag in the world, a panel falls a quarter-turn behind at 33 rad/s and tangles.
+	var yaw_step := wrapf(rotation.y-skirt_yaw_last,-PI,PI)/maxi(1,waiting)
+	var spin_rate := yaw_step/SKIRT_STEP
 	var thigh_world: Array[Vector3] = []
 	for point in legs: thigh_world.append(to_global(point))
 	while skirt_clock>=SKIRT_STEP:
@@ -216,10 +232,13 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 		for i in count:
 			# Drag acts on how the cloth moves against the skater, not against the ice:
 			# damped against the ice, plain forward speed would blow the skirt out behind.
-			var carried: Vector3 = (pivots[i]-skirt_pivots_last[i])/maxi(1,waiting)
+			skirt_tips[i] = centre+(skirt_tips[i]-centre).rotated(Vector3.UP,yaw_step)
+			skirt_last[i] = centre+(skirt_last[i]-centre).rotated(Vector3.UP,yaw_step)
 			var moving: Vector3 = carried+(skirt_tips[i]-skirt_last[i]-carried)*SKIRT_DRAG
+			var radius: Vector3 = skirt_tips[i]-centre
+			radius.y = 0
 			skirt_last[i] = skirt_tips[i]
-			skirt_tips[i] += moving+(rests[i]+wind-skirt_tips[i])*SKIRT_STIFFNESS*step*step
+			skirt_tips[i] += moving+((rests[i]+wind-skirt_tips[i])*SKIRT_STIFFNESS+radius*spin_rate*spin_rate*SKIRT_FLARE)*step*step
 		for _relax in 3:
 			# Neighbours stay one cloth; no panel leaves the waist or passes through a leg.
 			for i in count:
@@ -244,10 +263,11 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 						skirt_tips[i] += (outward.normalized()*.8+Vector3.UP*.45)*pushed.length()/reach
 				var hanging := (skirt_tips[i]-from).limit_length(rests[i].distance_to(from))
 				# Cloth does not stand above its own waist, however fast the spin.
-				hanging.y = minf(hanging.y,.02)
+				hanging.y = minf(hanging.y,SKIRT_TOP)
 				skirt_tips[i] = from+hanging
 	if waiting>0:
-		skirt_pivots_last = pivots.duplicate()
+		skirt_centre_last = centre
+		skirt_yaw_last = rotation.y
 	for i in count:
 		aim_bone(skirt_bones[i],to_local(pivots[i]),to_local(skirt_tips[i]))
 
@@ -551,6 +571,12 @@ func _process(dt: float) -> void:
 			var swing := (1.0 if i==int(state.get("strokeFoot",0)) else -1.0)*stroke
 			elbow += Vector3(0,-.025,swing*.075)
 			hand += Vector3(0,-.05,swing*.16)
+		# An upright spin's arms follow the sim's own inertia: drawn in, they are
+		# what is speeding her up, and they meet at the chest as it does.
+		if spinning and int(state.spin.position)==0:
+			var open := clampf((float(state.spin.inertia)-INERTIA_TUCKED)/(INERTIA_OPEN-INERTIA_TUCKED),0,1)
+			elbow = Vector3(side*.17,-.15,-.09).lerp(elbow,open)
+			hand = Vector3(side*.015,-.15,-.17).lerp(hand,open)
 		if air and not coming_down:
 			elbow = Vector3(side*.13,-.18,-.10)
 			hand = Vector3(-side*.11,-.12,-.19)

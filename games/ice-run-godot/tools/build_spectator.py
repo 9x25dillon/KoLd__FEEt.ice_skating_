@@ -37,25 +37,49 @@ for v in verts:
  w=ramp(hip.y+.03,hip.y-.05,v.y)
  if w>0 and abs(v.x)<.4:p=turned(p,Vector((p.x,hip.y,hip.z)),Vector((1,0,0)),-1.45*w)
  out.append(p)
-keep=[]
+# Each arm is its own piece: a cheer swings it about the shoulder as a rigid part,
+# where bending one continuous low-poly mesh that far tears it into spikes.
+reach=(shoulder-elbow).length*2.2
+def is_arm(ids):return all(abs(verts[i].x)>shoulder.x-.015 and verts[i].y>hip.y-.1 for i in ids)
+pieces={'body':[],'left':[],'right':[]}
 for f in groups['body']:
  ids=faces[f]
- if min(verts[i].y for i in ids)>knee.y+.02:keep.append(ids)
-used={};v2=[];f2=[]
-for ids in keep:
- row=[]
- for i in ids:
-  if i not in used:
-   used[i]=len(v2);p=out[i];v2.append(Vector((p.x,-p.z,p.y)))
-  row.append(used[i])
- f2.append(row)
-lowest=min(p.z for p in v2)
-for p in v2:p.z-=lowest
-mesh=bpy.data.meshes.new('Spectator');mesh.from_pydata(v2,[],f2);mesh.update()
-for poly in mesh.polygons:poly.use_smooth=True
-obj=bpy.data.objects.new('Spectator',mesh);bpy.context.collection.objects.link(obj)
-bpy.context.view_layer.objects.active=obj;obj.select_set(True)
-mod=obj.modifiers.new('fewer','DECIMATE');mod.ratio=.024
-bpy.ops.object.modifier_apply(modifier='fewer')
-print('SPECTATOR: %d triangles, %.2f m tall, head from %.2f'%(sum(len(p.vertices)-2 for p in mesh.polygons),max(p.co.z for p in mesh.vertices),joint('neck').y-hip.y+.0))
+ if min(verts[i].y for i in ids)<=knee.y+.02:continue
+ if is_arm(ids):pieces['left' if verts[ids[0]].x>0 else 'right'].append(ids)
+ else:pieces['body'].append(ids)
+placed=lambda i:Vector((out[i].x,-out[i].z,out[i].y))
+lowest=min(placed(i).z for ids in pieces['body'] for i in ids)
+objects=[]
+for name,rows in pieces.items():
+ used={};v2=[];f2=[]
+ for ids in rows:
+  row=[]
+  for i in ids:
+   if i not in used:
+    used[i]=len(v2);p=placed(i);p.z-=lowest;v2.append(p)
+   row.append(used[i])
+  f2.append(row)
+ mesh=bpy.data.meshes.new(name);mesh.from_pydata(v2,[],f2);mesh.update()
+ # UV: x marks an arm, y how far along it the point is, shoulder to fingertips.
+ layer=mesh.uv_layers.new(name='UVMap')
+ pivot=placed(0)*0
+ if name!='body':
+  sign=1 if name=='left' else -1
+  q=Vector((sign*shoulder.x,-shoulder.z,shoulder.y-lowest))
+  for loop in mesh.loops:
+   layer.data[loop.index].uv=(1,min(1,(mesh.vertices[loop.vertex_index].co-q).length/reach))
+ else:
+  for data in layer.data:data.uv=(0,0)
+ for poly in mesh.polygons:poly.use_smooth=True
+ obj=bpy.data.objects.new(name,mesh);bpy.context.collection.objects.link(obj)
+ bpy.context.view_layer.objects.active=obj;bpy.ops.object.select_all(action='DESELECT');obj.select_set(True)
+ mod=obj.modifiers.new('fewer','DECIMATE');mod.ratio=.024 if name=='body' else .05
+ bpy.ops.object.modifier_apply(modifier='fewer')
+ objects.append(obj)
+bpy.ops.object.select_all(action='DESELECT')
+for o in objects:o.select_set(True)
+bpy.context.view_layer.objects.active=objects[0]
+bpy.ops.object.join()
+obj=objects[0];obj.name='Spectator'
+print('SPECTATOR: %d triangles; shoulder at x %.3f y %.3f z %.3f; neck y %.3f'%(sum(len(p.vertices)-2 for p in obj.data.polygons),shoulder.x,shoulder.y-lowest,-shoulder.z,joint('neck').y-lowest))
 bpy.ops.export_scene.gltf(filepath=str(ROOT/'assets/generated/spectator.glb'),export_format='GLB',use_selection=True,export_animations=False,export_materials='NONE')

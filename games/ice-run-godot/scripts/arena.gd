@@ -3,6 +3,8 @@ const SimSpace = preload("res://scripts/sim_space.gd")
 var trace_mesh: MultiMesh
 var ice_material: ShaderMaterial
 var arena_environment: Environment
+var crowd_material: ShaderMaterial
+var crowd_mood := 0.0
 # A second, smaller view of the skaters alone, from the camera's mirror image
 # under the ice. The ice shader lays it over itself by its own fresnel.
 const MIRROR_LAYER := 4
@@ -69,12 +71,13 @@ func crowd(transforms: Array[Transform3D], colors: Array[Color], skins: Array[Co
 	for i in transforms.size():
 		batch.set_instance_transform(i,transforms[i])
 		batch.set_instance_color(i,colors[i])
-		batch.set_instance_custom_data(i,skins[i])
+		# Alpha is this person's own timing (shaders/crowd.gdshader).
+		batch.set_instance_custom_data(i,Color(skins[i].r,skins[i].g,skins[i].b,audience_rng.randf()))
 	var node := MultiMeshInstance3D.new()
 	node.multimesh = batch
-	var material := ShaderMaterial.new()
-	material.shader = load("res://shaders/crowd.gdshader")
-	node.material_override = material
+	crowd_material = ShaderMaterial.new()
+	crowd_material.shader = load("res://shaders/crowd.gdshader")
+	node.material_override = crowd_material
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
 
@@ -287,6 +290,15 @@ func clear_traces() -> void:
 	trace_count = 0
 	trace_mesh.visible_instance_count = 0
 	previous = [null,null]
+
+# A reaction rises fast and takes a few seconds to die away.
+func react(amount: float) -> void:
+	crowd_mood = maxf(crowd_mood,amount)
+
+func update_crowd(skater_at: Vector3, dt: float) -> void:
+	crowd_mood = maxf(0,crowd_mood-dt/3.5)
+	crowd_material.set_shader_parameter("skater",skater_at)
+	crowd_material.set_shader_parameter("cheer",crowd_mood)
 
 func add_mirror() -> void:
 	mirror_view = SubViewport.new()

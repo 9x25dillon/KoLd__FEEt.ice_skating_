@@ -658,6 +658,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		var clean := not bool(landed.fall) and not bool(landed.stepOut)
 		landing_envelope = .32
 		crowd_swell = 1.0 if clean else .35
+		arena.react(1.0 if clean else .12)
 		broadcast.announce("CLEAN LANDING" if clean else "FIND YOUR EDGE", "%.2f rotations   /   Jump TES %.2f" % [float(landed.turned),float(frame.get("technical",0))])
 		var pads := Input.get_connected_joypads()
 		if rumble_enabled and not pads.is_empty():
@@ -1069,6 +1070,7 @@ func update_camera(dt: float) -> void:
 	camera.fov = lerpf(camera.fov,fov,1-exp(-dt*2.5))
 	camera.look_at(look)
 	arena.update_mirror(camera)
+	arena.update_crowd(skater.position,dt)
 
 func fill_audio() -> void:
 	if generator == null:

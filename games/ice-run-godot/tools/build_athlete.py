@@ -186,14 +186,17 @@ collar_z=neck.z-.035
 def neckline(x,y):
  if y<0:return collar_z-.075-.05*(1-min(1,abs(x)/.11)**2)
  return collar_z-.16+.09*min(1,abs(x)/.16)
+# Where the leotard meets the leg, seen when a spin lifts the skirt.
+def leg_line(x):return hip_l.z-.06-.03*min(1,abs(x)/.13)
 def is_bodice(f):
  c=centre(f)
  if face_mean(f,'ArmL','ArmR','ForearmL','ForearmR','HandL','HandR')>.5 or face_mean(f,'Head')>.25:return False
- if c.z<hip_l.z-.06-.03*min(1,abs(c.x)/.13):return False
+ if c.z<leg_line(c.x):return False
  return c.z<neckline(c.x,c.y)
 def clean_neckline(v):
  # The mesh's own rows cut a sawtooth; the boundary is laid onto the line itself.
  if abs(v.co.x)<.145 and v.co.z>waist.z+.05:v.co.z=neckline(v.co.x,v.co.y)
+ elif v.co.z<hip_l.z:v.co.z=leg_line(v.co.x)
 def is_sleeve(f):
  return face_mean(f,'ArmL','ArmR','ForearmL','ForearmR')>.5 and face_mean(f,'HandL','HandR')<.4
 boot_top=ankle_z+.125
