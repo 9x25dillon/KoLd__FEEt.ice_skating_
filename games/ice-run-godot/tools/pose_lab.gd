@@ -133,6 +133,16 @@ func frame_camera(s: Dictionary) -> void:
 		look = focus+follow*float(shot.lead)*(1.0+velocity.length()*.14)
 	camera.position = camera.position.lerp(seat,1-exp(-DT*(3.0 if view=="" else 10.0))) if render>1 else seat
 	camera.look_at(look)
+	# --view=rink and --view=broadcast are the game's other two fixed cameras (main.gd update_camera).
+	if view == "rink":
+		camera.position = Vector3(39,44,43)
+		camera.fov = 58
+		camera.cull_mask = 1
+		camera.look_at(Vector3.ZERO)
+	elif view == "broadcast":
+		camera.position = Vector3(clampf(skater.position.x*.45,-18,18),7.8,31.5)
+		camera.fov = 40
+		camera.look_at(skater.position+Vector3(0,.9,0))
 	if not args.has("no-mirror"): arena.update_mirror(camera)
 	if was_airborne and int(s.jump.phase)!=2: arena.react(1.0)
 	was_airborne = int(s.jump.phase)==2

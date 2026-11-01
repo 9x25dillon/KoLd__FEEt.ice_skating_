@@ -31,6 +31,11 @@ void fragment() {
  base=mix(base,paint,max(center*.5,circle*.72));
  base=mix(base,vec3(.42,.58,.72),medallion*.34);
  base=mix(base,paint,diamond*.8);
+ // The resurfacer's passes: long overlapping bands, a machine's width apart, that
+ // read at any distance and catch the light slightly differently.
+ float pass_x=p.x/2.4+noise(vec2(p.y*.05,3.0))*.35;
+ float band=abs(fract(pass_x)-.5)*2.0;
+ base*=.975+.05*smoothstep(.15,.85,band)+(hash(vec2(floor(pass_x),7.0))-.5)*.035;
  // Skated ice is not clean: older blade work and worn patches show through.
  float worn=noise(p*.55+11.0)*.6+noise(p*2.3)*.4;
  base*=1.0-smoothstep(.45,.85,worn)*.09;

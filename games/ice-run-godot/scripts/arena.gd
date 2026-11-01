@@ -45,6 +45,9 @@ func beam(a: Vector3, b: Vector3, radius: float, material: Material) -> void:
 	var node := box(Vector3(radius, radius, a.distance_to(b)), (a+b)*.5, material)
 	node.look_at(b, Vector3.FORWARD if absf((b-a).normalized().y) > .99 else Vector3.UP)
 
+func board_sign(sign: Label3D) -> void:
+	sign.layers = 1|MIRROR_LAYER
+
 func sign_text(text: String, pos: Vector3, scale_factor: float, color: Color, yaw: float = 0.0) -> Label3D:
 	var sign := Label3D.new()
 	sign.text = text
@@ -204,7 +207,7 @@ func _ready() -> void:
 			sign_text("GRAND\nPRIX",basis*Vector3(x,13,42.6),.014,Color("d8c295"),angle+PI)
 		# Board typography faces the ice.
 		for x in [-13,0,13]:
-			sign_text("EDGEWORK" if x==0 else "THE ICE REMEMBERS",basis*Vector3(x,.63,27.8),.007,Color("294b60"),angle+PI)
+			board_sign(sign_text("EDGEWORK" if x==0 else "THE ICE REMEMBERS",basis*Vector3(x,.63,27.8),.007,Color("294b60"),angle+PI))
 	var seat_mesh := BoxMesh.new()
 	seat_mesh.size = Vector3(.85,.62,.17)
 	var vertex_mat := mat(Color.WHITE,0,.85)
@@ -228,10 +231,10 @@ func _ready() -> void:
 		var basis := Basis(Vector3.UP,angle)
 		var screen := box(Vector3(5.7,2.6,.035),Vector3(0,11.5,0)+basis*Vector3(0,0,3.13),rail)
 		screen.rotation.y = angle
-		var sign := sign_text("EDGEWORK\nGRAND PRIX  /  01",Vector3(0,11.5,0)+basis*Vector3(0,0,3.17),.011,Color("dbecf6"),angle)
+		var sign := sign_text("EDGEWORK\nGRAND PRIX  /  01",Vector3(0,11.5,0)+basis*Vector3(0,0,3.17),.0078,Color("dbecf6"),angle)
 		if side==0: scoreboard=sign
 		beam(Vector3(-2+side%2*4,13, -2+side/2*4),Vector3(-2+side%2*4,20,-2+side/2*4),.045,gold)
-	for setup in [[Vector3(-68,-32,0),Color("e5efff"),.95],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
+	for setup in [[Vector3(-68,-32,0),Color("e5efff"),.5],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
 		var light := DirectionalLight3D.new()
 		light.rotation_degrees = setup[0]
 		light.light_color = setup[1]
@@ -248,11 +251,12 @@ func _ready() -> void:
 			var fixture := SpotLight3D.new()
 			fixture.position = Vector3(column*12,14.5,row*11)
 			fixture.rotation_degrees = Vector3(-90,0,0)
-			fixture.spot_range = 24
-			fixture.spot_angle = 42
-			fixture.spot_attenuation = .9
+			fixture.spot_range = 22
+			fixture.spot_angle = 31
+			fixture.spot_attenuation = 1.0
+			fixture.spot_angle_attenuation = 1.6
 			fixture.light_color = Color("eaf2ff")
-			fixture.light_energy = .5
+			fixture.light_energy = 9.0
 			fixture.light_volumetric_fog_energy = 1.2
 			fixture.light_specular = .9
 			add_child(fixture)
@@ -273,7 +277,9 @@ func _ready() -> void:
 	trace_mesh.visible_instance_count = 0
 	trace_node.multimesh = trace_mesh
 	# A cut in bright ice reads darker than the ice around it, in shadow along its wall.
-	trace_node.material_override = mat(Color("7f9db0"),0,.6)
+	var cut := ShaderMaterial.new()
+	cut.shader = load("res://shaders/trace.gdshader")
+	trace_node.material_override = cut
 	trace_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(trace_node)
 	markers = Node3D.new()
@@ -286,6 +292,10 @@ func wall_segment(a: Vector2, b: Vector2, board: Material, rail: Material) -> vo
 	var top := box(Vector3(.30,.075,a.distance_to(b)+.07),Vector3(center.x,1.10,center.y),rail)
 	top.rotation.y = node.rotation.y
 	var kick := box(Vector3(.24,.13,a.distance_to(b)+.05),Vector3(center.x,.075,center.y),rail)
+	# The boards stand on the ice, so the ice shows them too.
+	node.layers = 1|MIRROR_LAYER
+	top.layers = 1|MIRROR_LAYER
+	kick.layers = 1|MIRROR_LAYER
 	kick.rotation.y = node.rotation.y
 
 func clear_traces() -> void:
