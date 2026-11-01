@@ -650,6 +650,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 	else:
 		skater.apply_frame(frame)
 		apply_partner(false)
+	arena.trace_lifted = skater.lifted_blade()
 	arena.add_traces(frame.trace)
 	arena.update_course(frame)
 	ribbon.update_state(frame)

@@ -1,5 +1,7 @@
 extends Control
 const SimSpace = preload("res://scripts/sim_space.gd")
+# sim/params.ts twistMax: how far the shoulders can wind against the hips, radians.
+const TWIST_MAX := .8
 # The presentation reads the solver; none of these meters alters skating.
 var data: Dictionary = {}
 var setup_name := "BLADE EXPLORER"
@@ -70,7 +72,19 @@ func _draw() -> void:
 	text(Vector2(224,bottom-28),"%04.1f  KM/H" % speed,16,MUTED)
 	text(Vector2(48,bottom-10),setup_name+"   /   "+camera_name,9,MUTED)
 	# The two bars are actual left/right support loads; the needle is actual knee load.
-	plate(Rect2(size.x*.5-143,bottom-70,286,70))
+	var coiled: bool = s.has("twist")
+	plate(Rect2(size.x*.5-143,bottom-(92 if coiled else 70),286,92 if coiled else 70))
+	# The shoulders against the hips, the sim's own twist: left or right of centre by
+	# which way they are wound. It only stores rotation while the feet hold the ice,
+	# so it dims the moment the feet are pivoting and the wind is going nowhere.
+	if coiled:
+		var feet_holding: bool = absf(float(s.get("yawDev",0)))<1.5
+		var wound := clampf(float(s.twist)/TWIST_MAX,-1,1)
+		var coil_x := size.x*.5+17
+		text(Vector2(size.x*.5-126,bottom-69),"COIL",9,GOLD if feet_holding else MUTED)
+		draw_rect(Rect2(coil_x-103,bottom-77,206,3),Color("30424f"))
+		draw_rect(Rect2(minf(coil_x,coil_x+103*wound),bottom-77,103*absf(wound),3),GOLD if feet_holding else MUTED)
+		draw_rect(Rect2(coil_x-.5,bottom-79,1,7),MUTED)
 	for i in 2:
 		var x := size.x*.5-126+i*142
 		var weight := clampf(float(s.blade[i].weight),0,1)
