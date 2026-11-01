@@ -72,11 +72,28 @@ const FOREARM_SWING_MAX := .6
 const UPPER_SWING_MAX := .38
 const ARM_LAG_STIFFNESS := 40.0
 const ARM_LAG_DAMPING := 9.0
+# What the career's arm focus looks like, Function to Expression. Function is quick and
+# economical, low and close to the body. Expression is slow with a long follow-through,
+# carried higher and open, with soft wrists. Nothing here reaches the sim, and it still
+# stays below the shoulder: no one holds their arms level for a program.
+const ARM_RATE_FUNCTION := 18.0
+const ARM_RATE_EXPRESSION := 8.0
+const SWAY_RATE_FUNCTION := 1.15
+const SWAY_RATE_EXPRESSION := .8
+const SWAY_FUNCTION := .45
+const LINE_REACH := .14 # m the leading hand goes forward along a turn, and the other back
+const LINE_LIFT := .05 # m it rises as it leads, so the arms make a diagonal
+const WRIST_DRAG := .07 # how far a moving hand trails its forearm
+const WRIST_DROOP_FUNCTION := .1
+const WRIST_DROOP_EXPRESSION := .38
+const WRIST_RATE := 12.0
 var arm_energy := 0.0
 var sway_clock := 0.0
 var arm_lag := 0.0
 var arm_lag_rate := 0.0
 var arm_last_yaw := 0.0
+var hand_last: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
+var hand_aim: Array[Vector3] = [Vector3.DOWN,Vector3.DOWN]
 var trunk_offsets: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO,Vector3.ZERO,Vector3.ZERO]
 var foot_on_ice: Array[float] = [1.0,1.0]
 # The skirt: panels hanging from the waist (tools/build_athlete.py), each a tip on
@@ -86,6 +103,9 @@ const SKIRT_DRAG := .90
 # Its own fixed step: a spring stepped by the display's frame time hangs differently at every frame rate.
 const SKIRT_STEP := 1.0/120.0
 const THIGH_RADIUS := .085
+# Panels are a hand's width apart at the hem and the cloth between them is a straight
+# chord, so a panel must stand this much clear or the leg comes through between two.
+const SKIRT_LEG_CLEAR := .03
 const SHIN_RADIUS := .055
 var skirt_bones: Array[String] = []
 var skirt_pivots: Array[Vector3] = []
@@ -95,6 +115,7 @@ var skirt_last: Array[Vector3] = []
 var skirt_gap := 0.0
 var skirt_dirty := true
 var skirt_pushed := 0.0
+var skirt_pierce_peak := 0.0
 var skirt_clock := 0.0
 var skirt_pivots_last: Array[Vector3] = []
 var skirt_centre_last := Vector3.ZERO
@@ -321,7 +342,7 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 				for reach in [.5,.75,1.0]:
 					var at: Vector3 = from.lerp(skirt_tips[i],reach)
 					for leg in range(0,thigh_world.size(),3):
-						var pushed := push_off(at,thigh_world[leg],thigh_world[leg+1],THIGH_RADIUS)+push_off(at,thigh_world[leg+1],thigh_world[leg+2],SHIN_RADIUS)
+						var pushed := push_off(at,thigh_world[leg],thigh_world[leg+1],THIGH_RADIUS+SKIRT_LEG_CLEAR)+push_off(at,thigh_world[leg+1],thigh_world[leg+2],SHIN_RADIUS+SKIRT_LEG_CLEAR)
 						skirt_pushed = maxf(skirt_pushed,pushed.length())
 						# Cloth rides out and over a leg. Pushed straight off it, neighbouring
 						# panels part either side and the thigh shows through the gap.
@@ -335,6 +356,14 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 	if waiting>0:
 		skirt_centre_last = centre
 		skirt_yaw_last = rotation.y
+	# How deep a leg stands through the cloth between two panels; the lab holds this down.
+	for i in count:
+		var other := (i+1)%count
+		for reach in [.5,.75,1.0]:
+			var between: Vector3 = (pivots[i].lerp(skirt_tips[i],reach)+pivots[other].lerp(skirt_tips[other],reach))*.5
+			for leg in range(0,thigh_world.size(),3):
+				skirt_pierce_peak = maxf(skirt_pierce_peak,push_off(between,thigh_world[leg],thigh_world[leg+1],THIGH_RADIUS).length())
+				skirt_pierce_peak = maxf(skirt_pierce_peak,push_off(between,thigh_world[leg+1],thigh_world[leg+2],SHIN_RADIUS).length())
 	for i in count:
 		aim_bone(skirt_bones[i],to_local(pivots[i]),to_local(skirt_tips[i]))
 
@@ -668,7 +697,7 @@ func _process(dt: float) -> void:
 	var carrying := float(state.get("armsL",0))
 	var asked := maxf(maxf(absf(yaw_rate_now)/3.5,stroking*.8),maxf(absf(float(state.intAccel))*.25,absf(carrying)*.12))
 	arm_energy = lerpf(arm_energy,clampf(asked+arm_style*.12,0,1),1.0-exp(-4.0*dt))
-	sway_clock += dt*(1.4+Vector2(state.vel.x,state.vel.y).length()*.15)
+	sway_clock += dt*(1.4+Vector2(state.vel.x,state.vel.y).length()*.15)*lerpf(SWAY_RATE_FUNCTION,SWAY_RATE_EXPRESSION,arm_style)
 	# The hands have weight: a body that turns leaves them behind, and they swing back.
 	var yaw_pull := clampf((yaw_rate_now-arm_last_yaw)/maxf(dt,.001),-60,60)
 	arm_last_yaw = yaw_rate_now
@@ -774,8 +803,8 @@ func _process(dt: float) -> void:
 			spread = .15+clampf(float(state.spin.inertia)/6.0,0.0,1.0)*.34
 		# At rest the arms hang relaxed, a little away from the sides, elbows soft: no one
 		# holds them level for a whole program. The chosen style only opens them slightly.
-		var elbow := Vector3(side*.11,-.25,.01).lerp(Vector3(side*.15,-.23,-.02),arm_style)
-		var hand := Vector3(side*.17,-.44,-.13).lerp(Vector3(side*.29,-.38,-.18),arm_style)
+		var elbow := Vector3(side*.10,-.26,.01).lerp(Vector3(side*.17,-.20,-.04),arm_style)
+		var hand := Vector3(side*.14,-.46,-.10).lerp(Vector3(side*.34,-.31,-.21),arm_style)
 		# They come out only when they are needed: when balance asks, or the sim's spin
 		# has them open, or a finish shows them off. Those are the moments worth the effort.
 		var lead := clampf(float(state.yawRate)*.6,-1,1)
@@ -783,6 +812,10 @@ func _process(dt: float) -> void:
 		var wide_hand := Vector3(side*spread*1.12,-.01,-.12+side*lead*.17)
 		var catching := clampf(absf(float(state.intAccel))*.05+absf(float(state.get("balanceError",0)))/.25,0,1)
 		var out := 1.0 if upright_spin else maxf(finish,catching*.8)
+		# Expression draws a line along the turn: one arm leads and rises, the other trails.
+		var line := lead*arm_style*(1.0-out)
+		hand += Vector3(0,side*line*LINE_LIFT,side*line*LINE_REACH)
+		elbow += Vector3(0,side*line*LINE_LIFT*.4,side*line*LINE_REACH*.4)
 		elbow = elbow.lerp(wide_elbow,out)
 		hand = hand.lerp(wide_hand,out)
 		# An upright spin's arms follow the sim's own inertia: drawn in, they are
@@ -814,18 +847,31 @@ func _process(dt: float) -> void:
 		var free_to_swing := not (spinning or (air and not coming_down) or camel or sit or pose_low or bool(state.fallen))
 		if free_to_swing:
 			var settle := 1.0-finish
-			var forearm_angle := side*lerpf(FOREARM_SWING,FOREARM_SWING_MAX,arm_energy)*sin(sway_clock-.5)*settle
-			var upper_angle := side*UPPER_SWING_MAX*smoothstep(.35,1.0,arm_energy)*sin(sway_clock)*settle
+			var sway_size := lerpf(SWAY_FUNCTION,1.0,arm_style)
+			var forearm_angle := side*lerpf(FOREARM_SWING,FOREARM_SWING_MAX,arm_energy)*sin(sway_clock-.5)*settle*sway_size
+			var upper_angle := side*UPPER_SWING_MAX*smoothstep(.35,1.0,arm_energy)*sin(sway_clock)*settle*sway_size
 			var hanging_forearm := hand-elbow
 			elbow = elbow.rotated(Vector3.RIGHT,upper_angle).rotated(Vector3.UP,arm_lag*.35*arm_energy)
 			hand = elbow+hanging_forearm.rotated(Vector3.RIGHT,forearm_angle).rotated(Vector3.UP,arm_lag)
-		arm_targets[i*2] = arm_targets[i*2].lerp(elbow,ease_arm)
-		arm_targets[i*2+1] = arm_targets[i*2+1].lerp(hand,ease_arm)
+		# A save is quick at any tier; only free carriage takes its time.
+		var limb_ease := ease_arm
+		if free_to_swing and finish<=0.0:
+			limb_ease = 1.0-exp(-lerpf(ARM_RATE_FUNCTION,ARM_RATE_EXPRESSION,arm_style*(1.0-catching))*dt)
+		arm_targets[i*2] = arm_targets[i*2].lerp(elbow,limb_ease)
+		arm_targets[i*2+1] = arm_targets[i*2+1].lerp(hand,limb_ease)
 		# The arms ride the shoulders round and over with the trunk.
 		var carried := shoulder_tilt*Basis(Vector3.UP,upper_turn)
 		var elbow_at := shoulder+(carried*arm_targets[i*2]).normalized()*upper_arm
 		var hand_at := elbow_at+(shoulder+carried*arm_targets[i*2+1]-elbow_at).normalized()*forearm
 		aim_bone("Arm"+suffix,shoulder,elbow_at)
 		aim_bone("Forearm"+suffix,elbow_at,hand_at)
+		# The wrist: the hand trails its forearm when moving and droops when not.
+		var along := (hand_at-elbow_at).normalized()
+		var hand_moved := (hand_at-hand_last[i])/maxf(dt,.001)
+		hand_last[i] = hand_at
+		var droop := lerpf(WRIST_DROOP_FUNCTION,WRIST_DROOP_EXPRESSION,arm_style)
+		var bend := (Vector3.DOWN*droop-hand_moved*WRIST_DRAG*arm_style).limit_length(.7)
+		hand_aim[i] = hand_aim[i].lerp((along+bend).normalized(),1.0-exp(-WRIST_RATE*dt)).normalized()
+		aim_bone("Hand"+suffix,hand_at,hand_at+hand_aim[i]*.1)
 	last_contacts = contacts
 	swing_skirt(dt,hip,spine,legs)
