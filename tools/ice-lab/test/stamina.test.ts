@@ -9,7 +9,9 @@ import { PRESETS, DEFAULT_PARAMS, SIM_DT, validate } from "../sim/params.ts";
 import { createState, step, run } from "../sim/solver.ts";
 import { NEUTRAL_INPUT, MOVE, EVENT } from "../sim/types.ts";
 import type { EdgeEvent } from "../sim/types.ts";
+import type { Params } from "../sim/params.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
+import { setupParams } from "../game/setups.ts";
 
 const glide = { ...NEUTRAL_INPUT, lean: 0, weight: 0.5 };
 const cruise = { ...NEUTRAL_INPUT, lean: 0.35, weight: 0.5 };
@@ -156,4 +158,51 @@ test("the stamina levers validate, and a bad one is caught", () => {
   assert.ok(validate({ ...p, staminaInertiaFloorMax: 0.1 }).length > 0, "cannot pull in tighter than fresh");
   assert.ok(validate({ ...p, staminaMaxLeanLoss: 10 }).length > 0);
   assert.ok(validate({ ...p, staminaBalanceNoiseMax: 0.5 }).length > 0, "fatigue cannot reduce noise");
+});
+
+// A skater an instant above the ice, legs part spent by the takeoff, coming down at 3.8 m/s and
+// travelling backward along the blade at 4 m/s, turned `crossways` radians away from that travel.
+function touchdown(p: Params, crossways: number, knee: number) {
+  const s = createState(p, 0);
+  s.legs = 0.8;
+  s.heading = { x: 1, y: 0 };
+  s.vel = { x: -4 * Math.cos(crossways), y: -4 * Math.sin(crossways) };
+  s.jump.phase = JUMP_PHASE.Air;
+  s.jump.t = 0.5;
+  s.jump.z = 0.001;
+  s.jump.vz = -3.8;
+  step(s, { ...NEUTRAL_INPUT, knee, weight: 1, lean: -0.2 }, p, SIM_DT, []);
+  // What the whole jump cost: the takeoff's flat price, and how touchdown settled it.
+  return { spent: p.staminaLegsPerJump + 0.8 - s.legs, phase: s.jump.phase };
+}
+
+test("staminaLandingMode: a landing settles the jump's price for the energy the ice takes", () => {
+  const flat = { ...PRESETS.responsive, staminaMode: 1 };
+  const on = { ...flat, staminaLandingMode: 1 };
+  assert.ok(Math.abs(touchdown(flat, 0, 0.8).spent - 0.05) < 0.002, "off: the jump costs its flat price, and landing adds nothing");
+  const aligned = touchdown(on, 0, 0.8), crossways = touchdown(on, 0.9, 0.8), stiff = touchdown(on, 0, 0.1);
+  assert.notEqual(aligned.phase, JUMP_PHASE.Air, "the touchdown happened");
+  assert.ok(Math.abs(aligned.spent - 0.05) < 0.005, `a clean landing costs about the flat price: ${aligned.spent}`);
+  assert.ok(crossways.spent > aligned.spent * 1.2, `a crossways landing loses speed to the ice and pays for it: ${crossways.spent} vs ${aligned.spent}`);
+  assert.ok(stiff.spent > aligned.spent * 1.2, `a stiff knee is spared less: ${stiff.spent} vs ${aligned.spent}`);
+});
+
+test("staminaLandingMode leaves the takeoff's price, and so the flight, alone", () => {
+  const off = { ...setupParams("experimental"), staminaLandingMode: 0 };
+  const go = (p: Params) => {
+    const s = createState(p, 0);
+    s.jump.phase = JUMP_PHASE.Air; s.jump.t = 0.2; s.jump.z = 0.5; s.jump.vz = 2;
+    for (let i = 0; i < 30; i++) step(s, { ...NEUTRAL_INPUT, knee: 0.5 }, p, SIM_DT, []);
+    return [s.legs, s.jump.z, s.jump.vz, s.jump.rotation];
+  };
+  assert.deepEqual(go(setupParams("experimental")), go(off));
+});
+
+test("staminaLandingMode is on only in Experimental, and validates", () => {
+  assert.equal(DEFAULT_PARAMS.staminaLandingMode, 0, "off by default");
+  assert.equal(setupParams("experimental").staminaLandingMode, 1, "the operator's choice");
+  for (const setup of ["simulation", "explorer", "repertoire"] as const) assert.equal(setupParams(setup).staminaLandingMode, 0);
+  for (const preset of Object.values(PRESETS)) assert.equal(preset.staminaLandingMode, 0);
+  assert.ok(validate({ ...DEFAULT_PARAMS, staminaLandingMode: 2 }).some((e) => e.includes("staminaLandingMode")));
+  assert.ok(validate({ ...DEFAULT_PARAMS, staminaLandingCost: -1 }).some((e) => e.includes("staminaLandingCost")));
 });

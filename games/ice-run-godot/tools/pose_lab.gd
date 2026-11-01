@@ -11,6 +11,7 @@ const DT := 1.0/60.0
 const ARRIVALS := [2,0,4,2,1,3,2,2]
 const LIMITS := {"roll_deg":1.0,"foot_off_line_m":.03,"hip_m":.02,"lean_deg":6.0,"crossed_frames":0,"wrong_way_frames":0,"skirt_reach_m":1.6}
 const Arena = preload("res://scripts/arena.gd")
+const Shot = preload("res://scripts/shot.gd")
 var args := {}
 var clip: Dictionary
 var skater: Node3D
@@ -31,6 +32,7 @@ var follow := Vector3(1,0,0)
 var shots: Array = []
 var last_trace := -1
 var was_airborne := false
+var shot: Dictionary = Shot.NONE
 var skirt_worst := 0.0
 var skirt_reach := 0.0
 var skirt_rest := []
@@ -114,9 +116,23 @@ func frame_camera(s: Dictionary) -> void:
 	var velocity := direction(s.vel.x,s.vel.y)
 	if velocity.length()>.5 and int(s.jump.phase)!=2:
 		follow = follow.lerp(velocity.normalized(),1-exp(-DT*3)).normalized()
-	var focus := skater.position+Vector3(0,.72,0)
-	camera.position = camera.position.lerp(focus-follow*3.3+Vector3(0,.3,0),1-exp(-DT*10)) if render>1 else focus-follow*3.3+Vector3(0,.3,0)
-	camera.look_at(focus)
+	# --view=boots or face moves in close, from the skater's right, to judge detail.
+	var view := str(args.get("view",""))
+	var height := .14 if view=="boots" else 1.45 if view=="face" else .72
+	var away := .85 if view=="boots" else .7 if view=="face" else 3.3
+	var focus := skater.position+Vector3(0,height,0)
+	# Close views sit in front of the skater, where the face and the boots' fronts are.
+	var facing := direction(float(s.heading.x),float(s.heading.y)).rotated(Vector3.UP,.6)
+	var seat := focus+facing*away+Vector3(0,.08,0)
+	var look := focus
+	# The ordinary view is the game's own tracking camera (main.gd update_camera).
+	if view == "":
+		shot = Shot.blend(shot,Shot.framing(s),1-exp(-DT*3.0))
+		focus = skater.position+Vector3(0,float(shot.aim),0)
+		seat = focus-follow*float(shot.away)+Vector3(0,float(shot.height),0)+follow.cross(Vector3.UP)*float(shot.away)*.245
+		look = focus+follow*float(shot.lead)*(1.0+velocity.length()*.14)
+	camera.position = camera.position.lerp(seat,1-exp(-DT*(3.0 if view=="" else 10.0))) if render>1 else seat
+	camera.look_at(look)
 	if not args.has("no-mirror"): arena.update_mirror(camera)
 	if was_airborne and int(s.jump.phase)!=2: arena.react(1.0)
 	was_airborne = int(s.jump.phase)==2

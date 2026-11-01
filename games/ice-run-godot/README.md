@@ -244,6 +244,9 @@ springs, stepped in `swing_skirt`: they swing with the body, flare in a spin and
 It is not cloth simulation, and nothing reads it back into the solver. Painted skin keeps its paint, so a
 costume's skin tone does not apply to the athlete.
 
+The tracking camera's framing per move is in `scripts/shot.gd`: wide with headroom for a jump, low for footwork,
+steady for a spin. `tools/pose_lab.gd` plays the same framing, and `--view=boots` or `--view=face` for close-ups.
+
 The game now renders with Forward+ (Vulkan or D3D12), for ambient occlusion, indirect light and haze.
 Low-end and mobile GPUs that only managed the Compatibility renderer are no longer the target.
 

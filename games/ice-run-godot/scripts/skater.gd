@@ -74,6 +74,9 @@ const SKIRT_TOP := -.07
 # Metres the hem trails per m/s of travel: air on the cloth, capped.
 const SKIRT_TRAIL := .012
 const SKIRT_TRAIL_MAX := .07
+# Metres the hem swings per m/s^2 of the edge's pull.
+const SKIRT_SWING := .022
+const SKIRT_SWING_MAX := .09
 var last_contacts: Array[Vector3] = []
 var contact_slide: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
 var free_feet: Array[Vector3] = [Vector3(-.15,.16,.22),Vector3(.15,.16,.22)]
@@ -88,7 +91,7 @@ func _ready() -> void:
 	load_model(model_path)
 	contact_shadow = MeshInstance3D.new()
 	var shadow_plane := PlaneMesh.new()
-	shadow_plane.size = Vector2(1.3,1.3)
+	shadow_plane.size = Vector2(.8,.8)
 	contact_shadow.mesh = shadow_plane
 	var shadow_material := ShaderMaterial.new()
 	shadow_material.shader = load("res://shaders/contact.gdshader")
@@ -215,6 +218,9 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 		skirt_dirty = false
 	var wind := -SimSpace.direction(state.vel.x,state.vel.y)*SKIRT_TRAIL
 	wind = wind.limit_length(SKIRT_TRAIL_MAX)
+	# On an edge the cloth swings out of the curve; an edge pulls the body the other way.
+	var pulled := SimSpace.direction(-float(state.heading.y),float(state.heading.x))*float(state.get("latAccel",0))
+	wind += (-pulled*SKIRT_SWING).limit_length(SKIRT_SWING_MAX)
 	skirt_pushed = 0.0
 	var step := SKIRT_STEP
 	skirt_clock = minf(skirt_clock+dt,SKIRT_STEP*8)

@@ -3,6 +3,7 @@ const EngineLink = preload("res://scripts/engine_link.gd")
 const Arena = preload("res://scripts/arena.gd")
 const Skater = preload("res://scripts/skater.gd")
 const SimSpace = preload("res://scripts/sim_space.gd")
+const Shot = preload("res://scripts/shot.gd")
 const Ribbon = preload("res://scripts/ribbon.gd")
 const Broadcast = preload("res://scripts/broadcast.gd")
 # Purely a local presentation choice: skater.gd poses whichever glb this
@@ -58,6 +59,7 @@ var event_index := 0
 var sequence: Array = ["glide","edge","jump","spin","pose"]
 var camera_mode := 0
 var follow_direction := Vector3(1,0,0)
+var shot: Dictionary = Shot.NONE
 var music_enabled := true
 var beginner := false
 var scheme := 3
@@ -1044,9 +1046,11 @@ func update_camera(dt: float) -> void:
 	var velocity := SimSpace.direction(s.vel.x,s.vel.y)
 	if velocity.length()>.5 and int(s.jump.phase)!=2:
 		follow_direction = follow_direction.lerp(velocity.normalized(),1-exp(-dt*1.8)).normalized()
-	var focus: Vector3 = skater.position+Vector3(0,.9,0)
-	var desired := focus-follow_direction*4.7+Vector3(0,.9,0)+follow_direction.cross(Vector3.UP)*1.15
-	var look := focus+follow_direction*.6
+	shot = Shot.blend(shot,Shot.framing(s),1-exp(-dt*3.0))
+	var focus: Vector3 = skater.position+Vector3(0,float(shot.aim),0)
+	var desired := focus-follow_direction*float(shot.away)+Vector3(0,float(shot.height),0)+follow_direction.cross(Vector3.UP)*float(shot.away)*.245
+	# It looks a little ahead of a moving skater, to where the program is going.
+	var look := focus+follow_direction*float(shot.lead)*(1.0+velocity.length()*.14)
 	var fov := 46.0
 	if camera_mode == 1:
 		desired = Vector3(clampf(focus.x*.45,-18,18),7.8,31.5)

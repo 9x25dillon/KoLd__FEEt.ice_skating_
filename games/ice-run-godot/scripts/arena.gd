@@ -104,7 +104,7 @@ func _ready() -> void:
 	env.background_color = Color("101724")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color("bacddd")
-	env.ambient_light_energy = .22
+	env.ambient_light_energy = .16
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_white = 3.2
 	env.tonemap_exposure = 1.08
@@ -179,15 +179,15 @@ func _ready() -> void:
 				var x := -33.0+float(seat)*1.15
 				var pos := basis*Vector3(x,height+.5,depth)
 				seats.append(Transform3D(basis,pos))
-				seat_colors.append(Color("14233a") if row%3 else Color("1a2e47"))
+				seat_colors.append(Color("0c1626") if row%3 else Color("101d30"))
 				if audience_rng.randf()>.22:
 					var sway := audience_rng.randf_range(-.1,.1)
 					var size := audience_rng.randf_range(.92,1.08)
 					# The model faces away from its stand's outward axis: toward the ice.
 					var facing := basis*Basis(Vector3.UP,PI+audience_rng.randf_range(-.28,.28))
 					bodies.append(Transform3D(facing.scaled(Vector3.ONE*size),basis*Vector3(x+sway,height+.2,depth-.2)))
-					body_colors.append(coats[audience_rng.randi()%coats.size()].darkened(.42))
-					skins.append(Color("a07c66").lerp(Color("4a362b"),audience_rng.randf()))
+					body_colors.append(coats[audience_rng.randi()%coats.size()].darkened(.62))
+					skins.append(Color("7c604f").lerp(Color("3a2a21"),audience_rng.randf()))
 		var back := box(Vector3(91,12,.5),basis*Vector3(0,8,45),dark)
 		back.rotation.y = angle
 		var fascia := box(Vector3(72,1.4,.3),basis*Vector3(0,8.2,43),rail)
@@ -198,9 +198,10 @@ func _ready() -> void:
 		# Event banners, rigging and structural columns.
 		for x in [-34,-17,0,17,34]:
 			box(Vector3(.5,19,.5),basis*Vector3(x,9.5,43),rail)
-			var banner := box(Vector3(3.8,5,.08),basis*Vector3(x,12.8,43.3),rail)
+			# Hung on the ice side of the column, or the column hides the banner's middle.
+			var banner := box(Vector3(3.8,5,.08),basis*Vector3(x,12.8,42.68),rail)
 			banner.rotation.y = angle
-			sign_text("EW\n01",basis*Vector3(x,13,43.2),.025,Color("d8c295"),angle+PI)
+			sign_text("GRAND\nPRIX",basis*Vector3(x,13,42.6),.014,Color("d8c295"),angle+PI)
 		# Board typography faces the ice.
 		for x in [-13,0,13]:
 			sign_text("EDGEWORK" if x==0 else "THE ICE REMEMBERS",basis*Vector3(x,.63,27.8),.007,Color("294b60"),angle+PI)
@@ -230,7 +231,7 @@ func _ready() -> void:
 		var sign := sign_text("EDGEWORK\nGRAND PRIX  /  01",Vector3(0,11.5,0)+basis*Vector3(0,0,3.17),.011,Color("dbecf6"),angle)
 		if side==0: scoreboard=sign
 		beam(Vector3(-2+side%2*4,13, -2+side/2*4),Vector3(-2+side%2*4,20,-2+side/2*4),.045,gold)
-	for setup in [[Vector3(-68,-32,0),Color("e5efff"),.62],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
+	for setup in [[Vector3(-68,-32,0),Color("e5efff"),.95],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
 		var light := DirectionalLight3D.new()
 		light.rotation_degrees = setup[0]
 		light.light_color = setup[1]
@@ -238,6 +239,7 @@ func _ready() -> void:
 		light.shadow_enabled = setup[2]>1
 		light.directional_shadow_max_distance = 65
 		light.shadow_bias = .035
+		light.shadow_blur = .6
 		light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 		add_child(light)
 	# Rows of roof fixtures: what lights a real rink, and what the haze catches.
@@ -250,7 +252,7 @@ func _ready() -> void:
 			fixture.spot_angle = 42
 			fixture.spot_attenuation = .9
 			fixture.light_color = Color("eaf2ff")
-			fixture.light_energy = .75
+			fixture.light_energy = .5
 			fixture.light_volumetric_fog_energy = 1.2
 			fixture.light_specular = .9
 			add_child(fixture)

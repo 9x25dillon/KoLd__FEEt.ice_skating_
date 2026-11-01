@@ -49,9 +49,9 @@ void fragment() {
  // The skater's own reflection, softened by the ice's surface, stretched along the view.
  vec2 uv=vec2(SCREEN_UV.x,1.0-SCREEN_UV.y)+(vec2(noise(p*17.0),noise(p*17.0+3.0))-.5)*.004;
  vec4 held=vec4(0.0);
- for(int i=-2;i<=2;i++) held+=texture(mirror,uv+vec2(0.0,float(i)*.0035))*.2;
- float mirrored=clamp(fresnel*1.5+.04,0.0,.6)*mirror_strength*held.a;
- ALBEDO=min(base+grooming*.02-scratches*.07+grain*.01,vec3(.97))*(1.0-mirrored);
+ for(int i=-2;i<=2;i++) held+=texture(mirror,uv+vec2(0.0,float(i)*.006))*.2;
+ float mirrored=clamp(fresnel*1.0+.03,0.0,.42)*mirror_strength*held.a;
+ ALBEDO=min(base+grooming*.02-scratches*.07+grain*.01,vec3(.97))*.82*(1.0-mirrored);
  EMISSION=vec3(.72,.84,.95)*fixture*fresnel*.55*roof_strength+held.rgb*mirrored;
  METALLIC=0.0;
  ROUGHNESS=.16+cloud*.06+scratches*.1;

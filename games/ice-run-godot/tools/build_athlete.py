@@ -92,13 +92,14 @@ def material(name,color,metal=0,rough=.5,image=None,alpha=False):
  return m
 SKIN='young_lightskinned_female_diffuse.png'
 skin=material('Warm porcelain',(1,1,1),0,.46,SKIN)
-tights=material('Skin-tone tights',(1,1,1),0,.34,SKIN)
+tights=material('Skin-tone tights',(1,1,1),0,.56,SKIN)
 bodice=material('Midnight plum satin',(.025,.09,.14),.12,.3)
 skirt_mat=material('Flowing skirt satin',(.025,.09,.14),.12,.3)
 sleeve=material('Illusion sleeve',(.31,.23,.23),0,.53)
 hair=material('Espresso hair',(1,1,1),0,.42,'ponytail01_diffuse.png',True)
 crystal=material('Champagne crystals',(.85,.72,.48),.75,.18)
-leather=material('Ivory leather boots',(.86,.85,.80),0,.32)
+leather=material('Ivory leather boots',(.90,.88,.82),0,.27)
+lace_mat=material('Boot laces',(.72,.72,.70),0,.7)
 sole_mat=material('Stacked leather heel',(.21,.16,.12),0,.6)
 steel=material('Polished steel',(.62,.68,.72),.95,.14)
 eye=material('Eyes',(1,1,1),0,.1,'brown.png')
@@ -197,12 +198,19 @@ def clean_neckline(v):
  # The mesh's own rows cut a sawtooth; the boundary is laid onto the line itself.
  if abs(v.co.x)<.145 and v.co.z>waist.z+.05:v.co.z=neckline(v.co.x,v.co.y)
  elif v.co.z<hip_l.z:v.co.z=leg_line(v.co.x)
+# The sleeve starts on a clean line round the top of the arm and ends at the wrist.
+def clean_sleeve(v):
+ side=shoulder_l if v.co.x>0 else mirror(shoulder_l)
+ end=elbow_l if v.co.x>0 else mirror(elbow_l)
+ along=(end-side).normalized()
+ t=(v.co-side).dot(along)
+ if t<.08:v.co+=along*(-.005-t)
 def is_sleeve(f):
  return face_mean(f,'ArmL','ArmR','ForearmL','ForearmR')>.5 and face_mean(f,'HandL','HandR')<.4
 boot_top=ankle_z+.125
 def is_boot(f):return centre(f).z<boot_top
 dress=carve(body,'Bodice',is_bodice,.0035,bodice,edge=clean_neckline)
-sheer=carve(body,'Sleeves',is_sleeve,.0022,sleeve)
+sheer=carve(body,'Sleeves',is_sleeve,.0022,sleeve,edge=clean_sleeve)
 boots=carve(body,'Boots',is_boot,.0075,leather,smooth=14)
 # ---- skin under the costume is gone; legs wear tights ----
 bm=bmesh.new();bm.from_mesh(body.data);bm.faces.ensure_lookup_table()
@@ -219,9 +227,33 @@ bmesh.ops.delete(bm,geom=doomed,context='FACES')
 bmesh.ops.delete(bm,geom=[v for v in bm.verts if not v.link_faces],context='VERTS')
 bm.to_mesh(body.data);bm.free();body.data.update()
 
+def piping(obj,name,mat,wanted):
+ """A sewn edge: a fine cord along a garment's open boundary, which also covers the mesh's own stepped rows."""
+ groups={g.index:g.name for g in obj.vertex_groups}
+ mesh=obj.data
+ count={}
+ for poly in mesh.polygons:
+  for e in poly.edge_keys:count[e]=count.get(e,0)+1
+ v,f,w=[],[],[]
+ weights=lambda i:{groups[g.group]:g.weight for g in mesh.vertices[i].groups}
+ for (i,j),n in count.items():
+  a,b=mesh.vertices[i].co,mesh.vertices[j].co
+  if n!=1 or not wanted((a+b)/2):continue
+  u=(b-a)
+  if u.length<1e-5:continue
+  u.normalize()
+  n1=u.cross(Vector((0,0,1)) if abs(u.z)<.9 else Vector((1,0,0))).normalized()*.0024
+  n2=u.cross(n1).normalized()*.0024
+  first=len(v)
+  for c,k in ((a,i),(b,j)):
+   v.extend([c+n1,c+n2,c-n1,c-n2]);w.extend([weights(k)]*4)
+  for q in range(4):
+   p=(q+1)%4
+   f.append((first+q,first+p,first+4+p,first+4+q))
+ return own_mesh(name,v,f,mat,w) if v else None
 def stream(obj):
  for poly in obj.data.polygons:poly.use_smooth=True
-for o in (dress,sheer,boots,body):stream(o)
+for o in (dress,sheer,body):stream(o)
 def own_mesh(name,verts,faces,mat,weights):
  mesh=bpy.data.meshes.new(name);mesh.from_pydata(verts,[],faces);mesh.update()
  for poly in mesh.polygons:poly.use_smooth=True
@@ -233,6 +265,7 @@ def own_mesh(name,verts,faces,mat,weights):
    (obj.vertex_groups.get(b) or obj.vertex_groups.new(name=b)).add([i],w,'REPLACE')
  return obj
 
+seams=[o for o in (piping(dress,'Neckline cord',bodice,lambda c:c.z>waist.z+.03),piping(sheer,'Sleeve cord',bodice,lambda c:c.z>waist.z-.02 and abs(c.x)<elbow_l.x-.03)) if o]
 # ---- skirt: it starts at the waist of this body and clears this body's hips ----
 body_tree=[v.co.copy() for v in deform]
 def radial_at(z,theta,band=.018):
@@ -333,6 +366,61 @@ for side,flip,sign in (('L',lambda v:v,1),('R',mirror,-1)):
  back,front_end=min(along),max(along)
  at=lambda s,w,z:ankle+forward*s+lateral*w+Vector((0,0,z-ankle.z))
  foot_w={'Foot'+side:1}
+ # The boot is lofted, not grown from the foot: a skating boot is stiff, with a
+ # firm toe box and a straight shaft, and hides the toes inside it. Each row is a
+ # horizontal slice: height, furthest forward, furthest back, half width.
+ calf=[v.co for v in boots.data.vertices if (v.co.x>0)==(sign>0)]
+ def leg_at(z):
+  # A leg is an oval, not a circle: its reach fore and aft and its half width, measured apart.
+  near=[p for p in calf if abs(p.z-z)<.012]
+  if not near:return .04,-.04,.035
+  along=[(p-ankle).dot(forward) for p in near];across=[(p-ankle).dot(lateral) for p in near]
+  return max(along),min(along),(max(across)-min(across))/2
+ welt=SOLE+.006
+ rise=ankle_z-welt
+ heel=leg_at(ankle_z+.024)[1]-.003
+ rows=[(welt,front_end,back,.042),(welt+rise*.18,front_end,back,.0445),(welt+rise*.42,front_end-.014,back-.001,.0445),
+  (welt+rise*.68,front_end-.06,back+.006,.041),(welt+rise*.88,front_end-.105,(back+heel)/2,.038),(ankle_z+.006,.066,heel,.037)]
+ for k in range(1,6):
+  z=ankle_z+.024*k
+  ahead,behind,half=leg_at(z)
+  rows.append((z,ahead+.003,behind-.003,half+.003))
+ def front_at(z):
+  for (z0,f0,_,_),(z1,f1,_,_) in zip(rows,rows[1:]):
+   if z0<=z<=z1:return f0+(f1-f0)*(z-z0)/(z1-z0)
+  return rows[-1][1]
+ RING=40
+ v,f,w=[],[],[]
+ for z,fr,bk,half in rows:
+  centre_s=(fr+bk)/2;reach=(fr-bk)/2
+  low=max(0,min(1,(ankle_z-z)/.06))
+  blend=max(0,min(1,(z-ankle_z+.01)/.1))
+  for j in range(RING):
+   a=2*math.pi*j/RING;c,sn=math.cos(a),math.sin(a)
+   # Rounder through the shaft, blockier and wider toward the ball of the foot low down.
+   power=1-.28*low
+   sc=math.copysign(abs(c)**power,c);ss=math.copysign(abs(sn)**power,sn)
+   v.append(at(centre_s+reach*sc,half*ss*(1+.13*low*c),z))
+   w.append({'Foot'+side:1-blend,'Shin'+side:blend})
+ for i in range(len(rows)-1):
+  for j in range(RING):
+   n=(j+1)%RING;p=i*RING;q=(i+1)*RING
+   f.append((p+j,p+n,q+n,q+j))
+ f.append(tuple(range(RING-1,-1,-1)))
+ parts.append(own_mesh('Boot '+side,v,f,leather,w))
+ # A dark padded collar closes the top of the shaft around the leg.
+ z,fr,bk,half=rows[-1]
+ centre_s=(fr+bk)/2;reach=(fr-bk)/2
+ v,f,w=[],[],[]
+ for rise,grow in ((-.003,1.005),(.002,1.02),(.005,.985)):
+  for j in range(RING):
+   a=2*math.pi*j/RING
+   v.append(at(centre_s+reach*grow*math.cos(a),half*grow*math.sin(a),z+rise));w.append({'Shin'+side:1})
+ for i in range(2):
+  for j in range(RING):
+   n=(j+1)%RING;p=i*RING;q=(i+1)*RING
+   f.append((p+j,p+n,q+n,q+j))
+ parts.append(own_mesh('Boot collar '+side,v,f,sole_mat,w))
  # Rocker blade: bows along a 2.1 m radius, then sweeps up into the toe pick.
  v,f,w=[],[],[]
  N=44;start=back-.025;end=front_end+.002;mid=(start+end)*.5
@@ -375,40 +463,28 @@ for side,flip,sign in (('L',lambda v:v,1),('R',mirror,-1)):
   f.append((i,n,n+R,i+R))
  f.append(tuple(range(R-1,-1,-1)))
  parts.append(own_mesh('Sole '+side,v,f,sole_mat,w))
- # Laces crossing the front of the boot.
- boot_side=[p.co for p in boots.data.vertices if (p.co.x>0)==(sign>0)]
- def surface(s,wd,z):
-  target=at(s,wd,z);best=max((p for p in boot_side if abs((p-ankle).dot(lateral)-wd)<.012 and abs(p.z-z)<.012),key=lambda p:(p-ankle).dot(forward),default=target)
-  return best-forward*-.0025
+ # Laces crossing the instep and shaft, on the boot's own front line.
  v,f,w=[],[],[]
- for k in range(8):
-  z=ankle_z-.022+k*.019
-  for wa,wb in ((-.017,.017),(.017,-.017)):
-   a=surface(.0,wa,z);b=surface(.0,wb,z+.016)
+ lace_top=rows[-1][0]-.012
+ z=rows[2][0]+.012
+ while z<lace_top:
+  for wa,wb in ((-.016,.016),(.016,-.016)):
+   a=at(front_at(z)+.0012,wa,z);b=at(front_at(z+.013)+.0012,wb,z+.013)
    base_i=len(v)
-   u=(b-a).normalized();n=u.cross(forward).normalized()*.0012;m=u.cross(n).normalized()*.0012
+   u=(b-a).normalized();n=u.cross(forward).normalized()*.0011;m=u.cross(n).normalized()*.0011
    for c in (a,b):
-    v.extend([c+n,c+m,c-n,c-m]);w.extend([foot_w]*4)
+    v.extend([c+n,c+m,c-n,c-m]);w.extend([{'Foot'+side:1} if z<ankle_z else {'Shin'+side:1}]*4)
    for j in range(4):
     p=(j+1)%4
     f.append((base_i+j,base_i+p,base_i+4+p,base_i+4+j))
- parts.append(own_mesh('Laces '+side,v,f,leather,w))
-# The boot itself is rigid below the ankle.
-for v in boots.data.vertices:
- share={names[g.group]:g.weight for g in v.groups}
- side='L' if v.co.x>0 else 'R'
- blend=max(0,min(1,(v.co.z-ankle_z+.01)/.1))
- for g in list(v.groups):boots.vertex_groups[g.group].remove([v.index])
- (boots.vertex_groups.get('Foot'+side) or boots.vertex_groups.new(name='Foot'+side)).add([v.index],1-blend,'REPLACE')
- (boots.vertex_groups.get('Shin'+side) or boots.vertex_groups.new(name='Shin'+side)).add([v.index],blend,'REPLACE')
-# Flat under the foot, so the toes under the leather never read.
-for v in boots.data.vertices:v.co.z=max(v.co.z,SOLE+.004)
-
+  z+=.0135
+ parts.append(own_mesh('Laces '+side,v,f,lace_mat,w))
+bpy.data.objects.remove(boots)
 # ---- face and hair ----
 proxies=[fit_proxy('high-poly',eye,'Head'),fit_proxy('eyebrow001',brow,'Head'),fit_proxy('eyelashes02',lash,'Head'),fit_proxy('ponytail01',hair,'Head')]
 
 # ---- one skinned mesh ----
-everything=[body,dress,sheer,boots,skirt]+trim_objs+parts+proxies
+everything=[body,dress,sheer,skirt]+seams+trim_objs+parts+proxies
 bpy.ops.object.select_all(action='DESELECT')
 for o in everything:
  o.select_set(True)
