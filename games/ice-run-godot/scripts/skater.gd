@@ -330,13 +330,19 @@ func recolour(node: Node) -> int:
 			# Painted skin and hair keep their paint; the cards among them cut out by alpha.
 			if base and base.albedo_texture:
 				var painted := base.duplicate() as BaseMaterial3D
+				if base.resource_name == "Eyes":
+					painted.roughness = .08
+					painted.metallic_specular = .6
+				if base.resource_name == "Espresso hair":
+					# The paint fades to orange at the tips; the costume's colour settles it.
+					painted.albedo_color = Color.html(str(skin.get("hair","4a3528"))).lerp(Color.WHITE,.42)
 				if base.resource_name in ["Espresso hair","Brow","Lashes"]:
 					painted.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
 					painted.cull_mode = BaseMaterial3D.CULL_DISABLED
 				elif base.resource_name in ["Warm porcelain","Skin-tone tights"]:
 					painted.subsurf_scatter_enabled = true
 					painted.subsurf_scatter_skin_mode = true
-					painted.subsurf_scatter_strength = .4
+					painted.subsurf_scatter_strength = .16
 				node.set_surface_override_material(i,painted)
 				if slot != "": count += 1
 				continue

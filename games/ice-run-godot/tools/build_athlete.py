@@ -56,7 +56,7 @@ def make_mesh(name,verts,uvs,faces,mat):
  mesh.materials.append(mat)
  obj=bpy.data.objects.new(name,mesh);bpy.context.collection.objects.link(obj)
  return obj,used
-def fit_proxy(stem,mat,bone):
+def fit_proxy(stem,mat,bone,keep_face=None):
  """Places a CC0 proxy on the shaped body the way a .mhclo says to."""
  p_verts,p_uv,p_faces,_=read_obj(MH/(stem+'.obj'))
  lines=open(MH/(stem+'.mhclo')).read().split('\n')
@@ -76,6 +76,7 @@ def fit_proxy(stem,mat,bone):
    q=base[int(n[0])]*n[3]+base[int(n[1])]*n[4]+base[int(n[2])]*n[5]+Vector((n[6]*scale[0],n[7]*scale[1],n[8]*scale[2]))
   else:q=base[int(n[0])]
   placed.append(to_body(q))
+ if keep_face:p_faces=[f for f in p_faces if keep_face([p_uv[t] for _,t in f])]
  obj,_=make_mesh(stem,placed,p_uv,p_faces,mat)
  obj.vertex_groups.new(name=bone).add(list(range(len(obj.data.vertices))),1,'REPLACE')
  return obj
@@ -173,6 +174,14 @@ def carve(source,name,keep,offset,mat,smooth=0,edge=None):
  if edge:
   for v in bm.verts:
    if v.is_boundary:edge(v)
+  # Then along the edge itself: what the line did not catch still steps up and down.
+  rim=[v for v in bm.verts if v.is_boundary and v.co.z>waist.z]
+  for _ in range(6):
+   moved={}
+   for v in rim:
+    near=[e.other_vert(v).co for e in v.link_edges if e.is_boundary]
+    if len(near)==2:moved[v]=v.co*.5+(near[0]+near[1])*.25
+   for v,co in moved.items():v.co=co
   bm.normal_update()
  for v in bm.verts:v.co+=v.normal*offset
  bm.to_mesh(mesh);bm.free();mesh.update()
@@ -189,14 +198,19 @@ def neckline(x,y):
  return collar_z-.16+.09*min(1,abs(x)/.16)
 # Where the leotard meets the leg, seen when a spin lifts the skirt.
 def leg_line(x):return hip_l.z-.06-.03*min(1,abs(x)/.13)
+# The armhole, cut on a clean line above the armpit; below it the arm's own weights decide.
+armpit_z=shoulder_l.z-.075
+armhole_x=shoulder_l.x-.03
 def is_bodice(f):
  c=centre(f)
+ if c.z>armpit_z and abs(c.x)>armhole_x:return False
  if face_mean(f,'ArmL','ArmR','ForearmL','ForearmR','HandL','HandR')>.5 or face_mean(f,'Head')>.25:return False
  if c.z<leg_line(c.x):return False
  return c.z<neckline(c.x,c.y)
 def clean_neckline(v):
  # The mesh's own rows cut a sawtooth; the boundary is laid onto the line itself.
- if abs(v.co.x)<.145 and v.co.z>waist.z+.05:v.co.z=neckline(v.co.x,v.co.y)
+ if v.co.z>armpit_z-.01 and abs(v.co.x)>armhole_x-.022:v.co.x=math.copysign(armhole_x,v.co.x)
+ elif abs(v.co.x)<armhole_x and v.co.z>waist.z+.05:v.co.z=neckline(v.co.x,v.co.y)
  elif v.co.z<hip_l.z:v.co.z=leg_line(v.co.x)
 # The sleeve starts on a clean line round the top of the arm and ends at the wrist.
 def clean_sleeve(v):
@@ -204,8 +218,12 @@ def clean_sleeve(v):
  end=elbow_l if v.co.x>0 else mirror(elbow_l)
  along=(end-side).normalized()
  t=(v.co-side).dot(along)
- if t<.08:v.co+=along*(-.005-t)
+ if t<.07:v.co+=along*(.03-t)
 def is_sleeve(f):
+ # Starts just down the arm, on a line round it, not on the shoulder or the chest.
+ c=centre(f)
+ side,end=(shoulder_l,elbow_l) if c.x>0 else (mirror(shoulder_l),mirror(elbow_l))
+ if (c-side).dot((end-side).normalized())<.03:return False
  return face_mean(f,'ArmL','ArmR','ForearmL','ForearmR')>.5 and face_mean(f,'HandL','HandR')<.4
 boot_top=ankle_z+.125
 def is_boot(f):return centre(f).z<boot_top
@@ -481,7 +499,26 @@ for side,flip,sign in (('L',lambda v:v,1),('R',mirror,-1)):
  parts.append(own_mesh('Laces '+side,v,f,lace_mat,w))
 bpy.data.objects.remove(boots)
 # ---- face and hair ----
-proxies=[fit_proxy('high-poly',eye,'Head'),fit_proxy('eyebrow001',brow,'Head'),fit_proxy('eyelashes02',lash,'Head'),fit_proxy('ponytail01',hair,'Head')]
+# Each eye is two shells, and neither's UVs fit this texture, which is one iris filling
+# the image: they blank or bloody the eye. The outer shell stays, with the iris projected
+# straight onto its front at a real 6.2 mm radius; beyond it the image's edge is sclera.
+IRIS_RADIUS=.0062
+IRIS_IN_IMAGE=.42
+def outer_shell(uvs):return all(u>.8 and v<.25 for u,v in uvs)
+def project_iris(obj):
+ mesh=obj.data
+ for sign in (1,-1):
+  shell=[v.co for v in mesh.vertices if (v.co.x>0)==(sign>0)]
+  mid=sum(shell,Vector())/len(shell)
+  for poly in mesh.polygons:
+   if (mesh.vertices[poly.vertices[0]].co.x>0)!=(sign>0):continue
+   for li in poly.loop_indices:
+    p=mesh.vertices[mesh.loops[li].vertex_index].co
+    u=.5+(p.x-mid.x)/IRIS_RADIUS*IRIS_IN_IMAGE
+    w=.5+(p.z-mid.z)/IRIS_RADIUS*IRIS_IN_IMAGE
+    mesh.uv_layers[0].data[li].uv=(max(.01,min(.99,u)),max(.01,min(.99,w)))
+ return obj
+proxies=[project_iris(fit_proxy('high-poly',eye,'Head',outer_shell)),fit_proxy('eyebrow001',brow,'Head'),fit_proxy('eyelashes02',lash,'Head'),fit_proxy('ponytail01',hair,'Head')]
 
 # ---- one skinned mesh ----
 everything=[body,dress,sheer,skirt]+seams+trim_objs+parts+proxies

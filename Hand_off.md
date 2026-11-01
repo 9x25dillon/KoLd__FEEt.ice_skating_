@@ -1,8 +1,8 @@
 # Hand-off — EDGEWORK / native game
 
 ## Resume here
-**Newest close:** 1 November 2026, 00:40 PDT · Claude Code, Opus 5.5 · session `7d6a47c6`
-**Where things stand:** The native Godot game is much further on. PR #56 merged it to `main` (physics-driven pose, CC0 athlete, Forward+, arm tiers, landing stamina). A second batch is pushed but **not merged**: branch `crowd-and-ice`, with real crowd seating, cleaner ice, the spin finish, relaxed arms, backward gaze, square shoulders, pointed free foot and a COIL bar. Nobody has played any of this on a physical pad. CI is red on 8 older tests.
+**Newest close:** 1 November 2026 · Claude Code, Opus 5.5 · session `7d6a47c6`
+**Where things stand:** The native Godot game is much further on. PR #56 merged it to `main` (physics-driven pose, CC0 athlete, Forward+, arm tiers, landing stamina). A second batch is pushed but **not merged**: branch `crowd-and-ice`, with real crowd seating, cleaner ice, the spin finish, relaxed arms, backward gaze, square shoulders, pointed free foot and a COIL bar. A close-up pass followed: real irises (the eyes were blank), satin fabric, clean armholes, and the pose lab now wears the real costume. Nobody has played any of this on a physical pad. CI is red on 8 older tests.
 **Corrects the previous hand-off:** pairs and Grand Prix are not the newest work; that hand-off is now in `Hand_off-archive.md`.
 **Decision needed:** whether to open a PR for `crowd-and-ice` and merge it. Reply "open the PR" to start.
 **Start with:**
@@ -59,6 +59,7 @@
 - Fragile: the crowd is the costliest thing added. Second-arm timing at a spin finish is now measured unreliably (98 and 25 degrees), so judge it by eye. Expression and Function arms look too alike.
 
 ## Next steps, in order
+0. Look items next: blinking and small eye movement, the sleeve's top band, the skirt's small front slit, Expression arms. Judge close up with `pose_lab.gd --view=torso` or `--view=body`.
 1. Decide on the PR, merge with `! gh pr merge <n> --merge`, re-render `docs/presentation/edgework-now.*`.
 2. Playtest on the pad, with notes as a timestamped list.
 3. Read the grip search result, then decide on the coil axis and difficulty tiers.
@@ -82,7 +83,7 @@ Fresh worktrees need `node games/ice-run-godot/tools/prepare.mjs` and `godot4 --
 - Do not change grip, hip ceiling, tuck or landing shock to disguise the contact problem. Keep new physics default-off. Replay stays at unfinished `/39`.
 - Do not rewrite goldens or pinned numbers to pass tests. Compare failures by name.
 - `pose_lab` proves agreement with the sim, not with real skaters; never present it as realism evidence.
-- Judge renders by looking at them, with the costume on: the lab skips costumes.
+- Judge renders by looking at them, close up as well as at game distance. The lab now wears the costume; `--no-costume` skips it.
 - `gh pr merge` may be blocked for the assistant; ask the owner for `!`.
 - The owner decides gate policy. Answer the question first, then build; "keep going" means the next grounded item.
 

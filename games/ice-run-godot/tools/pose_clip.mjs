@@ -6,6 +6,7 @@ import {writeFileSync} from 'node:fs';
 import {IceEngine} from '../bridge/engine.mjs';
 import {createState} from '../runtime/sim/solver.js';
 import {NEUTRAL_INPUT} from '../runtime/sim/types.js';
+import {SKINS} from '../runtime/game/appearance.js';
 const e=new IceEngine();
 e.start({mode:'free'});
 e.state=createState(e.params,6);
@@ -34,6 +35,7 @@ run('spin, arms out',90,()=>({weight:0,lean:0,knee:.45,spin:true,carriage:1}));
 run('spin, arms in',330,()=>({weight:0,lean:0,knee:.45,spin:true,carriage:0}));
 run('spin exit',240,()=>({weight:exitWeight,lean:0,knee:.45}));
 const s=e.state;
-const out={marks,landed:s.landed.tick!==first?{tick:s.landed.tick,...Object.fromEntries(Object.entries(s.landed).filter(([,v])=>typeof v!=='object'))}:null,fallen:frames.filter(f=>f.state.fallen).length,frames};
+// The costume new sessions wear, so the lab shows what the game shows.
+const out={skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],marks,landed:s.landed.tick!==first?{tick:s.landed.tick,...Object.fromEntries(Object.entries(s.landed).filter(([,v])=>typeof v!=='object'))}:null,fallen:frames.filter(f=>f.state.fallen).length,frames};
 writeFileSync(process.argv[2],JSON.stringify(out));
 console.log(JSON.stringify({ticks:frames.length,marks,fallen:out.fallen,landed:out.landed,end:{pos:s.pos,move:s.move,speed:Math.hypot(s.vel.x,s.vel.y)},leanPeak:Math.max(...frames.map(f=>Math.abs(f.state.lean))),tiltPeak:Math.max(...frames.map(f=>Math.max(Math.abs(f.state.blade[0].tilt),Math.abs(f.state.blade[1].tilt))))}));

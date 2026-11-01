@@ -103,6 +103,7 @@ func _process(_delta: float) -> bool:
 		# Ready has just switched processing on; the lab alone steps the skater.
 		skater.set_process(false)
 		skeleton = skater.skeleton
+		if clip.has("skin") and not args.has("no-costume"): skater.apply_skin(clip.skin)
 		skater.apply_frame(clip.frames[0],true)
 	var ideal := render*2
 	if ideal >= clip.frames.size():
@@ -151,6 +152,17 @@ func frame_camera(s: Dictionary) -> void:
 		camera.fov = 58
 		camera.cull_mask = 1
 		camera.look_at(Vector3.ZERO)
+	elif view == "body":
+		# Square on and close, at the skater's own level: for judging her, not the shot.
+		var ahead := direction(float(s.heading.x),float(s.heading.y)).rotated(Vector3.UP,float(args.get("around",.5)))
+		camera.position = skater.position+ahead*2.1+Vector3(0,1.0,0)
+		camera.fov = 40
+		camera.look_at(skater.position+Vector3(0,.88,0))
+	elif view == "torso":
+		var ahead := direction(float(s.heading.x),float(s.heading.y)).rotated(Vector3.UP,float(args.get("around",.5)))
+		camera.position = skater.position+ahead*float(args.get("near",1.05))+Vector3(0,1.32,0)
+		camera.fov = 36
+		camera.look_at(skater.position+Vector3(0,float(args.get("aim",1.25)),0))
 	elif view == "stands":
 		camera.position = Vector3(-4,1.6,25)
 		camera.fov = 40
