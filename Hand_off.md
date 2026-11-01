@@ -19,7 +19,7 @@
 | 2026-09-27 | Earlier | Grand Prix, PR #52 | Northlight Arena; see archive |
 
 ## In flight
-- **Grip search** on `grip-search` (delegated to a background agent at the close of this session): does a shoulder wind ever add takeoff momentum through a gripping edge? Output: `docs/grip-search.md`. Sim source must stay unchanged. Check the result before believing it.
+- **Grip search** done, on `grip-search` (`370dcb7`, pushed, no PR, reproduced by the main session): `docs/grip-search.md` there. Shoulder wind pays about +5 kg m^2/s (best L 9.62 to 14.96, Experimental loop), only with arms in, leaving the ice while the shoulders are still swinging. Winding and holding pays nothing, it does not stack with arms out, and it does not raise the best achievable jump. The pad cannot reach it as mapped, because carriage is at least |windup|.
 - **`crowd-and-ice`** pushed: done and checked by script and render, not played. Verify with the One-shot check below.
 
 ## Decisions (why things are the way they are)
@@ -30,7 +30,7 @@
 - 2026-10-31 **Career arm tiers**: Function, Shared, Expression, trained by drills; other modes get both. Numbers are authored and untuned.
 - 2026-10-31 **Landing stamina settles at touchdown**: cheapening the takeoff moved the pinned 115.957 degree baseline, so the takeoff still pays in full. On in Experimental and Dig Gate only.
 - 2026-10-31 **No Earth rotation model**: about 1.6e-6 of a 33 rad/s spin and 0.7 degrees over a program. The rink crown is the larger real effect, and it already exists, off.
-- 2026-11-01 **No free momentum bonus for shoulder wind**: the sim's rule is that twist makes spin only while the ice holds the feet.
+- 2026-11-01 **No free momentum bonus for shoulder wind**: the sim's rule is that twist makes spin only while the ice holds the feet. The grip search confirmed a small real effect through a holding edge.
 - 2026-11-01 **Career training that closes off elements**: owner's design, in `docs/open-decisions.md`, not built. No real athlete's name in the game (D6).
 - 2026-11-01 **kgirl not used for the grip search**: it is an LLM harness, and the search is CPU arithmetic.
 
@@ -41,8 +41,9 @@
 - Regenerating fixtures or rewriting pinned numbers to pass tests: never.
 
 ## Open questions (settle these first)
+- **Possible free angular momentum, found by the grip search:** stepping carriage 0 to 1 on the release tick reads L 41.43 instead of 14.96 in the best case, because `bodyRate` (`sim/jump.ts`) reads that tick's carriage for the upper body's inertia. Not fixed, and untested on a pad. It touches the takeoff research, so the owner decides.
+- Should the pad be remapped so wind and arms separate? Only then is the shoulder effect reachable in play.
 - How do the camera moves, arm swing and landing stamina feel in play? Only a playtest settles this.
-- Does a gripping takeoff exist where wind pays? `docs/grip-search.md`.
 - Is leading-shoulder-first the right way round for the arms at a spin finish? A skater would know.
 - Backward gaze along the blade is the owner's style choice; real skaters usually look over a shoulder. Blend them if skaters object.
 - Is the name "Edgework" clear? The README says to resolve this before any public announcement. Was the Reddit post made?
