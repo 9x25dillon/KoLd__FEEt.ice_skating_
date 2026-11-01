@@ -25,6 +25,13 @@ npm start
 *Real renders from the current build. [Watch the same passage in motion](docs/presentation/edgework-now.mp4),
 or [compared with where this rebuild started](docs/presentation/start-vs-now.mp4), an earlier render of it.*
 
+![Close up: the eyes, the costume, and Function arms beside Expression arms](docs/presentation/edgework-closeup.png)
+
+*Close up: the eyes, the costume, then the same moment with Function arms (left) and Expression arms
+(right). In motion: [blink and gaze](docs/presentation/blink-and-gaze.mp4),
+[the costume before and after](docs/presentation/costume-before-after.mp4) and
+[Function beside Expression](docs/presentation/arm-tiers.mp4).*
+
 Requires Godot 4 (tested with 4.7.2), Node 24.19+ or 26, FFmpeg, and a GPU that runs
 Godot's Forward+ renderer (Vulkan or D3D12). No npm packages need installing. The launcher
 prepares the existing simulation and opens **Northlight Arena**. For an already exported
@@ -43,15 +50,18 @@ during a spin is the same event that speeds it up (about 9 to 33 rad/s in the te
 Arms, the free leg and shapes like camel and sit are still authored. There is no motion capture.
 
 - **Athlete:** built on MakeHuman's CC0 anatomy and skin, with a dress, boots and blades made
-  for it, and a skirt on sprung panels that swings, flares and rides over the legs.
+  for it, and a pleated skirt on sprung panels that swings, flares and rides over the legs. Her
+  eyes reach a new target before her head does, and she blinks. The timing is authored.
 - **Rink:** ice with real reflectance, pools of light from the roof, painted markings, tracings
   that stay readable from the high camera, and live reflections of the skater and boards.
 - **Crowd:** seated people who watch the skater and react to clean landings.
 - **Cameras:** Tracking, Broadcast, Rink and Blade. Tracking changes its framing by move: wide for
   a jump, low for footwork, steady for a spin.
 - **Career:** choose what your arms do most: **Function**, **Shared** or **Expression**. Expression
-  earns Presentation marks and gives up balance; 45-second drills shrink that trade-off. Other modes
-  get full balance and the expressive look. The numbers are authored and not yet tuned from play.
+  earns Presentation marks and gives up balance; 45-second drills shrink that trade-off. You can see
+  the choice: Function arms stay low, close and quick, while Expression arms are lifted and open, with
+  a slow follow-through and soft wrists. Other modes get full balance and the expressive look. The
+  numbers are authored and not yet tuned from play.
 
 The 120 Hz solver, Composer, technical scoring, training, music and replay systems remain the
 foundation. See the [native game guide](games/ice-run-godot/README.md) and
