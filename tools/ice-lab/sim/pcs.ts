@@ -106,6 +106,11 @@ export interface PcsInputs {
    * musicCreditRate reads 0 rather than NaN with no free play.
    */
   lobeVariety: number;
+  /**
+   * 0..1, optional: how much of the program the arms carried (game/armfocus.ts).
+   * Authored like everything here. Absent is 0, and every existing score stands.
+   */
+  armExpression?: number;
 }
 
 /** The session/PCS meters' own fields, read into the shape scorePcs wants. */
@@ -165,8 +170,11 @@ function skatingSkillsQuality(i: PcsInputs): number {
   return (saturate(i.meanFlow) + lean + clean + variety) / 4;
 }
 
+/** The share of the Presentation quality fully expressive arms can add. Authored. */
+const ARM_PRESENTATION = 0.2;
+
 function presentationQuality(i: PcsInputs): number {
-  return rise(i.musicCreditRate, 0, 4);
+  return saturate(rise(i.musicCreditRate, 0, 4) + ARM_PRESENTATION * saturate(i.armExpression ?? 0));
 }
 
 function compositionQuality(i: PcsInputs, ice: IceGrid): number {

@@ -14,11 +14,12 @@ void vertex() {
  }
 }
 void fragment() {
- float weave=sin(fabric_pos.x*1900.0)*sin(fabric_pos.y*1900.0);
+ // The weave fades out before it is finer than a pixel, or it shimmers into stripes.
+ float weave=sin(fabric_pos.x*1900.0)*sin(fabric_pos.y*1900.0)*(1.0-smoothstep(.0002,.001,fwidth(fabric_pos.x)+fwidth(fabric_pos.y)));
  ALBEDO=tint.rgb*(.98+weave*.02);
- METALLIC=is_sleeve ? .0 : .12;
- ROUGHNESS=(is_sleeve ? .64 : .34)+weave*.035;
+ METALLIC=(is_sleeve || is_skirt) ? .0 : .12;
+ ROUGHNESS=(is_sleeve ? .64 : is_skirt ? .52 : .34)+weave*.035;
  SPECULAR=.5;
- RIM=.17;
+ RIM=is_skirt ? .06 : .17;
  RIM_TINT=.4;
 }

@@ -555,6 +555,7 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
   // there is no travel direction to check (edgeOK still reads Stationary).
   const arrivalError = p.rotationCallMode >= 1 && len(s.vel) > p.dirSpeedEps
     ? Math.abs(atan2(dot(s.vel, perpLeft(t)), -vLong)) : 0;
+  const speedLost = dot(s.vel, perpLeft(t));
   s.vel = mul(t, vLong);
 
   const weightR = clamp(finite(input.weight, 0.5), 0, 1);
@@ -594,6 +595,13 @@ function land(s: SkaterState, input: SkatingInput, p: Params, events: EdgeEvent[
     ? (kind === JUMP_NONE ? Math.min(arrivalError, Math.PI - arrivalError) : arrivalError) / Math.PI
     : Math.abs(wrapPi(facing - target)) / Math.PI;
   const absorb = saturate(finite(input.knee, 0.35));
+  // staminaLandingMode settles the jump's price here, after the flight it must not
+  // change: half the flat takeoff price back, and the ice's share charged instead:
+  // the fall and the sideways speed the blade cannot keep, less what the knee takes.
+  if (p.staminaMode >= 1 && p.staminaLandingMode >= 1) {
+    const lost = 0.5 * (J.vz * J.vz + speedLost * speedLost);
+    s.legs = clamp(s.legs + 0.5 * p.staminaLegsPerJump - p.staminaLandingCost * lost * (1 - 0.5 * absorb), 0, 1);
+  }
   const edgeOK = kind === JUMP_NONE ? 1
     : foot === FOOT.Right && dir === DIR.Backward ? 1 - edgeMismatch(o, true) : 0;
   // airPostureMode 1: touchdown starts a fresh contact, and the takeoff

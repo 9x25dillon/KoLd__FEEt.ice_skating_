@@ -492,6 +492,18 @@ export interface Params {
   staminaLegsPerDeepEdge: number;
   /** Legs lost on one jump takeoff, flat, regardless of the jump's size. */
   staminaLegsPerJump: number;
+  /**
+   * 0: a jump costs its flat takeoff price, however it lands. 1: the takeoff still
+   * pays it in full, so the flight is untouched, and touchdown settles up: half comes
+   * back, and the landing is charged for the energy the ice took, per unit mass: the
+   * fall, and whatever speed the blade could not keep. An
+   * aligned landing keeps its speed and costs less than a crossways one; a bent
+   * knee takes some of it in the muscle's stride. Off in every preset; on in the
+   * Experimental setup (game/setups.ts), by the operator's choice.
+   */
+  staminaLandingMode: number;
+  /** Legs per J/kg the landing gives up, at no knee absorption. AUTHORED, NOT MEASURED: set so a clean 3.8 m/s landing with a good knee costs about what it gave back from the takeoff. */
+  staminaLandingCost: number;
   /** 1/s while spinning with the knee at or past a sit position (`spinSitKnee`). */
   staminaLegsPerSitSpin: number;
   /** 1/s recovered while low-effort — but only when Wind clears the floor below. */
@@ -1093,6 +1105,8 @@ export const DEFAULT_PARAMS: Params = {
   staminaLegsPerPush: 0.011,      // SkateSolver.cpp, taken directly
   staminaLegsPerDeepEdge: 0.015,
   staminaLegsPerJump: 0.05,
+  staminaLandingMode: 0,
+  staminaLandingCost: 0.0052,
   staminaLegsPerSitSpin: 0.03,
   staminaLegsRecover: 0.0008,
   staminaLegsRecoverWindFloor: 0.3,
@@ -1347,6 +1361,8 @@ export function validate(p: Params): string[] {
   if (p.staminaLegsPerPush < 0) errs.push("staminaLegsPerPush cannot be negative");
   if (p.staminaLegsPerDeepEdge < 0) errs.push("staminaLegsPerDeepEdge cannot be negative");
   if (p.staminaLegsPerJump < 0) errs.push("staminaLegsPerJump cannot be negative");
+  if (![0, 1].includes(p.staminaLandingMode)) errs.push("staminaLandingMode is 0 (a flat takeoff price) or 1 (the landing pays for the energy it loses)");
+  if (p.staminaLandingCost < 0) errs.push("staminaLandingCost cannot be negative");
   if (p.staminaLegsPerSitSpin < 0) errs.push("staminaLegsPerSitSpin cannot be negative");
   if (p.staminaLegsRecover < 0) errs.push("staminaLegsRecover cannot be negative");
   if (p.staminaLegsRecoverWindFloor < 0 || p.staminaLegsRecoverWindFloor > 1)

@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {IceEngine,emptyControls} from '../bridge/engine.mjs';
+import {CareerState} from '../runtime/game/career.js';
 import {createState,step} from '../runtime/sim/solver.js';
 import {IceGrid} from '../runtime/sim/ice.js';
 import {NEUTRAL_INPUT,MOVE,TURN_KIND} from '../runtime/sim/types.js';
@@ -235,4 +236,38 @@ test('experimental keeps trigger-driven strokes when a saved preference requests
  e.configure({setup:'experimental',beginner:true,cruise:true});e.start();
  assert.equal(e.beginner,false);assert.equal(e.cruise,false);
  assert.equal(e.snapshot().setup,'experimental');
+});
+
+test('arm focus: career trades balance for line, drills shrink it, every other mode has both',()=>{
+ const e=new IceEngine(),base=e.start({mode:'free'});
+ const full=e.params.internalMax;
+ assert.equal(base.armStyle,1,'free skate carries the line');
+ e.setArmFocus(0);e.start({mode:'career',event:0});
+ assert.equal(e.params.internalMax,full,'Function is the full authority free skate has');
+ assert.equal(e.routine.armExpression,0);assert.equal(e.snapshot().armStyle,0);
+ e.setArmFocus(2);e.start({mode:'career',event:0});
+ const raw=e.params.internalMax;
+ assert.ok(raw<full,'Expression gives up authority');assert.equal(e.routine.armExpression,.5);
+ e.career.recordDrill(2,100);e.start({mode:'career',event:0});
+ assert.ok(e.params.internalMax>raw&&e.params.internalMax<full,'mastery narrows the trade, never removes it');
+ assert.equal(e.routine.armExpression,1);
+ e.start({mode:'free'});assert.equal(e.params.internalMax,full,'the choice never reaches free skate');
+ const saved=CareerState.restore(e.career.serialize());
+ assert.equal(saved.armFocus,2);assert.deepEqual(saved.armBest,[0,0,100]);
+ assert.equal(saved.recordDrill(2,60),0,'only an improved drill counts');
+ const old=JSON.parse(e.career.serialize());delete old.armFocus;delete old.armBest;
+ assert.equal(CareerState.restore(JSON.stringify(old)).armFocus,1,'a save from before the drills still loads');
+});
+
+test('an arm drill scores the called line, finishes, and replays with its own params',()=>{
+ const e=new IceEngine();e.setArmFocus(2);e.start({mode:'armdrill'});
+ let i=0;
+ while(!e.finished&&i<46*120){const d=e.drill;e.tick({...NEUTRAL_INPUT,lean:.2,weight:.5,knee:.4,push:i%90===0,carriage:d.done?0:d.wanted});i++;}
+ assert.ok(e.finished,'the drill ends by itself');
+ assert.ok(e.drill.score>=80,`following every call should score high: ${e.drill.score}`);
+ assert.equal(e.career.armBest[2],e.drill.score);
+ assert.equal(verifyReplay(parseReplay(e.exportReplay())).divergence,null);
+ const f=new IceEngine();f.setArmFocus(2);f.start({mode:'armdrill'});
+ for(let j=0;j<46*120&&!f.finished;j++)f.tick({...NEUTRAL_INPUT,lean:.2,weight:.5,knee:.4,push:j%90===0,carriage:f.drill.done?0:1-f.drill.wanted});
+ assert.ok(f.drill.score<=20,`doing the opposite should score low: ${f.drill.score}`);
 });

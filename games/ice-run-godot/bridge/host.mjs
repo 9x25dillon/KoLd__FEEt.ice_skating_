@@ -20,6 +20,7 @@ lines.on('line',line=>{
    case 'configure':engine.configure(req.options);data=engine.snapshot();break;
    case 'frame':data=engine.advance(req.controls,req.ticks,req.low);break;
    case 'train':engine.train(req.stat);data=engine.snapshot();break;
+   case 'armFocus':engine.setArmFocus(req.focus);data=engine.snapshot();break;
    case 'export':{const path=join(saveDir,'ice-run-replay.json');writeFileSync(path,engine.exportReplay());data={path};break;}
    case 'replay':{const path=join(saveDir,'ice-run-replay.json');if(!existsSync(path))throw Error('Save a replay first');data=engine.replay(readFileSync(path,'utf8'));break;}
    case 'metrics':{const path=join(saveDir,'session-metrics.json');writeFileSync(path,JSON.stringify(engine.meter.summary(),null,2));data={path};break;}

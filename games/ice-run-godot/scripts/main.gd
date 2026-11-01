@@ -2,12 +2,15 @@ extends Node3D
 const EngineLink = preload("res://scripts/engine_link.gd")
 const Arena = preload("res://scripts/arena.gd")
 const Skater = preload("res://scripts/skater.gd")
+const SimSpace = preload("res://scripts/sim_space.gd")
+const Shot = preload("res://scripts/shot.gd")
 const Ribbon = preload("res://scripts/ribbon.gd")
 const Broadcast = preload("res://scripts/broadcast.gd")
 # Purely a local presentation choice: skater.gd poses whichever glb this
 # points at by bone name, so any entry here just needs to answer to the same
 # eleven bones (see tools/build_skater.py and tools/build_berserker.py).
 const CHARACTERS: Array[Dictionary] = [
+	{"name": "Athlete", "path": "res://assets/generated/skater-athlete.glb"},
 	{"name": "Competition athlete", "path": "res://assets/generated/skater-competition.glb"},
 	{"name": "Black Berserker", "path": "res://assets/generated/skater-berserker.glb"},
 	{"name": "Original Violet", "path": "res://assets/generated/skater.glb"},
@@ -56,6 +59,7 @@ var event_index := 0
 var sequence: Array = ["glide","edge","jump","spin","pose"]
 var camera_mode := 0
 var follow_direction := Vector3(1,0,0)
+var shot: Dictionary = Shot.NONE
 var music_enabled := true
 var beginner := false
 var scheme := 3
@@ -112,7 +116,7 @@ func _ready() -> void:
 	skater.model_path = CHARACTERS[character].path
 	add_child(skater)
 	partner = Skater.new()
-	partner.model_path = CHARACTERS[1].path
+	partner.model_path = CHARACTERS[2].path
 	partner.visible = false
 	add_child(partner)
 	camera = Camera3D.new()
@@ -153,6 +157,10 @@ func label(text: String, size: int, color: Color = Color("e6edef")) -> Label:
 	l.text = text
 	l.add_theme_font_size_override("font_size",size)
 	l.add_theme_color_override("font_color",color)
+	# Bright ice runs behind much of this type.
+	l.add_theme_color_override("font_shadow_color",Color(.02,.05,.09,.85))
+	l.add_theme_constant_override("shadow_offset_x",1)
+	l.add_theme_constant_override("shadow_offset_y",1)
 	return l
 
 func paragraph(text: String, size: int = 16) -> Label:
@@ -367,6 +375,16 @@ func show_page(page: String) -> void:
 				event_button.disabled = i > int(frame.career.unlocked)
 				menu.add_child(event_button)
 				menu.add_child(paragraph("%ds · %s" % [int(event.seconds),routine_names(event.routine)],12))
+			menu.add_child(HSeparator.new())
+			menu.add_child(label("Your arms",21))
+			menu.add_child(paragraph("What your arms do most in competition. Drills shrink the trade-off for the tier you drill. Other modes need no choice: full balance, full line.",13))
+			for i in catalog.armFocus.size():
+				var tier: Dictionary = catalog.armFocus[i]
+				var chosen: bool = i == int(frame.career.armFocus)
+				menu.add_child(button("%s%s   /   drill best %d" % ["● " if chosen else "",tier.title,int(frame.career.armBest[i])],func():link.send("armFocus",{"focus":i}),chosen))
+				menu.add_child(paragraph(str(tier.blurb),12))
+			var drill_tier := str(catalog.armFocus[int(frame.career.armFocus)].title)
+			menu.add_child(button("Drill %s   /   45 seconds" % drill_tier,func():start_game("armdrill")))
 			menu.add_child(HSeparator.new())
 			menu.add_child(label("Training",21))
 			for stat in ["strength","spring","edgeControl","balance"]:
@@ -604,7 +622,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		notice.text = "Saved: "+str(data.path)
 		return
 	frame = data
-	if op == "train":
+	if op == "train" or op == "armFocus":
 		show_page("career")
 		return
 	if op == "configure":
@@ -642,6 +660,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		var clean := not bool(landed.fall) and not bool(landed.stepOut)
 		landing_envelope = .32
 		crowd_swell = 1.0 if clean else .35
+		arena.react(1.0 if clean else .12)
 		broadcast.announce("CLEAN LANDING" if clean else "FIND YOUR EDGE", "%.2f rotations   /   Jump TES %.2f" % [float(landed.turned),float(frame.get("technical",0))])
 		var pads := Input.get_connected_joypads()
 		if rumble_enabled and not pads.is_empty():
@@ -722,6 +741,10 @@ func update_hud() -> void:
 			coach_progress.text = "%02d / %02d    ·    %s" % [int(r.index)+1,r.sequence.size(),r.title]
 			if float(element.duration)>0:
 				coach_progress.text += "\nHold %.1f / %.1f s" % [float(r.held),float(element.duration)]
+	elif frame.mode == "armdrill" and frame.get("drill") != null:
+		coach_title.text = str(frame.drill.title)
+		coach_tip.text = str(frame.drill.hint)
+		coach_progress.text = "%d s left    ·    %d / 100" % [ceili(float(frame.drill.seconds)),int(frame.drill.score)]
 	elif frame.mode == "rookie":
 		coach_title.text = frame.rookie.title
 		coach_tip.text = frame.rookie.hint
@@ -802,7 +825,7 @@ func controls(dt: float) -> Dictionary:
 		forward.y = 0
 		forward = forward.normalized()
 		var aim := camera.global_basis.x*left.x+forward*left.y
-		left = Vector2(aim.x,aim.z)
+		left = Vector2(aim.x,-aim.z)
 	var lb := pressed(KEY_Q) or pad(joy,JOY_BUTTON_LEFT_SHOULDER)
 	var rb := pressed(KEY_E) or pad(joy,JOY_BUTTON_RIGHT_SHOULDER)
 	var k1 := float(pressed(KEY_D))-float(pressed(KEY_A))
@@ -1020,12 +1043,14 @@ func capture() -> void:
 func update_camera(dt: float) -> void:
 	camera.cull_mask = 1 if camera_mode==2 and not overlay.visible else 3
 	var s: Dictionary = frame.state
-	var velocity := Vector3(float(s.vel.x),0,float(s.vel.y))
+	var velocity := SimSpace.direction(s.vel.x,s.vel.y)
 	if velocity.length()>.5 and int(s.jump.phase)!=2:
 		follow_direction = follow_direction.lerp(velocity.normalized(),1-exp(-dt*1.8)).normalized()
-	var focus: Vector3 = skater.position+Vector3(0,.9,0)
-	var desired := focus-follow_direction*4.7+Vector3(0,.9,0)+follow_direction.cross(Vector3.UP)*1.15
-	var look := focus+follow_direction*.6
+	shot = Shot.blend(shot,Shot.framing(s),1-exp(-dt*3.0))
+	var focus: Vector3 = skater.position+Vector3(0,float(shot.aim),0)
+	var desired := focus-follow_direction*float(shot.away)+Vector3(0,float(shot.height),0)+follow_direction.cross(Vector3.UP)*float(shot.away)*.245
+	# It looks a little ahead of a moving skater, to where the program is going.
+	var look := focus+follow_direction*float(shot.lead)*(1.0+velocity.length()*.14)
 	var fov := 46.0
 	if camera_mode == 1:
 		desired = Vector3(clampf(focus.x*.45,-18,18),7.8,31.5)
@@ -1040,7 +1065,7 @@ func update_camera(dt: float) -> void:
 		fov = 46
 	if overlay.visible:
 		var a := .38+sin(presentation_clock*.09)*.22
-		var front := Vector3(float(s.heading.x),0,float(s.heading.y))
+		var front := SimSpace.direction(s.heading.x,s.heading.y)
 		var showcase := front.rotated(Vector3.UP,a)
 		desired = skater.position+showcase*4.2+Vector3(0,1.35,0)
 		look = skater.position+Vector3(0,1.1,0)-showcase.cross(Vector3.UP)*.85
@@ -1048,6 +1073,8 @@ func update_camera(dt: float) -> void:
 	camera.position = camera.position.lerp(desired,1-exp(-dt*3.0))
 	camera.fov = lerpf(camera.fov,fov,1-exp(-dt*2.5))
 	camera.look_at(look)
+	arena.update_mirror(camera)
+	arena.update_crowd(skater.position,dt)
 
 func fill_audio() -> void:
 	if generator == null:

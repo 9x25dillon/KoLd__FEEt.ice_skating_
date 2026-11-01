@@ -1,7 +1,21 @@
 extends Node3D
+const SimSpace = preload("res://scripts/sim_space.gd")
 var trace_mesh: MultiMesh
+var ice_material: ShaderMaterial
+var arena_environment: Environment
+var crowd_material: ShaderMaterial
+var crowd_mood := 0.0
+# A second, smaller view of the skaters alone, from the camera's mirror image
+# under the ice. The ice shader lays it over itself by its own fresnel.
+const MIRROR_LAYER := 4
+var mirror_view: SubViewport
+var mirror_camera: Camera3D
 var trace_count := 0
 var previous: Array = [null, null]
+var trace_heading: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
+var trace_steps := 0
+# Metres sideways off a blade's own line, between two trace samples, that no edge can carve.
+const TRACE_STEP := .05
 var markers: Node3D
 var targets: Array[Node3D] = []
 const CAPACITY := 18000
@@ -35,6 +49,9 @@ func beam(a: Vector3, b: Vector3, radius: float, material: Material) -> void:
 	var node := box(Vector3(radius, radius, a.distance_to(b)), (a+b)*.5, material)
 	node.look_at(b, Vector3.FORWARD if absf((b-a).normalized().y) > .99 else Vector3.UP)
 
+func board_sign(sign: Label3D) -> void:
+	sign.layers = 1|MIRROR_LAYER
+
 func sign_text(text: String, pos: Vector3, scale_factor: float, color: Color, yaw: float = 0.0) -> Label3D:
 	var sign := Label3D.new()
 	sign.text = text
@@ -48,6 +65,28 @@ func sign_text(text: String, pos: Vector3, scale_factor: float, color: Color, ya
 	sign.no_depth_test = false
 	add_child(sign)
 	return sign
+
+func crowd(transforms: Array[Transform3D], colors: Array[Color], skins: Array[Color]) -> void:
+	var batch := MultiMesh.new()
+	batch.transform_format = MultiMesh.TRANSFORM_3D
+	batch.use_colors = true
+	batch.use_custom_data = true
+	var scene: Node = load("res://assets/generated/spectator.glb").instantiate()
+	batch.mesh = scene.find_children("*","MeshInstance3D",true,false)[0].mesh
+	scene.free()
+	batch.instance_count = transforms.size()
+	for i in transforms.size():
+		batch.set_instance_transform(i,transforms[i])
+		batch.set_instance_color(i,colors[i])
+		# Alpha is this person's own timing (shaders/crowd.gdshader).
+		batch.set_instance_custom_data(i,Color(skins[i].r,skins[i].g,skins[i].b,audience_rng.randf()))
+	var node := MultiMeshInstance3D.new()
+	node.multimesh = batch
+	crowd_material = ShaderMaterial.new()
+	crowd_material.shader = load("res://shaders/crowd.gdshader")
+	node.material_override = crowd_material
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
 
 func instances(mesh: Mesh, transforms: Array[Transform3D], colors: Array[Color], material: Material) -> void:
 	var batch := MultiMesh.new()
@@ -72,9 +111,28 @@ func _ready() -> void:
 	env.background_color = Color("101724")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color("bacddd")
-	env.ambient_light_energy = .48
+	env.ambient_light_energy = .16
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.15
+	env.tonemap_white = 3.2
+	env.tonemap_exposure = 1.08
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 1.18
+	env.adjustment_contrast = 1.06
+	env.glow_enabled = true
+	env.glow_intensity = .35
+	env.glow_bloom = .02
+	env.glow_hdr_threshold = 1.1
+	env.ssao_enabled = true
+	env.ssao_radius = 1.2
+	env.ssao_intensity = 1.6
+	env.ssil_enabled = true
+	env.ssil_intensity = .7
+	env.volumetric_fog_enabled = true
+	env.volumetric_fog_density = .0006
+	env.volumetric_fog_albedo = Color("c8d8e8")
+	env.volumetric_fog_anisotropy = .35
+	env.volumetric_fog_length = 90
+	arena_environment = env
 	env.fog_enabled = true
 	env.fog_light_color = Color("34465b")
 	env.fog_density = .0018
@@ -87,6 +145,7 @@ func _ready() -> void:
 	var ice_mat := ShaderMaterial.new()
 	ice_mat.shader = load("res://shaders/ice.gdshader")
 	ice.material_override = ice_mat
+	ice_material = ice_mat
 	add_child(ice)
 	var dark := mat(Color("131e2b"),.25,.6)
 	var concrete := mat(Color("273644"),0,.88)
@@ -96,6 +155,8 @@ func _ready() -> void:
 	var gold := mat(Color("bea775"),.6,.35)
 	box(Vector3(105,.5,105),Vector3(0,-.32,0),concrete)
 	var ceiling := box(Vector3(100,.4,100),Vector3(0,20,0),dark)
+	# The arena's main light stands in for its fixtures, which sit under this roof.
+	ceiling.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# The high rink camera uses a roof cutaway; ice-level cameras see the ceiling.
 	ceiling.layers = 2
 	for corner in 4:
@@ -109,11 +170,8 @@ func _ready() -> void:
 	var seats: Array[Transform3D] = []
 	var seat_colors: Array[Color] = []
 	var bodies: Array[Transform3D] = []
+	var skins: Array[Color] = []
 	var body_colors: Array[Color] = []
-	var heads: Array[Transform3D] = []
-	var head_colors: Array[Color] = []
-	var arms: Array[Transform3D] = []
-	var arm_colors: Array[Color] = []
 	var coats := [Color("35475e"),Color("5f5064"),Color("939495"),Color("9e7465"),Color("233342"),Color("4d6670")]
 	for side in 4:
 		var angle := float(side)*PI*.5
@@ -128,18 +186,15 @@ func _ready() -> void:
 				var x := -33.0+float(seat)*1.15
 				var pos := basis*Vector3(x,height+.5,depth)
 				seats.append(Transform3D(basis,pos))
-				seat_colors.append(Color("243c55") if row%3 else Color("34516b"))
+				seat_colors.append(Color("0c1626") if row%3 else Color("101d30"))
 				if audience_rng.randf()>.22:
-					var sway := audience_rng.randf_range(-.12,.12)
-					var body_pos := basis*Vector3(x+sway,height+.69,depth-.26)
-					bodies.append(Transform3D(basis.scaled(Vector3(1,audience_rng.randf_range(.85,1.15),1)),body_pos))
-					var coat: Color = coats[audience_rng.randi()%coats.size()].darkened(.32)
-					body_colors.append(coat)
-					for arm_side in [-1,1]:
-						arms.append(Transform3D(basis.rotated(basis.z,arm_side*.22),body_pos+basis*Vector3(arm_side*.19,-.06,0)))
-						arm_colors.append(coat)
-					heads.append(Transform3D(basis,body_pos+Vector3(0,.44,0)))
-					head_colors.append(Color("b78e76").lerp(Color("654d40"),audience_rng.randf()).darkened(.22))
+					var sway := audience_rng.randf_range(-.1,.1)
+					var size := audience_rng.randf_range(.92,1.08)
+					# The model faces away from its stand's outward axis: toward the ice.
+					var facing := basis*Basis(Vector3.UP,PI+audience_rng.randf_range(-.28,.28))
+					bodies.append(Transform3D(facing.scaled(Vector3.ONE*size),basis*Vector3(x+sway,height+.2,depth-.2)))
+					body_colors.append(coats[audience_rng.randi()%coats.size()].darkened(.62))
+					skins.append(Color("7c604f").lerp(Color("3a2a21"),audience_rng.randf()))
 		var back := box(Vector3(91,12,.5),basis*Vector3(0,8,45),dark)
 		back.rotation.y = angle
 		var fascia := box(Vector3(72,1.4,.3),basis*Vector3(0,8.2,43),rail)
@@ -150,35 +205,19 @@ func _ready() -> void:
 		# Event banners, rigging and structural columns.
 		for x in [-34,-17,0,17,34]:
 			box(Vector3(.5,19,.5),basis*Vector3(x,9.5,43),rail)
-			var banner := box(Vector3(3.8,5,.08),basis*Vector3(x,12.8,43.3),rail)
+			# Hung on the ice side of the column, or the column hides the banner's middle.
+			var banner := box(Vector3(3.8,5,.08),basis*Vector3(x,12.8,42.68),rail)
 			banner.rotation.y = angle
-			sign_text("EW\n01",basis*Vector3(x,13,43.2),.025,Color("d8c295"),angle+PI)
+			sign_text("GRAND\nPRIX",basis*Vector3(x,13,42.6),.014,Color("d8c295"),angle+PI)
 		# Board typography faces the ice.
 		for x in [-13,0,13]:
-			sign_text("EDGEWORK" if x==0 else "THE ICE REMEMBERS",basis*Vector3(x,.63,27.8),.007,Color("294b60"),angle+PI)
+			board_sign(sign_text("EDGEWORK" if x==0 else "THE ICE REMEMBERS",basis*Vector3(x,.63,27.8),.007,Color("294b60"),angle+PI))
 	var seat_mesh := BoxMesh.new()
 	seat_mesh.size = Vector3(.85,.62,.17)
 	var vertex_mat := mat(Color.WHITE,0,.85)
 	vertex_mat.vertex_color_use_as_albedo = true
 	instances(seat_mesh,seats,seat_colors,vertex_mat)
-	var body_mesh := CapsuleMesh.new()
-	body_mesh.radius = .19
-	body_mesh.height = .66
-	body_mesh.radial_segments = 8
-	body_mesh.rings = 3
-	instances(body_mesh,bodies,body_colors,vertex_mat)
-	var arm_mesh := CapsuleMesh.new()
-	arm_mesh.radius = .065
-	arm_mesh.height = .48
-	arm_mesh.radial_segments = 6
-	arm_mesh.rings = 2
-	instances(arm_mesh,arms,arm_colors,vertex_mat)
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = .115
-	head_mesh.height = .25
-	head_mesh.radial_segments = 8
-	head_mesh.rings = 4
-	instances(head_mesh,heads,head_colors,vertex_mat)
+	crowd(bodies,body_colors,skins)
 	# Triangulated roof trusses and banks of luminaires.
 	for z in [-32,-16,0,16,32]:
 		beam(Vector3(-43,16,z),Vector3(43,16,z),.14,rail)
@@ -196,10 +235,10 @@ func _ready() -> void:
 		var basis := Basis(Vector3.UP,angle)
 		var screen := box(Vector3(5.7,2.6,.035),Vector3(0,11.5,0)+basis*Vector3(0,0,3.13),rail)
 		screen.rotation.y = angle
-		var sign := sign_text("EDGEWORK\nGRAND PRIX  /  01",Vector3(0,11.5,0)+basis*Vector3(0,0,3.17),.011,Color("dbecf6"),angle)
+		var sign := sign_text("EDGEWORK\nGRAND PRIX  /  01",Vector3(0,11.5,0)+basis*Vector3(0,0,3.17),.0078,Color("dbecf6"),angle)
 		if side==0: scoreboard=sign
 		beam(Vector3(-2+side%2*4,13, -2+side/2*4),Vector3(-2+side%2*4,20,-2+side/2*4),.045,gold)
-	for setup in [[Vector3(-68,-32,0),Color("e5efff"),1.25],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
+	for setup in [[Vector3(-68,-32,0),Color("e5efff"),.5],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
 		var light := DirectionalLight3D.new()
 		light.rotation_degrees = setup[0]
 		light.light_color = setup[1]
@@ -207,8 +246,24 @@ func _ready() -> void:
 		light.shadow_enabled = setup[2]>1
 		light.directional_shadow_max_distance = 65
 		light.shadow_bias = .035
+		light.shadow_blur = .6
 		light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 		add_child(light)
+	# Rows of roof fixtures: what lights a real rink, and what the haze catches.
+	for row in range(-2,3):
+		for column in range(-2,3):
+			var fixture := SpotLight3D.new()
+			fixture.position = Vector3(column*12,14.5,row*11)
+			fixture.rotation_degrees = Vector3(-90,0,0)
+			fixture.spot_range = 22
+			fixture.spot_angle = 31
+			fixture.spot_attenuation = 1.0
+			fixture.spot_angle_attenuation = 1.6
+			fixture.light_color = Color("eaf2ff")
+			fixture.light_energy = 9.0
+			fixture.light_volumetric_fog_energy = 1.2
+			fixture.light_specular = .9
+			add_child(fixture)
 	var probe := ReflectionProbe.new()
 	probe.position = Vector3(0,4,0)
 	probe.size = Vector3(94,40,94)
@@ -220,12 +275,15 @@ func _ready() -> void:
 	trace_mesh = MultiMesh.new()
 	trace_mesh.transform_format = MultiMesh.TRANSFORM_3D
 	var groove := PlaneMesh.new()
-	groove.size = Vector2(.024,1)
+	groove.size = Vector2(.011,1)
 	trace_mesh.mesh = groove
 	trace_mesh.instance_count = CAPACITY
 	trace_mesh.visible_instance_count = 0
 	trace_node.multimesh = trace_mesh
-	trace_node.material_override = mat(Color("a6bfcb"),.12,.42)
+	# A cut in bright ice reads darker than the ice around it, in shadow along its wall.
+	var cut := ShaderMaterial.new()
+	cut.shader = load("res://shaders/trace.gdshader")
+	trace_node.material_override = cut
 	trace_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(trace_node)
 	markers = Node3D.new()
@@ -238,27 +296,84 @@ func wall_segment(a: Vector2, b: Vector2, board: Material, rail: Material) -> vo
 	var top := box(Vector3(.30,.075,a.distance_to(b)+.07),Vector3(center.x,1.10,center.y),rail)
 	top.rotation.y = node.rotation.y
 	var kick := box(Vector3(.24,.13,a.distance_to(b)+.05),Vector3(center.x,.075,center.y),rail)
+	# The boards stand on the ice, so the ice shows them too.
+	node.layers = 1|MIRROR_LAYER
+	top.layers = 1|MIRROR_LAYER
+	kick.layers = 1|MIRROR_LAYER
 	kick.rotation.y = node.rotation.y
 
 func clear_traces() -> void:
 	trace_count = 0
 	trace_mesh.visible_instance_count = 0
 	previous = [null,null]
+	trace_heading = [Vector3.ZERO,Vector3.ZERO]
+
+# A reaction rises fast and takes a few seconds to die away.
+func react(amount: float) -> void:
+	crowd_mood = maxf(crowd_mood,amount)
+
+func update_crowd(skater_at: Vector3, dt: float) -> void:
+	crowd_mood = maxf(0,crowd_mood-dt/3.5)
+	crowd_material.set_shader_parameter("skater",skater_at)
+	crowd_material.set_shader_parameter("cheer",crowd_mood)
+
+func add_mirror() -> void:
+	mirror_view = SubViewport.new()
+	mirror_view.size = Vector2i(640,360)
+	mirror_view.transparent_bg = true
+	mirror_view.msaa_3d = Viewport.MSAA_DISABLED
+	mirror_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	mirror_view.world_3d = get_world_3d()
+	add_child(mirror_view)
+	mirror_camera = Camera3D.new()
+	mirror_camera.cull_mask = MIRROR_LAYER
+	# Only the skater is in this view, and it is small and soft: no screen effects.
+	var plain := arena_environment.duplicate() as Environment
+	plain.ssao_enabled = false
+	plain.ssil_enabled = false
+	plain.volumetric_fog_enabled = false
+	plain.glow_enabled = false
+	mirror_camera.environment = plain
+	mirror_view.add_child(mirror_camera)
+	ice_material.set_shader_parameter("mirror",mirror_view.get_texture())
+	ice_material.set_shader_parameter("mirror_strength",1.0)
+
+func update_mirror(camera: Camera3D) -> void:
+	if mirror_camera == null:
+		add_mirror()
+	var eye := camera.global_position
+	var forward := -camera.global_basis.z
+	mirror_camera.global_position = Vector3(eye.x,-eye.y,eye.z)
+	mirror_camera.look_at(mirror_camera.global_position+Vector3(forward.x,-forward.y,forward.z))
+	mirror_camera.fov = camera.fov
+	mirror_camera.near = camera.near
+	mirror_camera.far = camera.far
+	var window := camera.get_viewport().get_visible_rect().size
+	mirror_view.size = Vector2i(640,maxi(1,int(640.0*window.y/window.x)))
 
 func add_traces(frames: Array) -> void:
 	for pair in frames:
 		for i in range(2):
 			var b: Dictionary = pair[i]
-			var point := Vector3(float(b.x),.016,float(b.y)-18.0)
+			var point := SimSpace.point(b.x,b.y,.016)
 			if b.contact and previous[i] != null:
 				var delta: Vector3 = point-previous[i]
 				var length := delta.length()
-				if length > .015 and length < 1.5:
-					var transform := Transform3D(Basis(Vector3.UP,atan2(delta.x,delta.z)),(point+previous[i])*.5)
-					transform.basis = transform.basis.scaled(Vector3(1,1,length))
+				# A real blade cannot step sideways on the ice, but the solver moves a
+				# contact in one tick when the support changes, two feet to one. That is
+				# a foot set down, not a cut, so the line ends and a new one starts.
+				var stepped: bool = trace_heading[i] != Vector3.ZERO and absf(delta.cross(trace_heading[i]).y)>TRACE_STEP
+				if stepped:
+					trace_heading[i] = Vector3.ZERO
+					trace_steps += 1
+				elif length > .015 and length < 1.5:
+					var transform := Transform3D(Basis(Vector3.UP,atan2(delta.x,delta.z))*Basis.from_scale(Vector3(1,1,length)),(point+previous[i])*.5)
 					trace_mesh.set_instance_transform(trace_count % CAPACITY,transform)
 					trace_count += 1
 					trace_mesh.visible_instance_count = mini(trace_count,CAPACITY)
+					trace_heading[i] = delta/length
+			if not b.contact:
+				trace_heading[i] = Vector3.ZERO
 			previous[i] = point if b.contact else null
 
 func set_course(mode: String, catalog: Dictionary) -> void:
@@ -274,7 +389,7 @@ func set_course(mode: String, catalog: Dictionary) -> void:
 		torus.rings = 32
 		torus.ring_segments = 8
 		node.mesh = torus
-		node.position = Vector3(float(p.x),.04,float(p.y)-18)
+		node.position = SimSpace.point(p.x,p.y,.04)
 		node.material_override = mat(Color("c6b393"),.1,.4,0.25)
 		markers.add_child(node)
 		targets.append(node)

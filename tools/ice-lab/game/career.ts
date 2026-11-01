@@ -125,6 +125,8 @@ export class Choreography {
    * three scores above already have when their data fails to load.
    */
   pcsScore: PcsScore | null = null;
+  /** 0..1, game/armfocus.ts: what the skater chose their arms to do, as the panel sees it. */
+  armExpression = 0;
   private segmentRules?: readonly SegmentRule[];
   private ice?: IceGrid;
   private sessionMeter = new SessionMeter();
@@ -264,7 +266,7 @@ export class Choreography {
     const musicCredit = Math.max(0, s.musicCredit - Math.max(0, this.startMusicCredit));
     const lobeAlternations = Math.max(0, s.lobeAlternations - Math.max(0, this.startLobeAlternations));
     const lobeRepeats = Math.max(0, s.lobeRepeats - Math.max(0, this.startLobeRepeats));
-    const inputs = pcsInputsFrom(this.sessionMeter.summary(), this.pcsMeter, musicCredit, lobeAlternations, lobeRepeats);
+    const inputs = { ...pcsInputsFrom(this.sessionMeter.summary(), this.pcsMeter, musicCredit, lobeAlternations, lobeRepeats), armExpression: this.armExpression };
     this.pcsScore = scorePcs(rule, inputs, this.ice, s.tick);
   }
 }
@@ -273,6 +275,9 @@ export class Choreography {
 export class CareerState {
   medals = CAREER_EVENTS.map(() => 0);
   profile: SkaterProfile = makeProfile("Career skater");
+  /** game/armfocus.ts: the tier chosen, and each tier's best drill score. */
+  armFocus = 1;
+  armBest = [0, 0, 0];
 
   /** How far medals alone would unlock: the first not-yet-earned event. */
   get medalCap(): number {
@@ -316,8 +321,14 @@ export class CareerState {
     this.profile = { ...this.profile, xp: this.profile.xp + earned };
     return earned;
   }
+  /** Only an improved drill counts, the same anti-farming rule the medals follow. Returns the points gained. */
+  recordDrill(focus: number, score: number): number {
+    const gained = Math.max(0, score - this.armBest[focus]);
+    this.armBest[focus] += gained;
+    return gained;
+  }
   train(stat: StatName) { this.profile = train(this.profile, stat, xpToRaise(this.profile.stats[stat])); }
-  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats }); }
+  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest }); }
   static restore(json: string | null): CareerState {
     const career = new CareerState();
     try {
@@ -331,6 +342,9 @@ export class CareerState {
       if (firstEmpty >= 0 && saved.medals.slice(firstEmpty).some((m: number) => m !== 0)) return career;
       career.medals = [...saved.medals];
       career.profile = makeProfile("Career skater", { xp: saved.xp, stats: saved.stats });
+      // Absent from saves older than the arm drills; a bad value keeps the defaults, not the whole career at risk.
+      if ([0, 1, 2].includes(saved.armFocus)) career.armFocus = saved.armFocus;
+      if (Array.isArray(saved.armBest) && saved.armBest.length === 3 && saved.armBest.every((b: unknown) => Number.isInteger(b) && Number(b) >= 0 && Number(b) <= 100)) career.armBest = [...saved.armBest];
     } catch { /* A missing or invalid save starts a playable career. */ }
     return career;
   }

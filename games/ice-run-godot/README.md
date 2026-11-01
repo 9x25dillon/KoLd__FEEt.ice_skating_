@@ -21,7 +21,8 @@ information. These are actual game captures, not concept art.
   elbows/knees, shaped anatomy, fingers, facial features, braided bun, embroidery,
   two-layer skirt, laces, leather soles, curved steel blades and toe picks.
   The original Violet and Berserker models remain selectable.
-- **Materials:** procedural ice grain and grooming marks, a venue reflection probe,
+- **Materials:** procedural ice grain and grooming marks with ice's real reflectance,
+  roof fixtures and a venue probe reflected in it, the skater's live reflection,
   satin weave, restrained skirt flutter, a soft
   contact shadow and slip-driven ice particles. Dynamic poses reflect actual
   blade contacts, knee pressure, trunk twist, jumps, camel/sit spins and spirals.
@@ -204,10 +205,50 @@ logic. The host invokes the solver and gameplay modules; copying the browser app
 modules does not make every browser UI feature a Godot feature. This is a Godot
 presentation around the original engine, **not a native GDScript/C++ physics port**.
 The character uses a small procedural rig, not motion-captured animation. Full
-cloth simulation, photorealistic character art, planar reflections, and the complete
+cloth simulation, photorealistic character art, and the complete
 judging model remain future work. Stamina is exposed in the HUD; existing enabled
-flow and ice systems remain owned by Ice Lab. The reflected fixture highlights are
-procedural plus a venue reflection probe, not a live planar mirror.
+flow and ice systems remain owned by Ice Lab. The ice's reflections are three things: roof fixtures
+traced procedurally, a static venue probe, and a small live view of the skaters alone
+(`arena.gd` `update_mirror`). The crowd and boards are not in the live view.
+
+## Pose from physics
+
+`scripts/skater.gd` poses the body from the solver's own state: the hip from
+`comZ`, the trunk along the contact-to-centre-of-mass pendulum (lean and pitch),
+each boot's roll from its blade's `tilt`, its place from `contact`. Only what the
+sim does not state is authored and eased: arms, the free leg, camel/sit/low/fallen
+shapes. Every sim coordinate reaches the world through `scripts/sim_space.gd`.
+
+`tools/pose_lab.gd` measures this. It plays a recording from the real engine
+through the real skater script, frames arriving unevenly, and compares the rendered
+skeleton with the state that produced it:
+
+```sh
+node games/ice-run-godot/tools/pose_clip.mjs /tmp/pose-clip.json
+godot4 --headless --path games/ice-run-godot --script res://tools/pose_lab.gd -- --clip=/tmp/pose-clip.json --check
+```
+
+Add `--shots=<dir> --ticks=60,300` (with a display) for stills, or Godot's
+`--write-movie out.avi --fixed-fps 60` for the passage as video. This shows the pose
+agrees with the simulation, not that either matches a real skater. CI has no Godot, so
+this check runs locally.
+
+## The athlete and the arena's look
+
+The default skater is built on MakeHuman's CC0 anatomy and textures (`assets/source/makehuman`,
+licence and sources in its README): `blender --background --python games/ice-run-godot/tools/build_athlete.py`.
+Its dress, sleeves and boots are cut from its own body surface. The crowd is one seated body from the same
+mesh, instanced (`tools/build_spectator.py`, `shaders/crowd.gdshader`). `skater.gd` reads each model's
+proportions from its skeleton, so the three older models still work. Its skirt is sixteen panels on
+springs, stepped in `swing_skirt`: they swing with the body, flare in a spin and are pushed aside by the legs.
+It is not cloth simulation, and nothing reads it back into the solver. Painted skin keeps its paint, so a
+costume's skin tone does not apply to the athlete.
+
+The tracking camera's framing per move is in `scripts/shot.gd`: wide with headroom for a jump, low for footwork,
+steady for a spin. `tools/pose_lab.gd` plays the same framing, and `--view=boots` or `--view=face` for close-ups.
+
+The game now renders with Forward+ (Vulkan or D3D12), for ambient occlusion, indirect light and haze.
+Low-end and mobile GPUs that only managed the Compatibility renderer are no longer the target.
 
 ## Rebuild the competition athlete
 

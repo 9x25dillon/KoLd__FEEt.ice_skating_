@@ -46,6 +46,8 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   // The arms and trunk with it (pitchInternalMode), 2026-09-24: the operator's queue item.
   if (setup === "simulation" || exp) { p.footMode = 1; p.pitchMode = 1; p.pitchInternalMode = 1; }
   if (exp) p.freeLegMode = 1;
+  // A landing pays for the energy the ice takes (staminaLandingMode): the operator's choice, 2026-10-31.
+  if (exp) p.staminaLandingMode = 1;
   return p;
 }
 export function setupInput(c: Controls, s: SkaterState, setup: Setup, st: GameControlState, p: Params, profile: ControllerProfile, assistance = 0.75) {
