@@ -9,7 +9,7 @@ extends SceneTree
 # the marked ticks in --ticks=60,300,...; --write-movie records the whole passage.
 const DT := 1.0/60.0
 const ARRIVALS := [2,0,4,2,1,3,2,2]
-const LIMITS := {"roll_deg":1.0,"foot_off_line_m":.03,"hip_m":.02,"lean_deg":6.0,"crossed_frames":0,"wrong_way_frames":0,"skirt_reach_m":1.6}
+const LIMITS := {"roll_deg":1.0,"foot_off_line_m":.03,"hip_m":.02,"lean_deg":6.0,"crossed_frames":0,"wrong_way_frames":0,"skirt_reach_m":1.6,"skirt_pierce_m":.01}
 const Arena = preload("res://scripts/arena.gd")
 const Shot = preload("res://scripts/shot.gd")
 var args := {}
@@ -332,6 +332,7 @@ func report() -> void:
 	for name in ["skirt_sag_m","roll_deg","foot_off_line_m","foot_along_line_m","hip_m","lean_deg","lag_m","jerk"]:
 		result[name] = snappedf(rms(name),.001)
 	if arena: result["trace_steps"] = arena.trace_steps
+	result["skirt_pierce_m"] = snappedf(skater.skirt_pierce_peak,.001)
 	for name in ["hand_below_shoulder_m","upper_arm_below_level_deg","gaze_off_blade_deg","gaze_down_deg"]:
 		if samples.has(name): result[name] = snappedf(rms(name),.01)
 	if forearm_high>forearm_low:

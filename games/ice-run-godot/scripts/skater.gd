@@ -86,6 +86,9 @@ const SKIRT_DRAG := .90
 # Its own fixed step: a spring stepped by the display's frame time hangs differently at every frame rate.
 const SKIRT_STEP := 1.0/120.0
 const THIGH_RADIUS := .085
+# Panels are a hand's width apart at the hem and the cloth between them is a straight
+# chord, so a panel must stand this much clear or the leg comes through between two.
+const SKIRT_LEG_CLEAR := .03
 const SHIN_RADIUS := .055
 var skirt_bones: Array[String] = []
 var skirt_pivots: Array[Vector3] = []
@@ -95,6 +98,7 @@ var skirt_last: Array[Vector3] = []
 var skirt_gap := 0.0
 var skirt_dirty := true
 var skirt_pushed := 0.0
+var skirt_pierce_peak := 0.0
 var skirt_clock := 0.0
 var skirt_pivots_last: Array[Vector3] = []
 var skirt_centre_last := Vector3.ZERO
@@ -321,7 +325,7 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 				for reach in [.5,.75,1.0]:
 					var at: Vector3 = from.lerp(skirt_tips[i],reach)
 					for leg in range(0,thigh_world.size(),3):
-						var pushed := push_off(at,thigh_world[leg],thigh_world[leg+1],THIGH_RADIUS)+push_off(at,thigh_world[leg+1],thigh_world[leg+2],SHIN_RADIUS)
+						var pushed := push_off(at,thigh_world[leg],thigh_world[leg+1],THIGH_RADIUS+SKIRT_LEG_CLEAR)+push_off(at,thigh_world[leg+1],thigh_world[leg+2],SHIN_RADIUS+SKIRT_LEG_CLEAR)
 						skirt_pushed = maxf(skirt_pushed,pushed.length())
 						# Cloth rides out and over a leg. Pushed straight off it, neighbouring
 						# panels part either side and the thigh shows through the gap.
@@ -335,6 +339,14 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 	if waiting>0:
 		skirt_centre_last = centre
 		skirt_yaw_last = rotation.y
+	# How deep a leg stands through the cloth between two panels; the lab holds this down.
+	for i in count:
+		var other := (i+1)%count
+		for reach in [.5,.75,1.0]:
+			var between: Vector3 = (pivots[i].lerp(skirt_tips[i],reach)+pivots[other].lerp(skirt_tips[other],reach))*.5
+			for leg in range(0,thigh_world.size(),3):
+				skirt_pierce_peak = maxf(skirt_pierce_peak,push_off(between,thigh_world[leg],thigh_world[leg+1],THIGH_RADIUS).length())
+				skirt_pierce_peak = maxf(skirt_pierce_peak,push_off(between,thigh_world[leg+1],thigh_world[leg+2],SHIN_RADIUS).length())
 	for i in count:
 		aim_bone(skirt_bones[i],to_local(pivots[i]),to_local(skirt_tips[i]))
 
