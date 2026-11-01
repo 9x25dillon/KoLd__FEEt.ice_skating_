@@ -9,6 +9,7 @@ const Broadcast = preload("res://scripts/broadcast.gd")
 # points at by bone name, so any entry here just needs to answer to the same
 # eleven bones (see tools/build_skater.py and tools/build_berserker.py).
 const CHARACTERS: Array[Dictionary] = [
+	{"name": "Athlete", "path": "res://assets/generated/skater-athlete.glb"},
 	{"name": "Competition athlete", "path": "res://assets/generated/skater-competition.glb"},
 	{"name": "Black Berserker", "path": "res://assets/generated/skater-berserker.glb"},
 	{"name": "Original Violet", "path": "res://assets/generated/skater.glb"},
@@ -113,7 +114,7 @@ func _ready() -> void:
 	skater.model_path = CHARACTERS[character].path
 	add_child(skater)
 	partner = Skater.new()
-	partner.model_path = CHARACTERS[1].path
+	partner.model_path = CHARACTERS[2].path
 	partner.visible = false
 	add_child(partner)
 	camera = Camera3D.new()
@@ -154,6 +155,10 @@ func label(text: String, size: int, color: Color = Color("e6edef")) -> Label:
 	l.text = text
 	l.add_theme_font_size_override("font_size",size)
 	l.add_theme_color_override("font_color",color)
+	# Bright ice runs behind much of this type.
+	l.add_theme_color_override("font_shadow_color",Color(.02,.05,.09,.85))
+	l.add_theme_constant_override("shadow_offset_x",1)
+	l.add_theme_constant_override("shadow_offset_y",1)
 	return l
 
 func paragraph(text: String, size: int = 16) -> Label:
@@ -368,6 +373,16 @@ func show_page(page: String) -> void:
 				event_button.disabled = i > int(frame.career.unlocked)
 				menu.add_child(event_button)
 				menu.add_child(paragraph("%ds · %s" % [int(event.seconds),routine_names(event.routine)],12))
+			menu.add_child(HSeparator.new())
+			menu.add_child(label("Your arms",21))
+			menu.add_child(paragraph("What your arms do most in competition. Drills shrink the trade-off for the tier you drill. Other modes need no choice: full balance, full line.",13))
+			for i in catalog.armFocus.size():
+				var tier: Dictionary = catalog.armFocus[i]
+				var chosen: bool = i == int(frame.career.armFocus)
+				menu.add_child(button("%s%s   /   drill best %d" % ["● " if chosen else "",tier.title,int(frame.career.armBest[i])],func():link.send("armFocus",{"focus":i}),chosen))
+				menu.add_child(paragraph(str(tier.blurb),12))
+			var drill_tier := str(catalog.armFocus[int(frame.career.armFocus)].title)
+			menu.add_child(button("Drill %s   /   45 seconds" % drill_tier,func():start_game("armdrill")))
 			menu.add_child(HSeparator.new())
 			menu.add_child(label("Training",21))
 			for stat in ["strength","spring","edgeControl","balance"]:
@@ -605,7 +620,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		notice.text = "Saved: "+str(data.path)
 		return
 	frame = data
-	if op == "train":
+	if op == "train" or op == "armFocus":
 		show_page("career")
 		return
 	if op == "configure":
@@ -723,6 +738,10 @@ func update_hud() -> void:
 			coach_progress.text = "%02d / %02d    ·    %s" % [int(r.index)+1,r.sequence.size(),r.title]
 			if float(element.duration)>0:
 				coach_progress.text += "\nHold %.1f / %.1f s" % [float(r.held),float(element.duration)]
+	elif frame.mode == "armdrill" and frame.get("drill") != null:
+		coach_title.text = str(frame.drill.title)
+		coach_tip.text = str(frame.drill.hint)
+		coach_progress.text = "%d s left    ·    %d / 100" % [ceili(float(frame.drill.seconds)),int(frame.drill.score)]
 	elif frame.mode == "rookie":
 		coach_title.text = frame.rookie.title
 		coach_tip.text = frame.rookie.hint
@@ -1049,6 +1068,7 @@ func update_camera(dt: float) -> void:
 	camera.position = camera.position.lerp(desired,1-exp(-dt*3.0))
 	camera.fov = lerpf(camera.fov,fov,1-exp(-dt*2.5))
 	camera.look_at(look)
+	arena.update_mirror(camera)
 
 func fill_audio() -> void:
 	if generator == null:

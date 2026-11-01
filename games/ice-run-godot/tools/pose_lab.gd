@@ -38,7 +38,7 @@ func _initialize() -> void:
 	clip = JSON.parse_string(FileAccess.get_file_as_string(args.clip))
 	skater = Node3D.new()
 	skater.set_script(load(args.get("skater","res://scripts/skater.gd")))
-	skater.model_path = "res://assets/generated/skater-competition.glb"
+	skater.model_path = args.get("model","res://assets/generated/skater-athlete.glb")
 	root.add_child(skater)
 	if args.has("shots") or args.has("movie"):
 		arena = Arena.new()
@@ -81,7 +81,9 @@ func _process(_delta: float) -> bool:
 	var next := mini(delivered+ARRIVALS[render%ARRIVALS.size()],clip.frames.size()-1) if delivered>=0 else 0
 	if next != delivered:
 		delivered = next
-		skater.apply_frame(clip.frames[delivered])
+		var shown: Dictionary = clip.frames[delivered]
+		if args.has("arm-style"): shown["armStyle"] = float(args["arm-style"])
+		skater.apply_frame(shown)
 	skater._process(DT)
 	measure(clip.frames[ideal].state,clip.frames[delivered].state)
 	render += 1
@@ -97,6 +99,7 @@ func frame_camera(s: Dictionary) -> void:
 	var focus := skater.position+Vector3(0,.72,0)
 	camera.position = camera.position.lerp(focus-follow*3.3+Vector3(0,.3,0),1-exp(-DT*10)) if render>1 else focus-follow*3.3+Vector3(0,.3,0)
 	camera.look_at(focus)
+	if not args.has("no-mirror"): arena.update_mirror(camera)
 	var pieces := []
 	while last_trace+4<=delivered:
 		last_trace += 4
@@ -127,7 +130,7 @@ func measure(now: Dictionary, s: Dictionary) -> void:
 	var hips := (joint("ThighL")+joint("ThighR"))*.5
 	var grounded: bool = int(s.jump.phase)!=2 and not bool(s.fallen) and int(s.move)!=3 and int(s.move)!=5
 	if grounded:
-		add("hip_m",hips.y-(float(s.comZ)-.06))
+		add("hip_m",hips.y-(float(s.comZ)-float(skater.get("com_above_hip") if "com_above_hip" in skater else .06)))
 		var left := direction(-float(s.heading.y),float(s.heading.x))
 		var axis := joint("Head")-hips
 		add("lean_deg",rad_to_deg(atan2(axis.dot(left),axis.y)-float(s.lean)))
@@ -146,7 +149,8 @@ func measure(now: Dictionary, s: Dictionary) -> void:
 			var blade_left := direction(-float(blade.tangent.y),float(blade.tangent.x))
 			add("roll_deg",rad_to_deg(atan2(up.dot(blade_left),up.dot(Vector3.UP))-float(blade.tilt)))
 			var c := point(now.blade[i].contact)
-			var horizontal := Vector2(ankle.x-up.x*.105,ankle.z-up.z*.105)
+			var lift := float(skater.ankle_height) if "ankle_height" in skater else .105
+			var horizontal := Vector2(ankle.x-up.x*lift,ankle.z-up.z*lift)
 			var track := direction(float(blade.tangent.x),float(blade.tangent.y))
 			var off := Vector3(horizontal.x-c.x,0,horizontal.y-c.z)
 			add("foot_along_line_m",off.dot(track))

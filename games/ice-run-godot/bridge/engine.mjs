@@ -16,6 +16,7 @@ import {gameInput,GAME_PARAMS} from '../runtime/game/controls.js';
 import {defaultControllerProfile,parseControllerProfile,validHardware,ACTIONS,BUTTON_NAMES,TUNING,bindingLabel} from '../runtime/game/full-controls.js';
 import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
 import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS} from '../runtime/game/career.js';
+import {ARM_FOCUS,ArmDrill,armParams,armExpression} from '../runtime/game/armfocus.js';
 import {Practice,LESSONS} from '../runtime/game/practice.js';
 import {IceRun,LIGHTS} from '../runtime/game/run.js';
 import {RookieCourse,ROOKIE_GATES} from '../runtime/game/rookie.js';
@@ -39,10 +40,10 @@ export class IceEngine {
   this.profile=0; this.cruise=true; this.sequence=['glide','edge','jump','spin','pose'];
   this.start({mode:'free'});
  }
- catalog() {return {setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,flakes:SNOWFLAKES,targets:TARGETS};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
-  if(!['free','career','rookie','timed','composer','pairs'].includes(mode)) throw Error('Unknown skating mode');
+  if(!['free','career','rookie','timed','composer','pairs','armdrill'].includes(mode)) throw Error('Unknown skating mode');
   if(options.pairsChallenge!==undefined&&typeof options.pairsChallenge!=='boolean')throw Error('Invalid pairs challenge');
   const index=options.event??this.event??0;
   if(mode==='career'&&(!Number.isInteger(index)||index<0||index>this.career.unlocked)) throw Error('Complete the previous career event first');
@@ -52,6 +53,10 @@ export class IceEngine {
   }
   this.mode=mode;this.event=index;
   this.state=createState(this.params=applyProfile(this.setup?setupParams(this.setup,this.assistance):this.beginner?BEGINNER_PARAMS:GAME_PARAMS,mode==='career'?this.career.profile:SAMPLE_PROFILES[this.profile]),4.5);
+  // Only career trades balance for line; every other mode has both at once.
+  const armed=mode==='career'||mode==='armdrill',focus=this.career.armFocus;
+  if(armed)this.params=armParams(this.params,focus,this.career.armBest[focus]);
+  this.drill=mode==='armdrill'?new ArmDrill(focus):null;this.armStyle=armed?ARM_FOCUS[focus].style:1;
   const t=tracks[this.track]; Object.assign(this.params,{musicBpm:t.bpm,musicOffset:t.offset,musicBeatsPerBar:t.beatsPerBar,musicBarsPerPhrase:t.barsPerPhrase});
   this.state=createState(this.params,4.5);
   this.pairs=mode==='pairs'?new PairsSession(this.state,this.params,options.pairsChallenge??false):null;
@@ -59,6 +64,7 @@ export class IceEngine {
   this.ice=new IceGrid(this.params.rinkHalfLength,this.params.rinkHalfWidth);
   this.steering=newSchemeState();this.coach=new BeginnerCoach();this.practice=new Practice();this.run=new IceRun();this.rookie=new RookieCourse();this.playground=new Playground();
   this.routine=mode==='career'?new Choreography(CAREER_EVENTS[index],tables,spinThresholds,stepThresholds,segmentRules,this.ice):mode==='composer'?new Choreography({id:'authored',title:'Your signature program',venue:'Composer rehearsal',seconds:180,routine:this.sequence,discipline:'women',segment:'free'},tables,spinThresholds,stepThresholds,segmentRules,this.ice):null;
+  if(mode==='career')this.routine.armExpression=armExpression(focus,this.career.armBest[focus]);
   this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
   // The live free-skate readout game/main.ts already has (frame.technical above is its jump half) —
   // sample every tick a spin is live, score the moment it ends. -1 means no spin has finished yet;
@@ -133,6 +139,7 @@ export class IceEngine {
   }
   this.practice.sample(this.state,this.low,SIM_DT);
   if(this.mode==='rookie')this.rookie.sample(this.state,SIM_DT);
+  if(this.drill&&!this.drill.done)this.drill.sample(this.state,input,SIM_DT);
   if(this.mode==='timed')this.run.sample(this.state,SIM_DT);
   // Free Skate stays quiet per the bible. The original playground remains available in runtime.
   if(this.state.landed.tick>=0&&this.scoredTick!==this.state.landed.tick){this.scoredTick=this.state.landed.tick;this.technical+=scoreJump(tables,this.state.landed)?.score??0;}
@@ -153,6 +160,7 @@ export class IceEngine {
    // prose or recalculating scores. Null PCS remains distinguishable from zero.
    const protocol=r.sheet?{lines:r.sheet.lines,tes:r.technicalScore,pcs:r.pcsScore?.total??null,deductions:r.deductions,total:r.segmentScore}:null;
    this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls`,protocol,xp,complete:r.complete};
+  } else if(this.drill?.done&&!this.finished){const gained=this.career.recordDrill(this.drill.focus,this.drill.score);this.finished=true;this.result={title:`${ARM_FOCUS[this.drill.focus].title} drill: ${this.drill.score} / 100`,detail:gained>0?`A new best, up ${gained}. Your arms give up less for ${ARM_FOCUS[this.drill.focus].title} now.`:`Your best stays ${this.career.armBest[this.drill.focus]}.`,complete:true};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
  }
  replay(json){
@@ -166,6 +174,7 @@ export class IceEngine {
   return this.snapshot();
  }
  exportReplay(){return this.pairs?JSON.stringify({format:'edgework-pairs/1',challenge:this.pairs.challenge,solo:JSON.parse(this.recorder.toJson()),partners:this.pairFrames}):this.recorder.toJson();}
+ setArmFocus(focus){if(![0,1,2].includes(focus))throw Error('Unknown arm focus');this.career.armFocus=focus;}
  train(stat){if(!['strength','spring','edgeControl','balance'].includes(stat))throw Error('Unknown training skill');this.career.train(stat);}
  snapshot() {
   const s=this.state,r=this.routine;
@@ -180,8 +189,9 @@ export class IceEngine {
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    routine:r?{title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal,pcsScore:r.pcsScore}:null,
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},
+   armStyle:this.armStyle,drill:this.drill?{title:this.drill.title,hint:this.drill.hint,seconds:this.drill.seconds,score:this.drill.score,focus:this.drill.focus}:null,
    rookie:{index:this.rookie.index,cleared:this.rookie.cleared,title:this.rookie.title,hint:this.rookie.hint,target:this.rookie.target},
    run:{seconds:this.run.seconds,score:this.run.score,collected:this.run.collected,target:this.run.target},
-   career:{medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
+   career:{armFocus:this.career.armFocus,armBest:this.career.armBest,medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
  }
 }

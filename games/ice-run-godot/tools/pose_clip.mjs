@@ -12,7 +12,7 @@ e.state=createState(e.params,6);
 e.state.pos.y=18;
 const pick=b=>({contact:b.contact,tangent:b.tangent,tilt:b.tilt,weight:b.weight,normalLoad:b.normalLoad,inContact:b.inContact,latSlipAccel:b.latSlipAccel,longSpeed:b.longSpeed,demandRatio:b.demandRatio});
 const frames=[],marks=[];
-const record=()=>{const s=e.state;frames.push({low:false,state:{tick:s.tick,pos:s.pos,vel:s.vel,heading:s.heading,yawRate:s.yawRate,lean:s.lean,comZ:s.comZ,knee:s.knee,intAccel:s.intAccel,strokeTime:s.strokeTime,strokeFoot:s.strokeFoot,twist:s.twist,freeSwing:s.freeSwing,fallen:s.fallen,move:s.move,supportMode:s.supportMode,supportFoot:s.supportFoot,jump:{phase:s.jump.phase,z:s.jump.z,vz:s.jump.vz,rotation:s.jump.rotation,inertia:s.jump.inertia},spin:{position:s.spin.position,inertia:s.spin.inertia},blade:s.blade.map(pick)}});};
+const record=()=>{const s=e.state;frames.push({low:false,state:{tick:s.tick,pos:s.pos,vel:s.vel,heading:s.heading,yawRate:s.yawRate,lean:s.lean,comZ:s.comZ,knee:s.knee,intAccel:s.intAccel,balanceError:s.balanceError,strokeTime:s.strokeTime,strokeFoot:s.strokeFoot,twist:s.twist,freeSwing:s.freeSwing,fallen:s.fallen,move:s.move,supportMode:s.supportMode,supportFoot:s.supportFoot,jump:{phase:s.jump.phase,z:s.jump.z,vz:s.jump.vz,rotation:s.jump.rotation,inertia:s.jump.inertia},spin:{position:s.spin.position,inertia:s.spin.inertia},blade:s.blade.map(pick)}});};
 const run=(name,ticks,input)=>{marks.push({name,tick:frames.length});for(let i=0;i<ticks;i++){e.tick({...NEUTRAL_INPUT,...input(i)});record();}};
 run('two-foot glide',120,()=>({lean:0,weight:.5,knee:.35}));
 run('left outside edge',240,()=>({lean:.32,weight:0,knee:.6}));

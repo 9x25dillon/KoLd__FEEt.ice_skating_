@@ -1,6 +1,13 @@
 extends Node3D
 const SimSpace = preload("res://scripts/sim_space.gd")
 var trace_mesh: MultiMesh
+var ice_material: ShaderMaterial
+var arena_environment: Environment
+# A second, smaller view of the skaters alone, from the camera's mirror image
+# under the ice. The ice shader lays it over itself by its own fresnel.
+const MIRROR_LAYER := 4
+var mirror_view: SubViewport
+var mirror_camera: Camera3D
 var trace_count := 0
 var previous: Array = [null, null]
 var markers: Node3D
@@ -50,6 +57,27 @@ func sign_text(text: String, pos: Vector3, scale_factor: float, color: Color, ya
 	add_child(sign)
 	return sign
 
+func crowd(transforms: Array[Transform3D], colors: Array[Color], skins: Array[Color]) -> void:
+	var batch := MultiMesh.new()
+	batch.transform_format = MultiMesh.TRANSFORM_3D
+	batch.use_colors = true
+	batch.use_custom_data = true
+	var scene: Node = load("res://assets/generated/spectator.glb").instantiate()
+	batch.mesh = scene.find_children("*","MeshInstance3D",true,false)[0].mesh
+	scene.free()
+	batch.instance_count = transforms.size()
+	for i in transforms.size():
+		batch.set_instance_transform(i,transforms[i])
+		batch.set_instance_color(i,colors[i])
+		batch.set_instance_custom_data(i,skins[i])
+	var node := MultiMeshInstance3D.new()
+	node.multimesh = batch
+	var material := ShaderMaterial.new()
+	material.shader = load("res://shaders/crowd.gdshader")
+	node.material_override = material
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
+
 func instances(mesh: Mesh, transforms: Array[Transform3D], colors: Array[Color], material: Material) -> void:
 	var batch := MultiMesh.new()
 	batch.transform_format = MultiMesh.TRANSFORM_3D
@@ -73,9 +101,28 @@ func _ready() -> void:
 	env.background_color = Color("101724")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color("bacddd")
-	env.ambient_light_energy = .48
+	env.ambient_light_energy = .22
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.15
+	env.tonemap_white = 3.2
+	env.tonemap_exposure = 1.08
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 1.18
+	env.adjustment_contrast = 1.06
+	env.glow_enabled = true
+	env.glow_intensity = .35
+	env.glow_bloom = .02
+	env.glow_hdr_threshold = 1.1
+	env.ssao_enabled = true
+	env.ssao_radius = 1.2
+	env.ssao_intensity = 1.6
+	env.ssil_enabled = true
+	env.ssil_intensity = .7
+	env.volumetric_fog_enabled = true
+	env.volumetric_fog_density = .0006
+	env.volumetric_fog_albedo = Color("c8d8e8")
+	env.volumetric_fog_anisotropy = .35
+	env.volumetric_fog_length = 90
+	arena_environment = env
 	env.fog_enabled = true
 	env.fog_light_color = Color("34465b")
 	env.fog_density = .0018
@@ -88,6 +135,7 @@ func _ready() -> void:
 	var ice_mat := ShaderMaterial.new()
 	ice_mat.shader = load("res://shaders/ice.gdshader")
 	ice.material_override = ice_mat
+	ice_material = ice_mat
 	add_child(ice)
 	var dark := mat(Color("131e2b"),.25,.6)
 	var concrete := mat(Color("273644"),0,.88)
@@ -110,11 +158,8 @@ func _ready() -> void:
 	var seats: Array[Transform3D] = []
 	var seat_colors: Array[Color] = []
 	var bodies: Array[Transform3D] = []
+	var skins: Array[Color] = []
 	var body_colors: Array[Color] = []
-	var heads: Array[Transform3D] = []
-	var head_colors: Array[Color] = []
-	var arms: Array[Transform3D] = []
-	var arm_colors: Array[Color] = []
 	var coats := [Color("35475e"),Color("5f5064"),Color("939495"),Color("9e7465"),Color("233342"),Color("4d6670")]
 	for side in 4:
 		var angle := float(side)*PI*.5
@@ -129,18 +174,15 @@ func _ready() -> void:
 				var x := -33.0+float(seat)*1.15
 				var pos := basis*Vector3(x,height+.5,depth)
 				seats.append(Transform3D(basis,pos))
-				seat_colors.append(Color("243c55") if row%3 else Color("34516b"))
+				seat_colors.append(Color("14233a") if row%3 else Color("1a2e47"))
 				if audience_rng.randf()>.22:
-					var sway := audience_rng.randf_range(-.12,.12)
-					var body_pos := basis*Vector3(x+sway,height+.69,depth-.26)
-					bodies.append(Transform3D(basis.scaled(Vector3(1,audience_rng.randf_range(.85,1.15),1)),body_pos))
-					var coat: Color = coats[audience_rng.randi()%coats.size()].darkened(.32)
-					body_colors.append(coat)
-					for arm_side in [-1,1]:
-						arms.append(Transform3D(basis.rotated(basis.z,arm_side*.22),body_pos+basis*Vector3(arm_side*.19,-.06,0)))
-						arm_colors.append(coat)
-					heads.append(Transform3D(basis,body_pos+Vector3(0,.44,0)))
-					head_colors.append(Color("b78e76").lerp(Color("654d40"),audience_rng.randf()).darkened(.22))
+					var sway := audience_rng.randf_range(-.1,.1)
+					var size := audience_rng.randf_range(.92,1.08)
+					# The model faces away from its stand's outward axis: toward the ice.
+					var facing := basis*Basis(Vector3.UP,PI+audience_rng.randf_range(-.28,.28))
+					bodies.append(Transform3D(facing.scaled(Vector3.ONE*size),basis*Vector3(x+sway,height+.2,depth-.2)))
+					body_colors.append(coats[audience_rng.randi()%coats.size()].darkened(.42))
+					skins.append(Color("a07c66").lerp(Color("4a362b"),audience_rng.randf()))
 		var back := box(Vector3(91,12,.5),basis*Vector3(0,8,45),dark)
 		back.rotation.y = angle
 		var fascia := box(Vector3(72,1.4,.3),basis*Vector3(0,8.2,43),rail)
@@ -162,24 +204,7 @@ func _ready() -> void:
 	var vertex_mat := mat(Color.WHITE,0,.85)
 	vertex_mat.vertex_color_use_as_albedo = true
 	instances(seat_mesh,seats,seat_colors,vertex_mat)
-	var body_mesh := CapsuleMesh.new()
-	body_mesh.radius = .19
-	body_mesh.height = .66
-	body_mesh.radial_segments = 8
-	body_mesh.rings = 3
-	instances(body_mesh,bodies,body_colors,vertex_mat)
-	var arm_mesh := CapsuleMesh.new()
-	arm_mesh.radius = .065
-	arm_mesh.height = .48
-	arm_mesh.radial_segments = 6
-	arm_mesh.rings = 2
-	instances(arm_mesh,arms,arm_colors,vertex_mat)
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = .115
-	head_mesh.height = .25
-	head_mesh.radial_segments = 8
-	head_mesh.rings = 4
-	instances(head_mesh,heads,head_colors,vertex_mat)
+	crowd(bodies,body_colors,skins)
 	# Triangulated roof trusses and banks of luminaires.
 	for z in [-32,-16,0,16,32]:
 		beam(Vector3(-43,16,z),Vector3(43,16,z),.14,rail)
@@ -200,7 +225,7 @@ func _ready() -> void:
 		var sign := sign_text("EDGEWORK\nGRAND PRIX  /  01",Vector3(0,11.5,0)+basis*Vector3(0,0,3.17),.011,Color("dbecf6"),angle)
 		if side==0: scoreboard=sign
 		beam(Vector3(-2+side%2*4,13, -2+side/2*4),Vector3(-2+side%2*4,20,-2+side/2*4),.045,gold)
-	for setup in [[Vector3(-68,-32,0),Color("e5efff"),1.25],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
+	for setup in [[Vector3(-68,-32,0),Color("e5efff"),1.05],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
 		var light := DirectionalLight3D.new()
 		light.rotation_degrees = setup[0]
 		light.light_color = setup[1]
@@ -210,6 +235,20 @@ func _ready() -> void:
 		light.shadow_bias = .035
 		light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 		add_child(light)
+	# Rows of roof fixtures: what lights a real rink, and what the haze catches.
+	for row in range(-2,3):
+		for column in range(-2,3):
+			var fixture := SpotLight3D.new()
+			fixture.position = Vector3(column*12,14.5,row*11)
+			fixture.rotation_degrees = Vector3(-90,0,0)
+			fixture.spot_range = 24
+			fixture.spot_angle = 42
+			fixture.spot_attenuation = .9
+			fixture.light_color = Color("eaf2ff")
+			fixture.light_energy = .75
+			fixture.light_volumetric_fog_energy = 1.2
+			fixture.light_specular = .9
+			add_child(fixture)
 	var probe := ReflectionProbe.new()
 	probe.position = Vector3(0,4,0)
 	probe.size = Vector3(94,40,94)
@@ -226,7 +265,7 @@ func _ready() -> void:
 	trace_mesh.instance_count = CAPACITY
 	trace_mesh.visible_instance_count = 0
 	trace_node.multimesh = trace_mesh
-	trace_node.material_override = mat(Color("a6bfcb"),.12,.42)
+	trace_node.material_override = mat(Color("c9dbe3"),0,.55)
 	trace_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(trace_node)
 	markers = Node3D.new()
@@ -246,6 +285,40 @@ func clear_traces() -> void:
 	trace_mesh.visible_instance_count = 0
 	previous = [null,null]
 
+func add_mirror() -> void:
+	mirror_view = SubViewport.new()
+	mirror_view.size = Vector2i(640,360)
+	mirror_view.transparent_bg = true
+	mirror_view.msaa_3d = Viewport.MSAA_DISABLED
+	mirror_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	mirror_view.world_3d = get_world_3d()
+	add_child(mirror_view)
+	mirror_camera = Camera3D.new()
+	mirror_camera.cull_mask = MIRROR_LAYER
+	# Only the skater is in this view, and it is small and soft: no screen effects.
+	var plain := arena_environment.duplicate() as Environment
+	plain.ssao_enabled = false
+	plain.ssil_enabled = false
+	plain.volumetric_fog_enabled = false
+	plain.glow_enabled = false
+	mirror_camera.environment = plain
+	mirror_view.add_child(mirror_camera)
+	ice_material.set_shader_parameter("mirror",mirror_view.get_texture())
+	ice_material.set_shader_parameter("mirror_strength",1.0)
+
+func update_mirror(camera: Camera3D) -> void:
+	if mirror_camera == null:
+		add_mirror()
+	var eye := camera.global_position
+	var forward := -camera.global_basis.z
+	mirror_camera.global_position = Vector3(eye.x,-eye.y,eye.z)
+	mirror_camera.look_at(mirror_camera.global_position+Vector3(forward.x,-forward.y,forward.z))
+	mirror_camera.fov = camera.fov
+	mirror_camera.near = camera.near
+	mirror_camera.far = camera.far
+	var window := camera.get_viewport().get_visible_rect().size
+	mirror_view.size = Vector2i(640,maxi(1,int(640.0*window.y/window.x)))
+
 func add_traces(frames: Array) -> void:
 	for pair in frames:
 		for i in range(2):
@@ -255,8 +328,8 @@ func add_traces(frames: Array) -> void:
 				var delta: Vector3 = point-previous[i]
 				var length := delta.length()
 				if length > .015 and length < 1.5:
-					var transform := Transform3D(Basis(Vector3.UP,atan2(delta.x,delta.z)),(point+previous[i])*.5)
-					transform.basis = transform.basis.scaled(Vector3(1,1,length))
+					# Stretched along the groove's own length, then turned onto its heading.
+					var transform := Transform3D(Basis(Vector3.UP,atan2(delta.x,delta.z))*Basis.from_scale(Vector3(1,1,length)),(point+previous[i])*.5)
 					trace_mesh.set_instance_transform(trace_count % CAPACITY,transform)
 					trace_count += 1
 					trace_mesh.visible_instance_count = mini(trace_count,CAPACITY)

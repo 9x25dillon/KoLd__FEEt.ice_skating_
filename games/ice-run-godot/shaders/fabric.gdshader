@@ -14,7 +14,8 @@ void vertex() {
  }
 }
 void fragment() {
- float weave=sin(fabric_pos.x*1900.0)*sin(fabric_pos.y*1900.0);
+ // The weave fades out before it is finer than a pixel, or it shimmers into stripes.
+ float weave=sin(fabric_pos.x*1900.0)*sin(fabric_pos.y*1900.0)*(1.0-smoothstep(.0002,.001,fwidth(fabric_pos.x)+fwidth(fabric_pos.y)));
  ALBEDO=tint.rgb*(.98+weave*.02);
  METALLIC=is_sleeve ? .0 : .12;
  ROUGHNESS=(is_sleeve ? .64 : .34)+weave*.035;
