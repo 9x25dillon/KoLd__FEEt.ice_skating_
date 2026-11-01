@@ -48,6 +48,9 @@ var upper_high := -INF
 var skirt_worst := 0.0
 var skirt_reach := 0.0
 var skirt_rest := []
+var blink_frames := []
+var gpu_total := 0.0
+var gpu_frames := 0
 
 func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
@@ -102,6 +105,7 @@ func _process(_delta: float) -> bool:
 	if skeleton == null:
 		# Ready has just switched processing on; the lab alone steps the skater.
 		skater.set_process(false)
+		skater.face_rng.seed = 1 # the same blinks each run, so runs compare
 		skeleton = skater.skeleton
 		if clip.has("skin") and not args.has("no-costume"): skater.apply_skin(clip.skin)
 		skater.apply_frame(clip.frames[0],true)
@@ -118,9 +122,20 @@ func _process(_delta: float) -> bool:
 	# --steps=4 stands in for a display four times as fast: 240 Hz.
 	var steps := int(args.get("steps",1))
 	for _i in steps: skater._process(DT/steps)
+	if skater.blinks>blink_frames.size(): blink_frames.append(render)
+	# --gaze=x,y (rad, x toward positive head_turn, y up) and --lid=0..1 hold the face still.
+	if args.has("gaze") or args.has("lid"):
+		var held := str(args.get("gaze","0,0")).split(",")
+		skater.pose_face(Vector2(float(held[0]),float(held[1])),float(args.get("lid",0)))
 	measure(clip.frames[ideal].state,clip.frames[delivered].state)
 	render += 1
 	if camera: frame_camera(clip.frames[ideal].state)
+	if args.has("gpu-time"):
+		RenderingServer.viewport_set_measure_render_time(root.get_viewport_rid(),true)
+		# The first second is shaders compiling, not the cost of a frame.
+		if render>60:
+			gpu_total += RenderingServer.viewport_get_measured_render_time_gpu(root.get_viewport_rid())
+			gpu_frames += 1
 	if ideal in shots:
 		shoot(ideal)
 	return false
@@ -163,6 +178,15 @@ func frame_camera(s: Dictionary) -> void:
 		camera.position = skater.position+ahead*float(args.get("near",1.05))+Vector3(0,1.32,0)
 		camera.fov = 36
 		camera.look_at(skater.position+Vector3(0,float(args.get("aim",1.25)),0))
+	elif view == "eyes":
+		# Locked to the head bone: the face fills the frame whatever the body is doing.
+		var head_id := skeleton.find_bone("Head")
+		var head_now := skeleton.global_transform*skeleton.get_bone_global_pose(head_id)*skeleton.get_bone_global_rest(head_id).inverse()
+		var between := head_now*Vector3(0,1.558,.1127)
+		var outward := (head_now.basis*Vector3(0,0,1)).normalized().rotated(Vector3.UP,float(args.get("around",0)))
+		camera.position = between+outward*float(args.get("near",.22))
+		camera.fov = 28
+		camera.look_at(between)
 	elif view == "stands":
 		camera.position = Vector3(-4,1.6,25)
 		camera.fov = 40
@@ -323,6 +347,17 @@ func report() -> void:
 			printerr("POSE_LAB_FAIL the arm on the shoulder leading the spin must open first")
 			quit(1)
 			return
+	if skater.lid_shape>=0:
+		var seconds := render*DT
+		result["blinks_per_minute"] = snappedf(skater.blinks*60.0/seconds,.1)
+		result["eye_lead_peak_deg"] = snappedf(rad_to_deg(skater.eye_lead_peak),.1)
+		result["blink_frames"] = blink_frames
+		# People blink some 6 to 30 times a minute; outside that the timer or reflex is wrong.
+		if args.has("check") and not (6.0<=float(result["blinks_per_minute"]) and float(result["blinks_per_minute"])<=30.0):
+			printerr("POSE_LAB_FAIL blinks_per_minute ",result["blinks_per_minute"])
+			quit(1)
+			return
+	if gpu_frames>0: result["gpu_ms_per_frame"] = snappedf(gpu_total/gpu_frames,.01)
 	print("POSE_LAB ",JSON.stringify(result))
 	if args.has("check"):
 		for name in LIMITS:

@@ -114,6 +114,32 @@ var contact_slide: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
 var free_feet: Array[Vector3] = [Vector3(-.15,.16,.22),Vector3(.15,.16,.22)]
 var arm_targets: Array[Vector3] = [Vector3(-.25,-.14,-.05),Vector3(-.43,-.19,-.12),Vector3(.25,-.14,-.05),Vector3(.43,-.19,-.12)]
 var effects_active := true
+# The face. Eyes reach a new target first and the head catches up, so how far they lead
+# comes from the head's own lag. Fixations and blink timing are presentation, not sim.
+const EYE_DOME := .0156 # m, the eye's radius in build_athlete.py
+const IRIS_UV_PER_M := .42/.0062 # the iris's scale on the dome, also from the builder
+const EYE_TURN_MAX := .3 # rad, about 17 degrees before the iris crowds the eye's corner
+const EYE_DROP_MAX := .2
+const EYE_SPEED := 8.0 # rad/s, a saccade
+const EYE_DROP_PER_HEAD := .33 # rad of gaze for head_down's whole range
+const SACCADE_BLINK := .2 # rad; large gaze shifts tend to bring a blink with them
+const BLINK_CLOSE := .07
+const BLINK_HOLD := .03
+const BLINK_OPEN := .16
+const BLINK_REST := 1.5 # s; a run of gaze shifts must not make her flutter
+var eye_material: ShaderMaterial
+var lid_mesh: MeshInstance3D
+var lid_shape := -1
+var face_rng := RandomNumberGenerator.new()
+var eye_gaze := Vector2.ZERO # rad: x toward positive head_turn, y up
+var eye_fixation := Vector2.ZERO
+var fixation_left := 0.0
+var blink_wait := 2.0
+var blink_age := -1.0
+var since_blink := BLINK_REST
+var blinks := 0
+var eye_lead_peak := 0.0
+var face_was_airborne := false
 var cloth_materials: Array[ShaderMaterial] = []
 var contact_shadow: MeshInstance3D
 # Pairs: the partner's supported-lift height, presented above the solver's ground plane.
@@ -169,6 +195,9 @@ func load_model(path: String) -> void:
 		model.queue_free()
 		skeleton = null
 		bone_ids.clear()
+		eye_material = null
+		lid_mesh = null
+		lid_shape = -1
 	model_path = path
 	cloth_materials.clear()
 	model = load(model_path).instantiate()
@@ -324,21 +353,34 @@ func apply_skin(next: Dictionary) -> int:
 func recolour(node: Node) -> int:
 	var count := 0
 	if node is MeshInstance3D and node.mesh:
+		if node.find_blend_shape_by_name("Blink") >= 0:
+			lid_mesh = node
+			lid_shape = node.find_blend_shape_by_name("Blink")
 		for i in node.mesh.get_surface_count():
 			var base := node.mesh.surface_get_material(i) as BaseMaterial3D
 			var slot: String = SKIN_SLOTS.get(base.resource_name, "") if base else ""
 			# Painted skin and hair keep their paint; the cards among them cut out by alpha.
 			if base and base.albedo_texture:
-				var painted := base.duplicate() as BaseMaterial3D
 				if base.resource_name == "Eyes":
-					painted.roughness = .08
-					painted.metallic_specular = .6
+					eye_material = ShaderMaterial.new()
+					eye_material.shader = load("res://shaders/eye.gdshader")
+					eye_material.set_shader_parameter("iris",base.albedo_texture)
+					node.set_surface_override_material(i,eye_material)
+					continue
+				var painted := base.duplicate() as BaseMaterial3D
 				if base.resource_name == "Espresso hair":
 					# The paint fades to orange at the tips; the costume's colour settles it.
 					painted.albedo_color = Color.html(str(skin.get("hair","4a3528"))).lerp(Color.WHITE,.42)
-				if base.resource_name in ["Espresso hair","Brow","Lashes"]:
+				if base.resource_name == "Espresso hair":
 					painted.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
 					painted.cull_mode = BaseMaterial3D.CULL_DISABLED
+				elif base.resource_name in ["Brow","Lashes"]:
+					# No depth of their own: it would cut the skin's scattering at the card's edge.
+					painted.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+					painted.cull_mode = BaseMaterial3D.CULL_DISABLED
+					# Fine dark hairs, facing the ice's light: any sheen turns them pale grey.
+					painted.metallic_specular = 0.0
+					painted.roughness = 1.0
 				elif base.resource_name in ["Warm porcelain","Skin-tone tights"]:
 					painted.subsurf_scatter_enabled = true
 					painted.subsurf_scatter_skin_mode = true
@@ -477,6 +519,52 @@ func follow_spin(dt: float, upright: bool, air: bool) -> void:
 	var behind := clampf(SPIN_ARM_TURN/maxf(spin_rate,.1),.04,.35)
 	arm_open[1-leading] = lerpf(arm_open[1-leading],arm_open[leading],1.0-exp(-dt/behind))
 
+func start_blink() -> void:
+	if blink_age < 0.0 and since_blink >= BLINK_REST:
+		blink_age = 0.0
+		since_blink = 0.0
+		blinks += 1
+		blink_wait = face_rng.randf_range(2.2,6.0)
+
+# 0 open, 1 shut: quick to close, slower to open.
+func blink_amount() -> float:
+	if blink_age < 0.0: return 0.0
+	if blink_age < BLINK_CLOSE: return smoothstep(0.0,BLINK_CLOSE,blink_age)
+	if blink_age < BLINK_CLOSE+BLINK_HOLD: return 1.0
+	return 1.0-smoothstep(BLINK_CLOSE+BLINK_HOLD,BLINK_CLOSE+BLINK_HOLD+BLINK_OPEN,blink_age)
+
+func update_face(dt: float, looking: float, eyes_down: float, air: bool) -> void:
+	if eye_material == null and lid_shape < 0: return
+	fixation_left -= dt
+	if fixation_left <= 0.0:
+		eye_fixation = Vector2(face_rng.randf_range(-.07,.07),face_rng.randf_range(-.035,.035))
+		fixation_left = face_rng.randf_range(.7,2.6)
+	var lead := Vector2(looking-head_turn,(head_down-eyes_down)*EYE_DROP_PER_HEAD)
+	eye_lead_peak = maxf(eye_lead_peak,absf(lead.x))
+	var target := lead+eye_fixation
+	target = Vector2(clampf(target.x,-EYE_TURN_MAX,EYE_TURN_MAX),clampf(target.y,-EYE_DROP_MAX,EYE_DROP_MAX))
+	if eye_gaze.distance_to(target) > SACCADE_BLINK: start_blink()
+	eye_gaze = eye_gaze.move_toward(target,EYE_SPEED*dt)
+	# Touching down after a jump brings a reflex blink; otherwise they come every few seconds.
+	if face_was_airborne and not air: start_blink()
+	face_was_airborne = air
+	since_blink += dt
+	blink_wait -= dt
+	if blink_wait <= 0.0: start_blink()
+	if blink_age >= 0.0:
+		blink_age += dt
+		if blink_age > BLINK_CLOSE+BLINK_HOLD+BLINK_OPEN: blink_age = -1.0
+	# The upper lid follows the eye down, resting lower the further down she looks.
+	var lid_rest := clampf(.05-eye_gaze.y*.9+head_down*.15,0.0,.4)
+	pose_face(eye_gaze,maxf(lid_rest,blink_amount()))
+
+func pose_face(gaze: Vector2, lid: float) -> void:
+	if eye_material:
+		var slide := Vector2(-sin(gaze.x),sin(gaze.y))*EYE_DOME*IRIS_UV_PER_M
+		eye_material.set_shader_parameter("gaze",slide)
+	if lid_shape >= 0:
+		lid_mesh.set_blend_shape_value(lid_shape,lid)
+
 func _process(dt: float) -> void:
 	if state.is_empty() or skeleton == null:
 		return
@@ -614,6 +702,7 @@ func _process(dt: float) -> void:
 		looking = clampf(atan2(facing.cross(travel),facing.dot(travel)),-1.25,1.25)-upper_turn
 	head_turn = lerpf(head_turn,looking,1.0-exp(-5.0*dt))
 	head_down = lerpf(head_down,eyes_down,1.0-exp(-4.0*dt))
+	update_face(dt,looking,eyes_down,air)
 	aim_bone("Spine",spine,neck)
 	aim_bone("Head",neck,head+Vector3(0,.17,0)+Vector3(0,0,-GAZE_DOWN*head_down).rotated(Vector3.UP,head_turn+upper_turn))
 	var trunk_tilt := Basis(Quaternion(Vector3.UP,body_axis))
