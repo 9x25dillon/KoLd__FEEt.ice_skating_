@@ -9,7 +9,7 @@ extends SceneTree
 # the marked ticks in --ticks=60,300,...; --write-movie records the whole passage.
 const DT := 1.0/60.0
 const ARRIVALS := [2,0,4,2,1,3,2,2]
-const LIMITS := {"roll_deg":1.0,"foot_off_line_m":.03,"hip_m":.02,"lean_deg":6.0,"crossed_frames":0,"wrong_way_frames":0}
+const LIMITS := {"roll_deg":1.0,"foot_off_line_m":.03,"hip_m":.02,"lean_deg":6.0,"crossed_frames":0,"wrong_way_frames":0,"skirt_reach_m":1.6}
 const Arena = preload("res://scripts/arena.gd")
 var args := {}
 var clip: Dictionary
@@ -30,6 +30,9 @@ var camera: Camera3D
 var follow := Vector3(1,0,0)
 var shots: Array = []
 var last_trace := -1
+var skirt_worst := 0.0
+var skirt_reach := 0.0
+var skirt_rest := []
 
 func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
@@ -96,7 +99,9 @@ func _process(_delta: float) -> bool:
 		var shown: Dictionary = clip.frames[delivered]
 		if args.has("arm-style"): shown["armStyle"] = float(args["arm-style"])
 		skater.apply_frame(shown)
-	skater._process(DT)
+	# --steps=4 stands in for a display four times as fast: 240 Hz.
+	var steps := int(args.get("steps",1))
+	for _i in steps: skater._process(DT/steps)
 	measure(clip.frames[ideal].state,clip.frames[delivered].state)
 	render += 1
 	if camera: frame_camera(clip.frames[ideal].state)
@@ -175,10 +180,22 @@ func measure(now: Dictionary, s: Dictionary) -> void:
 	if not previous_ankles.is_empty():
 		for i in 2: pop = maxf(pop,ankles[i].distance_to(previous_ankles[i]))
 	previous_ankles = ankles
+	if "skirt_tips" in skater and not skater.skirt_tips.is_empty():
+		skirt_worst = maxf(skirt_worst,float(skater.skirt_pushed))
+		for tip in skater.skirt_tips:
+			skirt_reach = maxf(skirt_reach,tip.distance_to(world))
+			if not (tip.x==tip.x and tip.y==tip.y and tip.z==tip.z): skirt_reach = 99.0
+		# How far the settled skirt sits from where it hangs at rest, on a plain two-foot glide.
+		if int(now.supportMode)==2 and int(now.move)==0 and int(now.jump.phase)==0:
+			for i in skater.skirt_tips.size():
+				add("skirt_sag_m",skater.to_local(skater.skirt_tips[i]).distance_to(hips_local()+skater.skirt_rest_tips[i]))
+
+func hips_local() -> Vector3:
+	return skater.to_local((joint("ThighL")+joint("ThighR"))*.5)
 
 func report() -> void:
-	var result := {"frames":render,"samples":samples.get("roll_deg",[]).size(),"two_foot_frames":two_foot,"crossed_frames":crossed,"wrong_way_frames":wrong_way,"max_foot_step_m":snappedf(pop,.001)}
-	for name in ["roll_deg","foot_off_line_m","foot_along_line_m","hip_m","lean_deg","lag_m","jerk"]:
+	var result := {"frames":render,"samples":samples.get("roll_deg",[]).size(),"two_foot_frames":two_foot,"crossed_frames":crossed,"wrong_way_frames":wrong_way,"max_foot_step_m":snappedf(pop,.001),"skirt_leg_push_m":snappedf(skirt_worst,.001),"skirt_reach_m":snappedf(skirt_reach,.01)}
+	for name in ["skirt_sag_m","roll_deg","foot_off_line_m","foot_along_line_m","hip_m","lean_deg","lag_m","jerk"]:
 		result[name] = snappedf(rms(name),.001)
 	print("POSE_LAB ",JSON.stringify(result))
 	if args.has("check"):

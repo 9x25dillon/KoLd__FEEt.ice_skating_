@@ -262,12 +262,13 @@ func _ready() -> void:
 	trace_mesh = MultiMesh.new()
 	trace_mesh.transform_format = MultiMesh.TRANSFORM_3D
 	var groove := PlaneMesh.new()
-	groove.size = Vector2(.024,1)
+	groove.size = Vector2(.011,1)
 	trace_mesh.mesh = groove
 	trace_mesh.instance_count = CAPACITY
 	trace_mesh.visible_instance_count = 0
 	trace_node.multimesh = trace_mesh
-	trace_node.material_override = mat(Color("c9dbe3"),0,.55)
+	# A cut in bright ice reads darker than the ice around it, in shadow along its wall.
+	trace_node.material_override = mat(Color("7f9db0"),0,.6)
 	trace_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(trace_node)
 	markers = Node3D.new()

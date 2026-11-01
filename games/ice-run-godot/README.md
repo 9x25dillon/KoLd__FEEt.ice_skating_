@@ -239,7 +239,9 @@ The default skater is built on MakeHuman's CC0 anatomy and textures (`assets/sou
 licence and sources in its README): `blender --background --python games/ice-run-godot/tools/build_athlete.py`.
 Its dress, sleeves and boots are cut from its own body surface. The crowd is one seated body from the same
 mesh, instanced (`tools/build_spectator.py`, `shaders/crowd.gdshader`). `skater.gd` reads each model's
-proportions from its skeleton, so the three older models still work. Painted skin keeps its paint, so a
+proportions from its skeleton, so the three older models still work. Its skirt is sixteen panels on
+springs, stepped in `swing_skirt`: they swing with the body, flare in a spin and are pushed aside by the legs.
+It is not cloth simulation, and nothing reads it back into the solver. Painted skin keeps its paint, so a
 costume's skin tone does not apply to the athlete.
 
 The game now renders with Forward+ (Vulkan or D3D12), for ambient occlusion, indirect light and haze.

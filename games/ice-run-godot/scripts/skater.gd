@@ -44,6 +44,27 @@ var arm_style := 1.0
 var head_turn := 0.0
 var trunk_offsets: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO,Vector3.ZERO,Vector3.ZERO]
 var foot_on_ice: Array[float] = [1.0,1.0]
+# The skirt: panels hanging from the waist (tools/build_athlete.py), each a tip on
+# a spring toward where it hangs at rest. Presentation only; nothing reads it back.
+const SKIRT_STIFFNESS := 160.0
+const SKIRT_DRAG := .90
+# Its own fixed step: a spring stepped by the display's frame time hangs differently at every frame rate.
+const SKIRT_STEP := 1.0/120.0
+const THIGH_RADIUS := .085
+const SHIN_RADIUS := .055
+var skirt_bones: Array[String] = []
+var skirt_pivots: Array[Vector3] = []
+var skirt_rest_tips: Array[Vector3] = []
+var skirt_tips: Array[Vector3] = []
+var skirt_last: Array[Vector3] = []
+var skirt_gap := 0.0
+var skirt_dirty := true
+var skirt_pushed := 0.0
+var skirt_clock := 0.0
+var skirt_pivots_last: Array[Vector3] = []
+# Metres the hem trails per m/s of travel: air on the cloth, capped.
+const SKIRT_TRAIL := .012
+const SKIRT_TRAIL_MAX := .07
 var last_contacts: Array[Vector3] = []
 var contact_slide: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
 var free_feet: Array[Vector3] = [Vector3(-.15,.16,.22),Vector3(.15,.16,.22)]
@@ -134,6 +155,101 @@ func measure_rig() -> void:
 	upper_arm = at.call("ArmL").distance_to(at.call("ForearmL"))
 	if bone_ids.has("HandL"):
 		forearm = at.call("ForearmL").distance_to(at.call("HandL"))
+	measure_skirt()
+
+func measure_skirt() -> void:
+	skirt_bones.clear()
+	skirt_pivots.clear()
+	skirt_rest_tips.clear()
+	skirt_dirty = true
+	var turned := skeleton.global_basis
+	var hips := skeleton.get_bone_global_rest(bone_ids["Hips"]).origin
+	for bone in bone_ids:
+		if not str(bone).begins_with("Skirt"):
+			continue
+		var rest := skeleton.get_bone_global_rest(bone_ids[bone])
+		skirt_bones.append(bone)
+		skirt_pivots.append(model.transform.basis*(rest.origin-hips))
+		skirt_rest_tips.append(model.transform.basis*(rest.origin+rest.basis.y.normalized()*skirt_length(rest)-hips))
+	if not skirt_bones.is_empty():
+		skirt_gap = skirt_rest_tips[0].distance_to(skirt_rest_tips[1])
+
+# A bone's length is not in a glTF; the builder's panels all hang from the waist
+# to the hem, whose height the rig states through the thigh.
+func skirt_length(rest: Transform3D) -> float:
+	var drop := rest.origin.y-(skeleton.get_bone_global_rest(bone_ids["ThighL"]).origin.y-.205)
+	return drop/maxf(.2,-rest.basis.y.normalized().y)
+
+func push_off(point: Vector3, a: Vector3, b: Vector3, radius: float) -> Vector3:
+	var along := b-a
+	var nearest := a+along*clampf((point-a).dot(along)/along.length_squared(),0,1)
+	var away := point-nearest
+	if away.length()>=radius or away.length()<.0001:
+		return Vector3.ZERO
+	return away.normalized()*(radius-away.length())
+
+func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) -> void:
+	if skirt_bones.is_empty():
+		return
+	var count := skirt_bones.size()
+	var hang := Basis(Quaternion(Vector3.UP,(spine-hip).normalized()))
+	var pivots: Array[Vector3] = []
+	var rests: Array[Vector3] = []
+	for i in count:
+		pivots.append(to_global(hip+hang*skirt_pivots[i]))
+		rests.append(to_global(hip+hang*skirt_rest_tips[i]))
+	if skirt_dirty or skirt_tips.size()!=count or skirt_tips[0].distance_to(rests[0])>1.2:
+		skirt_tips = rests.duplicate()
+		skirt_last = rests.duplicate()
+		skirt_pivots_last = pivots.duplicate()
+		skirt_dirty = false
+	var wind := -SimSpace.direction(state.vel.x,state.vel.y)*SKIRT_TRAIL
+	wind = wind.limit_length(SKIRT_TRAIL_MAX)
+	skirt_pushed = 0.0
+	var step := SKIRT_STEP
+	skirt_clock = minf(skirt_clock+dt,SKIRT_STEP*8)
+	var waiting := floori(skirt_clock/SKIRT_STEP)
+	var thigh_world: Array[Vector3] = []
+	for point in legs: thigh_world.append(to_global(point))
+	while skirt_clock>=SKIRT_STEP:
+		skirt_clock -= SKIRT_STEP
+		for i in count:
+			# Drag acts on how the cloth moves against the skater, not against the ice:
+			# damped against the ice, plain forward speed would blow the skirt out behind.
+			var carried: Vector3 = (pivots[i]-skirt_pivots_last[i])/maxi(1,waiting)
+			var moving: Vector3 = carried+(skirt_tips[i]-skirt_last[i]-carried)*SKIRT_DRAG
+			skirt_last[i] = skirt_tips[i]
+			skirt_tips[i] += moving+(rests[i]+wind-skirt_tips[i])*SKIRT_STIFFNESS*step*step
+		for _relax in 3:
+			# Neighbours stay one cloth; no panel leaves the waist or passes through a leg.
+			for i in count:
+				var next := (i+1)%count
+				var between: Vector3 = skirt_tips[next]-skirt_tips[i]
+				var wanted := clampf(between.length(),skirt_gap*.55,skirt_gap*1.7)
+				if between.length()>.0001:
+					var fix: Vector3 = between.normalized()*(between.length()-wanted)*.5
+					skirt_tips[i] += fix
+					skirt_tips[next] -= fix
+			for i in count:
+				var from: Vector3 = pivots[i]
+				for reach in [.5,.75,1.0]:
+					var at: Vector3 = from.lerp(skirt_tips[i],reach)
+					for leg in range(0,thigh_world.size(),3):
+						var pushed := push_off(at,thigh_world[leg],thigh_world[leg+1],THIGH_RADIUS)+push_off(at,thigh_world[leg+1],thigh_world[leg+2],SHIN_RADIUS)
+						skirt_pushed = maxf(skirt_pushed,pushed.length())
+						# Cloth rides out and over a leg. Pushed straight off it, neighbouring
+						# panels part either side and the thigh shows through the gap.
+						var outward: Vector3 = at-to_global(hip)
+						outward.y = 0
+						skirt_tips[i] += (outward.normalized()*.8+Vector3.UP*.45)*pushed.length()/reach
+				var hanging := (skirt_tips[i]-from).limit_length(rests[i].distance_to(from))
+				# Cloth does not stand above its own waist, however fast the spin.
+				hanging.y = minf(hanging.y,.02)
+				skirt_tips[i] = from+hanging
+	if waiting>0:
+		skirt_pivots_last = pivots.duplicate()
+	for i in count:
+		aim_bone(skirt_bones[i],to_local(pivots[i]),to_local(skirt_tips[i]))
 
 func reflect_in_ice(node: Node) -> void:
 	if node is MeshInstance3D:
@@ -210,6 +326,7 @@ func apply_frame(frame: Dictionary, snap: bool = false) -> void:
 		position = SimSpace.point(state.pos.x,state.pos.y,float(state.jump.z))
 		rotation.y = SimSpace.yaw(state.heading.x,state.heading.y)
 		initialized = true
+		skirt_dirty = true
 
 func aim_bone(name: String, head: Vector3, tail: Vector3) -> void:
 	if not bone_ids.has(name):
@@ -247,7 +364,7 @@ func aim_foot(name: String, ankle: Vector3, toe: Vector3, up: Vector3) -> void:
 	var aimed := bone_frame(to_skeleton*toe,to_skeleton*up)*bone_frame(rest_toe,Vector3.UP).inverse()*rest.basis
 	skeleton.set_bone_global_pose_override(index,Transform3D(aimed,skeleton.to_local(to_global(ankle))),1.0,true)
 
-func plant_leg(suffix: String, hip: Vector3, ankle: Vector3, pole: Vector3) -> void:
+func plant_leg(suffix: String, hip: Vector3, ankle: Vector3, pole: Vector3) -> Vector3:
 	var delta := ankle-hip
 	var reach := clampf(delta.length(),.1,thigh+shin-.001)
 	var direction := delta.normalized()
@@ -256,6 +373,7 @@ func plant_leg(suffix: String, hip: Vector3, ankle: Vector3, pole: Vector3) -> v
 	var knee := hip+direction*along+bend*sqrt(maxf(0,thigh*thigh-along*along))
 	aim_bone("Thigh"+suffix,hip,knee)
 	aim_bone("Shin"+suffix,knee,ankle)
+	return knee
 
 func _process(dt: float) -> void:
 	if state.is_empty() or skeleton == null:
@@ -361,6 +479,7 @@ func _process(dt: float) -> void:
 	aim_bone("Spine",spine,neck)
 	aim_bone("Head",neck,head+Vector3(0,.17,0))
 	var trunk_tilt := Basis(Quaternion(Vector3.UP,body_axis))
+	var legs: Array[Vector3] = []
 	for i in range(2):
 		var suffix := "L" if i == 0 else "R"
 		var side := -1.0 if i == 0 else 1.0
@@ -401,7 +520,8 @@ func _process(dt: float) -> void:
 		# A free foot turns out from the hip.
 		var loose_toe := Vector3(0,0,-1).rotated(Vector3.UP,-side*.6).lerp(toe,planting)
 		var loose_up := Vector3.UP.lerp(blade_up,planting)
-		plant_leg(suffix,h,ankle,Vector3(0,0,-1).lerp(toe,.5*planting))
+		var knee_at := plant_leg(suffix,h,ankle,Vector3(0,0,-1).lerp(toe,.5*planting))
+		legs.append_array([h,knee_at,ankle])
 		aim_foot("Foot"+suffix,ankle,Vector3(loose_toe.x,0,loose_toe.z),loose_up)
 		sprays[i].position = ankle-Vector3(0,.08,0)
 		sprays[i].emitting = effects_active and on_ice and float(blade.latSlipAccel)>.3 and absf(float(blade.longSpeed))>1
@@ -455,3 +575,4 @@ func _process(dt: float) -> void:
 		aim_bone("Arm"+suffix,shoulder,elbow_at)
 		aim_bone("Forearm"+suffix,elbow_at,hand_at)
 	last_contacts = contacts
+	swing_skirt(dt,hip,spine,legs)

@@ -242,6 +242,7 @@ def radial_at(z,theta,band=.018):
  return best
 dress_points=[v.co.copy() for v in dress.data.vertices]
 SEGS,ROWS=144,12
+PANELS=16 # skater.gd swings these: Skirt00.. hang from the waist
 hem_z=hip_l.z-.205
 skirt_v,skirt_f,skirt_w=[],[],[]
 hip_r=[radial_at(hip_l.z-.03,2*math.pi*s/SEGS,.03) or .15 for s in range(SEGS)]
@@ -262,13 +263,20 @@ for layer,(drop,flare) in enumerate(((0,.085),(-.022,.06))):
    r=waist_r[s]+.004+(clear-waist_r[s]-.004)*min(1,t*3)+flare*(t**1.25)+sum(amp*math.sin(a*n+ph+layer) for amp,n,ph in drape)*t**1.2
    x=math.cos(a)*r;y=math.sin(a)*r
    skirt_v.append(Vector((x,y,z)))
-   k=.5*t*t
-   side=max(0,min(1,.5+x/.22))
-   skirt_w.append({'Hips':1-k,'ThighL':k*side,'ThighR':k*(1-side)})
+   # Each vertex hangs between its two nearest panels, so the skirt stays one cloth.
+   u=s/SEGS*PANELS;i=int(u)%PANELS;f=u-int(u)
+   skirt_w.append({'Skirt%02d'%i:1-f,'Skirt%02d'%((i+1)%PANELS):f})
  for j in range(ROWS):
   for s in range(SEGS):
    n=(s+1)%SEGS;row=first+j*SEGS;up=first+(j+1)*SEGS
    skirt_f.append((row+s,row+n,up+n,up+s))
+bpy.ops.object.select_all(action='DESELECT')
+rig.select_set(True);bpy.context.view_layer.objects.active=rig
+bpy.ops.object.mode_set(mode='EDIT')
+for i in range(PANELS):
+ s=round(i*SEGS/PANELS)%SEGS
+ bone('Skirt%02d'%i,skirt_v[s],skirt_v[s+ROWS*SEGS],'Hips')
+bpy.ops.object.mode_set(mode='OBJECT')
 skirt=own_mesh('Skirt',skirt_v,skirt_f,skirt_mat,skirt_w)
 
 # ---- crystals along the neckline, thinning down the bodice ----

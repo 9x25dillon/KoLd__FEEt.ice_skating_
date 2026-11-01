@@ -23,9 +23,15 @@ void fragment() {
  float circle=1.0-smoothstep(.025,.065,abs(length(p)-5.0));
  float medallion=1.0-smoothstep(2.8,2.83,length(p));
  float diamond=1.0-smoothstep(.018,.065,abs(abs(p.x)+abs(p.y)-1.9));
- base=mix(base,vec3(.34,.49,.58),max(center*.15,circle*.35));
- base=mix(base,vec3(.34,.46,.55),medallion*.10);
- base=mix(base,vec3(.34,.47,.55),diamond*.42);
+ // The markings are painted under the ice: blue, and slightly soft through it.
+ base*=vec3(1.2,1.3,1.36);
+ vec3 paint=vec3(.10,.27,.46);
+ base=mix(base,paint,max(center*.5,circle*.72));
+ base=mix(base,vec3(.42,.58,.72),medallion*.34);
+ base=mix(base,paint,diamond*.8);
+ // Skated ice is not clean: older blade work and worn patches show through.
+ float worn=noise(p*.55+11.0)*.6+noise(p*2.3)*.4;
+ base*=1.0-smoothstep(.45,.85,worn)*.09;
  // Ice is a dielectric, n = 1.31: F0 .018, nearly nothing from above, a mirror
  // at a glance. The arena has rows of fixtures, not a sun, so its lights take no
  // direct highlight here; the ice shows the reflected roof grid instead, found
@@ -43,7 +49,7 @@ void fragment() {
  vec4 held=vec4(0.0);
  for(int i=-2;i<=2;i++) held+=texture(mirror,uv+vec2(0.0,float(i)*.0035))*.2;
  float mirrored=clamp(fresnel*1.5+.04,0.0,.6)*mirror_strength*held.a;
- ALBEDO=min((base*vec3(1.2,1.3,1.36)+grooming*.012+scratches*.035+grain*.006),vec3(.97))*(1.0-mirrored);
+ ALBEDO=min(base+grooming*.02-scratches*.07+grain*.01,vec3(.97))*(1.0-mirrored);
  EMISSION=vec3(.72,.84,.95)*fixture*fresnel*.55*roof_strength+held.rgb*mirrored;
  METALLIC=0.0;
  ROUGHNESS=.16+cloud*.06+scratches*.1;
