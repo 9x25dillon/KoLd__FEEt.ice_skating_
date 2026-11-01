@@ -145,6 +145,8 @@ func _ready() -> void:
 	var gold := mat(Color("bea775"),.6,.35)
 	box(Vector3(105,.5,105),Vector3(0,-.32,0),concrete)
 	var ceiling := box(Vector3(100,.4,100),Vector3(0,20,0),dark)
+	# The arena's main light stands in for its fixtures, which sit under this roof.
+	ceiling.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# The high rink camera uses a roof cutaway; ice-level cameras see the ceiling.
 	ceiling.layers = 2
 	for corner in 4:
@@ -225,7 +227,7 @@ func _ready() -> void:
 		var sign := sign_text("EDGEWORK\nGRAND PRIX  /  01",Vector3(0,11.5,0)+basis*Vector3(0,0,3.17),.011,Color("dbecf6"),angle)
 		if side==0: scoreboard=sign
 		beam(Vector3(-2+side%2*4,13, -2+side/2*4),Vector3(-2+side%2*4,20,-2+side/2*4),.045,gold)
-	for setup in [[Vector3(-68,-32,0),Color("e5efff"),1.05],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
+	for setup in [[Vector3(-68,-32,0),Color("e5efff"),.62],[Vector3(-30,135,0),Color("ffe2bc"),.48],[Vector3(-48,60,0),Color("aecde9"),.3]]:
 		var light := DirectionalLight3D.new()
 		light.rotation_degrees = setup[0]
 		light.light_color = setup[1]

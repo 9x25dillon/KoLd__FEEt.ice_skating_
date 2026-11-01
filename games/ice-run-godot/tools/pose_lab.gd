@@ -48,7 +48,19 @@ func _initialize() -> void:
 		camera.far = 170
 		root.add_child(camera)
 		camera.make_current()
+		diagnose.call_deferred()
 		for tick in str(args.get("ticks","")).split(",",false): shots.append(int(tick))
+
+# --off=probe,sun,fixtures,mirror: renders without a suspect, to find what a look comes from.
+func diagnose() -> void:
+	var off := str(args.get("off","")).split(",",false)
+	for node in arena.get_children():
+		if node is ReflectionProbe and "probe" in off: node.visible = false
+		if node is DirectionalLight3D and "sun" in off: node.visible = false
+		if node is DirectionalLight3D and "sunshadow" in off: node.shadow_enabled = false
+		if node is SpotLight3D and "fixtures" in off: node.visible = false
+	if "roof" in off: arena.ice_material.set_shader_parameter("roof_strength",0.0)
+	if "mirror" in off: args["no-mirror"] = true
 
 func point(p: Dictionary, height := 0.0) -> Vector3:
 	return Vector3(p.x,height,float(p.y)-18) if args.has("legacy-map") else Vector3(p.x,height,18-float(p.y))
