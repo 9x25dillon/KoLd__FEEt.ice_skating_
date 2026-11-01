@@ -9,6 +9,7 @@ import bpy, bmesh, math, random
 from pathlib import Path
 from mathutils import Vector, Matrix
 from mathutils.kdtree import KDTree
+from mathutils.bvhtree import BVHTree
 ROOT=Path(__file__).resolve().parents[1]
 MH=ROOT/'assets/source/makehuman'
 OUT=ROOT/'assets/generated'
@@ -157,7 +158,7 @@ def weight(v,*bones):
 for poly in body.data.polygons:
  pass
 
-def carve(source,name,keep,offset,mat,smooth=0,edge=None):
+def carve(source,name,keep,offset,mat,smooth=0,edge=None,tuck=None):
  """A garment: the body's faces chosen by keep(), lifted off the skin by offset."""
  mesh=source.data.copy();obj=source.copy();obj.data=mesh;obj.name=name
  bpy.context.collection.objects.link(obj)
@@ -182,6 +183,13 @@ def carve(source,name,keep,offset,mat,smooth=0,edge=None):
     near=[e.other_vert(v).co for e in v.link_edges if e.is_boundary]
     if len(near)==2:moved[v]=v.co*.5+(near[0]+near[1])*.25
    for v,co in moved.items():v.co=co
+  # Laying the edge on its line can lift it off the body or sink it in: back onto the skin.
+  skin=BVHTree.FromPolygons([v.co.copy() for v in source.data.vertices],[tuple(p.vertices) for p in source.data.polygons])
+  # What stands past the edge once it has moved would fold up as a tab; it comes in too.
+  inside=[v for v in bm.verts if not v.is_boundary and tuck and tuck(v)]
+  for v in rim+inside:
+   on_skin=skin.find_nearest(v.co)[0]
+   if on_skin is not None:v.co=on_skin
   bm.normal_update()
  for v in bm.verts:v.co+=v.normal*offset
  bm.to_mesh(mesh);bm.free();mesh.update()
@@ -192,15 +200,18 @@ def face_mean(f,*bones):
 def centre(f):return f.calc_center_median()
 waist_z=waist.z-.015
 collar_z=neck.z-.035
-# A sweetheart front and a low scooped back: skaters' necklines.
-def neckline(x,y):
- if y<0:return collar_z-.075-.05*(1-min(1,abs(x)/.11)**2)
- return collar_z-.16+.09*min(1,abs(x)/.16)
-# Where the leotard meets the leg, seen when a spin lifts the skirt.
-def leg_line(x):return hip_l.z-.06-.03*min(1,abs(x)/.13)
 # The armhole, cut on a clean line above the armpit; below it the arm's own weights decide.
 armpit_z=shoulder_l.z-.075
 armhole_x=shoulder_l.x-.03
+# A sweetheart front and a low scooped back: skaters' necklines.
+def neckline(x,y):
+ # Never far above the armpit where it meets the armhole, or the corner stands up as a peak.
+ if y<0:line=collar_z-.075-.05*(1-min(1,abs(x)/.11)**2)
+ else:line=collar_z-.16+.09*min(1,abs(x)/.16)
+ near_arm=max(0,min(1,(abs(x)-(armhole_x-.05))/.05))
+ return line+(min(line,armpit_z+.006)-line)*near_arm
+# Where the leotard meets the leg, seen when a spin lifts the skirt.
+def leg_line(x):return hip_l.z-.06-.03*min(1,abs(x)/.13)
 def is_bodice(f):
  c=centre(f)
  if c.z>armpit_z and abs(c.x)>armhole_x:return False
@@ -212,6 +223,14 @@ def clean_neckline(v):
  if v.co.z>armpit_z-.01 and abs(v.co.x)>armhole_x-.022:v.co.x=math.copysign(armhole_x,v.co.x)
  elif abs(v.co.x)<armhole_x and v.co.z>waist.z+.05:v.co.z=neckline(v.co.x,v.co.y)
  elif v.co.z<hip_l.z:v.co.z=leg_line(v.co.x)
+def tuck_neckline(v):
+ if v.co.z<armpit_z-.01 and v.co.z<waist.z+.05:return False
+ moved=False
+ if v.co.z>armpit_z-.01 and abs(v.co.x)>armhole_x:
+  v.co.x=math.copysign(armhole_x-.001,v.co.x);moved=True
+ if v.co.z>neckline(v.co.x,v.co.y)-.001:
+  v.co.z=neckline(v.co.x,v.co.y)-.001;moved=True
+ return moved
 # The sleeve starts on a clean line round the top of the arm and ends at the wrist.
 def clean_sleeve(v):
  side=shoulder_l if v.co.x>0 else mirror(shoulder_l)
@@ -227,7 +246,7 @@ def is_sleeve(f):
  return face_mean(f,'ArmL','ArmR','ForearmL','ForearmR')>.5 and face_mean(f,'HandL','HandR')<.4
 boot_top=ankle_z+.125
 def is_boot(f):return centre(f).z<boot_top
-dress=carve(body,'Bodice',is_bodice,.0035,bodice,edge=clean_neckline)
+dress=carve(body,'Bodice',is_bodice,.0035,bodice,edge=clean_neckline,tuck=tuck_neckline)
 sheer=carve(body,'Sleeves',is_sleeve,.0022,sleeve,edge=clean_sleeve)
 boots=carve(body,'Boots',is_boot,.0075,leather,smooth=14)
 # ---- skin under the costume is gone; legs wear tights ----
@@ -245,7 +264,23 @@ bmesh.ops.delete(bm,geom=doomed,context='FACES')
 bmesh.ops.delete(bm,geom=[v for v in bm.verts if not v.link_faces],context='VERTS')
 bm.to_mesh(body.data);bm.free();body.data.update()
 
-def piping(obj,name,mat,wanted):
+# The source weights the seat to the thighs, so bending a knee swings it back through a
+# skirt that hangs from the hips. Above the hip joint the body follows the pelvis.
+def seat_follows_pelvis(obj):
+ by_index={g.index:g.name for g in obj.vertex_groups}
+ hips=obj.vertex_groups.get('Hips') or obj.vertex_groups.new(name='Hips')
+ thighs=[obj.vertex_groups[n] for n in ('ThighL','ThighR') if n in obj.vertex_groups]
+ for v in obj.data.vertices:
+  share=max(0,min(1,(v.co.z-(hip_l.z-.075))/.06))
+  if share<=0:continue
+  moved=0
+  for g in list(v.groups):
+   if by_index[g.group] in ('ThighL','ThighR'):
+    moved+=g.weight*share
+    obj.vertex_groups[g.group].add([v.index],g.weight*(1-share),'REPLACE')
+  if moved>0:hips.add([v.index],moved,'ADD')
+for o in (body,dress):seat_follows_pelvis(o)
+def piping(obj,name,mat,wanted,thick=.0024):
  """A sewn edge: a fine cord along a garment's open boundary, which also covers the mesh's own stepped rows."""
  groups={g.index:g.name for g in obj.vertex_groups}
  mesh=obj.data
@@ -260,8 +295,8 @@ def piping(obj,name,mat,wanted):
   u=(b-a)
   if u.length<1e-5:continue
   u.normalize()
-  n1=u.cross(Vector((0,0,1)) if abs(u.z)<.9 else Vector((1,0,0))).normalized()*.0024
-  n2=u.cross(n1).normalized()*.0024
+  n1=u.cross(Vector((0,0,1)) if abs(u.z)<.9 else Vector((1,0,0))).normalized()*thick
+  n2=u.cross(n1).normalized()*thick
   first=len(v)
   for c,k in ((a,i),(b,j)):
    v.extend([c+n1,c+n2,c-n1,c-n2]);w.extend([weights(k)]*4)
@@ -283,28 +318,76 @@ def own_mesh(name,verts,faces,mat,weights):
    (obj.vertex_groups.get(b) or obj.vertex_groups.new(name=b)).add([i],w,'REPLACE')
  return obj
 
-seams=[o for o in (piping(dress,'Neckline cord',bodice,lambda c:c.z>waist.z+.03),piping(sheer,'Sleeve cord',bodice,lambda c:c.z>waist.z-.02 and abs(c.x)<elbow_l.x-.03)) if o]
+# The sleeve has no cord: on a sheer sleeve it reads as a wire hoop round the shoulder.
+seams=[o for o in (piping(dress,'Neckline cord',bodice,lambda c:c.z>waist.z+.03),) if o]
+# The sheer fabric comes in gradually down the arm: at a constant density its top edge
+# shows as a hard band on the shoulder. shaders/sheer.gdshader reads this second UV.
+def fade_sleeve_in(obj):
+ mesh=obj.data
+ base=mesh.uv_layers[0].name
+ fade=mesh.uv_layers.new(name='SleeveFade')
+ mesh.uv_layers.active=mesh.uv_layers[base]
+ for poly in mesh.polygons:
+  for li in poly.loop_indices:
+   p=mesh.vertices[mesh.loops[li].vertex_index].co
+   side,end=(shoulder_l,elbow_l) if p.x>0 else (mirror(shoulder_l),mirror(elbow_l))
+   t=(p-side).dot((end-side).normalized())
+   fade.data[li].uv=(max(0,min(1,(t-.03)/.10)),0)
+fade_sleeve_in(sheer)
 # ---- skirt: it starts at the waist of this body and clears this body's hips ----
 body_tree=[v.co.copy() for v in deform]
-def radial_at(z,theta,band=.018):
- best=0
- d=Vector((math.cos(theta),math.sin(theta)))
- for p in dress_points:
-  if abs(p.z-z)<band:
-   flat=Vector((p.x,p.y))
-   if flat.length>1e-4 and flat.normalized().dot(d)>.985:best=max(best,flat.length)
- return best
-dress_points=[v.co.copy() for v in dress.data.vertices]
 SEGS,ROWS=144,12
+dress_surface=BVHTree.FromPolygons([v.co.copy() for v in dress.data.vertices],[tuple(p.vertices) for p in dress.data.polygons])
+def radial_at(z,theta):
+ """How far out the dress is at this height and bearing, looking in at it from outside."""
+ d=Vector((math.cos(theta),math.sin(theta),0))
+ hit=dress_surface.ray_cast(Vector((0,0,z))+d*.6,-d)[0]
+ return (hit-Vector((0,0,z))).length if hit is not None else 0
+def around_body(heights):
+ """The body's outline, round the circle: smooth, and never inside the body."""
+ rows=[max(radial_at(z,2*math.pi*s/SEGS) for z in heights) for s in range(SEGS)]
+ known=[r for r in rows if r>0]
+ rows=[r or sum(known)/len(known) for r in rows]
+ def blurred(values):return [sum(values[(k+o)%SEGS] for o in range(-3,4))/7 for k in range(SEGS)]
+ for _ in range(4):rows=[max(r,b) for r,b in zip(rows,blurred(rows))]
+ return blurred(rows)
 PANELS=16 # skater.gd swings these: Skirt00.. hang from the waist
 hem_z=hip_l.z-.205
 skirt_v,skirt_f,skirt_w=[],[],[]
-hip_r=[radial_at(hip_l.z-.03,2*math.pi*s/SEGS,.03) or .15 for s in range(SEGS)]
 skirt_top=hip_l.z+.085
-waist_r=[radial_at(skirt_top,2*math.pi*s/SEGS) or .12 for s in range(SEGS)]
+waist_r=around_body([skirt_top-.004,skirt_top,skirt_top+.004])
 # Slow, uneven drape rather than a repeating pleat.
 drape=[(random.uniform(.003,.008),random.randint(3,9),random.uniform(0,6.28)) for _ in range(5)]
-for layer,(drop,flare) in enumerate(((0,.085),(-.022,.06))):
+# Row by row, each no narrower than the one above, so nothing hangs in under the seat.
+row_clear=[]
+for j in range(ROWS+1):
+ z=skirt_top+(hem_z-skirt_top)*j/ROWS
+ row=around_body([z-.012,z,z+.012]) if z>=leg_line(0)-.03 else row_clear[-1]
+ row_clear.append([max(a,b) for a,b in zip(row,row_clear[-1])] if row_clear else row)
+# Blurred between rows too: a sharp change in clearance creases the cloth across the hem.
+for _ in range(3):
+ row_clear=[[max(row_clear[j][s],(row_clear[max(0,j-1)][s]+row_clear[j][s]+row_clear[min(ROWS,j+1)][s])/3) for s in range(SEGS)] for j in range(ROWS+1)]
+# Each panel flares just enough to clear the body at every row, and behind a little more,
+# since a bent knee still moves the seat. Never less than the skirt's own flare. A row
+# that only bulged around the seat would make a bustle, and the panels' straight bones
+# could not carry one.
+OUTER_FLARE=.11
+SEAT_ROOM=.012
+PANEL_CURVE=.55
+def needed_flare(s):
+ back=max(0,math.sin(2*math.pi*s/SEGS))
+ top=waist_r[s]+.004
+ return max([OUTER_FLARE]+[(row_clear[j][s]+.006+SEAT_ROOM*back-top)/(j/ROWS)**PANEL_CURVE for j in range(1,ROWS+1)])
+panel_flare=[needed_flare(s) for s in range(SEGS)]
+for _ in range(4):panel_flare=[max(panel_flare[k],sum(panel_flare[(k+o)%SEGS] for o in range(-3,4))/7) for k in range(SEGS)]
+panel_flare=[sum(panel_flare[(k+o)%SEGS] for o in range(-3,4))/7 for k in range(SEGS)]
+# Knife pleats: each rises slowly, then folds back sharply. 144 segments make six to a pleat.
+PLEATS=24
+PLEAT_DEPTH=.012
+def knife_pleat(a):
+ place=(a/(2*math.pi)*PLEATS)%1
+ return PLEAT_DEPTH*(place/.8 if place<.8 else (1-place)/.2)
+for layer,(drop,flare) in enumerate(((0,0),(-.022,.025))):
  first=len(skirt_v)
  for j in range(ROWS+1):
   t=j/ROWS
@@ -313,8 +396,10 @@ for layer,(drop,flare) in enumerate(((0,.085),(-.022,.06))):
    # Knife pleats deepening to the hem, longer behind than in front.
    back=max(0,math.sin(a))
    z=skirt_top+((hem_z-drop-.02*back)-skirt_top)*t
-   clear=max(waist_r[s]+.004,hip_r[s]+.012)
-   r=waist_r[s]+.004+(clear-waist_r[s]-.004)*min(1,t*3)+flare*(t**1.25)+sum(amp*math.sin(a*n+ph+layer) for amp,n,ph in drape)*t**1.2
+   # One curve from waist to hem, as cloth hangs; pleats and drape deepen toward the hem.
+   r=waist_r[s]+.004+panel_flare[s]*t**PANEL_CURVE+(sum(amp*math.sin(a*n+ph) for amp,n,ph in drape)+knife_pleat(a))*t**1.2
+   # The inner layer hangs just inside the outer one, so the two can never cross.
+   if layer==1:r-=.003+flare*t
    x=math.cos(a)*r;y=math.sin(a)*r
    skirt_v.append(Vector((x,y,z)))
    # Each vertex hangs between its two nearest panels, so the skirt stays one cloth.
@@ -364,7 +449,7 @@ trim_objs=[own_mesh('Crystals',gem_v,gem_f,crystal,gem_w)] if gem_v else []
 # A fine band where the skirt meets the bodice.
 band_v,band_f,band_w=[],[],[]
 for s in range(SEGS):
- a=2*math.pi*s/SEGS;r=waist_r[s]+.0062
+ a=2*math.pi*s/SEGS;r=waist_r[s]+.0072
  for dz,dr in ((.004,0),(0,.0022),(-.004,0)):
   band_v.append(Vector((math.cos(a)*(r+dr),math.sin(a)*(r+dr),skirt_top+dz)));band_w.append({'Hips':1})
 for s in range(SEGS):
@@ -546,7 +631,6 @@ bpy.ops.object.join()
 # centre. How far depends on the opening at that column, found by looking at the face
 # from the front: it pinches to nothing at the corners, so they stay put. The upper lid
 # does most of the travel, and the skin above it stretches, out to the brow.
-from mathutils.bvhtree import BVHTree
 def add_blink(obj):
  UPPER_SHARE=.78
  OVERLAP=math.radians(1.5)
