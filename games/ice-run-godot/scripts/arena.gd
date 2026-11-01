@@ -5,6 +5,11 @@ var ice_material: ShaderMaterial
 var arena_environment: Environment
 var crowd_material: ShaderMaterial
 var crowd_mood := 0.0
+# tools/build_spectator.py: the height under a seated thigh, so a body sits on its seat.
+const SEAT_HEIGHT := .36
+const SEAT_PITCH := .6
+const SEATS_PER_ROW := 113
+const AISLE_EVERY := 28
 # A second, smaller view of the skaters alone, from the camera's mirror image
 # under the ice. The ice shader lays it over itself by its own fresnel.
 const MIRROR_LAYER := 4
@@ -14,6 +19,8 @@ var trace_count := 0
 var previous: Array = [null, null]
 var trace_heading: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
 var trace_steps := 0
+# A blade the presentation has lifted off the ice leaves no line (skater.gd lifted_blade).
+var trace_lifted := -1
 # Metres sideways off a blade's own line, between two trace samples, that no edge can carve.
 const TRACE_STEP := .05
 var markers: Node3D
@@ -169,6 +176,8 @@ func _ready() -> void:
 	# Four raked spectator banks with aisles and a lit concourse.
 	var seats: Array[Transform3D] = []
 	var seat_colors: Array[Color] = []
+	var seat_backs: Array[Transform3D] = []
+	var back_colors: Array[Color] = []
 	var bodies: Array[Transform3D] = []
 	var skins: Array[Color] = []
 	var body_colors: Array[Color] = []
@@ -181,20 +190,22 @@ func _ready() -> void:
 			var height := .5+float(row)*.72
 			var stand := box(Vector3(69,.6,1.35),basis*Vector3(0,height-.3,depth),concrete)
 			stand.rotation.y = angle
-			for seat in 58:
-				if seat%15 in [0,1]: continue
-				var x := -33.0+float(seat)*1.15
-				var pos := basis*Vector3(x,height+.5,depth)
-				seats.append(Transform3D(basis,pos))
-				seat_colors.append(Color("0c1626") if row%3 else Color("101d30"))
-				if audience_rng.randf()>.22:
-					var sway := audience_rng.randf_range(-.1,.1)
-					var size := audience_rng.randf_range(.92,1.08)
-					# The model faces away from its stand's outward axis: toward the ice.
-					var facing := basis*Basis(Vector3.UP,PI+audience_rng.randf_range(-.28,.28))
-					bodies.append(Transform3D(facing.scaled(Vector3.ONE*size),basis*Vector3(x+sway,height+.2,depth-.2)))
-					body_colors.append(coats[audience_rng.randi()%coats.size()].darkened(.62))
-					skins.append(Color("7c604f").lerp(Color("3a2a21"),audience_rng.randf()))
+			# Real seats: a pan and a back at a real pitch, in blocks with aisles between.
+			for seat in SEATS_PER_ROW:
+				if seat%AISLE_EVERY < 3: continue
+				var x := -33.8+float(seat)*SEAT_PITCH
+				var tone := Color("121f33") if row%3 else Color("16273d")
+				seats.append(Transform3D(basis,basis*Vector3(x,height+SEAT_HEIGHT-.04,depth+.08)))
+				seat_colors.append(tone)
+				seat_backs.append(Transform3D(basis*Basis(Vector3.RIGHT,-.14),basis*Vector3(x,height+SEAT_HEIGHT+.27,depth+.33)))
+				back_colors.append(tone.darkened(.1))
+				if audience_rng.randf()>.14:
+					var size := audience_rng.randf_range(.94,1.06)
+					# The model faces its +Z; turned to the ice, and settled a little each their own way.
+					var facing := basis*Basis(Vector3.UP,PI+audience_rng.randf_range(-.14,.14))
+					bodies.append(Transform3D(facing.scaled(Vector3.ONE*size),basis*Vector3(x,height,depth+.1)))
+					body_colors.append(coats[audience_rng.randi()%coats.size()].darkened(.5))
+					skins.append(Color("a07a62").lerp(Color("47332a"),pow(audience_rng.randf(),1.5)))
 		var back := box(Vector3(91,12,.5),basis*Vector3(0,8,45),dark)
 		back.rotation.y = angle
 		var fascia := box(Vector3(72,1.4,.3),basis*Vector3(0,8.2,43),rail)
@@ -213,10 +224,13 @@ func _ready() -> void:
 		for x in [-13,0,13]:
 			board_sign(sign_text("EDGEWORK" if x==0 else "THE ICE REMEMBERS",basis*Vector3(x,.63,27.8),.007,Color("294b60"),angle+PI))
 	var seat_mesh := BoxMesh.new()
-	seat_mesh.size = Vector3(.85,.62,.17)
+	seat_mesh.size = Vector3(.5,.07,.46)
 	var vertex_mat := mat(Color.WHITE,0,.85)
 	vertex_mat.vertex_color_use_as_albedo = true
 	instances(seat_mesh,seats,seat_colors,vertex_mat)
+	var back_mesh := BoxMesh.new()
+	back_mesh.size = Vector3(.5,.56,.06)
+	instances(back_mesh,seat_backs,back_colors,vertex_mat)
 	crowd(bodies,body_colors,skins)
 	# Triangulated roof trusses and banks of luminaires.
 	for z in [-32,-16,0,16,32]:
@@ -256,11 +270,11 @@ func _ready() -> void:
 			fixture.position = Vector3(column*12,14.5,row*11)
 			fixture.rotation_degrees = Vector3(-90,0,0)
 			fixture.spot_range = 22
-			fixture.spot_angle = 31
+			fixture.spot_angle = 46
 			fixture.spot_attenuation = 1.0
-			fixture.spot_angle_attenuation = 1.6
+			fixture.spot_angle_attenuation = 2.2
 			fixture.light_color = Color("eaf2ff")
-			fixture.light_energy = 9.0
+			fixture.light_energy = 6.5
 			fixture.light_volumetric_fog_energy = 1.2
 			fixture.light_specular = .9
 			add_child(fixture)
@@ -356,7 +370,8 @@ func add_traces(frames: Array) -> void:
 		for i in range(2):
 			var b: Dictionary = pair[i]
 			var point := SimSpace.point(b.x,b.y,.016)
-			if b.contact and previous[i] != null:
+			var cutting: bool = b.contact and i != trace_lifted
+			if cutting and previous[i] != null:
 				var delta: Vector3 = point-previous[i]
 				var length := delta.length()
 				# A real blade cannot step sideways on the ice, but the solver moves a
@@ -372,9 +387,9 @@ func add_traces(frames: Array) -> void:
 					trace_count += 1
 					trace_mesh.visible_instance_count = mini(trace_count,CAPACITY)
 					trace_heading[i] = delta/length
-			if not b.contact:
+			if not cutting:
 				trace_heading[i] = Vector3.ZERO
-			previous[i] = point if b.contact else null
+			previous[i] = point if cutting else null
 
 func set_course(mode: String, catalog: Dictionary) -> void:
 	for child in markers.get_children():

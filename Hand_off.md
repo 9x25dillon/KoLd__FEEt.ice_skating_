@@ -1,179 +1,95 @@
-# Hand-off — EDGEWORK / Pairs skating
+# Hand-off — EDGEWORK / native game
 
-## Newest close: 28 September 2026 (pairs)
+## Resume here
+**Newest close:** 1 November 2026 · Claude Code, Opus 5.5 · session `7d6a47c6`
+**Where things stand:** The native Godot game is much further on. PR #56 merged it to `main` (physics-driven pose, CC0 athlete, Forward+, arm tiers, landing stamina). A second batch is pushed but **not merged**: branch `crowd-and-ice`, with real crowd seating, cleaner ice, the spin finish, relaxed arms, backward gaze, square shoulders, pointed free foot and a COIL bar. A close-up pass followed: real irises (the eyes were blank), satin fabric, clean armholes, and the pose lab now wears the real costume. Nobody has played any of this on a physical pad. CI is red on 8 older tests.
+**Corrects the previous hand-off:** pairs and Grand Prix are not the newest work; that hand-off is now in `Hand_off-archive.md`.
+**Decision needed:** whether to open a PR for `crowd-and-ice` and merge it. Reply "open the PR" to start.
+**Start with:**
+1. `git fetch origin; git log --oneline origin/main..origin/crowd-and-ice`: confirms the unmerged batch.
+2. Check for branch `grip-search` and `docs/grip-search.md`: the delegated research result (see In flight).
+3. Play Experimental on the pad and note what feels wrong. Nothing else tells us how the camera, arms and landing stamina feel.
 
-Read [the pairs session review](docs/session-review-2026-09-28-pairs.md) first;
-the Grand Prix hand-off below it remains authoritative for build and repository
-mechanics.
+## Progress track (newest first)
+| Date | Session | Shipped | State after |
+|---|---|---|---|
+| 2026-11-01 | Opus 5.5 `7d6a47c6` | `crowd-and-ice` pushed, unmerged | Crowd in seats, clean ice, spin finish, relaxed arms, gaze, shoulders, COIL bar |
+| 2026-10-31 | Opus 5.5 `7d6a47c6` | PR #56 merged, `e1c6d67` | Native game on `main`; README current; public browser build not deployed (tests gate it) |
+| 2026-09-28 | Earlier | PR #54, #55, pairs mode | Pairs playable; see archive |
+| 2026-09-27 | Earlier | Grand Prix, PR #52 | Northlight Arena; see archive |
 
-### State
+## In flight
+- **Grip search** done, on `grip-search` (`370dcb7`, pushed, no PR, reproduced by the main session): `docs/grip-search.md` there. Shoulder wind pays about +5 kg m^2/s (best L 9.62 to 14.96, Experimental loop), only with arms in, leaving the ice while the shoulders are still swinging. Winding and holding pays nothing, it does not stack with arms out, and it does not raise the best achievable jump. The pad cannot reach it as mapped, because carriage is at least |windup|.
+- **`crowd-and-ice`** pushed: done and checked by script and render, not played. Verify with the One-shot check below.
 
-- Branch `pairs-skating` (worktree `/home/kill/KoLd__FEEt.ice_skating_/.delivery/pairs`),
-  based on main `6154e62` (PR #52). Pairs work: `dfcfeb2` plus the docs commit.
-- Delivered: partner sim (`tools/ice-lab/game/pairs.ts`), bridge mode `pairs`
-  (+ `pairsChallenge`, replay `edgework-pairs/1`), Godot menu/controls/HUD,
-  `games/ice-run-godot/tests/pairs.test.mjs`. Bridge 28/28, Godot smoke passes.
-- Verify publication before assuming anything:
-  `git fetch origin; gh pr list --head pairs-skating --state all; git log -3 origin/main`.
+## Decisions (why things are the way they are)
+- 2026-10-31 **Forward+ over Compatibility**: ambient occlusion, haze, skin. Rejected keeping low-end and mobile GPUs. One line in `project.godot` reverts it, but the look would need retuning.
+- 2026-10-31 **MakeHuman data, not code**: base mesh, skin, hair are CC0; its code is AGPL and is not used. Vendored in `games/ice-run-godot/assets/source/makehuman/`.
+- 2026-10-31 **Fox Engine: public technique only**: no Konami code or data.
+- 2026-10-31 **Difficulty is how much physics is live** (owner's direction, 2026-11-01): the setups already work this way. Not faster judges or harsher scores.
+- 2026-10-31 **Career arm tiers**: Function, Shared, Expression, trained by drills; other modes get both. Numbers are authored and untuned.
+- 2026-10-31 **Landing stamina settles at touchdown**: cheapening the takeoff moved the pinned 115.957 degree baseline, so the takeoff still pays in full. On in Experimental and Dig Gate only.
+- 2026-10-31 **No Earth rotation model**: about 1.6e-6 of a 33 rad/s spin and 0.7 degrees over a program. The rink crown is the larger real effect, and it already exists, off.
+- 2026-11-01 **No free momentum bonus for shoulder wind**: the sim's rule is that twist makes spin only while the ice holds the feet. The grip search confirmed a small real effect through a holding edge.
+- 2026-11-01 **Career training that closes off elements**: owner's design, in `docs/open-decisions.md`, not built. No real athlete's name in the game (D6).
+- 2026-11-01 **kgirl not used for the grip search**: it is an LLM harness, and the search is CPU arithmetic.
 
-### Next steps, in order
+## Dead ends (don't retry without new information)
+- Blaming screen-space reflections, then the probe, for the ice patches: both wrong. It was the roof-reflection term's hard limit, found with `pose_lab.gd --off=`.
+- A scripted spin in `pose_clip.mjs` that never started: claims about spins from it were false. Check a clip contains the move.
+- Shoulder wind in plain scripted takeoffs: the feet pivot against the shoulders (`twistRate` +5, `yawDev` -6) and momentum stays near zero.
+- Regenerating fixtures or rewriting pinned numbers to pass tests: never.
 
-1. **Playtest pairs** (operator plays; Firefox for browser, Godot for native).
-   Record notes as timestamped list: hold, lift, spin, drift, fall recovery.
-2. Check G/T and D-pad left/right against Full-repertoire and Experimental
-   bindings; move them if they collide.
-3. Look at the partner: model choice (currently Berserker glb), spacing, lift
-   height. Capture a screenshot or replay clip; do not judge by tests alone.
-4. ~~Add a pairs stage to the Godot `--smoke-test`~~ **Done** (PR #54, `089d7ac`): partner presented and hand offer reaches the bridge; lift deliberately not covered (needs a steady glide, would be flaky).
-5. Draw partner traces on the rink with their own `previous` state in `arena.gd`.
-6. Run `npm test` and compare the eight inherited failures.
+## Open questions (settle these first)
+- **Possible free angular momentum, found by the grip search:** stepping carriage 0 to 1 on the release tick reads L 41.43 instead of 14.96 in the best case, because `bodyRate` (`sim/jump.ts`) reads that tick's carriage for the upper body's inertia. Not fixed, and untested on a pad. It touches the takeoff research, so the owner decides.
+- Should the pad be remapped so wind and arms separate? Only then is the shoulder effect reachable in play.
+- How do the camera moves, arm swing and landing stamina feel in play? Only a playtest settles this.
+- Is leading-shoulder-first the right way round for the arms at a spin finish? A skater would know.
+- Backward gaze along the blade is the owner's style choice; real skaters usually look over a shoulder. Blend them if skaters object.
+- Is the name "Edgework" clear? The README says to resolve this before any public announcement. Was the Reddit post made?
 
-### Rules that still apply
+## State (verified 00:36-00:45 PDT)
+- `main` `e1c6d67`, PR #56 merged. CI red on the 8 older tests.
+- `crowd-and-ice`, worktree `.delivery/crowd`. No PR yet.
+- Outer checkout `phase17-assurance`: old dirty work, not this session's. Never sweep it into a commit.
 
+## Project health
+- `npm test`: 736 pass, 8 fail (two `backjump`, two ghost double-loop, v1 fixture, three turning-jump tutorial). Bridge 30/30. Godot smoke and capture pass. Pose lab passes on all four models, both spin directions.
+- About 4.9 ms per frame at 1080p on an RTX 2080 Super, without the Node bridge. No sustained in-game benchmark.
+- README image and clip predate `crowd-and-ice`; re-render when it is merged.
+- Fragile: the crowd is the costliest thing added. Second-arm timing at a spin finish is now measured unreliably (98 and 25 degrees), so judge it by eye. Expression and Function arms look too alike.
+
+## Next steps, in order
+0. Look items next: blinking and small eye movement, the sleeve's top band, the skirt's small front slit, Expression arms. Judge close up with `pose_lab.gd --view=torso` or `--view=body`.
+1. Decide on the PR, merge with `! gh pr merge <n> --merge`, re-render `docs/presentation/edgework-now.*`.
+2. Playtest on the pad, with notes as a timestamped list.
+3. Read the grip search result, then decide on the coil axis and difficulty tiers.
+4. Give Expression arms a stronger identity; consider a stamina cost for holding arms out (physics change, ask first).
+5. Try the rink crown in Experimental.
+
+## One-shot check
+    bash ~/.claude/skills/hanoffed/scripts/scan.sh --root ~/KoLd__FEEt.ice_skating_ --fetch
+    npm test
+    node games/ice-run-godot/tools/prepare.mjs --engine-only
+    node --test --test-isolation=none games/ice-run-godot/tests/*.test.mjs
+    node games/ice-run-godot/tools/pose_clip.mjs /tmp/clip.json
+    godot4 --headless --path games/ice-run-godot --script res://tools/pose_lab.gd -- --clip=/tmp/clip.json --check
+    godot4 --headless --path games/ice-run-godot -- --smoke-test
+
+Fresh worktrees need `node games/ice-run-godot/tools/prepare.mjs` and `godot4 --headless --path games/ice-run-godot --import` first. Run from a worktree, not the outer checkout. `npm start` launches the game. `pose_lab.gd` views: `--view=boots|face|stands|rink|broadcast`, `--off=probe,sun,fixtures,roof`, `--steps=4` for a faster display, `--shots=<dir> --ticks=...`.
+
+## Rules that still apply
 - No deletes, resets, cleans, force pushes or overwrites. Additive edits only.
-- Keep pairs points separate from ISU protocol scoring; the lift is assisted, not
-  a validated two-body model — do not claim otherwise.
-- New worktree shortcuts: fresh worktrees need `node games/ice-run-godot/tools/prepare.mjs`
-  and `godot4 --headless --path games/ice-run-godot --import` before any smoke run.
-- Codex's own history/goals live in `~/.codex` (`history.jsonl`, `goals_1.sqlite`);
-  check them first when asked to continue its work.
-- `gh pr merge` may be blocked for the assistant; ask the operator for `!`.
+- New work in a fresh worktree off `origin/main`. Another session may share the checkout. Never use a broad process kill.
+- Do not change grip, hip ceiling, tuck or landing shock to disguise the contact problem. Keep new physics default-off. Replay stays at unfinished `/39`.
+- Do not rewrite goldens or pinned numbers to pass tests. Compare failures by name.
+- `pose_lab` proves agreement with the sim, not with real skaters; never present it as realism evidence.
+- Judge renders by looking at them, close up as well as at game distance. The lab now wears the costume; `--no-costume` skips it.
+- `gh pr merge` may be blocked for the assistant; ask the owner for `!`.
+- The owner decides gate policy. Answer the question first, then build; "keep going" means the next grounded item.
 
----
+## Vocabulary so far
+word, referent, idempotent, provenance, invariant, presupposition, stipulate, contiguous, fast-forward, confabulation, threat model, reaction torque, confound
 
-# Hand-off — EDGEWORK / Grand Prix
-
-## Authoritative close: 27 September 2026
-
-Read this page first, then [the session review](docs/session-review-2026-09-27-grand-prix.md)
-and [build notes](docs/grand-prix-build.md). The previous handoff, including the
-landing investigation and earlier history, is preserved in
-[the archived handoff](docs/handoff-before-grand-prix-2026-09-27.md). Its relative
-links were written from the repository root; resolve them there.
-
-## Objective and delivered work
-
-Continue a professional figure-skating game using the existing simulation, with
-Xbox Elite Series 2 as the primary input and a PS3-inspired native presentation.
-Northlight Arena, competition athlete, shaders, broadcast HUD, four cameras,
-audio, optional vibration and controller menus are implemented. Career, Composer,
-scoring protocols and replay support remain. This is a playable development build;
-the physical double loop is still unresolved.
-
-## Repository and publication
-
-- Repository: `9x25dillon/KoLd__FEEt.ice_skating_`.
-- Integration branch: `grand-prix-presentation`, based on verified main `0392bf0`
-  (PR #51). The user explicitly authorized commit, push and merge.
-- Authoritative delivery worktree on this machine:
-  `/home/kill/KoLd__FEEt.ice_skating_/.delivery/grand-prix`.
-- The outer checkout remains on `phase17-assurance` at `a3c942e`, with older game
-  edits and unrelated work. Do not mistake it for the delivered source or reset it.
-- Preserve `E_W_replays_sessions_eng_bld/`, `session-notes/`, saved root HTML,
-  nested research worktrees, phase17 notes and the unrelated turns-test edit.
-- Verify publication rather than assuming this pre-commit document knows its own
-  eventual commit hash:
-
-```sh
-git fetch origin
-git status --short --branch
-git log -5 --oneline origin/main
-gh pr list --head grand-prix-presentation --state all
-git diff origin/main --stat
-```
-
-If this branch is merged, start the next change in a clean worktree from verified
-current main. Inspect ownership and changes before editing. Never sweep nested
-research checkouts into a commit.
-
-## Run and verify
-
-From the delivery worktree (not the older outer checkout):
-
-```sh
-npm start                       # Godot source launch; Node, Godot, FFmpeg needed
-npm run start:browser            # browser game and workshop
-npm run build:native             # Linux export; templates must be installed
-npm test                         # currently eight inherited failures
-node games/ice-run-godot/tools/prepare.mjs --engine-only
-node --test --test-isolation=none games/ice-run-godot/tests/*.test.mjs
-./games/ice-run-godot/exports/linux/ice-run.x86_64 --headless -- --smoke-test
-```
-
-The exported executable is `games/ice-run-godot/exports/linux/ice-run.x86_64`.
-Keep its PCK, bridge and runtime adjacent. Node 24.19+ or 26 is required; the
-runtime is not bundled. Exports are ignored build products. Editable athlete:
-`games/ice-run-godot/assets/source/skater-competition.blend`; builder:
-`games/ice-run-godot/tools/build_competition_skater.py`. Do not regenerate the
-model unless changing it.
-
-`-- --capture` on the executable renders gameplay, four cameras and menus into
-`/tmp/edgework-godot-*.png`. Smoke/capture use isolated save paths. Checked-in
-screenshots live in `docs/presentation/`. Browser integration was checked on
-port 8124; existing outer-checkout and research servers may use 8123/8130.
-Identify the owner before stopping a server; never use a broad process kill.
-
-Controller: A selects, B returns, D-pad navigates, Menu pauses. Native View cycles
-camera (blocked while airborne); browser View restarts a run. Start with Blade
-Explorer. Native has Simulation, Explorer, Experimental and Repertoire. Browser
-also exposes Dig Gate, the tutorial, ghost and workshop. Native separate-paddle
-presets require driver exposure; duplicate-button profiles work through ordinary
-button mappings. No physical Elite 2 validation has been completed.
-
-## Evidence and known failures
-
-- Baseline current main: 737 tests, 729 pass / eight fail.
-- Integrated suite: 741 tests, 733 pass / the same eight fail.
-- Native bridge/host: 22 pass after regeneration. An earlier manifest mismatch
-  was caused by edits after preparation; refresh runtime after source edits.
-- Simulated Xbox browser checks cover tutorial shortcut, ghost checkbox, menus,
-  settings, disconnect/reconnect and career, without page exceptions.
-- Linux export, exported career/protocol smoke and actual renderer captures were
-  checked. No sustained FPS benchmark or physical-controller feel test was done.
-- Older 613/613 results describe the `/35` development checkout only.
-
-Inherited failures: two `backjump.test.ts`, two ghost double-loop assertions,
-one committed replay fixture, three turning-jump tutorial assertions. Logs are
-`/tmp/grand-prix-main-baseline.log`, `grand-prix-integrated-tests.log`,
-`grand-prix-integrated-native.log`, `grand-prix-integrated-smoke.log` and
-`grand-prix-integrated-capture.log` (all under `/tmp`). Compare names, not just counts.
-Do not call the whole suite green or regenerate fixture goldens to conceal drift.
-
-## Physics constraints to preserve
-
-Read [takeoff-orientation.md](docs/takeoff-orientation.md) and the archived handoff
-before touching mechanics. The current research contract remains unfinished `/39`;
-`/40` canonicalization is a separate task. Physical double-loop landings are not
-solved. Keep experimental behavior default-off. Do not change grip, hip ceiling,
-tuck or landing shock to disguise the contact problem. Shoulder rotation from a
-paper is not automatically blade rotation on ice.
-
-The measured prior baseline is 87.151 degrees of body AND travel rotation before
-blade-off, 475.957 airborne body degrees, and 115.957 degrees off backward at first
-contact. Verify the named experiment before treating those numbers as current.
-No physics solver source was changed for this presentation integration.
-
-## Next session: three priorities
-
-1. **Physical controller acceptance.** Record OS, connection, controller profile,
-   exposed button IDs and selected setup. Play launch → free skate → pause →
-   setup change → career without mouse input; check reconnect, triggers, paddle
-   mappings and vibration. Fix concrete failures with reproducible steps.
-2. **Visual and performance review.** Agree on a reference screenshot and target
-   resolution/frame rate. Inspect athlete close-ups and moving knees/shoulders,
-   backward travel, jumps, all cameras and menu readability. Capture frame times;
-   optimize measured costs. The current animation is procedural, not mocap.
-3. **Choose one next workstream explicitly.** Either continue native feature
-   parity/polish or resume the unresolved landing mechanism. For physics, reproduce
-   the eight failures and isolate one physical cause; keep presentation changes
-   separate. For product work, decide whether native Dig Gate/tutorial/ghost is
-   the next priority rather than assuming prepared modules mean complete parity.
-
-## Work habits that will improve the next session
-
-Fetch and map worktrees first. Define an observable acceptance sequence. Capture
-real gameplay early. Finish source edits before generating bridge modules, then
-run targeted checks and one final export. Preserve historical notes and data.
-Keep the user informed of concrete findings and limitations. The user authorizes
-routine implementation choices and dislikes repeated confirmation requests;
-ask only for missing decisions that materially block useful work.
+## Opening prompt for next session (edit the brackets)
+> Read `Hand_off.md` in `.delivery/crowd` and run its one-shot check. Then [open the PR for crowd-and-ice | read docs/grip-search.md | here are my playtest notes: ...]. Stipulate: live work. When we wrap up: /hanoffed [target].

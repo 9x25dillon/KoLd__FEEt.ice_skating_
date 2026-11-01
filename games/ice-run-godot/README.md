@@ -241,7 +241,7 @@ Its dress, sleeves and boots are cut from its own body surface. The crowd is one
 mesh, instanced (`tools/build_spectator.py`, `shaders/crowd.gdshader`). `skater.gd` reads each model's
 proportions from its skeleton, so the three older models still work. Its skirt is sixteen panels on
 springs, stepped in `swing_skirt`: they swing with the body, flare in a spin and are pushed aside by the legs.
-It is not cloth simulation, and nothing reads it back into the solver. Painted skin keeps its paint, so a
+It is not cloth simulation, and nothing reads it back into the solver. A spin's finish is authored on top of the sim: the free leg extends, and the arm on the shoulder leading the spin opens first, the other a quarter-turn behind. Painted skin keeps its paint, so a
 costume's skin tone does not apply to the athlete.
 
 The tracking camera's framing per move is in `scripts/shot.gd`: wide with headroom for a jump, low for footwork,

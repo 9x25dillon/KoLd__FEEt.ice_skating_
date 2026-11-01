@@ -56,7 +56,7 @@ def make_mesh(name,verts,uvs,faces,mat):
  mesh.materials.append(mat)
  obj=bpy.data.objects.new(name,mesh);bpy.context.collection.objects.link(obj)
  return obj,used
-def fit_proxy(stem,mat,bone):
+def fit_proxy(stem,mat,bone,keep_face=None):
  """Places a CC0 proxy on the shaped body the way a .mhclo says to."""
  p_verts,p_uv,p_faces,_=read_obj(MH/(stem+'.obj'))
  lines=open(MH/(stem+'.mhclo')).read().split('\n')
@@ -76,6 +76,7 @@ def fit_proxy(stem,mat,bone):
    q=base[int(n[0])]*n[3]+base[int(n[1])]*n[4]+base[int(n[2])]*n[5]+Vector((n[6]*scale[0],n[7]*scale[1],n[8]*scale[2]))
   else:q=base[int(n[0])]
   placed.append(to_body(q))
+ if keep_face:p_faces=[f for f in p_faces if keep_face([p_uv[t] for _,t in f])]
  obj,_=make_mesh(stem,placed,p_uv,p_faces,mat)
  obj.vertex_groups.new(name=bone).add(list(range(len(obj.data.vertices))),1,'REPLACE')
  return obj
@@ -173,6 +174,14 @@ def carve(source,name,keep,offset,mat,smooth=0,edge=None):
  if edge:
   for v in bm.verts:
    if v.is_boundary:edge(v)
+  # Then along the edge itself: what the line did not catch still steps up and down.
+  rim=[v for v in bm.verts if v.is_boundary and v.co.z>waist.z]
+  for _ in range(6):
+   moved={}
+   for v in rim:
+    near=[e.other_vert(v).co for e in v.link_edges if e.is_boundary]
+    if len(near)==2:moved[v]=v.co*.5+(near[0]+near[1])*.25
+   for v,co in moved.items():v.co=co
   bm.normal_update()
  for v in bm.verts:v.co+=v.normal*offset
  bm.to_mesh(mesh);bm.free();mesh.update()
@@ -189,14 +198,19 @@ def neckline(x,y):
  return collar_z-.16+.09*min(1,abs(x)/.16)
 # Where the leotard meets the leg, seen when a spin lifts the skirt.
 def leg_line(x):return hip_l.z-.06-.03*min(1,abs(x)/.13)
+# The armhole, cut on a clean line above the armpit; below it the arm's own weights decide.
+armpit_z=shoulder_l.z-.075
+armhole_x=shoulder_l.x-.03
 def is_bodice(f):
  c=centre(f)
+ if c.z>armpit_z and abs(c.x)>armhole_x:return False
  if face_mean(f,'ArmL','ArmR','ForearmL','ForearmR','HandL','HandR')>.5 or face_mean(f,'Head')>.25:return False
  if c.z<leg_line(c.x):return False
  return c.z<neckline(c.x,c.y)
 def clean_neckline(v):
  # The mesh's own rows cut a sawtooth; the boundary is laid onto the line itself.
- if abs(v.co.x)<.145 and v.co.z>waist.z+.05:v.co.z=neckline(v.co.x,v.co.y)
+ if v.co.z>armpit_z-.01 and abs(v.co.x)>armhole_x-.022:v.co.x=math.copysign(armhole_x,v.co.x)
+ elif abs(v.co.x)<armhole_x and v.co.z>waist.z+.05:v.co.z=neckline(v.co.x,v.co.y)
  elif v.co.z<hip_l.z:v.co.z=leg_line(v.co.x)
 # The sleeve starts on a clean line round the top of the arm and ends at the wrist.
 def clean_sleeve(v):
@@ -204,8 +218,12 @@ def clean_sleeve(v):
  end=elbow_l if v.co.x>0 else mirror(elbow_l)
  along=(end-side).normalized()
  t=(v.co-side).dot(along)
- if t<.08:v.co+=along*(-.005-t)
+ if t<.07:v.co+=along*(.03-t)
 def is_sleeve(f):
+ # Starts just down the arm, on a line round it, not on the shoulder or the chest.
+ c=centre(f)
+ side,end=(shoulder_l,elbow_l) if c.x>0 else (mirror(shoulder_l),mirror(elbow_l))
+ if (c-side).dot((end-side).normalized())<.03:return False
  return face_mean(f,'ArmL','ArmR','ForearmL','ForearmR')>.5 and face_mean(f,'HandL','HandR')<.4
 boot_top=ankle_z+.125
 def is_boot(f):return centre(f).z<boot_top
@@ -481,7 +499,38 @@ for side,flip,sign in (('L',lambda v:v,1),('R',mirror,-1)):
  parts.append(own_mesh('Laces '+side,v,f,lace_mat,w))
 bpy.data.objects.remove(boots)
 # ---- face and hair ----
-proxies=[fit_proxy('high-poly',eye,'Head'),fit_proxy('eyebrow001',brow,'Head'),fit_proxy('eyelashes02',lash,'Head'),fit_proxy('ponytail01',hair,'Head')]
+# Each eye is two shells, and neither's UVs fit this texture, which is one iris filling
+# the image: they blank or bloody the eye. The outer shell stays, with the iris projected
+# straight onto its front at a real 6.2 mm radius; beyond it the image's edge is sclera.
+IRIS_RADIUS=.0062
+IRIS_IN_IMAGE=.42
+EYE_SEAT_LEAST=.0003
+EYE_SEAT_MOST=.0008
+def outer_shell(uvs):return all(u>.8 and v<.25 for u,v in uvs)
+def project_iris(obj):
+ mesh=obj.data
+ for sign in (1,-1):
+  shell=[v.co for v in mesh.vertices if (v.co.x>0)==(sign>0)]
+  mid=sum(shell,Vector())/len(shell)
+  for poly in mesh.polygons:
+   if (mesh.vertices[poly.vertices[0]].co.x>0)!=(sign>0):continue
+   for li in poly.loop_indices:
+    p=mesh.vertices[mesh.loops[li].vertex_index].co
+    u=.5+(p.x-mid.x)/IRIS_RADIUS*IRIS_IN_IMAGE
+    w=.5+(p.z-mid.z)/IRIS_RADIUS*IRIS_IN_IMAGE
+    # Left unclamped: shaders/eye.gdshader clamps per pixel, after the gaze moves the iris.
+    mesh.uv_layers[0].data[li].uv=(u,w)
+ # The fitted shell stands proud of the lower lid at the outer corners. Seat it deeper
+ # there and only slightly at the top, where seating shows the lid's inside.
+ for sign in (1,-1):
+  shell=[v for v in mesh.vertices if (v.co.x>0)==(sign>0)]
+  mid=sum((v.co for v in shell),Vector())/len(shell)
+  reach=max(abs(v.co.x-mid.x) for v in shell)
+  for v in shell:
+   toward=max(0,min(1,.5+.5*((mid.z-v.co.z)+(v.co.x-mid.x)*sign)/reach))
+   v.co.y+=EYE_SEAT_LEAST+(EYE_SEAT_MOST-EYE_SEAT_LEAST)*toward*toward
+ return obj
+proxies=[project_iris(fit_proxy('high-poly',eye,'Head',outer_shell)),fit_proxy('eyebrow001',brow,'Head'),fit_proxy('eyelashes02',lash,'Head'),fit_proxy('ponytail01',hair,'Head')]
 
 # ---- one skinned mesh ----
 everything=[body,dress,sheer,skirt]+seams+trim_objs+parts+proxies
@@ -492,6 +541,124 @@ for o in everything:
  o.parent=rig
 bpy.context.view_layer.objects.active=body
 bpy.ops.object.join()
+# ---- the blink ----
+# The eye is a dome and the lids ride on it, so a blink turns each lid about the eye's
+# centre. How far depends on the opening at that column, found by looking at the face
+# from the front: it pinches to nothing at the corners, so they stay put. The upper lid
+# does most of the travel, and the skin above it stretches, out to the brow.
+from mathutils.bvhtree import BVHTree
+def add_blink(obj):
+ UPPER_SHARE=.78
+ OVERLAP=math.radians(1.5)
+ UPPER_REACH=math.radians(42)
+ LOWER_REACH=math.radians(30)
+ LID_LIFT=.0006
+ LASH_LENGTH=.62 # the proxy's lashes are stage lashes at full length
+ mesh=obj.data
+ names=[m.name for m in mesh.materials]
+ skin_i,eye_i,lash_i=names.index('Warm porcelain'),names.index('Eyes'),names.index('Lashes')
+ def verts_of(i):return {v for p in mesh.polygons if p.material_index==i for v in p.vertices}
+ eye_v,skin_v,lash_v=verts_of(eye_i),verts_of(skin_i),verts_of(lash_i)
+ faces=[p for p in mesh.polygons if p.material_index in (skin_i,eye_i)]
+ tree=BVHTree.FromPolygons([v.co for v in mesh.vertices],[tuple(p.vertices) for p in faces])
+ # Lash cards, by connected piece: a whole card belongs to one lid.
+ parent={i:i for i in lash_v}
+ def find(i):
+  while parent[i]!=i:
+   parent[i]=parent[parent[i]];i=parent[i]
+  return i
+ for p in mesh.polygons:
+  if p.material_index==lash_i:
+   for a,b in zip(p.vertices,p.vertices[1:]):parent[find(a)]=find(b)
+ pieces={}
+ for i in lash_v:pieces.setdefault(find(i),[]).append(i)
+ print('BLINK lash pieces',len(pieces))
+ basis=obj.shape_key_add(name='Basis',from_mix=False)
+ blink=obj.shape_key_add(name='Blink',from_mix=False)
+ moved=0
+ for sign in (1,-1):
+  dome=[mesh.vertices[i].co for i in eye_v if (mesh.vertices[i].co.x>0)==(sign>0)]
+  lo=Vector([min(p[k] for p in dome) for k in range(3)]);hi=Vector([max(p[k] for p in dome) for k in range(3)])
+  R=(hi.x-lo.x)/2
+  C=Vector(((lo.x+hi.x)/2,lo.y+R,(lo.z+hi.z)/2))
+  def angle(p):return math.atan2(p.z-C.z,-(p.y-C.y))
+  # Each column's opening, as angles about the eye's centre.
+  STEP=.0005
+  columns=[]
+  for c in range(int(2*R/STEP)+1):
+   x=C.x-R+c*STEP
+   seen=[]
+   for r in range(int(2*R/.00025)+1):
+    z=C.z-R+r*.00025
+    loc,_,face,_=tree.ray_cast(Vector((x,C.y-.06,z)),Vector((0,1,0)))
+    if loc is not None and faces[face].material_index==eye_i:seen.append(angle(loc))
+   columns.append((x,max(seen),min(seen)) if len(seen)>=2 else (x,None,None))
+  open_at=[(x,up-low) if up is not None else (x,0.0) for x,up,low in columns]
+  # A short moving average, so a mesh edge does not show as a notch along the lid.
+  soft=[sum(open_at[j][1] for j in range(max(0,c-3),min(len(open_at),c+4)))/(min(len(open_at),c+4)-max(0,c-3)) for c in range(len(open_at))]
+  known=[(x,up,low) for x,up,low in columns if up is not None]
+  def at_column(x):
+   f=(x-(C.x-R))/STEP
+   c=max(0,min(len(soft)-2,int(f)));t=max(0,min(1,f-c))
+   wide=soft[c]*(1-t)+soft[c+1]*t
+   near=min(known,key=lambda k:abs(k[0]-x))
+   return wide,near[1],near[2]
+  def turned(p,by,lift):
+   d=Vector((0,p.y-C.y,p.z-C.z))
+   r=d.length+lift
+   a=angle(p)-by
+   return Vector((p.x,C.y-r*math.cos(a),C.z+r*math.sin(a)))
+  # Lashes: shortened toward the lid's edge, then carried by a column further in than
+  # their own, because their tips fan out past the corner, where the lid hardly travels.
+  first,last=known[0][0],known[-1][0]
+  for piece in pieces.values():
+   if (mesh.vertices[piece[0]].co.x>0)!=(sign>0):continue
+   is_upper=sum(mesh.vertices[i].co.z for i in piece)/len(piece)>C.z
+   for i in piece:
+    p=mesh.vertices[i].co.copy()
+    x=max(first,min(last,p.x))
+    wide,up,low=at_column(x)
+    root=up if is_upper else low
+    # Only what stands outward of the lid's edge shortens, measured on this column's
+    # circle of the dome, which is smaller than the dome near the corners.
+    out=(angle(p)-root)*(1 if is_upper else -1)
+    # Anything the proxy left inside the opening goes back to the lid's edge: lashes grow
+    # from the lid, and a root lying over the eye shows the sclera through the hairs.
+    a=root+(angle(p)-root)*LASH_LENGTH if out>0 else root
+    rim=math.sqrt(max(0,R*R-(x-C.x)**2))
+    across=(p-Vector((p.x,C.y,C.z))).length
+    r=rim+(across-rim)*LASH_LENGTH if across>rim else across
+    x_short=x+(p.x-x)*LASH_LENGTH
+    short=Vector((x_short,C.y-r*math.cos(a),C.z+r*math.sin(a)))
+    mesh.vertices[i].co=short
+    basis.data[i].co=short
+    wide=at_column(C.x+(x-C.x)*.92)[0]
+    by=wide*UPPER_SHARE+OVERLAP if is_upper else -(wide*(1-UPPER_SHARE)+OVERLAP)
+    blink.data[i].co=turned(short,by,0)
+    moved+=1
+  for i in skin_v:
+   p=mesh.vertices[i].co
+   if (p.x>0)!=(sign>0) or p.y>C.y:continue
+   wide,up,low=at_column(p.x)
+   if wide<=0:continue
+   dist=(p-C).length
+   if dist<R*.97:continue
+   # Fades out with distance too, so nothing moved sits beside something held.
+   fade=max(0,min(1,(R*1.7-dist)/(R*.5)))
+   if fade<=0:continue
+   a=angle(p)
+   upper_turn=wide*UPPER_SHARE+OVERLAP
+   lower_turn=wide*(1-UPPER_SHARE)+OVERLAP
+   if a>=(up+low)/2:
+    w=fade*max(0,1-max(0,a-up)/UPPER_REACH)**1.2
+    blink.data[i].co=turned(p,upper_turn*w,LID_LIFT*w)
+   else:
+    w=fade*max(0,1-max(0,low-a)/LOWER_REACH)**1.2
+    blink.data[i].co=turned(p,-lower_turn*w,LID_LIFT*w)
+   moved+=1
+  print('BLINK eye %+d: centre %s radius %.4f, %d columns, widest opening %.1f degrees'%(sign,tuple(round(k,4) for k in C),R,len(known),math.degrees(max(soft))))
+ print('BLINK moved %d vertices'%moved)
+add_blink(bpy.context.view_layer.objects.active)
 rig.select_set(True);bpy.context.view_layer.objects.active=rig
 source=ROOT/'assets/source';source.mkdir(parents=True,exist_ok=True)
 bpy.ops.file.pack_all()

@@ -18,7 +18,9 @@ void fragment() {
  float grain=hash(floor(p*270.0));
  float grooming=pow(abs(sin(p.x*3.2+p.y*.018)),75.0);
  float scratches=pow(noise(p*vec2(180.0,2.0)),18.0);
- vec3 base=mix(vec3(.48,.63,.70),vec3(.83,.90,.91),cloud*.45+.42);
+ // A resurfaced sheet is one even colour. Large soft clouds here read as stains from the
+ // high camera, so they only just tint it; the light and the blade work do the rest.
+ vec3 base=mix(vec3(.48,.63,.70),vec3(.83,.90,.91),.645+(cloud-.5)*.05);
  // Lines keep at least a pixel's width, or far off they break up into dots.
  float pixel=fwidth(p.x)+fwidth(p.y);
  float center=(1.0-smoothstep(.018,.045+pixel,abs(p.y)))*min(1.0,.06/pixel);
@@ -38,7 +40,7 @@ void fragment() {
  base*=.975+.05*smoothstep(.15,.85,band)+(hash(vec2(floor(pass_x),7.0))-.5)*.035;
  // Skated ice is not clean: older blade work and worn patches show through.
  float worn=noise(p*.55+11.0)*.6+noise(p*2.3)*.4;
- base*=1.0-smoothstep(.45,.85,worn)*.09;
+ base*=1.0-smoothstep(.45,.85,worn)*.025;
  // Ice is a dielectric, n = 1.31: F0 .018, nearly nothing from above, a mirror
  // at a glance. The arena has rows of fixtures, not a sun, so its lights take no
  // direct highlight here; the ice shows the reflected roof grid instead, found

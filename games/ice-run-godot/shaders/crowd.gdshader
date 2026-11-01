@@ -5,16 +5,32 @@ shader_type spatial;
 // none of it is individually simulated, and nothing reads it back.
 uniform vec3 skater = vec3(0.0);
 uniform float cheer = 0.0;
-const float NECK = .64;
-const vec3 SHOULDER = vec3(.157,0.589,0.);
+// From tools/build_spectator.py's printed measurements, metres above the floor.
+const float NECK = .998;
+const float HIP = .457;
+const float CROWN = 1.1;
+const vec3 SHOULDER = vec3(.168,.933,-.015);
 varying vec3 skin;
 varying float bare;
+varying float legs;
+varying float shoes;
+varying float hair;
+varying vec3 hair_colour;
+varying vec3 leg_colour;
 mat3 turn_y(float a) { float c=cos(a),s=sin(a); return mat3(vec3(c,0.,-s),vec3(0.,1.,0.),vec3(s,0.,c)); }
 mat3 turn_x(float a) { float c=cos(a),s=sin(a); return mat3(vec3(1.,0.,0.),vec3(0.,c,s),vec3(0.,-s,c)); }
 void vertex() {
  skin=INSTANCE_CUSTOM.rgb;
  float own=INSTANCE_CUSTOM.a;
- bare=smoothstep(.63,.67,VERTEX.y);
+ bare=smoothstep(NECK-.04,NECK-.005,VERTEX.y)+UV.x*smoothstep(.72,.8,UV.y);
+ legs=(1.-step(.5,UV.x))*(1.-smoothstep(HIP-.03,HIP+.05,VERTEX.y));
+ shoes=(1.-step(.5,UV.x))*(1.-smoothstep(.05,.09,VERTEX.y));
+ // Hair sweeps from the crown down the back of the head; the face, forward (+Z), stays bare.
+ hair=smoothstep(CROWN-.02,CROWN+.01,VERTEX.y-VERTEX.z*.55+max(0.,-VERTEX.z)*.25);
+ float own_hair=fract(INSTANCE_CUSTOM.a*31.7);
+ hair_colour=own_hair<.45?vec3(.05,.035,.03):own_hair<.75?vec3(.16,.09,.05):own_hair<.9?vec3(.42,.29,.14):vec3(.34,.33,.33);
+ float own_legs=fract(INSTANCE_CUSTOM.a*17.3);
+ leg_colour=own_legs<.5?vec3(.025,.03,.045):own_legs<.8?vec3(.06,.055,.05):vec3(.12,.11,.09);
  vec3 p=VERTEX;
  // Not everyone is on their feet for the same landing, or at the same moment.
  float joins=step(fract(own*7.3),.82);
@@ -43,7 +59,10 @@ void vertex() {
  VERTEX=p;
 }
 void fragment() {
- ALBEDO=mix(COLOR.rgb,skin,bare);
+ vec3 worn=mix(COLOR.rgb,leg_colour,legs);
+ worn=mix(worn,vec3(.02),shoes);
+ // House lights are down: they are the audience, not the show.
+ ALBEDO=mix(mix(worn,skin,clamp(bare,0.,1.)),hair_colour,hair)*.72;
  ROUGHNESS=.82;
  SPECULAR=.25;
 }
