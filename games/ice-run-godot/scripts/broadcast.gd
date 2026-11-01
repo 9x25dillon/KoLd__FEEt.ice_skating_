@@ -1,4 +1,5 @@
 extends Control
+const SimSpace = preload("res://scripts/sim_space.gd")
 # The presentation reads the solver; none of these meters alters skating.
 var data: Dictionary = {}
 var setup_name := "BLADE EXPLORER"
@@ -18,6 +19,10 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	font = ThemeDB.fallback_font
 
+# The map is the rink seen from above, the same way round as the arena.
+func plan(p: Dictionary) -> Vector2:
+	return Vector2(p.x,SimSpace.RINK_CENTRE_Y-float(p.y))
+
 func update_state(frame: Dictionary, setup: String, camera: String) -> void:
 	data = frame
 	setup_name = setup.replace("_"," ").to_upper()
@@ -25,7 +30,7 @@ func update_state(frame: Dictionary, setup: String, camera: String) -> void:
 	var tick := int(frame.state.tick)
 	if tick < last_tick: rink_path.clear()
 	if tick != last_tick and tick%8<3:
-		rink_path.append(Vector2(frame.state.pos.x,float(frame.state.pos.y)-18))
+		rink_path.append(plan(frame.state.pos))
 		if rink_path.size()>900: rink_path.remove_at(0)
 	last_tick = tick
 	queue_redraw()
@@ -91,9 +96,9 @@ func _draw() -> void:
 		var points := PackedVector2Array()
 		for p in rink_path: points.append(map_pos+p*2.12)
 		draw_polyline(points,Color(.6,.77,.83,.4),1,true)
-	var current := map_pos+Vector2(s.pos.x,float(s.pos.y)-18)*2.12
+	var current := map_pos+plan(s.pos)*2.12
 	draw_circle(current,3,GOLD)
-	draw_line(current,current+Vector2(s.heading.x,s.heading.y)*9,WHITE,1.5,true)
+	draw_line(current,current+Vector2(s.heading.x,-float(s.heading.y))*9,WHITE,1.5,true)
 	if int(data.get("spinLevel",-1))>=0:
 		text(Vector2(48,bottom-157),"LAST SPIN  /  LEVEL "+("B" if int(data.spinLevel)==0 else str(data.spinLevel)),12,GOLD)
 	if announce_time>0:

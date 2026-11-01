@@ -1,4 +1,5 @@
 extends Node3D
+const SimSpace = preload("res://scripts/sim_space.gd")
 var trace_mesh: MultiMesh
 var trace_count := 0
 var previous: Array = [null, null]
@@ -249,7 +250,7 @@ func add_traces(frames: Array) -> void:
 	for pair in frames:
 		for i in range(2):
 			var b: Dictionary = pair[i]
-			var point := Vector3(float(b.x),.016,float(b.y)-18.0)
+			var point := SimSpace.point(b.x,b.y,.016)
 			if b.contact and previous[i] != null:
 				var delta: Vector3 = point-previous[i]
 				var length := delta.length()
@@ -274,7 +275,7 @@ func set_course(mode: String, catalog: Dictionary) -> void:
 		torus.rings = 32
 		torus.ring_segments = 8
 		node.mesh = torus
-		node.position = Vector3(float(p.x),.04,float(p.y)-18)
+		node.position = SimSpace.point(p.x,p.y,.04)
 		node.material_override = mat(Color("c6b393"),.1,.4,0.25)
 		markers.add_child(node)
 		targets.append(node)

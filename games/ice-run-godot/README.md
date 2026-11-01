@@ -209,6 +209,28 @@ judging model remain future work. Stamina is exposed in the HUD; existing enable
 flow and ice systems remain owned by Ice Lab. The reflected fixture highlights are
 procedural plus a venue reflection probe, not a live planar mirror.
 
+## Pose from physics
+
+`scripts/skater.gd` poses the body from the solver's own state: the hip from
+`comZ`, the trunk along the contact-to-centre-of-mass pendulum (lean and pitch),
+each boot's roll from its blade's `tilt`, its place from `contact`. Only what the
+sim does not state is authored and eased: arms, the free leg, camel/sit/low/fallen
+shapes. Every sim coordinate reaches the world through `scripts/sim_space.gd`.
+
+`tools/pose_lab.gd` measures this. It plays a recording from the real engine
+through the real skater script, frames arriving unevenly, and compares the rendered
+skeleton with the state that produced it:
+
+```sh
+node games/ice-run-godot/tools/pose_clip.mjs /tmp/pose-clip.json
+godot4 --headless --path games/ice-run-godot --script res://tools/pose_lab.gd -- --clip=/tmp/pose-clip.json --check
+```
+
+Add `--shots=<dir> --ticks=60,300` (with a display) for stills, or Godot's
+`--write-movie out.avi --fixed-fps 60` for the passage as video. This shows the pose
+agrees with the simulation, not that either matches a real skater. CI has no Godot, so
+this check runs locally.
+
 ## Rebuild the competition athlete
 
 ```sh

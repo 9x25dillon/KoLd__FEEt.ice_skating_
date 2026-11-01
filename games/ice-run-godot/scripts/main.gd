@@ -2,6 +2,7 @@ extends Node3D
 const EngineLink = preload("res://scripts/engine_link.gd")
 const Arena = preload("res://scripts/arena.gd")
 const Skater = preload("res://scripts/skater.gd")
+const SimSpace = preload("res://scripts/sim_space.gd")
 const Ribbon = preload("res://scripts/ribbon.gd")
 const Broadcast = preload("res://scripts/broadcast.gd")
 # Purely a local presentation choice: skater.gd poses whichever glb this
@@ -802,7 +803,7 @@ func controls(dt: float) -> Dictionary:
 		forward.y = 0
 		forward = forward.normalized()
 		var aim := camera.global_basis.x*left.x+forward*left.y
-		left = Vector2(aim.x,aim.z)
+		left = Vector2(aim.x,-aim.z)
 	var lb := pressed(KEY_Q) or pad(joy,JOY_BUTTON_LEFT_SHOULDER)
 	var rb := pressed(KEY_E) or pad(joy,JOY_BUTTON_RIGHT_SHOULDER)
 	var k1 := float(pressed(KEY_D))-float(pressed(KEY_A))
@@ -1020,7 +1021,7 @@ func capture() -> void:
 func update_camera(dt: float) -> void:
 	camera.cull_mask = 1 if camera_mode==2 and not overlay.visible else 3
 	var s: Dictionary = frame.state
-	var velocity := Vector3(float(s.vel.x),0,float(s.vel.y))
+	var velocity := SimSpace.direction(s.vel.x,s.vel.y)
 	if velocity.length()>.5 and int(s.jump.phase)!=2:
 		follow_direction = follow_direction.lerp(velocity.normalized(),1-exp(-dt*1.8)).normalized()
 	var focus: Vector3 = skater.position+Vector3(0,.9,0)
@@ -1040,7 +1041,7 @@ func update_camera(dt: float) -> void:
 		fov = 46
 	if overlay.visible:
 		var a := .38+sin(presentation_clock*.09)*.22
-		var front := Vector3(float(s.heading.x),0,float(s.heading.y))
+		var front := SimSpace.direction(s.heading.x,s.heading.y)
 		var showcase := front.rotated(Vector3.UP,a)
 		desired = skater.position+showcase*4.2+Vector3(0,1.35,0)
 		look = skater.position+Vector3(0,1.1,0)-showcase.cross(Vector3.UP)*.85
