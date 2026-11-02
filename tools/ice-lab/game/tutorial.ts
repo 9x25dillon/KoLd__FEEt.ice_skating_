@@ -18,7 +18,7 @@ import { MOVE, REGIME } from "../sim/types.ts";
 import type { SkaterState } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import type { Setup } from "./setups.ts";
-import type { FeetLayout } from "./full-controls.ts";
+import type { FeetLayout, PaddleAction } from "./full-controls.ts";
 import { Ghost, TRICKS } from "./ghost.ts";
 
 export const STAGES = [
@@ -40,6 +40,8 @@ export interface HowContext {
   modifier: string;
   /** Where the feet live on the pad (Simulation's profile; Experimental reads it too). */
   feet: FeetLayout;
+  /** Where an Elite paddle action lives ("top-right paddle"), for game/padcourse.ts; absent where none does. */
+  paddle?: (action: PaddleAction) => string | null;
 }
 
 /** A step's own memory; wiped when the step starts and after a fall. */
@@ -56,8 +58,10 @@ export interface StepMemory {
   /** s.landed.tick when the step (re)started: a landing after it is this step's. */
   landedBase: number | null;
   landed: boolean;
+  /** game/padcourse.ts: which of a step's two sides have been seen, as bits. */
+  sides: number;
 }
-const freshMemory = (): StepMemory => ({ pushes: 0, stroking: false, armed: false, scraped: false, wind: 0, quiet: 0, wound: false, landedBase: null, landed: false });
+const freshMemory = (): StepMemory => ({ pushes: 0, stroking: false, armed: false, scraped: false, wind: 0, quiet: 0, wound: false, landedBase: null, landed: false, sides: 0 });
 
 export interface TutorialStep {
   id: string;
@@ -106,10 +110,10 @@ export const SCRAPE_GAP = 0.3;
 /** Revolutions a turning jump must turn. */
 export const AIR_TURN = 0.5;
 
-const speed = (s: SkaterState) => Math.hypot(s.vel.x, s.vel.y);
+export const speed = (s: SkaterState) => Math.hypot(s.vel.x, s.vel.y);
 const backward = (s: SkaterState) => s.vel.x * s.heading.x + s.vel.y * s.heading.y < -0.5;
 const onIce = (s: SkaterState) => !s.fallen && s.jump.phase !== JUMP_PHASE.Air;
-const settled = (s: SkaterState) => !s.fallen && s.jump.phase === JUMP_PHASE.None && s.move === MOVE.None;
+export const settled = (s: SkaterState) => !s.fallen && s.jump.phase === JUMP_PHASE.None && s.move === MOVE.None;
 const skidding = (s: SkaterState) => s.blade.some(b => b.inContact && b.regime === REGIME.Skid);
 /** Setups whose stops come from the feet: the pad has no brake there, so a brake is not a scrape. */
 const feetSetup = (setup: Setup | null) => setup === "simulation" || setup === "experimental" || setup === "diggate";
@@ -272,7 +276,9 @@ function landedClean(s: SkaterState, m: StepMemory, turn: number): boolean {
 
 export class Tutorial {
   readonly setup: Setup | null;
-  /** STEPS index of the current step; STEPS.length when done. */
+  /** The course: this tutorial's own, unless game/padcourse.ts hands it another. */
+  readonly steps: readonly TutorialStep[];
+  /** steps index of the current step; steps.length when done. */
   index = 0;
   /** s the current step's condition has held. */
   progress = 0;
@@ -289,13 +295,14 @@ export class Tutorial {
   memory: StepMemory = freshMemory();
   private wasFallen = false;
 
-  constructor(setup: Setup | null, start = 0) {
+  constructor(setup: Setup | null, start = 0, steps: readonly TutorialStep[] = STEPS) {
     this.setup = setup;
+    this.steps = steps;
     this.index = start;
     this.skipUnavailable();
   }
-  get done() { return this.index >= STEPS.length; }
-  get step(): TutorialStep | null { return STEPS[this.index] ?? null; }
+  get done() { return this.index >= this.steps.length; }
+  get step(): TutorialStep | null { return this.steps[this.index] ?? null; }
   get stage() { return this.step ? STAGES.findIndex(g => g.id === this.step!.stage) : STAGES.length; }
   /** 0..1 through the current step's hold. */
   get fraction() { return this.step ? Math.min(1, this.progress / this.step.hold) : 1; }

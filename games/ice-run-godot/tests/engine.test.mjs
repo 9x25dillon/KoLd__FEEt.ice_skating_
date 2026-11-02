@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {IceEngine,emptyControls} from '../bridge/engine.mjs';
+import {setupParams} from '../runtime/game/setups.js';
 import {CareerState} from '../runtime/game/career.js';
 import {createState,step} from '../runtime/sim/solver.js';
 import {IceGrid} from '../runtime/sim/ice.js';
@@ -270,4 +271,63 @@ test('an arm drill scores the called line, finishes, and replays with its own pa
  const f=new IceEngine();f.setArmFocus(2);f.start({mode:'armdrill'});
  for(let j=0;j<46*120&&!f.finished;j++)f.tick({...NEUTRAL_INPUT,lean:.2,weight:.5,knee:.4,push:j%90===0,carriage:f.drill.done?0:1-f.drill.wanted});
  assert.ok(f.drill.score<=20,`doing the opposite should score low: ${f.drill.score}`);
+});
+
+test('a lesson runs on its own setup, pays each step once, and a skip pays nothing',()=>{
+ const e=new IceEngine();
+ assert.throws(()=>e.start({mode:'lesson',course:'nope'}),/Unknown lesson/);
+ e.configure({setup:'explorer'});
+ assert.throws(()=>e.start({mode:'lesson',course:'experimental'}),/needs its own setup/);
+ assert.equal(e.start({mode:'lesson',course:'explorer'}).tutorial.title,'Lean into a curve');
+ const hardware={axes:[.5,0,0,0],buttons:Array(16).fill(0),keys:[],connected:true};
+ for(let i=0;i<60;i++)e.advance({hardware},12);
+ const f=e.snapshot();
+ assert.equal(f.tutorial.index,1,'holding the stick passed the edge');
+ assert.deepEqual(f.career.lessons,['edge']);
+ assert.equal(f.career.xp,25);
+ const total=f.tutorial.total;
+ for(let i=1;i<total;i++)e.skipStep();
+ assert.equal(e.finished,true);
+ assert.match(e.result.detail,/skipped/);
+ assert.equal(e.result.xp,25,'skips paid nothing');
+ assert.equal(e.career.profile.xp,25);
+ e.start({mode:'lesson',course:'explorer'});
+ for(let i=0;i<60;i++)e.advance({hardware},12);
+ assert.equal(e.career.profile.xp,25,'a second pass pays nothing');
+});
+
+test('the trust-the-ice lesson runs on every setup, and no lesson leaves a career mode behind it',()=>{
+ const e=new IceEngine();
+ for(const setup of ['simulation','explorer','experimental','diggate','repertoire']){
+  e.configure({setup});
+  const f=e.start({mode:'lesson',course:'trust'});
+  assert.equal(f.tutorial.title,'Stand tall, let it carry you',setup);
+  assert.ok(f.tutorial.how.length>20);
+  assert.equal(e.params.internalMax,setupParams(setup).internalMax,'no arm trade-off in a lesson');
+ }
+ assert.throws(()=>new IceEngine().skipStep(),/No lesson/);
+});
+
+test('career prompts follow the setup, and every stat can be trained',()=>{
+ const e=new IceEngine();e.configure({setup:'experimental'});
+ const f=e.start({mode:'career',event:0});
+ assert.match(f.routine.how,/Snap LT and RT/);
+ assert.match(f.recover,/Snap a trigger/);
+ e.configure({setup:'explorer'});
+ assert.match(e.start({mode:'career',event:0}).routine.how,/A \/ Cross/);
+ assert.deepEqual(e.snapshot().career.floors,[0,0,51,51.5,52]);
+ assert.equal(e.snapshot().career.locks[0],'');
+ e.career.profile={...e.career.profile,xp:1000};
+ e.train('stamina');assert.equal(e.career.profile.stats.stamina,51);
+ assert.throws(()=>e.train('luck'),/Unknown/);
+});
+
+test('a routine that ran out says which element stopped it',()=>{
+ const e=new IceEngine();e.configure({setup:'experimental'});e.start({mode:'career',event:0});
+ e.routine.elapsed=e.routine.event.seconds-.001;
+ const hardware={axes:[0,0,0,0],buttons:Array(16).fill(0),keys:[],connected:true};
+ e.advance({hardware},2);
+ assert.equal(e.result.complete,false);
+ assert.equal(e.result.stopped.element,'Opening glide');
+ assert.match(e.result.stopped.how,/Snap LT and RT/);
 });

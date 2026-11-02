@@ -5,7 +5,7 @@ import {MOVE,TURN_KIND,NEUTRAL_INPUT,codeToString} from '../runtime/sim/types.js
 import {JUMP_PHASE,JUMP_CODE} from '../runtime/sim/jump.js';
 import {ReplayRecorder,ReplayPlayer,parseReplay,replayDigest,MAX_REPLAY_BYTES} from '../runtime/sim/replay.js';
 import {SessionMeter} from '../runtime/sim/session.js';
-import {applyProfile,SAMPLE_PROFILES,xpToRaise} from '../runtime/sim/profile.js';
+import {applyProfile,SAMPLE_PROFILES,xpToRaise,overall,STAT_NAMES} from '../runtime/sim/profile.js';
 import {loadTables,scoreJump} from '../runtime/sim/score.js';
 import {loadSpinFeatureThresholds,SpinLevelTracker,scoreSpinLevel} from '../runtime/sim/spinLevel.js';
 import {loadStepFeatureThresholds} from '../runtime/sim/stepLevel.js';
@@ -15,7 +15,9 @@ import {SETUPS,isSetup,setupParams,setupInput} from '../runtime/game/setups.js';
 import {gameInput,GAME_PARAMS} from '../runtime/game/controls.js';
 import {defaultControllerProfile,parseControllerProfile,validHardware,ACTIONS,BUTTON_NAMES,TUNING,bindingLabel} from '../runtime/game/full-controls.js';
 import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
-import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS} from '../runtime/game/career.js';
+import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS,EVENT_FLOORS,LESSON_XP} from '../runtime/game/career.js';
+import {Tutorial,STEPS as TRUST_STEPS} from '../runtime/game/tutorial.js';
+import {COURSES,courseById,courseSteps,howContext,elementHow,recoverHow} from '../runtime/game/padcourse.js';
 import {ARM_FOCUS,ArmDrill,armParams,armExpression} from '../runtime/game/armfocus.js';
 import {Practice,LESSONS} from '../runtime/game/practice.js';
 import {IceRun,LIGHTS} from '../runtime/game/run.js';
@@ -32,6 +34,8 @@ const spinThresholds=loadSpinFeatureThresholds(readFileSync(new URL('../runtime/
 const stepThresholds=loadStepFeatureThresholds(readFileSync(new URL('../runtime/data/step-features.json',import.meta.url),'utf8'));
 const segmentRules=loadSegmentRules(readFileSync(new URL('../runtime/data/segment-rules.csv',import.meta.url),'utf8'));
 export const tracks=JSON.parse(readFileSync(new URL('../runtime/tracks.json',import.meta.url),'utf8'));
+/** Measured 2026-11-01: 420 scripted takeoffs on Simulation and Experimental, none landed clean past 0.06 rev. Physics research, not this lesson's to bend. */
+const UNPROVEN_AIR='This one may not land yet: turning takeoffs are still being worked on. Pause and skip it if it will not come.';
 export const emptyControls=()=>({lx:0,ly:0,rx:0,ry:0,lean:0,pitch:0,kx:0,ky:0,kPrimaryX:0,kAltX:0,knee:.35,weight:.5,carriage:0,windup:0,push:false,brake:false,toe:false,turn:false,bracket:false,twizzle:false,spin:false,inaBauer:false,reset:false,pause:false,cyclePreset:false,cycleScheme:false,cycleJump:false,cycleView:false,zoom:0,dpadStep:0,tilt:0,toggleGame:false,cycleGhost:false,pickJump:-1,cycleProfile:false,cycleMoves:false,cycleRink:false});
 export class IceEngine {
  constructor(save=null) {
@@ -40,10 +44,10 @@ export class IceEngine {
   this.profile=0; this.cruise=true; this.sequence=['glide','edge','jump','spin','pose'];
   this.start({mode:'free'});
  }
- catalog() {return {armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,flakes:SNOWFLAKES,targets:TARGETS};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
-  if(!['free','career','rookie','timed','composer','pairs','armdrill'].includes(mode)) throw Error('Unknown skating mode');
+  if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson'].includes(mode)) throw Error('Unknown skating mode');
   if(options.pairsChallenge!==undefined&&typeof options.pairsChallenge!=='boolean')throw Error('Invalid pairs challenge');
   const index=options.event??this.event??0;
   if(mode==='career'&&(!Number.isInteger(index)||index<0||index>this.career.unlocked)) throw Error('Complete the previous career event first');
@@ -51,6 +55,14 @@ export class IceEngine {
    if(!Array.isArray(options.sequence)||options.sequence.length<1||options.sequence.length>16||options.sequence.some(id=>!Object.hasOwn(ELEMENTS,id))) throw Error('A program needs 1–16 valid elements');
    this.sequence=[...options.sequence];
   }
+  // A lesson: 'trust' is game/tutorial.ts's course, on any setup; the rest belong to their setups.
+  const course=mode==='lesson'?(options.course??this.course??'trust'):null;
+  if(mode==='lesson'&&course!=='trust'){
+   const known=courseById(course);
+   if(!known)throw Error('Unknown lesson');
+   if(!known.setups.includes(this.setup))throw Error(`${known.title} needs its own setup`);
+  }
+  this.course=course;
   this.mode=mode;this.event=index;
   this.state=createState(this.params=applyProfile(this.setup?setupParams(this.setup,this.assistance):this.beginner?BEGINNER_PARAMS:GAME_PARAMS,mode==='career'?this.career.profile:SAMPLE_PROFILES[this.profile]),4.5);
   // Only career trades balance for line; every other mode has both at once.
@@ -65,6 +77,7 @@ export class IceEngine {
   this.steering=newSchemeState();this.coach=new BeginnerCoach();this.practice=new Practice();this.run=new IceRun();this.rookie=new RookieCourse();this.playground=new Playground();
   this.routine=mode==='career'?new Choreography(CAREER_EVENTS[index],tables,spinThresholds,stepThresholds,segmentRules,this.ice):mode==='composer'?new Choreography({id:'authored',title:'Your signature program',venue:'Composer rehearsal',seconds:180,routine:this.sequence,discipline:'women',segment:'free'},tables,spinThresholds,stepThresholds,segmentRules,this.ice):null;
   if(mode==='career')this.routine.armExpression=armExpression(focus,this.career.armBest[focus]);
+  this.lesson=mode==='lesson'?(course==='trust'?new Tutorial(this.setup):new Tutorial(this.setup,0,courseSteps(courseById(course),this.setup))):null;this.lessonXp=0;
   this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
   // The live free-skate readout game/main.ts already has (frame.technical above is its jump half) —
   // sample every tick a spin is live, score the moment it ends. -1 means no spin has finished yet;
@@ -111,7 +124,8 @@ export class IceEngine {
    } else {
     const s=this.state;
     const canPush=!s.fallen&&s.move===MOVE.None&&s.jump.phase===JUMP_PHASE.None&&!c.brake&&!c.spin&&!c.turn&&!c.twizzle&&!c.inaBauer&&!low;
-    const repeat=canPush&&s.tick%90===0&&(controls.pushHeld||(this.cruise&&Math.hypot(s.vel.x,s.vel.y)<5.5));
+    // No cruise in a lesson: a step asks for the player's own pushes and glides.
+    const repeat=canPush&&s.tick%90===0&&(controls.pushHeld||(this.cruise&&this.mode!=='lesson'&&Math.hypot(s.vel.x,s.vel.y)<5.5));
     const live={...c,push:(i===0&&c.push)||repeat,autoPush:repeat,toe:i===0&&c.toe};
     const mapped=this.setup?setupInput(live,s,this.setup,this.steering,this.params,this.controllerProfile,this.assistance)
       :gameInput(live,s,this.scheme,this.steering,low,this.params,this.controllerProfile);
@@ -140,6 +154,11 @@ export class IceEngine {
   this.practice.sample(this.state,this.low,SIM_DT);
   if(this.mode==='rookie')this.rookie.sample(this.state,SIM_DT);
   if(this.drill&&!this.drill.done)this.drill.sample(this.state,input,SIM_DT);
+  if(this.lesson&&!this.lesson.done){
+   const at=this.lesson.step;this.lesson.sample(this.state,SIM_DT);
+   if(this.lesson.step!==at)this.lessonXp+=this.career.recordLesson(at.id);
+   if(this.lesson.done)this.finishLesson();
+  }
   if(this.mode==='timed')this.run.sample(this.state,SIM_DT);
   // Free Skate stays quiet per the bible. The original playground remains available in runtime.
   if(this.state.landed.tick>=0&&this.scoredTick!==this.state.landed.tick){this.scoredTick=this.state.landed.tick;this.technical+=scoreJump(tables,this.state.landed)?.score??0;}
@@ -159,39 +178,50 @@ export class IceEngine {
    // Forward the existing sheet and totals; Godot formats them without parsing
    // prose or recalculating scores. Null PCS remains distinguishable from zero.
    const protocol=r.sheet?{lines:r.sheet.lines,tes:r.technicalScore,pcs:r.pcsScore?.total??null,deductions:r.deductions,total:r.segmentScore}:null;
-   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls`,protocol,xp,complete:r.complete};
+   const stopped=r.complete?null:{element:ELEMENTS[r.current].title,how:elementHow(r.current,howContext(this.setup,this.controllerProfile))};
+   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls`,protocol,xp,complete:r.complete,stopped};
   } else if(this.drill?.done&&!this.finished){const gained=this.career.recordDrill(this.drill.focus,this.drill.score);this.finished=true;this.result={title:`${ARM_FOCUS[this.drill.focus].title} drill: ${this.drill.score} / 100`,detail:gained>0?`A new best, up ${gained}. Your arms give up less for ${ARM_FOCUS[this.drill.focus].title} now.`:`Your best stays ${this.career.armBest[this.drill.focus]}.`,complete:true};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
  }
+ finishLesson(){
+  const l=this.lesson,title=this.course==='trust'?'You trust the ice.':'Your hands know the way.';
+  const skipped=l.skipped.map(id=>l.steps.find(x=>x.id===id)?.title).filter(Boolean);
+  this.finished=true;
+  this.result={title,detail:`${l.steps.length-skipped.length}/${l.steps.length} steps${l.falls?` · ${l.falls} fall${l.falls>1?'s':''} you got up from`:' · without a fall'}${skipped.length?` · skipped: ${skipped.join(', ')}`:''}`,xp:this.lessonXp,lesson:true,complete:true};
+ }
+ /** The player moves past a step. It pays nothing. */
+ skipStep(){if(!this.lesson||this.finished)throw Error('No lesson is running');this.lesson.skip();if(this.lesson.done)this.finishLesson();return this.snapshot();}
  replay(json){
   if(typeof json!=='string'||json.length>MAX_REPLAY_BYTES)throw Error('Replay is too large');
   const root=JSON.parse(json),paired=root?.format==='edgework-pairs/1';
   const clip=parseReplay(paired?JSON.stringify(root.solo):json);
   if(paired&&(!Array.isArray(root.partners)||root.partners.length!==clip.frames.length||typeof root.challenge!=='boolean'
    ||root.partners.some(f=>!f||!Number.isInteger(f.actions)||f.actions<0||f.actions>3||!Number.isInteger(f.digest)||f.digest<0||f.digest>0xffffffff)))throw Error('Invalid pairs replay');
-  this.start({mode:'free'});this.player=new ReplayPlayer(clip);this.state=this.player.state;this.params=this.player.params;
+  this.start({mode:'free'});this.player=new ReplayPlayer(clip);this.lesson=null;this.state=this.player.state;this.params=this.player.params;
   if(paired){this.mode='pairs';this.pairs=new PairsSession(this.state,this.params,root.challenge);this.pairPlayback=root.partners;}
   return this.snapshot();
  }
  exportReplay(){return this.pairs?JSON.stringify({format:'edgework-pairs/1',challenge:this.pairs.challenge,solo:JSON.parse(this.recorder.toJson()),partners:this.pairFrames}):this.recorder.toJson();}
  setArmFocus(focus){if(![0,1,2].includes(focus))throw Error('Unknown arm focus');this.career.armFocus=focus;}
- train(stat){if(!['strength','spring','edgeControl','balance'].includes(stat))throw Error('Unknown training skill');this.career.train(stat);}
+ train(stat){if(!STAT_NAMES.includes(stat))throw Error('Unknown training skill');this.career.train(stat);}
  snapshot() {
-  const s=this.state,r=this.routine;
+  const s=this.state,r=this.routine,l=this.lesson,words=howContext(this.setup,this.controllerProfile);
   // Turn's own kind, broken down the same way game/main.ts's free-skate HUD
   // already does — this bridge used to say the bare 'Turn' for all six.
   const turnLabel=s.turn.against?(s.turn.kind===TURN_KIND.Counter?'Counter':'Bracket')
    :s.turn.kind===TURN_KIND.Mohawk?'Mohawk':s.turn.kind===TURN_KIND.Choctaw?'Choctaw'
    :s.turn.kind===TURN_KIND.Loop?'Loop':s.turn.kind===TURN_KIND.Rocker?'Rocker'
    :'Three-turn';
-  const move=s.fallen?'Recover · press Space / A':s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
+  const move=s.fallen?`Recover · ${recoverHow(words)}`:s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
   return {pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
-   routine:r?{title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal,pcsScore:r.pcsScore}:null,
+   recover:recoverHow(words),
+   tutorial:l?{unproven:l.step?.id==='spin'?UNPROVEN_AIR:'',course:this.course,index:l.index,total:l.steps.length,title:l.step?.title??'',prose:l.step?.prose??'',how:l.step?l.step.how(words):'',keys:l.step?.keys?.(words)??'',hold:l.step?.hold??0,progress:l.progress,fraction:l.fraction,status:l.status,message:l.toast>0?l.message:'',falls:l.falls}:null,
+   routine:r?{how:r.current?elementHow(r.current,words):'',title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal,pcsScore:r.pcsScore}:null,
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},
    armStyle:this.armStyle,drill:this.drill?{title:this.drill.title,hint:this.drill.hint,seconds:this.drill.seconds,score:this.drill.score,focus:this.drill.focus}:null,
    rookie:{index:this.rookie.index,cleared:this.rookie.cleared,title:this.rookie.title,hint:this.rookie.hint,target:this.rookie.target},
    run:{seconds:this.run.seconds,score:this.run.score,collected:this.run.collected,target:this.run.target},
-   career:{armFocus:this.career.armFocus,armBest:this.career.armBest,medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
+   career:{overall:overall(this.career.profile),floors:EVENT_FLOORS,locks:CAREER_EVENTS.map((_,i)=>this.career.lockReason(i)),lessons:this.career.lessons,armFocus:this.career.armFocus,armBest:this.career.armBest,medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
  }
 }

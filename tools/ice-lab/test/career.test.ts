@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import {
   CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX, TECHNICAL_XP_PER_POINT, SPIN_LEVEL_XP,
-  STEP_LEVEL_XP,
+  STEP_LEVEL_XP, EVENT_FLOORS, LESSON_XP,
 } from "../game/career.ts";
 import type { CareerEvent, ElementId } from "../game/career.ts";
 import { createState, step } from "../sim/solver.ts";
@@ -360,23 +360,75 @@ test("PCS stays unscored, gracefully, without segmentRules or an ice grid", () =
 test("stats gate progression independent of medals: a neutral profile holds at regionals", () => {
   const c = new CareerState();
   assert.equal(overall(c.profile), 50, "every stat starts neutral");
-  assert.equal(c.statCap, 1, "overall 50 clears club (0) and regionals (40), not nationals (55)");
+  assert.equal(c.statCap, 1, "overall 50 clears the first two events, not the third");
   c.medals = CAREER_EVENTS.map(() => 3);         // every medal already earned, by fiat
   assert.equal(c.medalCap, CAREER_EVENTS.length - 1);
   assert.equal(c.unlocked, 1, "medals in hand cannot outrun the stats behind them");
 });
 
-test("training raises overall past a tier floor and lifts the stat gate", () => {
+test("training raises overall past an event floor and lifts the stat gate", () => {
   const c = new CareerState();
   c.profile = { ...c.profile, xp: 100000 };
-  // CareerState.train spends exactly one point's price per call (the UI's one
-  // click, one point), so reaching 100 from neutral 50 takes fifty calls.
-  for (let i = 0; i < 50; i++) c.train("edgeControl");   // overall 50 -> 64
-  assert.equal(c.profile.stats.edgeControl, 100);
-  assert.ok(overall(c.profile) >= TIERS[2].floor && overall(c.profile) < TIERS[3].floor,
-    `overall ${overall(c.profile)} should clear nationals (${TIERS[2].floor}) but not grand prix (${TIERS[3].floor})`);
+  c.train("edgeControl"); c.train("edgeControl"); c.train("edgeControl"); c.train("edgeControl");
+  assert.ok(overall(c.profile) >= EVENT_FLOORS[2] && overall(c.profile) < EVENT_FLOORS[3], `overall ${overall(c.profile)}`);
   assert.equal(c.statCap, 2);
   assert.equal(CAREER_EVENTS.length, TIERS.length, "the five events and the five tiers are the same ladder");
+  assert.equal(EVENT_FLOORS.length, CAREER_EVENTS.length);
+});
+
+/** The most overall `xp` buys, from neutral: every point into edge control, the heaviest stat. */
+function bestOverall(xp: number) {
+  const c = new CareerState();
+  c.profile = { ...c.profile, xp };
+  for (let i = 0; i < 50; i++) c.train("edgeControl");
+  return overall(c.profile);
+}
+
+test("the whole ladder can be reached: silver alone pays for every floor, bronze alone does not", () => {
+  // Medals pay 150 a tier. Before event i, the i events below it have paid.
+  for (let i = 0; i < CAREER_EVENTS.length; i++) {
+    assert.ok(bestOverall(i * 300) >= EVENT_FLOORS[i], `silver reaches event ${i}: ${bestOverall(i * 300)} against ${EVENT_FLOORS[i]}`);
+  }
+  assert.ok(bestOverall(2 * 150) < EVENT_FLOORS[2], "bronze alone does not skip the training");
+  // Playing it: the top event really opens, with the XP really earned.
+  const c = new CareerState();
+  for (let i = 0; i < CAREER_EVENTS.length; i++) {
+    while (c.profile.xp >= 110 && c.unlocked < i) c.train("edgeControl");
+    assert.equal(c.unlocked >= i, true, `event ${i} opens (overall ${overall(c.profile)}, ${c.profile.xp} XP)`);
+    assert.equal(c.award(finish(CAREER_EVENTS[i], 1)), 300);
+  }
+  assert.deepEqual(c.medals, [2, 2, 2, 2, 2]);
+});
+
+test("a save holding more XP than five medals still loads: bonuses are real XP", () => {
+  const c = new CareerState();
+  c.medals = [3, 3, 0, 0, 0];
+  c.profile = { ...c.profile, xp: 2600 };
+  const back = CareerState.restore(c.serialize());
+  assert.equal(back.profile.xp, 2600, "a career was wiped on load past 2,250 XP");
+  assert.deepEqual(back.medals, [3, 3, 0, 0, 0]);
+});
+
+test("a closed event says why, and which gate", () => {
+  const c = new CareerState();
+  assert.equal(c.lockReason(0), "");
+  assert.match(c.lockReason(1), /medal/);
+  c.medals = [1, 1, 0, 0, 0];
+  assert.match(c.lockReason(2), /Needs overall 51\.0; you are at 50\.0/);
+  assert.match(c.lockReason(3), /medal/);
+});
+
+test("a lesson step pays once, survives a save, and a bad list keeps the career", () => {
+  const c = new CareerState();
+  assert.equal(c.recordLesson("glide"), LESSON_XP);
+  assert.equal(c.recordLesson("glide"), 0);
+  assert.equal(c.profile.xp, LESSON_XP);
+  const back = CareerState.restore(c.serialize());
+  assert.deepEqual(back.lessons, ["glide"]);
+  assert.equal(back.recordLesson("glide"), 0);
+  const old = JSON.parse(c.serialize()); old.lessons = [1, 2];
+  assert.deepEqual(CareerState.restore(JSON.stringify(old)).lessons, []);
+  assert.equal(CareerState.restore(JSON.stringify(old)).profile.xp, LESSON_XP);
 });
 
 test("XP training persists, spends one point and changes the next career parameter bake", () => {

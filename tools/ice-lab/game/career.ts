@@ -2,7 +2,7 @@ import { MOVE, TURN_KIND, EVENT, FOOT, codeToString, NEUTRAL_INPUT } from "../si
 import type { SkaterState, EdgeEvent } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import { SIM_HZ } from "../sim/params.ts";
-import { makeProfile, train, xpToRaise, STAT_NAMES, overall, TIERS } from "../sim/profile.ts";
+import { makeProfile, train, xpToRaise, STAT_NAMES, overall } from "../sim/profile.ts";
 import type { SkaterProfile, StatName } from "../sim/profile.ts";
 import { ComboTracker } from "../sim/combo.ts";
 import { ProtocolSheet, segmentScore } from "../sim/sheet.ts";
@@ -71,6 +71,22 @@ export const STEP_LEVEL_XP = 40;
  *  richest componentFactor), scaled down hard so it reads as a style bonus alongside the
  *  technical score above rather than dwarfing it. */
 export const PCS_XP_PER_POINT = 3;
+
+/**
+ * The overall (sim/profile.ts) each event asks of the skater, index for index
+ * with CAREER_EVENTS. AUTHORED, TO BE RETUNED FROM PLAY.
+ *
+ * These were profile.ts's TIERS floors (0, 40, 55, 70, 85), which cannot be
+ * reached: 55 costs 2,955 XP spread evenly, 85 costs 33,885, and a season of
+ * five gold medals pays 2,250 plus bonuses, so the last two events could never
+ * open. The floors below are what a skater can reach on silver medals alone
+ * (300 XP an event) trained into edge control, the stat `overall` weights most:
+ * test/career.test.ts pins that. Bronze alone falls short, so a clean program
+ * still does not skip the training it needs. TIERS still names a skater's level.
+ */
+export const EVENT_FLOORS = [0, 0, 51, 51.5, 52] as const;
+/** XP for passing a lesson step (game/padcourse.ts) for the first time, by step id. Authored. */
+export const LESSON_XP = 25;
 
 /** Ordered choreography reads live solver results; no input press earns a move. */
 export class Choreography {
@@ -278,6 +294,8 @@ export class CareerState {
   /** game/armfocus.ts: the tier chosen, and each tier's best drill score. */
   armFocus = 1;
   armBest = [0, 0, 0];
+  /** Lesson step ids passed, each paid once. */
+  lessons: string[] = [];
 
   /** How far medals alone would unlock: the first not-yet-earned event. */
   get medalCap(): number {
@@ -285,20 +303,15 @@ export class CareerState {
     return next < 0 ? CAREER_EVENTS.length - 1 : next;
   }
   /**
-   * How far the skater's own stats permit, independent of any medal.
-   *
-   * CAREER_EVENTS and profile.ts's TIERS are the same five rungs, index for
-   * index (club, regionals, nationals, grand prix, worlds) — the queued
-   * "stat balance tied to the competitive scoring", with `overall()` and the
-   * tier floors as the literal attachment points. A neutral, untrained
-   * profile (`overall` 50) already clears club (0) and regionals (40), so a
-   * new career is not stat-locked out of its first two events; nationals
-   * (55) is where training stops being optional.
+   * How far the skater's own stats permit, independent of any medal: the last
+   * event in a row whose EVENT_FLOORS entry `overall()` clears. A neutral
+   * profile (`overall` 50) clears the first two, so a new career is not
+   * stat-locked out of them; the third is where training stops being optional.
    */
   get statCap(): number {
     const o = overall(this.profile);
     let cap = 0;
-    for (let i = 0; i < TIERS.length; i++) if (o >= TIERS[i].floor) cap = i;
+    for (let i = 0; i < EVENT_FLOORS.length; i++) if (o >= EVENT_FLOORS[i]) cap = i;
     return cap;
   }
   /** The lower of the two: a clean program does not skip the training it needs. */
@@ -327,15 +340,29 @@ export class CareerState {
     this.armBest[focus] += gained;
     return gained;
   }
+  /** A lesson step passed: XP the first time only, so a lesson cannot be farmed. Returns the XP gained. */
+  recordLesson(id: string): number {
+    if (this.lessons.includes(id)) return 0;
+    this.lessons.push(id);
+    this.profile = { ...this.profile, xp: this.profile.xp + LESSON_XP };
+    return LESSON_XP;
+  }
+  /** Why event `i` is closed, for the menu; empty when it is open. */
+  lockReason(i: number): string {
+    if (i <= this.unlocked) return "";
+    if (i > this.medalCap) return "Earn a medal at the event before it.";
+    const need = EVENT_FLOORS[i], have = overall(this.profile);
+    return `Needs overall ${need.toFixed(1)}; you are at ${have.toFixed(1)}. Train below, or better a medal for more XP.`;
+  }
   train(stat: StatName) { this.profile = train(this.profile, stat, xpToRaise(this.profile.stats[stat])); }
-  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest }); }
+  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons }); }
   static restore(json: string | null): CareerState {
     const career = new CareerState();
     try {
       const saved = JSON.parse(json ?? "null");
       if (saved?.version !== 1 || !Array.isArray(saved.medals) || saved.medals.length !== CAREER_EVENTS.length ||
           !saved.medals.every((m: unknown) => Number.isInteger(m) && Number(m) >= 0 && Number(m) <= 3) ||
-          !Number.isSafeInteger(saved.xp) || saved.xp < 0 || saved.xp > CAREER_EVENTS.length * 450 ||
+          !Number.isSafeInteger(saved.xp) || saved.xp < 0 ||
           !STAT_NAMES.every(n => Number.isInteger(saved.stats?.[n]) && saved.stats[n] >= 50 && saved.stats[n] <= 100)) return career;
       // Reject a broken unlock chain instead of silently skipping events.
       const firstEmpty = saved.medals.indexOf(0);
@@ -345,6 +372,7 @@ export class CareerState {
       // Absent from saves older than the arm drills; a bad value keeps the defaults, not the whole career at risk.
       if ([0, 1, 2].includes(saved.armFocus)) career.armFocus = saved.armFocus;
       if (Array.isArray(saved.armBest) && saved.armBest.length === 3 && saved.armBest.every((b: unknown) => Number.isInteger(b) && Number(b) >= 0 && Number(b) <= 100)) career.armBest = [...saved.armBest];
+      if (Array.isArray(saved.lessons) && saved.lessons.length <= 200 && saved.lessons.every((l: unknown) => typeof l === "string" && l.length <= 40)) career.lessons = [...saved.lessons];
     } catch { /* A missing or invalid save starts a playable career. */ }
     return career;
   }
