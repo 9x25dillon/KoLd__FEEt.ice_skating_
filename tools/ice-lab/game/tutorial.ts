@@ -253,11 +253,14 @@ export const STEPS: readonly TutorialStep[] = [
   },
   {
     id: "spin", stage: "air", title: "Turn in the air", hold: 2, ghost: "loop",
-    prose: "Rotation is balance you carry off the ice. Open the arms, let them take you round as you leave, and trust your landing edge to catch you.",
+    prose: "Rotation is balance you carry off the ice, and the ice only gives it to an edge that holds. Take off from a curve, let the arms pull against that edge, and trust your landing to catch you.",
+    // MEASURED 2026-11-01, armsWhipMode on: from a straight glide the arms give nothing (best 0.06 rev), so a
+    // turning jump starts on an edge. Simulation holds from 3 to 5.5 m/s; Experimental only near 4.5 m/s at full
+    // lean (3 of 1,080 tried); Blade Explorer's best clean landing was 0.03 rev in 4,320 tried.
     how: c => c.setup === "simulation"
-      ? `Hold ${c.modifier} and push the right stick most of the way right (the arms open), squeeze LT + RT a third of a second, let the triggers go and ease the stick to halfway: half a turn or more. Squeeze the triggers a little again in the air for soft knees, and once you've landed bring the arms in slowly — a snap twists you off your feet. Glide 2 s.`
-      : exp(c) ? "Hold B (right foot, arms swing right) and RT together for a quick quarter-second, then let both go: the arms whip you round, twice or more. Squeeze RT a little in the air for soft knees to land. Glide 2 s."
-      : "Open the arms (right stick) as you load RT, let go of both: half a turn or more. Land clean and glide 2 s.",
+      ? `On a curve, both sticks halfway to one side. Hold ${c.modifier} and push the right stick halfway the same way (the arms), and squeeze LT + RT deep for a third of a second. Let everything go, then squeeze the triggers about halfway for soft knees. Land and glide 2 s.`
+      : exp(c) ? "The narrowest step here. At about your starting speed, press B for the right foot and hold both sticks all the way to one side. Hold B + RT for a third of a second, then let go of everything and squeeze RT well past halfway for soft knees. Land and glide 2 s."
+      : "On a curve, push the right stick the way you are leaning as you load RT, then let go of both: half a turn or more. Land clean and glide 2 s.",
     trust: "You left the ice turning and came back to it standing. It's yours now.",
     check: (s, m) => landedClean(s, m, AIR_TURN),
   },

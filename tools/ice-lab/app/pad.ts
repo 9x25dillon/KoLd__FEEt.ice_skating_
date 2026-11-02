@@ -59,6 +59,18 @@ const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, BACK = 8, STAR
  * direction exactly as pushed, since "point where you want to go" is distorted
  * by any suppression at all.
  */
+/**
+ * The game's paddle slots are 18 top-right, 19 bottom-right, 20 top-left, 21 bottom-left
+ * (game/full-controls.ts). A wired Elite 2 in Firefox on Linux reports 21 buttons, with the
+ * paddles at 17 top-left, 18 top-right, 19 bottom-left, 20 bottom-right (the owner's pad,
+ * read off the raw probe, 2026-11-01). Any other layout passes through as it is.
+ */
+export function canonicalPaddles(buttons: number[]): number[] {
+  if (buttons.length !== 21) return buttons;
+  const [tl, tr, bl, br] = buttons.slice(17);
+  return [...buttons.slice(0, 17), 0, tr, br, tl, bl];
+}
+
 export interface ControllerHardware {
   /** Standard Gamepad ordering; Y axes are positive down, triggers are buttons 6/7. */
   axes: number[];
@@ -357,7 +369,7 @@ export class Pad {
     this.prevKeys = new Set(this.keys);
     out.hardware = {
       axes: gp ? Array.from(gp.axes) : [0, 0, 0, 0],
-      buttons: gp ? gp.buttons.map(b => b.value) : [],
+      buttons: gp ? canonicalPaddles(gp.buttons.map(b => b.value)) : [],
       keys: [...this.keys], connected: gp !== null,
     };
     return out;

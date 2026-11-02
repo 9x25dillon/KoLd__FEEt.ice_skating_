@@ -15,6 +15,8 @@ import { SessionMeter } from "../sim/session.ts";
 import { PcsMeter, pcsInputsFrom, scorePcs } from "../sim/pcs.ts";
 import type { SegmentRule, PcsScore } from "../sim/pcs.ts";
 import type { IceGrid } from "../sim/ice.ts";
+import { JUMP_FAMILIES, RUST_PER_STEP, RUST_PER_WEEK } from "./training.ts";
+import type { JumpFamily, Rust } from "./training.ts";
 
 export const ELEMENTS = {
   glide: { title: "Opening glide", hint: "Hold Space / A to push. Glide upright above 3 m/s for 3 seconds.", duration: 3 },
@@ -85,6 +87,25 @@ export const PCS_XP_PER_POINT = 3;
  * still does not skip the training it needs. TIERS still names a skater's level.
  */
 export const EVENT_FLOORS = [0, 0, 51, 51.5, 52] as const;
+/** Training weeks a new career starts with, and what each improved medal tier adds. Authored. */
+export const START_WEEKS = 4, WEEKS_PER_TIER = 2;
+/** Elements a planned program may add past its event's own. Authored. */
+export const PLAN_EXTRA = 2;
+/**
+ * Whether a program can be skated at this event: every element the event asks for,
+ * in any order, and up to PLAN_EXTRA more of any kind. Null is the event's own layout.
+ */
+export function validPlan(event: CareerEvent, plan: unknown): plan is ElementId[] {
+  if (!Array.isArray(plan) || plan.length > event.routine.length + PLAN_EXTRA) return false;
+  if (!plan.every(id => typeof id === "string" && Object.hasOwn(ELEMENTS, id))) return false;
+  const left = [...plan] as ElementId[];
+  for (const need of event.routine) {
+    const at = left.indexOf(need);
+    if (at < 0) return false;
+    left.splice(at, 1);
+  }
+  return true;
+}
 /** XP for passing a lesson step (game/padcourse.ts) for the first time, by step id. Authored. */
 export const LESSON_XP = 25;
 
@@ -296,6 +317,16 @@ export class CareerState {
   armBest = [0, 0, 0];
   /** Lesson step ids passed, each paid once. */
   lessons: string[] = [];
+  /** Training weeks in hand. Raising a stat or drilling a jump family costs one. */
+  weeks = START_WEEKS;
+  /** game/training.ts: 0 sharp .. 1 fully rusty, by jump family. */
+  rust: Rust = { toe: 0, edge: 0 };
+  /** Families drilled since the last season step; those not drilled rust at the next. */
+  drilled: Record<JumpFamily, boolean> = { toe: false, edge: false };
+  /** The player's own layout for each event; null skates the event's. */
+  plans: (ElementId[] | null)[] = CAREER_EVENTS.map(() => null);
+  /** Best segment score at each event, for the standings; null until skated. */
+  best: (number | null)[] = CAREER_EVENTS.map(() => null);
 
   /** How far medals alone would unlock: the first not-yet-earned event. */
   get medalCap(): number {
@@ -318,7 +349,8 @@ export class CareerState {
   get unlocked(): number { return Math.min(this.medalCap, this.statCap); }
 
   award(routine: Choreography): number {
-    const i = CAREER_EVENTS.indexOf(routine.event);
+    // By id: a planned program is its own event object, on the same rung.
+    const i = CAREER_EVENTS.findIndex(e => e.id === routine.event.id);
     if (i < 0 || i > this.unlocked || !routine.done) return 0;
     const improved = Math.max(0, routine.medal - this.medals[i]);
     // Every bonus only pays out alongside a genuine medal improvement — the
@@ -330,6 +362,9 @@ export class CareerState {
         + STEP_LEVEL_XP * routine.bestStepLevel + Math.round(PCS_XP_PER_POINT * (routine.pcsScore?.total ?? 0))
       : 0;
     const earned = improved * 150 + bonus;
+    if (improved > 0) this.weeks += improved * WEEKS_PER_TIER;
+    if (this.medals[i] === 0 && routine.medal > 0) this.seasonStep();
+    if (routine.complete) this.best[i] = Math.max(this.best[i] ?? -Infinity, routine.segmentScore);
     this.medals[i] = Math.max(this.medals[i], routine.medal);
     this.profile = { ...this.profile, xp: this.profile.xp + earned };
     return earned;
@@ -354,8 +389,38 @@ export class CareerState {
     const need = EVENT_FLOORS[i], have = overall(this.profile);
     return `Needs overall ${need.toFixed(1)}; you are at ${have.toFixed(1)}. Train below, or better a medal for more XP.`;
   }
-  train(stat: StatName) { this.profile = train(this.profile, stat, xpToRaise(this.profile.stats[stat])); }
-  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons }); }
+  /** Raises a stat by one, for its XP and a week. Does nothing unless both are in hand. */
+  train(stat: StatName) {
+    if (this.weeks < 1) return;
+    const before = this.profile.stats[stat];
+    this.profile = train(this.profile, stat, xpToRaise(before));
+    if (this.profile.stats[stat] !== before) this.weeks--;
+  }
+  /** A week on a jump family: rust comes off, and it will hold through the next season step. */
+  drill(family: JumpFamily) {
+    if (this.weeks < 1) return;
+    this.weeks--;
+    this.rust = { ...this.rust, [family]: Math.max(0, this.rust[family] - RUST_PER_WEEK) };
+    this.drilled = { ...this.drilled, [family]: true };
+  }
+  /** A new event medalled: time has passed, and what was not drilled slips. */
+  private seasonStep() {
+    for (const { id } of JUMP_FAMILIES) if (!this.drilled[id]) this.rust[id] = Math.min(1, this.rust[id] + RUST_PER_STEP);
+    this.rust = { ...this.rust };
+    this.drilled = { toe: false, edge: false };
+  }
+  /** Sets event `i`'s layout, or null for its own. Returns whether it was allowed. */
+  setPlan(i: number, plan: ElementId[] | null): boolean {
+    if (!CAREER_EVENTS[i] || (plan !== null && !validPlan(CAREER_EVENTS[i], plan))) return false;
+    this.plans[i] = plan && [...plan];
+    return true;
+  }
+  /** Event `i` as this skater will skate it. */
+  planned(i: number): CareerEvent {
+    const plan = this.plans[i];
+    return plan ? { ...CAREER_EVENTS[i], routine: plan } : CAREER_EVENTS[i];
+  }
+  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, best: this.best }); }
   static restore(json: string | null): CareerState {
     const career = new CareerState();
     try {
@@ -372,6 +437,13 @@ export class CareerState {
       // Absent from saves older than the arm drills; a bad value keeps the defaults, not the whole career at risk.
       if ([0, 1, 2].includes(saved.armFocus)) career.armFocus = saved.armFocus;
       if (Array.isArray(saved.armBest) && saved.armBest.length === 3 && saved.armBest.every((b: unknown) => Number.isInteger(b) && Number(b) >= 0 && Number(b) <= 100)) career.armBest = [...saved.armBest];
+      // Saves from before training weeks: they keep the start's weeks and no rust. A bad field keeps the default.
+      if (Number.isSafeInteger(saved.weeks) && saved.weeks >= 0) career.weeks = saved.weeks;
+      const unit = (n: unknown) => typeof n === "number" && n >= 0 && n <= 1;
+      if (unit(saved.rust?.toe) && unit(saved.rust?.edge)) career.rust = { toe: saved.rust.toe, edge: saved.rust.edge };
+      if (typeof saved.drilled?.toe === "boolean" && typeof saved.drilled?.edge === "boolean") career.drilled = { toe: saved.drilled.toe, edge: saved.drilled.edge };
+      if (Array.isArray(saved.plans) && saved.plans.length === CAREER_EVENTS.length) career.plans = saved.plans.map((plan: unknown, i: number) => validPlan(CAREER_EVENTS[i], plan) ? plan : null);
+      if (Array.isArray(saved.best) && saved.best.length === CAREER_EVENTS.length && saved.best.every((b: unknown) => b === null || Number.isFinite(b))) career.best = [...saved.best];
       if (Array.isArray(saved.lessons) && saved.lessons.length <= 200 && saved.lessons.every((l: unknown) => typeof l === "string" && l.length <= 40)) career.lessons = [...saved.lessons];
     } catch { /* A missing or invalid save starts a playable career. */ }
     return career;

@@ -49,6 +49,10 @@ var paddle_layout := 0
 ## paddle_layout's last value: paddles reach the sim as buttons 18-21, its own layer (game/full-controls.ts).
 const PADDLE_LAYER := 3
 var lesson_course := "trust"
+## The event the briefing page shows, and the layout being edited there.
+var focus_event := 0
+## The button a page wants focused first, if not its first one.
+var preferred_focus: Button
 var blade_filter := 0.0
 var crowd_filter := 0.0
 var crowd_swell := 0.0
@@ -350,6 +354,9 @@ func clear_menu(title: String, subtitle: String) -> void:
 
 func focus_menu() -> void:
 	if not overlay.visible: return
+	if is_instance_valid(preferred_focus) and preferred_focus.is_inside_tree() and not preferred_focus.disabled:
+		preferred_focus.grab_focus()
+		return
 	for child in menu.get_children():
 		if child is Button and not child.disabled:
 			child.grab_focus()
@@ -379,19 +386,20 @@ func show_page(page: String) -> void:
 		menu.add_child(button("Controls, music & assists",func():show_page("settings")))
 		menu.add_child(button("Quit",func():get_tree().quit()))
 	elif page == "career":
-		clear_menu("The Season", "Finish the choreography to advance. Gold: no falls. Silver: at most two. Bronze: finish. Each improved medal tier earns 150 XP.")
+		clear_menu("The Season", "Finish the program to advance. Gold: no falls. Silver: at most two. Bronze: finish. Each improved medal tier earns 150 XP and 2 training weeks.")
 		if frame.is_empty():
 			menu.add_child(paragraph("Connecting to Ice Lab…"))
 		else:
-			menu.add_child(label("%d training XP available   ·   overall %.1f" % [int(frame.career.xp),float(frame.career.overall)],16,Color("d5bd96")))
+			menu.add_child(label("%d XP   ·   %d training weeks   ·   overall %.1f" % [int(frame.career.xp),int(frame.career.weeks),float(frame.career.overall)],16,Color("d5bd96")))
 			menu.add_child(button("Learn your controls   /   each new step +%d XP" % int(catalog.lessonXp),func():show_page("learn")))
 			for i in catalog.events.size():
 				var event: Dictionary = catalog.events[i]
 				var medal := str(catalog.medals[int(frame.career.medals[i])])
-				var event_button := button("%02d   %s   /   %s" % [i+1,event.title,medal],func():start_game("career",i),i == int(frame.career.unlocked))
+				var event_button := button("%02d   %s   /   %s" % [i+1,event.title,medal],func():focus_event=i;show_page("event"),i == int(frame.career.unlocked))
 				event_button.disabled = i > int(frame.career.unlocked)
 				menu.add_child(event_button)
-				menu.add_child(paragraph("%ds · %s" % [int(event.seconds),routine_names(event.routine)],12))
+				var planned = frame.career.plans[i]
+				menu.add_child(paragraph("%ds · %s" % [int(event.seconds),routine_names(event.routine if planned == null else planned)],12))
 				if not str(frame.career.locks[i]).is_empty():
 					menu.add_child(paragraph(str(frame.career.locks[i]),12))
 			menu.add_child(HSeparator.new())
@@ -405,14 +413,70 @@ func show_page(page: String) -> void:
 			var drill_tier := str(catalog.armFocus[int(frame.career.armFocus)].title)
 			menu.add_child(button("Drill %s   /   45 seconds" % drill_tier,func():start_game("armdrill")))
 			menu.add_child(HSeparator.new())
-			menu.add_child(label("Training",21))
+			menu.add_child(label("Training   /   %d weeks left" % int(frame.career.weeks),21))
+			menu.add_child(paragraph("Each costs a week. A jump family you don't drill between events goes rusty, and a rusty jump is harder to land. Drilling wins it back.",13))
+			for family in catalog.families:
+				var rust := float(frame.career.rust[family.id])
+				var drill_button := button("%s   /   rust %d%%   /   1 week" % [str(family.title),roundi(rust*100)],func():link.send("drill",{"family":family.id}))
+				drill_button.disabled = int(frame.career.weeks)<1
+				menu.add_child(drill_button)
+				menu.add_child(paragraph(str(family.blurb),12))
 			for stat in ["edgeControl","balance","spring","strength","stamina"]:
 				var cost := int(frame.career.costs[stat])
 				var value := int(frame.career.stats[stat])
-				var train_button := button("%s  %d → %d    /    %d XP" % [stat.capitalize(),value,value+1,cost],func():link.send("train",{"stat":stat}))
-				train_button.disabled = int(frame.career.xp)<cost or value>=100
+				var train_button := button("%s  %d → %d    /    %d XP, 1 week" % [stat.capitalize(),value,value+1,cost],func():link.send("train",{"stat":stat}))
+				train_button.disabled = int(frame.career.xp)<cost or value>=100 or int(frame.career.weeks)<1
 				menu.add_child(train_button)
+			menu.add_child(HSeparator.new())
+			menu.add_child(label("Season standings",21))
+			show_table(frame.career.season,"points")
 		menu.add_child(button("← Back",func():show_page("home")))
+	elif page == "event":
+		var event: Dictionary = catalog.events[focus_event]
+		clear_menu(str(event.title),"%s · %ds. Your program must hold everything this event asks for, in any order, and up to %d more of your own. More to skate is more to score, and more to fall on." % [str(event.venue),int(event.seconds),int(catalog.planExtra)])
+		var saved_plan = frame.career.plans[focus_event]
+		var plan: Array = (event.routine if saved_plan == null else saved_plan).duplicate()
+		var required: Array = event.routine.duplicate()
+		for i in plan.size():
+			var row := HBoxContainer.new()
+			var is_required: bool = required.has(plan[i])
+			if is_required: required.erase(plan[i])
+			var name_label := label("%02d   %s%s" % [i+1,catalog.elements[plan[i]].title,"" if is_required else "   (yours)"],15)
+			name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(name_label)
+			row.add_child(button("↑",func():
+				if i>0:
+					var moved = plan[i]
+					plan[i] = plan[i-1]
+					plan[i-1] = moved
+					link.send("plan",{"event":focus_event,"plan":plan})))
+			if not is_required:
+				row.add_child(button("×",func():
+					plan.remove_at(i)
+					link.send("plan",{"event":focus_event,"plan":plan})))
+			menu.add_child(row)
+		if plan.size()<event.routine.size()+int(catalog.planExtra):
+			var chooser := OptionButton.new()
+			for id in catalog.elements:
+				chooser.add_item(catalog.elements[id].title)
+			menu.add_child(chooser)
+			menu.add_child(button("+ Add to your program",func():
+				plan.append(catalog.elements.keys()[chooser.selected])
+				link.send("plan",{"event":focus_event,"plan":plan})))
+		if saved_plan != null:
+			menu.add_child(button("Use the event's own program",func():link.send("plan",{"event":focus_event,"plan":null})))
+		var lock := str(frame.career.locks[focus_event])
+		if not lock.is_empty():
+			menu.add_child(paragraph(lock,14))
+		var skate := button("Skate this program →",func():start_game("career",focus_event),true)
+		skate.disabled = not lock.is_empty()
+		menu.add_child(skate)
+		menu.add_child(HSeparator.new())
+		menu.add_child(label("The field",21))
+		menu.add_child(paragraph("They don't decide your medal. They are who you're measured against.",12))
+		show_table(frame.career.field[focus_event],"score")
+		menu.add_child(button("← The Season",func():show_page("career")))
+		preferred_focus = skate
 	elif page == "learn":
 		clear_menu("Learn your controls", "A short course for each setup: what your hands do on that pad, on the ice, in your own bindings. Pick one from another setup and it becomes your setup.")
 		if catalog.is_empty():
@@ -579,6 +643,9 @@ func show_page(page: String) -> void:
 			show_protocol(frame.result.protocol)
 		if frame.result.has("xp"):
 			menu.add_child(label("+%d training XP" % int(frame.result.xp),22,Color("d5bd96")))
+		if frame.result.get("standings") != null:
+			menu.add_child(label("The field",21))
+			show_table(frame.result.standings,"score")
 		if frame.result.get("stopped") != null:
 			menu.add_child(label("Time ran out on: "+str(frame.result.stopped.element),17))
 			menu.add_child(paragraph(str(frame.result.stopped.how),14))
@@ -589,6 +656,18 @@ func show_page(page: String) -> void:
 		menu.add_child(button("Skate again",func():start_game(active_mode,event_index)))
 		menu.add_child(button("Save performance replay",func():link.send("export")))
 		menu.add_child(button("Return to the rink menu",func():show_page("home")))
+
+## A place, a name and a number, one row each; your own row in gold.
+func show_table(rows: Array, column: String) -> void:
+	for row in rows:
+		var line := HBoxContainer.new()
+		var colour := Color("d5bd96") if bool(row.you) else Color("9eafb9")
+		line.add_child(label("%d" % int(row.place),15,colour))
+		var who := label(str(row.name),15,colour)
+		who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.add_child(who)
+		line.add_child(label("%d" % int(row.points) if column == "points" else "%.2f" % float(row.score),15,colour))
+		menu.add_child(line)
 
 func show_protocol(protocol: Dictionary) -> void:
 	menu.add_child(label("Jump protocol",21))
@@ -686,8 +765,11 @@ func on_engine(op: String, data: Dictionary) -> void:
 		notice.text = "Saved: "+str(data.path)
 		return
 	frame = data
-	if op == "train" or op == "armFocus":
+	if op == "train" or op == "armFocus" or op == "drill":
 		show_page("career")
+		return
+	if op == "plan":
+		show_page("event")
 		return
 	if op == "configure":
 		return
@@ -967,7 +1049,7 @@ func _input(event: InputEvent) -> void:
 		if overlay.visible:
 			if event.button_index == JOY_BUTTON_B:
 				if current_page == "home": resume_game()
-				else: show_page("home")
+				else: show_page("career" if current_page == "event" else "home")
 				get_viewport().set_input_as_handled()
 			elif event.button_index == JOY_BUTTON_START:
 				resume_game()
@@ -1063,9 +1145,52 @@ func _process(dt: float) -> void:
 			screenshot_saved = true
 			capture()
 
+# The briefing page's real buttons through the live bridge: add an element, then back to the event's own.
+func smoke_planning_ui() -> bool:
+	var result: Dictionary = frame.result
+	focus_event = 0
+	show_page("event")
+	# As if the player read this page for a while, then a request whose reply has not had time to arrive:
+	# a quiet spell in a menu is not a late reply.
+	link.last_reply -= 20000
+	link.send("configure",{"options":{}})
+	link._process(0.0)
+	if link.faulted:
+		push_error("Link: a request after an idle menu was called dead: %s" % notice.text)
+		return false
+	for child in menu.get_children():
+		if child is Button and child.text.begins_with("+ Add"):
+			child.pressed.emit()
+			break
+	var waited := 0.0
+	while frame.career.plans[0] == null and waited < 12.0 and not link.faulted:
+		await get_tree().create_timer(.1).timeout
+		waited += .1
+	if frame.career.plans[0] == null:
+		push_error("Planning: + Add did not store a program. %s" % notice.text)
+		return false
+	for child in menu.get_children():
+		if child is Button and child.text.begins_with("Use the event"):
+			child.pressed.emit()
+			break
+	waited = 0.0
+	while frame.career.plans[0] != null and waited < 12.0 and not link.faulted:
+		await get_tree().create_timer(.1).timeout
+		waited += .1
+	if frame.career.plans[0] != null:
+		push_error("Planning: the event's own program did not come back. %s" % notice.text)
+		return false
+	print("GODOT_PLANNING_PASS: briefing page stored and cleared a program through the live bridge")
+	frame.result = result
+	show_page("result")
+	await get_tree().process_frame
+	return true
+
 # Exercise real controls and layout at the end of the existing live smoke run.
 # Synthetic long sheets test scrolling only; bridge tests cover physical scoring.
 func smoke_protocol_ui() -> bool:
+	if not await smoke_planning_ui():
+		return false
 	var result: Dictionary = frame.result
 	var elements := menu.get_node_or_null("ProtocolElements")
 	if elements == null or elements.get_child_count() != 1 or not elements.get_child(0) is Label:
@@ -1110,7 +1235,7 @@ func capture() -> void:
 		await get_tree().create_timer(1.5).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-camera-%d.png" % view)
-	for page in ["home","career","learn","composer","settings"]:
+	for page in ["home","career","event","learn","composer","settings"]:
 		show_page(page)
 		await get_tree().create_timer(1.2).timeout
 		await RenderingServer.frame_post_draw

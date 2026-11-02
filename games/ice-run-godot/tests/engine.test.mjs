@@ -331,3 +331,18 @@ test('a routine that ran out says which element stopped it',()=>{
  assert.equal(e.result.stopped.element,'Opening glide');
  assert.match(e.result.stopped.how,/Snap LT and RT/);
 });
+
+test('a career run skates your plan, carries your rust, and shows the field only when finished',()=>{
+ const e=new IceEngine();
+ assert.throws(()=>e.setPlan(0,['glide']),/leaves out/);
+ e.setPlan(0,['edge','glide','pose']);
+ const f=e.start({mode:'career',event:0});
+ assert.deepEqual(f.routine.sequence,['edge','glide','pose']);
+ assert.deepEqual(f.career.plans[0],['edge','glide','pose']);
+ assert.equal(f.career.field[0].length,5,'five rivals until you skate');
+ e.career.rust={toe:0,edge:1};e.start({mode:'career',event:0});
+ assert.equal(e.rusty.rust.edge,1);
+ e.start({mode:'free'});assert.equal(e.rusty,null,'no rust outside a career');
+ const w=e.career.weeks;e.drillFamily('edge');assert.equal(e.career.weeks,w-1);assert.equal(e.career.rust.edge,.75);
+ assert.throws(()=>e.drillFamily('hop'),/Unknown/);
+});
