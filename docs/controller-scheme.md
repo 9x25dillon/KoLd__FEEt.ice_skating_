@@ -328,7 +328,8 @@ and their snowplow step accepts the brake (LT); Simulation's and Experimental's 
 Every step was played on the pad in Simulation and Experimental and its pass time pinned
 (`test/tutorial.test.ts`). What the measuring found: on Experimental, left on one foot after three
 strokes the skater drifts off balance and is down 2.7 s after the last push, so the push step ends
-with X + B, both feet down. A turning jump lands clean only with soft knees in the air (straight
-legs: a step-out); in Simulation, snapping the arms in after landing twists the skater off their feet
-1.7 s later, so the step says to bring them in slowly. Experimental's B + RT jump turns about two
-revolutions and lands clean when loaded 0.25–0.3 s; held 0.4 s it steps out and falls.
+with X + B, both feet down. Since the arms' whip (`armsWhipMode`), a turning jump starts on an edge: from a straight glide the arms have
+nothing to pull against and the best clean landing was 0.06 revolutions. Re-measured 2026-11-01: Simulation lands
+half a turn or more from a curve (sticks and arms 0.5, a 0.3 s load, soft knees 0.5) from 3 to 5.5 m/s;
+Experimental only near 4.5 m/s at full lean (3 of 1,080 tried); Blade Explorer's best clean landing was 0.03
+revolutions in 4,320 tried, so its step says it may not land.

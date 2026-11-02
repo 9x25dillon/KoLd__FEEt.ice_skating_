@@ -3,8 +3,9 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import {
   CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX, TECHNICAL_XP_PER_POINT, SPIN_LEVEL_XP,
-  STEP_LEVEL_XP, EVENT_FLOORS, LESSON_XP,
+  STEP_LEVEL_XP, EVENT_FLOORS, LESSON_XP, START_WEEKS, WEEKS_PER_TIER, validPlan,
 } from "../game/career.ts";
+import { RUST_PER_STEP } from "../game/training.ts";
 import type { CareerEvent, ElementId } from "../game/career.ts";
 import { createState, step } from "../sim/solver.ts";
 import { GAME_PARAMS } from "../game/controls.ts";
@@ -379,7 +380,7 @@ test("training raises overall past an event floor and lifts the stat gate", () =
 /** The most overall `xp` buys, from neutral: every point into edge control, the heaviest stat. */
 function bestOverall(xp: number) {
   const c = new CareerState();
-  c.profile = { ...c.profile, xp };
+  c.profile = { ...c.profile, xp }; c.weeks = 1000;
   for (let i = 0; i < 50; i++) c.train("edgeControl");
   return overall(c.profile);
 }
@@ -445,4 +446,97 @@ test("corrupt, incompatible and broken-chain saves fall back safely", () => {
   for (const json of [null, "bad json", "{}", '{"version":99}', JSON.stringify({version:1,medals:[0,3,0,0,0],xp:0,stats:new CareerState().profile.stats})]) {
     const c = CareerState.restore(json); assert.equal(c.unlocked, 0); assert.equal(c.profile.xp, 0);
   }
+});
+
+// ── training weeks, rust, planning ──────────────────────────────────────────
+
+test("training costs a week as well as XP, and a medal tier earns weeks back", () => {
+  const c = new CareerState();
+  c.profile = { ...c.profile, xp: 1000 };
+  assert.equal(c.weeks, START_WEEKS);
+  c.train("balance");
+  assert.equal(c.weeks, START_WEEKS - 1);
+  c.weeks = 0;
+  const before = c.profile.xp;
+  c.train("balance");
+  assert.equal(c.profile.stats.balance, 51, "no week, no training");
+  assert.equal(c.profile.xp, before);
+  c.award(finish(CAREER_EVENTS[0], 1));
+  assert.equal(c.weeks, 2 * WEEKS_PER_TIER, "silver is two tiers");
+  c.award(finish(CAREER_EVENTS[0], 1));
+  assert.equal(c.weeks, 2 * WEEKS_PER_TIER, "a repeat earns none");
+  // Too little XP costs no week either.
+  const poor = new CareerState(); poor.train("balance");
+  assert.equal(poor.weeks, START_WEEKS);
+});
+
+test("a family not drilled goes rusty at each new event, drilling holds it and wins it back", () => {
+  const c = new CareerState();
+  c.drill("toe");
+  c.award(finish(CAREER_EVENTS[0]));
+  assert.deepEqual(c.rust, { toe: 0, edge: RUST_PER_STEP }, "the one drilled held");
+  c.award(finish(CAREER_EVENTS[0]));
+  assert.equal(c.rust.edge, RUST_PER_STEP, "a repeat is not a season step");
+  c.weeks = 10;
+  c.drill("edge");
+  assert.equal(c.rust.edge, 0);
+  c.rust = { toe: 1, edge: 1 };
+  c.weeks = 0;
+  c.drill("edge");
+  assert.equal(c.rust.edge, 1, "no week, no drill");
+});
+
+test("silver alone can reach every floor and still keep both families sharp", () => {
+  const c = new CareerState();
+  for (let i = 0; i < CAREER_EVENTS.length; i++) {
+    c.drill("toe"); c.drill("edge");
+    while (c.unlocked < i && c.weeks > 0 && c.profile.xp >= 110) c.train("edgeControl");
+    assert.ok(c.unlocked >= i, `event ${i}: overall ${overall(c.profile)}, ${c.weeks} weeks, ${c.profile.xp} XP`);
+    c.award(finish(CAREER_EVENTS[i], 1));
+  }
+  assert.deepEqual(c.rust, { toe: 0, edge: 0 });
+  assert.deepEqual(c.medals, [2, 2, 2, 2, 2]);
+});
+
+test("a plan must hold what its event asks, adds up to PLAN_EXTRA, and awards the same rung", () => {
+  const event = CAREER_EVENTS[0];
+  assert.ok(validPlan(event, ["pose", "edge", "glide"]), "any order");
+  assert.ok(validPlan(event, ["glide", "spiral", "edge", "combo", "pose"]), "two of your own");
+  assert.ok(!validPlan(event, ["glide", "edge"]), "the pose is missing");
+  assert.ok(!validPlan(event, ["glide", "edge", "pose", "spin", "spin", "spin"]), "too many");
+  assert.ok(!validPlan(event, ["glide", "edge", "pose", "dance"]), "unknown element");
+  assert.ok(validPlan(CAREER_EVENTS[4], [...CAREER_EVENTS[4].routine]));
+  assert.ok(!validPlan(CAREER_EVENTS[4], CAREER_EVENTS[4].routine.slice(1)), "a repeated element counts twice");
+  const c = new CareerState();
+  assert.equal(c.setPlan(0, ["glide"]), false);
+  assert.equal(c.plans[0], null);
+  assert.equal(c.setPlan(0, ["edge", "glide", "pose", "spiral"]), true);
+  assert.deepEqual(c.planned(0).routine, ["edge", "glide", "pose", "spiral"]);
+  assert.equal(c.award(finish(c.planned(0))), 450, "a planned program is the same rung");
+  assert.equal(c.medals[0], 3);
+  assert.equal(c.setPlan(0, null), true);
+  assert.equal(c.planned(0), CAREER_EVENTS[0]);
+});
+
+test("weeks, rust, plans and best scores survive a save; a save from before them still loads", () => {
+  const c = new CareerState();
+  c.weeks = 7; c.rust = { toe: 0.5, edge: 0.25 }; c.drilled = { toe: true, edge: false };
+  c.setPlan(1, [...CAREER_EVENTS[1].routine, "spiral"]);
+  c.best[0] = 12.5;
+  const back = CareerState.restore(c.serialize());
+  assert.equal(back.weeks, 7);
+  assert.deepEqual(back.rust, { toe: 0.5, edge: 0.25 });
+  assert.deepEqual(back.drilled, { toe: true, edge: false });
+  assert.deepEqual(back.plans[1], [...CAREER_EVENTS[1].routine, "spiral"]);
+  assert.equal(back.best[0], 12.5);
+  const old = JSON.parse(new CareerState().serialize());
+  for (const k of ["weeks", "rust", "drilled", "plans", "best"]) delete old[k];
+  old.medals = [3, 0, 0, 0, 0];
+  const older = CareerState.restore(JSON.stringify(old));
+  assert.equal(older.medals[0], 3);
+  assert.equal(older.weeks, START_WEEKS);
+  const bad = JSON.parse(c.serialize()); bad.plans[1] = ["glide"]; bad.rust = { toe: 9, edge: 0 };
+  const kept = CareerState.restore(JSON.stringify(bad));
+  assert.equal(kept.plans[1], null, "a plan that no longer fits falls back to the event's own");
+  assert.deepEqual(kept.rust, { toe: 0, edge: 0 });
 });

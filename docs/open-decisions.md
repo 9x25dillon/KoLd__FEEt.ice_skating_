@@ -225,7 +225,7 @@ as surprises.
 | **Balance model tuning constants** are placeholders | `SkateSolver.cpp`, `kBalanceGain` | Cannot be derived; must come from the feel prototype in months 1–4. |
 | **Crowd reaction propagation** timing is unspecified | §07.3 | Per-agent delay curve for the reaction wave. Cheap to tune late. |
 | **Career economy** — training weeks, cost curves, progression pacing | §01 The Season | Deliberately deferred until the moment-to-moment game is proven. Designing progression before the verb is fun is a classic way to waste six months. |
-| **Training style that closes off elements** | §01 The Season | The owner's design, 2026-11-01, not built. What a career trains shapes what stays available: a skater built around one family of jumps can lose another, as real skaters' repertoires narrow. Open: which families, whether a lost element can be regained and at what cost, and how it shows in the sim. It should act through trained physics and skill, not a menu lock, and it uses no real athlete's name or record (D6). |
+| **Training style that closes off elements** | §01 The Season | RESOLVED (owner, 2026-11-01): a neglected jump family goes rusty and can be won back at a cost in training weeks; never a menu lock, and no real athlete's name or record (D6). Built in `game/training.ts`: toe and edge families, a late pick and a wavering edge, career only. The rates are authored and untuned; only the edge effect's strength was chosen by measurement. |
 | **Ice temperature and hardness** as a career variable | §03.2, §04.4 | The model supports it (`Ice.BiteCoefficient`, outdoor rinks) but no career-facing system uses it yet. Optional depth. |
 
 ---

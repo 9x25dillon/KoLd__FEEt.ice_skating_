@@ -37,6 +37,9 @@ func _ready() -> void:
 func send(op: String, payload: Dictionary = {}) -> void:
 	if pipe == null or faulted:
 		return
+	# The wait starts now if nothing was outstanding: time spent idle in a menu is not a late reply.
+	if pending.is_empty():
+		last_reply = Time.get_ticks_msec()
 	serial += 1
 	payload = payload.duplicate()
 	payload.op = op
@@ -79,7 +82,7 @@ func _process(_dt: float) -> void:
 		fail("Engine response exceeded its limit.")
 	elif busy() and Time.get_ticks_msec() - last_reply > 10000:
 		var details := error_pipe.get_buffer(4096).get_string_from_utf8()
-		fail("Ice Lab did not respond. " + details.left(400))
+		fail("Ice Lab did not respond to %s. %s" % [str(pending.values()), details.left(400)])
 
 func fail(message: String) -> void:
 	faulted = true

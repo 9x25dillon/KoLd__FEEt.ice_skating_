@@ -6,7 +6,7 @@ import { Pad } from "../app/pad.ts";
 import { MenuInput, navigateMenu } from "./menu.ts";
 import { newSchemeState, SCHEME } from "../app/schemes.ts";
 import type { GameScheme as Scheme } from "./controls.ts";
-import { FULL_SCHEME, ACTIONS, BUTTON_NAMES, bindingLabel, loadControllerProfile, digStatus } from "./full-controls.ts";
+import { FULL_SCHEME, ACTIONS, bindingLabel, loadControllerProfile, digStatus } from "./full-controls.ts";
 import type { GameControlState } from "./full-controls.ts";
 import { Ghost } from "./ghost.ts";
 import { MOVE, TURN_KIND, FALL, codeToString } from "../sim/types.ts";
@@ -22,6 +22,9 @@ import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
 import { RookieCourse } from "./rookie.ts";
 import { Tutorial, STAGES, STEPS, tutorialGhost } from "./tutorial.ts";
+import { RustGate, JUMP_FAMILIES } from "./training.ts";
+import { COURSES, courseSteps, howContext as padContext, elementHow } from "./padcourse.ts";
+import type { PadCourse } from "./padcourse.ts";
 import type { HowContext } from "./tutorial.ts";
 import { resolveRinkCollision } from "./rink.ts";
 import { IceGrid } from "../sim/ice.ts";
@@ -30,10 +33,11 @@ let career = new CareerState();
 try { career = CareerState.restore(localStorage.getItem("edgework-career-v1")); } catch { /* Storage is optional. */ }
 let courseMode = false, rookie: RookieCourse | null = null;
 /** The Tutorial (game/tutorial.ts): balance, edges, scrape & dig, air. */
-let tutorialMode = false, tutorial: Tutorial | null = null;
+let rustGate = new RustGate({ toe: 0, edge: 0 });
+let tutorialMode = false, tutorial: Tutorial | null = null, lessonCourse: PadCourse | null = null;
 import { EdgeAudio } from "../app/audio.ts";
 import type { EdgeEvent } from "../sim/types.ts";
-import { SAMPLE_PROFILES, applyProfile, TIERS } from "../sim/profile.ts";
+import { SAMPLE_PROFILES, applyProfile } from "../sim/profile.ts";
 import { ReplayRecorder, ReplayPlayer, parseReplay, MAX_REPLAY_BYTES } from "../sim/replay.ts";
 import { loadTables, scoreJump } from "../sim/score.ts";
 import { ComboTracker } from "../sim/combo.ts";
@@ -172,7 +176,7 @@ function start() {
   document.body.dataset.career = String(careerMode);
   el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : "ON THE ICE / PRACTICE";
   coach = new BeginnerCoach(); playground = new Playground(); pendingTrick = false; rookie = courseMode ? new RookieCourse() : null;
-  tutorial = tutorialMode ? new Tutorial(setup) : null;
+  tutorial = tutorialMode ? new Tutorial(setup, 0, lessonCourse ? courseSteps(lessonCourse, setup) : STEPS) : null;
   document.body.dataset.tutorial = String(tutorial !== null);
   recorder = new ReplayRecorder(params, 4.5); playback = null; replayJson = "";
   technical = 0; scoredTick = -1; replayNotice = "Recording your skating · first five minutes";
@@ -181,6 +185,7 @@ function start() {
   // Choreography's own PCS scoring (sim/pcs.ts) reads `ice.coverage()` at the
   // end of the routine — it must hold the SAME grid instance play actually
   // uses, so it is built only after `ice` above is the fresh one for this run.
+  rustGate = new RustGate(career.rust);
   choreography = careerMode
     ? new Choreography(CAREER_EVENTS[careerEvent], tables ?? undefined, spinThresholds ?? undefined, stepThresholds ?? undefined, segmentRules ?? undefined, ice)
     : null;
@@ -232,8 +237,18 @@ el("pause").addEventListener("click", pause);
 el("free").addEventListener("click", () => { careerMode = false; freeSkate = true; courseMode = false; tutorialMode = false; cruise = setup === null; start(); });
 el("rookie").addEventListener("click", () => { careerMode=false; freeSkate=true; courseMode=true; tutorialMode = false; cruise=setup === null; start(); });
 el("timed").addEventListener("click", () => { careerMode = false; freeSkate = false; courseMode = false; tutorialMode = false; cruise = false; start(); });
+function startCourse(course: PadCourse | null) { lessonCourse = course; startTutorial(); }
+/** The courses this setup has: its own, and the paddles' where it reads them. */
+function renderCourses() {
+  const mine = setup ? COURSES.filter(c => c.setups.includes(setup!)) : [];
+  const own = mine.find(c => c.id !== "paddles") ?? null, paddles = mine.find(c => c.id === "paddles") ?? null;
+  el("course").hidden = !own; el("course").textContent = own ? `Controls course · ${own.title}` : "";
+  el("course-paddles").hidden = !paddles; el("course-paddles").textContent = paddles ? paddles.title : "";
+}
+el("course").addEventListener("click", () => startCourse(COURSES.find(c => c.id !== "paddles" && setup !== null && c.setups.includes(setup)) ?? null));
+el("course-paddles").addEventListener("click", () => startCourse(COURSES.find(c => c.id === "paddles") ?? null));
 function startTutorial() { careerMode = false; freeSkate = true; courseMode = false; tutorialMode = true; cruise = false; start(); }
-el("tutorial").addEventListener("click", startTutorial);
+el("tutorial").addEventListener("click", () => startCourse(null));
 el("tutorial-skip").addEventListener("click", e => {
   (e.currentTarget as HTMLButtonElement).blur(); // Space is the push: it must not press this again.
   if (!tutorial || playback) return;
@@ -293,6 +308,7 @@ const setupSelect = el("setup-select") as HTMLSelectElement;
 el("ghost-toggle").addEventListener("change", e => setGhost((e.target as HTMLInputElement).checked));
 function saveSetup() { try { localStorage.setItem(SETUP_KEY, JSON.stringify({ setup, assistance })); } catch { /* Session only. */ } }
 function renderSetup() {
+  renderCourses();
   setupSelect.value = setup ?? "custom";
   el("setup-description").textContent = SETUPS.find(s => s.id === setup)?.description ?? "Custom legacy mapping and assists.";
   el("manual-guide").hidden = setup === null || setup === "repertoire";
@@ -457,7 +473,7 @@ function frame(now: number) {
       if (menu.back || menu.start) dialog.close();
       else if (connected) navigateMenu(dialog, menu);
     } else if (mode === "ready" && tutorialPressed) {
-      startTutorial();
+      startCourse(null);
     } else if (controls.reset && mode !== "ready") {
       start();
     } else if (menu.start || (menu.back && mode === "paused") || (controls.pause && mode === "paused")) {
@@ -504,7 +520,9 @@ function frame(now: number) {
       const liveControls = { ...aimed, push: pendingPush || repeated, autoPush: repeated, toe: pendingToe };
       const mapped = setup ? setupInput(liveControls, skater, setup, steering, params, controllerProfile, assistance)
         : gameInput(liveControls, skater, scheme, steering, lowPose, params, controllerProfile);
-      const input = beginner ? coach.apply(mapped.input, skater, params, pendingTrick, SIM_DT) : mapped.input;
+      const coached = beginner ? coach.apply(mapped.input, skater, params, pendingTrick, SIM_DT) : mapped.input;
+      // Applied before the recorder, so a replay holds what the skater actually did.
+      const input = careerMode && !playback ? rustGate.apply(coached, skater) : coached;
       pendingTrick = false; cantilever = mapped.cantilever;
       pendingPush = false; pendingToe = false;
       const events: EdgeEvent[] = [];
@@ -542,7 +560,9 @@ function frame(now: number) {
       rookie?.sample(skater,SIM_DT);
       if (tutorial && !playback) {
         // It only watches: the pass conditions read the solver's state, nothing else.
+        const at = tutorial.step;
         tutorial.sample(skater, SIM_DT);
+        if (at && tutorial.step !== at && career.recordLesson(at.id)) saveCareer();
         ghost = tutorialGhost(tutorial.step, ghost, skater, ghostOn);
         if (tutorial.done) finishTutorial();
       }
@@ -596,7 +616,7 @@ function refreshCareer() {
     const button = document.createElement("button"); button.disabled = i > career.unlocked;
     button.textContent = !button.disabled ? (career.medals[i] ? "Replay program →" : "Skate this program →")
       : i > career.medalCap ? "Complete the previous event to unlock"
-      : `Train to ${TIERS[i].name} overall (${TIERS[i].floor}) to unlock`;
+      : career.lockReason(i);
     button.addEventListener("click", () => {
       careerEvent = i; careerMode = true; courseMode = false; tutorialMode = false; freeSkate = true; cruise = true;
       resumeAfterCareer = false; careerBoard.close(); start();
@@ -604,14 +624,21 @@ function refreshCareer() {
     card.append(title, details, routine, button); events.append(card);
   });
   const training = el("career-training"); training.replaceChildren();
-  for (const [stat, label] of [["strength", "Push power"], ["spring", "Jump spring"], ["edgeControl", "Edge control"], ["balance", "Balance"]] as const) {
+  for (const [stat, label] of [["strength", "Push power"], ["spring", "Jump spring"], ["edgeControl", "Edge control"], ["balance", "Balance"], ["stamina", "Stamina"]] as const) {
     const value = career.profile.stats[stat], cost = xpToRaise(value), button = document.createElement("button");
-    button.textContent = `${label} ${value} · ${value === 100 ? "Max" : `+1 / ${cost} XP`}`;
-    button.disabled = value === 100 || career.profile.xp < cost;
+    button.textContent = `${label} ${value} · ${value === 100 ? "Max" : `+1 / ${cost} XP, 1 week`}`;
+    button.disabled = value === 100 || career.profile.xp < cost || career.weeks < 1;
     button.addEventListener("click", () => { career.train(stat); saveCareer(); refreshCareer(); });
     training.append(button);
   }
-  el("career-save").textContent = saveNotice;
+  for (const family of JUMP_FAMILIES) {
+    const button = document.createElement("button");
+    button.textContent = `${family.title} · rust ${Math.round(career.rust[family.id] * 100)}% · drill 1 week`;
+    button.disabled = career.weeks < 1;
+    button.addEventListener("click", () => { career.drill(family.id); saveCareer(); refreshCareer(); });
+    training.append(button);
+  }
+  el("career-save").textContent = `${career.weeks} training weeks left. ${saveNotice}`;
 }
 function openCareer() { resumeAfterCareer = mode === "playing"; pause(); refreshCareer(); careerBoard.showModal(); }
 el("career-menu").addEventListener("click", openCareer);
@@ -636,7 +663,9 @@ function drawCareer() {
   el("score").textContent = String(c.index * 250);
   el("combo-label").textContent = "Choreography"; el("combo").textContent = `${c.index}/${c.event.routine.length}`;
   el("lesson-title").textContent = element?.title ?? "Program complete";
-  el("lesson-tip").textContent = element?.hint ?? "Your choreography is complete. See your result and next event.";
+  // On a pad, the words for this setup's pad; the keyboard keeps the keyboard's.
+  const padWords = setup && navigator.getGamepads?.().some(Boolean) && c.current ? elementHow(c.current, padContext(setup, controllerProfile)) : null;
+  el("lesson-tip").textContent = padWords ?? element?.hint ?? "Your choreography is complete. See your result and next event.";
   el("lesson-progress").textContent = `${c.index}/${c.event.routine.length} elements`;
   const status = `${c.event.title} · ${c.falls} falls · ${c.complete ? MEDALS[c.medal] : "Finish to unlock the next event"}`;
   if (el("routine-status").textContent !== status) el("routine-status").textContent = status;
@@ -660,8 +689,7 @@ function finishCareer() {
 }
 /** The words for this setup's controls: the profile's own labels where it has them. */
 function howContext(): HowContext {
-  return { setup, push: bindingLabel(controllerProfile, "push"), three: bindingLabel(controllerProfile, "three"),
-    modifier: BUTTON_NAMES[controllerProfile.modifier], feet: controllerProfile.feet ?? "dpad" };
+  return padContext(setup, controllerProfile);
 }
 const setText = (id: string, text: string) => { if (el(id).textContent !== text) el(id).textContent = text; };
 function drawTutorial() {
@@ -678,18 +706,18 @@ function drawTutorial() {
   if (el("tutorial-stages").innerHTML !== stages) el("tutorial-stages").innerHTML = stages;
   (el("tutorial-meter") as HTMLProgressElement).value = t.fraction;
   setText("tutorial-status", t.status);
-  setText("lesson-progress", `Step ${Math.min(t.index + 1, STEPS.length)} of ${STEPS.length}`);
-  el("combo-label").textContent = "Tutorial"; el("combo").textContent = `${Math.min(t.index, STEPS.length)}/${STEPS.length}`;
+  setText("lesson-progress", `Step ${Math.min(t.index + 1, t.steps.length)} of ${t.steps.length}`);
+  el("combo-label").textContent = "Tutorial"; el("combo").textContent = `${Math.min(t.index, t.steps.length)}/${t.steps.length}`;
   if (!skater.fallen) el("hint").textContent = t.toast > 0 ? `✓ ${t.message}` : now ? `${stage.name} · ${stage.line}` : "";
 }
 function finishTutorial() {
   if (!tutorial) return;
   const t = tutorial;
   mode = "done"; musicEl.pause(); tutorialMode = false;
-  const passed = STEPS.length - t.skipped.length;
-  const skipped = t.skipped.map(id => STEPS.find(x => x.id === id)!.title).join(", ");
+  const passed = t.steps.length - t.skipped.length;
+  const skipped = t.skipped.map(id => t.steps.find(x => x.id === id)!.title).join(", ");
   el("title").textContent = "You trust the ice.";
-  el("description").textContent = `Balance, edges, the scrape and the dig, the air — ${passed}/${STEPS.length} steps${t.falls ? `, and ${t.falls} fall${t.falls > 1 ? "s" : ""} you got up from` : ", without a fall"}. Everything you felt standing still is still there when you leave the ice.${skipped ? ` Skipped: ${skipped}.` : ""}`;
+  el("description").textContent = `${lessonCourse ? lessonCourse.title : "Balance, edges, the scrape and the dig, the air"} — ${passed}/${t.steps.length} steps${t.falls ? `, and ${t.falls} fall${t.falls > 1 ? "s" : ""} you got up from` : ", without a fall"}. Everything you felt standing still is still there when you leave the ice.${skipped ? ` Skipped: ${skipped}.` : ""}`;
   el("help").hidden = true; el("start").textContent = "Free skate →";
   el("overlay").hidden = false; el("pause").hidden = true; el("start").focus();
 }
