@@ -178,20 +178,30 @@ export function landingTurns(s: Readonly<SkaterState>, p: Params): number {
 /** The check: B (arms out, weight to the right foot) once the landing will have turned this far. */
 const CHECK_AT = 1.95;
 
+/** s of the load: RT full, then let go for the takeoff. */
+const LOOP_LOAD = 0.4;
 /**
- * A jump off foot `f`'s back outside edge: load its trigger fully with its
- * stick back (heel), X / B held (the weight, the arms out that side) for
- * 0.35 s, let go — the takeoff. `edge` is held on the foot's stick, or on
- * both sticks when `both` (a deeper lean: the body leans on the mean of the
- * two). In the air B, once the landing will have
- * turned CHECK_AT: arms out, landing on the right foot. The run-out: B held,
- * and 0.15 s after the landing X too — the free foot down, knees at half.
+ * s into the load the arms change sides: X / B wound against the jump, then the
+ * other one swung with it, until the blade leaves. Under armsWhipMode, arms held
+ * wound through the whole load swing against the jump and take the spin away
+ * (L 0, test/backjump.test.ts). MEASURED 2026-11-02: from 5.25 m/s 0.07 lands
+ * clean and 0.0625 leaves with no turn; from 5 m/s 0.0783 falls.
+ */
+const LOOP_SWING = 0.07;
+/**
+ * A jump off foot `f`'s back outside edge: load its trigger fully for LOOP_LOAD,
+ * the arms wound on its side for LOOP_SWING and then swung to the other, let go:
+ * the takeoff. `edge` is held on the foot's stick, or on both sticks when `both`
+ * (a deeper lean: the body leans on the mean of the two). In the air B, once the
+ * landing will have turned CHECK_AT: arms out, landing on the right foot. The
+ * run-out: B held, and 0.15 s after the landing X too, the free foot down, knees
+ * at half.
  */
 export function jumpOff(f: number, edge: number, p: Params, both = false): Step[] {
   const hold = (h: ControllerHardware) => { h.axes[STICK[f]] = edge; if (both) h.axes[STICK[1 - f]] = edge; };
   return [
-    { name: "load", for: 0.35,
-      pad: h => { hold(h); h.axes[STICK[f] + 1] = f ? 1 : -1; h.buttons[TRIGGER[f]] = 1; h.buttons[WEIGHT[f]] = 1; } },
+    { name: "load", for: LOOP_LOAD,
+      pad: (h, c) => { hold(h); h.buttons[TRIGGER[f]] = 1; h.buttons[WEIGHT[c.pt < LOOP_SWING ? f : 1 - f]] = 1; } },
     { name: "air", max: 1.5,
       pad: (h, c) => {
         if (c.tookAt < 0) { hold(h); return; }
@@ -209,15 +219,15 @@ export function jumpOff(f: number, edge: number, p: Params, both = false): Step[
 
 const EXPERIMENTAL = setupParams("experimental");
 /**
- * Both sticks for the loop's held back outside edge: body lean -0.24..-0.28
- * at a 4.9-6.6 m/s takeoff. MEASURED from 0-8 m/s player speeds: 0.6 lands
- * as reliably as the old single-stick edge (-0.10..-0.15); 0.7 (lean to
- * -0.40) landed from 19 of 33 starts, full sticks (to -0.8) from under half —
- * short of rotation and down in the run-out — and 7 m/s backward was never
- * reached from a three-turn entry (the turn costs ~1 m/s, and above ~8 m/s
- * forward the blade barely takes the edge to turn on).
+ * Both sticks for the loop's held back outside edge. MEASURED 2026-11-02, from
+ * 5.25 m/s: 0.88-0.96 lands clean, 0.86 and below leave with no turn.
  */
-const LOOP_EDGE = 0.5;
+const LOOP_EDGE = 0.9;
+/**
+ * m/s the loop spawns at, forward. MEASURED 2026-11-02: clean at 5, 5.05, 5.1,
+ * 5.2, 5.25 and 5.5; at 4.95 and below it falls or lands short.
+ */
+const LOOP_SPEED = 5.25;
 
 export const TRICKS: readonly Trick[] = [
   {
@@ -250,17 +260,17 @@ export const TRICKS: readonly Trick[] = [
     ]),
   },
   {
-    // test/backjump.test.ts: a backward double loop, landed clean — here
-    // skated into: strokes on a left curve to 6 m/s, a right forward inside
-    // three-turn onto the back outside edge, then the edge deepened on both
-    // sticks and held 1 s before the takeoff (the takeoff on a held edge, not
-    // the flat one the backjump script leaves from). MEASURED: see
-    // test/ghost.test.ts; deeper than this did not hold (the report on the
-    // PR, and LOOP_EDGE).
-    id: "loop", name: "Backward double loop", setup: "experimental", speed: -7, duration: 18, entry: "stride",
-    how: "Experimental · stroke up (LT, RT…), B + right stick right: forward inside edge, A: three-turn onto the back outside edge; both sticks left to deepen the edge and hold it; RT + B + right stick back (heel) for 0.35 s, let go to take off, B in the air to check",
+    // A backward double loop, landed clean. It spawns at its entry instead of
+    // the player's stride: MEASURED 2026-11-02, under armsWhipMode, a stride
+    // entry never reached it from strokes (11,520 tries over 10 player speeds;
+    // the best setting landed only the two starts already at this speed).
+    // Numbers are in test/ghost.test.ts. The window is frame-exact (the deepen's
+    // 1 s, not 0.9 or 1.1): it shows the jump is there, not that a player can
+    // hit it this reliably.
+    id: "loop", name: "Backward double loop", setup: "experimental", speed: LOOP_SPEED, duration: 12,
+    how: "Experimental · glide in at 5.25 m/s on a left curve, B + right stick right: forward inside edge, A: three-turn onto the back outside edge; both sticks far left, RT half, hold 1 s; RT full with B, X after a moment, let go at 0.4 s to take off; B in the air to check",
     pad: routine([
-      ...strokesTo(5.5, 0.5),
+      { name: "glide", for: 0.4, pad: h => { h.axes[0] = h.axes[2] = 0.5; } },
       ...threeTurn(1, 0.6, 0),
       { name: "deepen", for: 1,
         pad: (h, c) => { if (c.pt >= 0.02) h.axes[0] = h.axes[2] = -LOOP_EDGE * Math.min(1, c.pt / 0.5); h.buttons[7] = 0.5; if (c.pt < 0.05) h.buttons[1] = 1; } },
