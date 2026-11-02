@@ -46,6 +46,9 @@ var last_landing_tick := -1
 var controller_status: Label
 var rumble_enabled := true
 var paddle_layout := 0
+## paddle_layout's last value: paddles reach the sim as buttons 18-21, its own layer (game/full-controls.ts).
+const PADDLE_LAYER := 3
+var lesson_course := "trust"
 var blade_filter := 0.0
 var crowd_filter := 0.0
 var crowd_swell := 0.0
@@ -97,6 +100,10 @@ func _ready() -> void:
 		beginner = true
 		cruise = true
 	screenshot_test = "--capture" in OS.get_cmdline_user_args()
+	if not boot_test and not screenshot_test and DisplayServer.get_name() != "headless":
+		# A wired Elite's paddles need SDL configured at launch: scripts/pad_map.gd. Joypads list after the first frames.
+		get_tree().create_timer(.25).timeout.connect(func():
+			if PadMap.relaunch_for_paddles(): get_tree().quit())
 	if boot_test and "--full-controls" in OS.get_cmdline_user_args():
 		scheme = 3
 	if not boot_test and not screenshot_test:
@@ -242,6 +249,10 @@ func build_ui() -> void:
 	coach_progress = label("",13,Color("c5b08e"))
 	coach_progress.position = Vector2(42,275)
 	root.add_child(coach_progress)
+	# Lessons are read while skating, over a busy crowd.
+	for coach_label in [coach_title,coach_tip,coach_progress]:
+		coach_label.add_theme_color_override("font_outline_color",Color(0.03,0.06,0.1,.9))
+		coach_label.add_theme_constant_override("outline_size",7)
 	hud_time = label("",20)
 	hud_time.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	hud_time.position = Vector2(-240,95)
@@ -325,6 +336,8 @@ func update_controller_status() -> void:
 	if controller_status == null: return
 	var devices := Input.get_connected_joypads()
 	controller_status.text = "XBOX CONTROLS  /  A select · B back · Menu pause\nD-pad navigate · View change camera" if not devices.is_empty() else "KEYBOARD  /  Enter select · Esc pause\nA / D carve · Space push · Shift load / release"
+	if not devices.is_empty() and PadMap.wired_elite(devices[0]):
+		controller_status.text += "\nElite 2  /  "+("paddles ready" if PadMap.paddles_mapped() else "paddles off until the game restarts")
 
 func clear_menu(title: String, subtitle: String) -> void:
 	for child in menu.get_children():
@@ -353,7 +366,10 @@ func show_page(page: String) -> void:
 		clear_menu("Your time on the ice", "One rink. Every edge. A season to make your own.")
 		if not frame.is_empty() and not frame.finished and int(frame.state.tick)>0:
 			menu.add_child(button("Continue skating →",resume_game,true))
+			if frame.get("tutorial") != null:
+				menu.add_child(button("Skip this step   /   earns no XP",func():link.send("skipStep")))
 		menu.add_child(button("The Season   /   Career →",func():show_page("career"),true))
+		menu.add_child(button("Learn your controls   /   A course for each setup",func():show_page("learn")))
 		menu.add_child(button("The Composer   /   Author a program",func():show_page("composer")))
 		menu.add_child(button("Free Skate   /   Quiet ice",func():start_game("free")))
 		menu.add_child(button("Pairs   /   Skate with a partner",func():start_game("pairs")))
@@ -367,7 +383,8 @@ func show_page(page: String) -> void:
 		if frame.is_empty():
 			menu.add_child(paragraph("Connecting to Ice Lab…"))
 		else:
-			menu.add_child(label("%d training XP available" % int(frame.career.xp),16,Color("d5bd96")))
+			menu.add_child(label("%d training XP available   ·   overall %.1f" % [int(frame.career.xp),float(frame.career.overall)],16,Color("d5bd96")))
+			menu.add_child(button("Learn your controls   /   each new step +%d XP" % int(catalog.lessonXp),func():show_page("learn")))
 			for i in catalog.events.size():
 				var event: Dictionary = catalog.events[i]
 				var medal := str(catalog.medals[int(frame.career.medals[i])])
@@ -375,6 +392,8 @@ func show_page(page: String) -> void:
 				event_button.disabled = i > int(frame.career.unlocked)
 				menu.add_child(event_button)
 				menu.add_child(paragraph("%ds · %s" % [int(event.seconds),routine_names(event.routine)],12))
+				if not str(frame.career.locks[i]).is_empty():
+					menu.add_child(paragraph(str(frame.career.locks[i]),12))
 			menu.add_child(HSeparator.new())
 			menu.add_child(label("Your arms",21))
 			menu.add_child(paragraph("What your arms do most in competition. Drills shrink the trade-off for the tier you drill. Other modes need no choice: full balance, full line.",13))
@@ -387,12 +406,34 @@ func show_page(page: String) -> void:
 			menu.add_child(button("Drill %s   /   45 seconds" % drill_tier,func():start_game("armdrill")))
 			menu.add_child(HSeparator.new())
 			menu.add_child(label("Training",21))
-			for stat in ["strength","spring","edgeControl","balance"]:
+			for stat in ["edgeControl","balance","spring","strength","stamina"]:
 				var cost := int(frame.career.costs[stat])
 				var value := int(frame.career.stats[stat])
 				var train_button := button("%s  %d → %d    /    %d XP" % [stat.capitalize(),value,value+1,cost],func():link.send("train",{"stat":stat}))
 				train_button.disabled = int(frame.career.xp)<cost or value>=100
 				menu.add_child(train_button)
+		menu.add_child(button("← Back",func():show_page("home")))
+	elif page == "learn":
+		clear_menu("Learn your controls", "A short course for each setup: what your hands do on that pad, on the ice, in your own bindings. Pick one from another setup and it becomes your setup.")
+		if catalog.is_empty():
+			menu.add_child(paragraph("Preparing your lessons…"))
+		else:
+			menu.add_child(button("Trust the ice   /   Balance to air, %d steps" % int(catalog.trustSteps),func():start_lesson("trust",skating_setup),true))
+			menu.add_child(paragraph("Skating itself, in your current setup's words: stand still on something that moves, then edges, stops, and only then the air.",12))
+			for course in catalog.courses:
+				if str(course.id) == "paddles": continue
+				var mine: bool = skating_setup in course.setups
+				menu.add_child(button("%s%s" % ["● " if mine else "",str(course.title)],func():start_lesson(str(course.id),str(course.setups[0])),mine))
+				menu.add_child(paragraph(str(course.blurb),12))
+			for course in catalog.courses:
+				if str(course.id) != "paddles": continue
+				var target: String = skating_setup if skating_setup in course.setups else "experimental"
+				menu.add_child(HSeparator.new())
+				menu.add_child(button("%s   /   on %s" % [str(course.title),target.capitalize()],func():
+					paddle_layout = PADDLE_LAYER
+					save_preferences()
+					start_lesson(str(course.id),target)))
+				menu.add_child(paragraph(str(course.blurb)+" Starting it sets Elite paddles to the game's layer.",12))
 		menu.add_child(button("← Back",func():show_page("home")))
 	elif page == "composer":
 		clear_menu("The Composer", "Author an ordered skating program. Add phrases, reorder them, then perform the sequence on the ice. A rehearsal lasts up to three minutes.")
@@ -454,8 +495,8 @@ func show_page(page: String) -> void:
 			menu.add_child(button("Cruise: "+("On" if cruise else "Off"),func():cruise=not cruise;show_page("settings")))
 		menu.add_child(button("Music: "+("On" if music_enabled else "Off"),func():music_enabled=not music_enabled;show_page("settings")))
 		menu.add_child(button("Controller vibration: "+("On" if rumble_enabled else "Off"),func():rumble_enabled=not rumble_enabled;show_page("settings")))
-		menu.add_child(button("Elite paddles: "+["Controller's own profile","Footwork · LB / RB / A / R3","Moves · X / B / A / Y"][paddle_layout],func():paddle_layout=(paddle_layout+1)%3;show_page("settings")))
-		menu.add_child(paragraph("Native paddle presets apply only when the driver exposes separate paddles. Otherwise use your controller's stored Xbox Accessories profile. View changes camera; Menu pauses.",12))
+		menu.add_child(button("Elite paddles: "+["Controller's own profile","Footwork · LB / RB / A / R3","Moves · X / B / A / Y","Game layer · feet, free leg or weight"][paddle_layout],func():paddle_layout=(paddle_layout+1)%4;show_page("settings")))
+		menu.add_child(paragraph("Presets and the game layer need the Elite on its default profile, profile LEDs off: a stored profile sends the paddles as ordinary buttons, which Controller's own profile uses as they are. View changes camera; Menu pauses.",12))
 		menu.add_child(button("Display: "+("Fullscreen" if DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN else "Windowed")+" · F11",toggle_fullscreen))
 		menu.add_child(label("Skater",16))
 		var character_picker := OptionButton.new()
@@ -520,6 +561,13 @@ func show_page(page: String) -> void:
 				mapping += str(action.name)+": "+(str(catalog.controller.buttons[int(controller_profile.modifier)])+" + " if binding.modified else "")+str(catalog.controller.buttons[int(binding.button)])+"\n"
 			menu.add_child(paragraph(mapping,13))
 			menu.add_child(paragraph("Left stick leans; RT loads/releases a jump; LT brakes. LB/RB retain a foot; both share weight. Right stick opens the arms and selects camel in a spin. RT selects sit. Turns need speed and an edge.\n\nBrowser workshop: run node tools/ice-lab/app/serve.mjs, then open localhost:8123/game/controller.html.",13))
+			var feet_now := str(controller_profile.get("feet","dpad"))
+			var feet_names := {"dpad":"D-pad","stickY":"Sticks up and down","modifier":"Modifier + left stick"}
+			menu.add_child(button("Feet layout: "+str(feet_names[feet_now]),func():
+				controller_profile["feet"]={"dpad":"stickY","stickY":"modifier","modifier":"dpad"}[feet_now]
+				save_preferences()
+				show_page("controller")))
+			menu.add_child(paragraph("Where the feet live in Simulation, Experimental and Dig Gate. Sticks up and down leaves the paddles nothing to turn. The lessons' words follow this.",12))
 			menu.add_child(button("Import controller profile",func():controller_file(false)))
 			menu.add_child(button("Export controller profile",func():controller_file(true)))
 			menu.add_child(button("Restore controller defaults",func():controller_profile=catalog.controller.profile.duplicate(true);show_page("controller")))
@@ -531,8 +579,13 @@ func show_page(page: String) -> void:
 			show_protocol(frame.result.protocol)
 		if frame.result.has("xp"):
 			menu.add_child(label("+%d training XP" % int(frame.result.xp),22,Color("d5bd96")))
+		if frame.result.get("stopped") != null:
+			menu.add_child(label("Time ran out on: "+str(frame.result.stopped.element),17))
+			menu.add_child(paragraph(str(frame.result.stopped.how),14))
 		menu.add_child(paragraph("Your lines remain on the ice. Take another run, or carry what you learned into the next program."))
-		menu.add_child(button("Continue your career →",func():show_page("career"),true))
+		if frame.result.get("lesson",false):
+			menu.add_child(button("More lessons →",func():show_page("learn"),true))
+		menu.add_child(button("Continue your career →",func():show_page("career"),not frame.result.get("lesson",false)))
 		menu.add_child(button("Skate again",func():start_game(active_mode,event_index)))
 		menu.add_child(button("Save performance replay",func():link.send("export")))
 		menu.add_child(button("Return to the rink menu",func():show_page("home")))
@@ -577,6 +630,17 @@ func routine_names(ids: Array) -> String:
 		names.append(catalog.elements[id].title)
 	return " → ".join(names)
 
+## A lesson needs its setup in force before it starts: the course and its words are that pad's.
+func start_lesson(course: String, setup: String) -> void:
+	if skating_setup != setup:
+		skating_setup = setup
+		scheme = 3
+		beginner = setup == "repertoire"
+		cruise = false
+		save_preferences()
+	lesson_course = course
+	start_game("lesson")
+
 func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
 	if not link.operational:
 		on_error("The skating engine is still starting.")
@@ -587,7 +651,7 @@ func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
 	skater.load_model(CHARACTERS[character].path)
 	partner.visible = false
 	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile}})
-	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge}})
+	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null}})
 
 func on_engine(op: String, data: Dictionary) -> void:
 	if op == "hello":
@@ -738,10 +802,18 @@ func update_hud() -> void:
 		if int(r.index)<r.sequence.size():
 			var element: Dictionary = catalog.elements[r.sequence[int(r.index)]]
 			coach_title.text = element.title
-			coach_tip.text = element.hint
+			coach_tip.text = str(r.get("how",element.hint))
 			coach_progress.text = "%02d / %02d    ·    %s" % [int(r.index)+1,r.sequence.size(),r.title]
 			if float(element.duration)>0:
 				coach_progress.text += "\nHold %.1f / %.1f s" % [float(r.held),float(element.duration)]
+	elif frame.get("tutorial") != null:
+		var l: Dictionary = frame.tutorial
+		coach_title.text = str(l.title)
+		coach_tip.text = str(l.how) if str(l.message).is_empty() else "✓ "+str(l.message)+"\n\n"+str(l.how)
+		if not str(l.unproven).is_empty():
+			coach_tip.text += "\n\n"+str(l.unproven)
+		coach_progress.text = "Step %d of %d    ·    %s\nPause to skip" % [mini(int(l.index)+1,int(l.total)),int(l.total),str(l.status)]
+		hud_time.text = "%02d:%02d" % [int(frame.elapsed)/60,int(frame.elapsed)%60]
 	elif frame.mode == "armdrill" and frame.get("drill") != null:
 		coach_title.text = str(frame.drill.title)
 		coach_tip.text = str(frame.drill.hint)
@@ -772,7 +844,7 @@ func update_hud() -> void:
 		hud_time.text = "%02d:%02d" % [int(frame.elapsed)/60,int(frame.elapsed)%60]
 	if bool(s.fallen):
 		coach_title.text = "Find your feet."
-		coach_tip.text = "A fall is part of skating. Tap Space / A to get up and continue."
+		coach_tip.text = "A fall is part of skating. "+str(frame.get("recover","Tap Space / A to get up."))
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
@@ -847,10 +919,15 @@ func full_hardware(joy: int) -> Dictionary:
 		buttons[6]=maxf(0,Input.get_joy_axis(joy,JOY_AXIS_TRIGGER_LEFT))
 		buttons[7]=maxf(0,Input.get_joy_axis(joy,JOY_AXIS_TRIGGER_RIGHT))
 		if paddle_layout>0:
-			var destinations := [4,5,0,11] if paddle_layout==1 else [2,1,0,3]
 			var paddles := [JOY_BUTTON_PADDLE1,JOY_BUTTON_PADDLE2,JOY_BUTTON_PADDLE3,JOY_BUTTON_PADDLE4]
+			if paddle_layout==PADDLE_LAYER:
+				buttons.resize(22)
+				for i in range(16,22):
+					buttons[i]=0.0
+			var destinations: Array = [4,5,0,11] if paddle_layout==1 else [2,1,0,3]
 			for i in 4:
-				if Input.is_joy_button_pressed(joy,paddles[i]): buttons[destinations[i]]=1.0
+				if Input.is_joy_button_pressed(joy,paddles[i]):
+					buttons[PadMap.LAYER_BUTTON[paddles[i]] if paddle_layout==PADDLE_LAYER else destinations[i]]=1.0
 	var keys: Array = []
 	var mapping := {KEY_A:"a",KEY_D:"d",KEY_W:"w",KEY_S:"s",KEY_Q:"q",KEY_E:"e",KEY_SHIFT:"shift",KEY_SPACE:" ",KEY_X:"x",KEY_C:"c",KEY_COMMA:",",KEY_B:"b",KEY_N:"n",KEY_Z:"z",KEY_Y:"y",KEY_F:"f",KEY_J:"j",KEY_K:"k",KEY_L:"l",KEY_H:"h",KEY_I:"i",KEY_O:"o",KEY_U:"u",KEY_LEFT:"arrowleft",KEY_RIGHT:"arrowright",KEY_UP:"arrowup",KEY_DOWN:"arrowdown"}
 	for code in mapping:
@@ -1033,11 +1110,15 @@ func capture() -> void:
 		await get_tree().create_timer(1.5).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-camera-%d.png" % view)
-	for page in ["home","career","composer","settings"]:
+	for page in ["home","career","learn","composer","settings"]:
 		show_page(page)
 		await get_tree().create_timer(1.2).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-%s.png" % ("menu" if page == "home" else page))
+	start_lesson("experimental","experimental")
+	await get_tree().create_timer(2.0).timeout
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-lesson.png")
 	print("GODOT_CAPTURE_PASS")
 	get_tree().quit()
 
@@ -1126,7 +1207,7 @@ func load_preferences() -> void:
 	cruise = bool(saved.get("cruise",true))
 	music_enabled = bool(saved.get("music",true))
 	rumble_enabled = bool(saved.get("rumble",true))
-	paddle_layout = clampi(int(saved.get("paddles",0)),0,2)
+	paddle_layout = clampi(int(saved.get("paddles",0)),0,PADDLE_LAYER)
 	var ids = saved.get("sequence",[])
 	if ids is Array and ids.size()>0 and ids.size()<=16:
 		var valid := true
