@@ -17,6 +17,8 @@ import type { SegmentRule, PcsScore } from "../sim/pcs.ts";
 import type { IceGrid } from "../sim/ice.ts";
 import { JUMP_FAMILIES, RUST_PER_STEP, RUST_PER_WEEK } from "./training.ts";
 import type { JumpFamily, Rust } from "./training.ts";
+import { BODY_REGIONS, HEALED_UNDER, INJURED_AT, REST_PER_WEEK, noInjury, noWear, wornProfile } from "./wear.ts";
+import type { BodyRegion, FallHit, Injured, Wear } from "./wear.ts";
 
 export const ELEMENTS = {
   glide: { title: "Opening glide", hint: "Hold Space / A to push. Glide upright above 3 m/s for 3 seconds.", duration: 3 },
@@ -327,6 +329,10 @@ export class CareerState {
   plans: (ElementId[] | null)[] = CAREER_EVENTS.map(() => null);
   /** Best segment score at each event, for the standings; null until skated. */
   best: (number | null)[] = CAREER_EVENTS.map(() => null);
+  /** game/wear.ts: what falling has done to the body, 0 fresh upward, by region. */
+  wear: Wear = noWear();
+  /** Regions injured: set at INJURED_AT, cleared under HEALED_UNDER. */
+  injured: Injured = noInjury();
 
   /** How far medals alone would unlock: the first not-yet-earned event. */
   get medalCap(): number {
@@ -403,6 +409,22 @@ export class CareerState {
     this.rust = { ...this.rust, [family]: Math.max(0, this.rust[family] - RUST_PER_WEEK) };
     this.drilled = { ...this.drilled, [family]: true };
   }
+  /** A fall in career. Returns the region if this one made it an injury. */
+  takeFall(hit: FallHit): BodyRegion | null {
+    this.wear = { ...this.wear, [hit.region]: this.wear[hit.region] + hit.wear };
+    if (this.injured[hit.region] || this.wear[hit.region] < INJURED_AT) return null;
+    this.injured = { ...this.injured, [hit.region]: true };
+    return hit.region;
+  }
+  /** A week's rest for one region. Does nothing without a week in hand, or with nothing to rest. */
+  rest(region: BodyRegion) {
+    if (this.weeks < 1 || this.wear[region] <= 0) return;
+    this.weeks--;
+    this.wear = { ...this.wear, [region]: Math.max(0, this.wear[region] - REST_PER_WEEK) };
+    if (this.wear[region] < HEALED_UNDER) this.injured = { ...this.injured, [region]: false };
+  }
+  /** The skater as they can skate today: trained stats, less what falling has cost. */
+  get bodyProfile(): SkaterProfile { return wornProfile(this.profile, this.wear, this.injured); }
   /** A new event medalled: time has passed, and what was not drilled slips. */
   private seasonStep() {
     for (const { id } of JUMP_FAMILIES) if (!this.drilled[id]) this.rust[id] = Math.min(1, this.rust[id] + RUST_PER_STEP);
@@ -420,7 +442,7 @@ export class CareerState {
     const plan = this.plans[i];
     return plan ? { ...CAREER_EVENTS[i], routine: plan } : CAREER_EVENTS[i];
   }
-  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, best: this.best }); }
+  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, best: this.best, wear: this.wear, injured: this.injured }); }
   static restore(json: string | null): CareerState {
     const career = new CareerState();
     try {
@@ -444,6 +466,10 @@ export class CareerState {
       if (typeof saved.drilled?.toe === "boolean" && typeof saved.drilled?.edge === "boolean") career.drilled = { toe: saved.drilled.toe, edge: saved.drilled.edge };
       if (Array.isArray(saved.plans) && saved.plans.length === CAREER_EVENTS.length) career.plans = saved.plans.map((plan: unknown, i: number) => validPlan(CAREER_EVENTS[i], plan) ? plan : null);
       if (Array.isArray(saved.best) && saved.best.length === CAREER_EVENTS.length && saved.best.every((b: unknown) => b === null || Number.isFinite(b))) career.best = [...saved.best];
+      // Saves from before wear keep a fresh body. A bad field keeps the default.
+      const regions = BODY_REGIONS.map(r => r.id);
+      if (regions.every(r => Number.isFinite(saved.wear?.[r]) && saved.wear[r] >= 0)) career.wear = Object.fromEntries(regions.map(r => [r, saved.wear[r]])) as Wear;
+      if (regions.every(r => typeof saved.injured?.[r] === "boolean")) career.injured = Object.fromEntries(regions.map(r => [r, saved.injured[r]])) as Injured;
       if (Array.isArray(saved.lessons) && saved.lessons.length <= 200 && saved.lessons.every((l: unknown) => typeof l === "string" && l.length <= 40)) career.lessons = [...saved.lessons];
     } catch { /* A missing or invalid save starts a playable career. */ }
     return career;

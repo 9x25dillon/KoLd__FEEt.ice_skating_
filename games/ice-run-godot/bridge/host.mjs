@@ -22,6 +22,7 @@ lines.on('line',line=>{
    case 'train':engine.train(req.stat);data=engine.snapshot();break;
    case 'armFocus':engine.setArmFocus(req.focus);data=engine.snapshot();break;
    case 'drill':engine.drillFamily(req.family);data=engine.snapshot();break;
+   case 'rest':engine.rest(req.region);data=engine.snapshot();break;
    case 'plan':engine.setPlan(req.event,req.plan);data=engine.snapshot();break;
    case 'skipStep':data=engine.skipStep();break;
    case 'export':{const path=join(saveDir,'ice-run-replay.json');writeFileSync(path,engine.exportReplay());data={path};break;}

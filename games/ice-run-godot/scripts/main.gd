@@ -428,6 +428,16 @@ func show_page(page: String) -> void:
 				train_button.disabled = int(frame.career.xp)<cost or value>=100 or int(frame.career.weeks)<1
 				menu.add_child(train_button)
 			menu.add_child(HSeparator.new())
+			menu.add_child(label("Your body",21))
+			menu.add_child(paragraph("Every fall costs something, and it builds. Wear lowers what you skate with, not what you have trained; enough of it becomes an injury. A week's rest wins it back.",13))
+			for region in catalog.bodyRegions:
+				var wear := float(frame.career.wear[region.id])
+				var injured: bool = frame.career.injured[region.id]
+				var rest_button := button("%s   /   %s   /   rest 1 week" % [str(region.injury) if injured else str(region.title),"injured" if injured else "wear %d%%" % roundi(wear*100)],func():link.send("rest",{"region":region.id}))
+				rest_button.disabled = int(frame.career.weeks)<1 or wear<=0.0
+				menu.add_child(rest_button)
+				menu.add_child(paragraph(str(region.blurb),12))
+			menu.add_child(HSeparator.new())
 			menu.add_child(label("Season standings",21))
 			show_table(frame.career.season,"points")
 		menu.add_child(button("← Back",func():show_page("home")))
@@ -643,6 +653,8 @@ func show_page(page: String) -> void:
 			show_protocol(frame.result.protocol)
 		if frame.result.has("xp"):
 			menu.add_child(label("+%d training XP" % int(frame.result.xp),22,Color("d5bd96")))
+		if not str(frame.result.get("body","")).is_empty():
+			menu.add_child(paragraph(str(frame.result.body),15))
 		if frame.result.get("standings") != null:
 			menu.add_child(label("The field",21))
 			show_table(frame.result.standings,"score")
@@ -765,7 +777,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		notice.text = "Saved: "+str(data.path)
 		return
 	frame = data
-	if op == "train" or op == "armFocus" or op == "drill":
+	if op == "train" or op == "armFocus" or op == "drill" or op == "rest":
 		show_page("career")
 		return
 	if op == "plan":

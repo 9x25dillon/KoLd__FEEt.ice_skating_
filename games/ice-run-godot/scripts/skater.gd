@@ -33,6 +33,11 @@ const BODY_WEIGHT := 540.0 # N, the support load the sim reports gliding on one 
 # Presentation-only easing, for what the sim does not state: authored poses
 # (camel, sit, low, fallen), arms, and a foot leaving or rejoining the ice.
 const POSE_RATE := 12.0
+# A fall, from its first tick: the hip takes the ice at about FALL_HIT, and the
+# trunk rolls over onto the forearm between FALL_ROLL_FROM and FALL_ROLL_TO. Presentation only.
+const FALL_HIT := .26
+const FALL_ROLL_FROM := .16
+const FALL_ROLL_TO := .62
 # sim/params.ts inertiaTucked and inertiaOpen: the range a body's inertia moves through.
 const INERTIA_TUCKED := .95
 const INERTIA_OPEN := 4.0
@@ -165,6 +170,26 @@ var cloth_materials: Array[ShaderMaterial] = []
 var contact_shadow: MeshInstance3D
 # Pairs: the partner's supported-lift height, presented above the solver's ground plane.
 var lift_height := 0.0
+
+# s since this fall began, -1 when up; and which side of the body (+x, -x) takes it.
+var fall_clock := -1.0
+var fall_side := 1.0
+
+# The landing hip is the side she was already going down on: where she leaned
+# when the sim called the fall, or her skating foot if she was upright. Latched,
+# so she does not change sides while sliding. game/fall.ts is this rule's browser twin.
+func track_fall(dt: float, to_body: Basis) -> void:
+	if not bool(state.fallen):
+		fall_clock = -1.0
+		return
+	if fall_clock>=0.0:
+		fall_clock += dt
+		return
+	fall_clock = 0.0
+	var lean := float(state.lean)
+	var toward_left := signf(lean) if absf(lean)>.02 else (1.0 if int(state.supportFoot)==0 else -1.0)
+	var sim_left: Vector3 = to_body*SimSpace.direction(-float(state.heading.y),float(state.heading.x))
+	fall_side = signf(sim_left.x)*toward_left
 
 func _ready() -> void:
 	load_model(model_path)
@@ -633,6 +658,8 @@ func _process(dt: float) -> void:
 			base += offset*float(blade.weight)
 			support += float(blade.weight)
 	var grounded := support>0 and not air and not bool(state.fallen)
+	track_fall(dt,to_body)
+	var fall_roll := smoothstep(FALL_ROLL_FROM,FALL_ROLL_TO,fall_clock)
 	# The body hangs along the solver's own pendulum, contact to centre of mass,
 	# which already holds its lean and its fore-aft pitch.
 	var com := Vector3(0,float(state.comZ),0)
@@ -667,10 +694,11 @@ func _process(dt: float) -> void:
 		neck = spine+Vector3(0,.18,.22)
 		head = neck+Vector3(0,.10,.03)
 	if bool(state.fallen):
-		hip = Vector3(0,.19,0)
-		spine = hip+Vector3(0,.02,-.18)
-		neck = spine+Vector3(0,.04,-.30)
-		head = neck+Vector3(0,.08,-.10)
+		# Down and out onto the hip with the trunk still up, then over onto the forearm.
+		hip = Vector3(fall_side*.16,.13-.02*sin(PI*clampf((fall_clock-FALL_HIT)/.2,0,1)),.02)
+		spine = hip+Vector3(-fall_side*.03,.20,-.04).lerp(Vector3(fall_side*.16,.14,.03),fall_roll)
+		neck = spine+Vector3(-fall_side*.02,.36,-.02).lerp(Vector3(fall_side*.30,.22,.05),fall_roll)
+		head = neck+Vector3(-fall_side*.02,.10,-.03)
 	# Authored poses ease in as offsets, so a settled skater is the sim exactly.
 	var ease_pose := 1.0-exp(-POSE_RATE*dt)
 	trunk_offsets[0] = trunk_offsets[0].lerp(hip-settled_hip,ease_pose)
@@ -746,6 +774,9 @@ func _process(dt: float) -> void:
 		var on_ice := bool(blade.inContact) and not air and not bool(state.fallen) and not (finish>.01 and i!=spin_foot)
 		# The loaded hip rides higher than the unloaded one.
 		var h := hip+trunk_tilt*Vector3(side*hip_half_width,(float(blade.weight)-.5)*.05 if grounded else 0.0,0)
+		var under := bool(state.fallen) and side==fall_side
+		if bool(state.fallen):
+			h.y += -.035 if under else .05
 		var free := Vector3(side*.04,.25,.04 if i == 0 else -.03)
 		if not air or coming_down:
 			var extension := clampf(float(state.strokeTime)*2.5,0,1)
@@ -755,8 +786,12 @@ func _process(dt: float) -> void:
 			if camel: free = Vector3(side*.08,.94,.68)
 			elif sit: free = Vector3(side*.1,.20,-.60)
 			free = h+(free-h).rotated(Vector3.UP,float(state.get("freeSwing",0)))
-		if bool(state.fallen):
-			free = Vector3(side*.28,.08,.5)
+		if under:
+			# The outer thigh on the ice, the knee out to that side and the foot trailing.
+			free = Vector3(fall_side*.42,.08,.30)
+		elif bool(state.fallen):
+			# The other knee up and that foot flat ahead of her, ready to get up from.
+			free = Vector3(-fall_side*.10,ankle_height,-.50)
 		# Spinning, the free foot draws in to cross the skating knee as the arms do.
 		if upright_spin:
 			free = free.lerp(Vector3(-side*.02,.36,-.09),1.0-(arm_open[0]+arm_open[1])*.5)
@@ -790,8 +825,18 @@ func _process(dt: float) -> void:
 		var pointed := Vector3(side*sin(FREE_TOE_TURNOUT),-.32,cos(FREE_TOE_TURNOUT)*-1.0).normalized()
 		var loose_toe := Vector3(0,0,-1).rotated(Vector3.UP,-side*.6).lerp(pointed,backing).lerp(toe,planting)
 		var loose_up := Vector3.UP.lerp(blade_up,planting)
-		var knee_at := plant_leg(suffix,h,ankle,Vector3(0,0,-1).lerp(toe,.5*planting))
+		var pole := Vector3(0,0,-1).lerp(toe,.5*planting)
+		if under: pole = Vector3(fall_side,.1,-.6)
+		elif bool(state.fallen): pole = Vector3(-fall_side*.1,1,-.4)
+		var knee_at := plant_leg(suffix,h,ankle,pole)
 		legs.append_array([h,knee_at,ankle])
+		if under:
+			# The boot lies on its side, its top along the shin.
+			loose_toe = Vector3(fall_side*.8,0,-.5).normalized()
+			loose_up = (knee_at-ankle).normalized()
+		elif bool(state.fallen):
+			loose_toe = Vector3(-fall_side*.25,0,-1).normalized()
+			loose_up = Vector3.UP
 		aim_foot("Foot"+suffix,ankle,loose_toe,loose_up)
 		sprays[i].position = ankle-Vector3(0,.08,0)
 		sprays[i].emitting = effects_active and on_ice and float(blade.latSlipAccel)>.3 and absf(float(blade.longSpeed))>1
@@ -839,9 +884,14 @@ func _process(dt: float) -> void:
 		if pose_low:
 			elbow = Vector3(side*.24,.02,.03)
 			hand = Vector3(side*.44,-.02,.05)
-		if bool(state.fallen):
-			elbow = Vector3(side*.20,-.06,0)
-			hand = Vector3(side*.30,-.08,-.12)
+		if under:
+			# Out and ready, then taking what is left of the fall on the forearm, after the hip.
+			elbow = Vector3(fall_side*.22,-.10,.02).lerp(Vector3(fall_side*.20,-shoulder.y*.5,.12),fall_roll)
+			hand = Vector3(fall_side*.40,-.20,.02).lerp(Vector3(fall_side*.16,.03-shoulder.y,.04),fall_roll)
+		elif bool(state.fallen):
+			# The other hand comes to the raised knee.
+			elbow = Vector3(-fall_side*.12,-.16,-.12)
+			hand = Vector3(-fall_side*.02,-.28,-.26)
 		# The swing starts below the elbow and spreads up the arm as more is asked of it.
 		# Each arm runs against the other, and the body's turning drags the hands behind.
 		var free_to_swing := not (spinning or (air and not coming_down) or camel or sit or pose_low or bool(state.fallen))

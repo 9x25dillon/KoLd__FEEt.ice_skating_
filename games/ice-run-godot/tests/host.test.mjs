@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
-import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -82,4 +82,25 @@ test('controller profile import is validated by the real host and D replay needs
   for (let i = 0; i < 20; i++) reply = await send('frame', {ticks: 12});
   assert.equal(reply.ok, true);
   assert.equal(reply.data.result.title, 'Replay verified');
+});
+
+test('rest goes through the real host: a saved injury costs a week to rest, and survives a reload', {timeout: 10000}, async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'ice-run-host-'));
+  t.after(() => rmSync(dir, {recursive: true, force: true}));
+  writeFileSync(join(dir, 'career-v1.json'), JSON.stringify({version: 1, medals: [0, 0, 0, 0, 0], xp: 0, stats: {strength: 50, spring: 50, edgeControl: 50, balance: 50, stamina: 50}, weeks: 3, wear: {hip: 1, knee: 0, shoulder: 0}, injured: {hip: true, knee: false, shoulder: false}}));
+  const send = host(t, dir);
+  const hello = await send('hello');
+  assert.equal(hello.ok, true);
+  assert.equal(hello.data.catalog.bodyRegions.length, 3);
+  const rested = await send('rest', {region: 'hip'});
+  assert.equal(rested.ok, true);
+  assert.equal(rested.data.career.weeks, 2);
+  assert.equal(rested.data.career.wear.hip, 0.8);
+  assert.equal(rested.data.career.injured.hip, true, 'one week does not heal it');
+  const refused = await send('rest', {region: 'elbow'});
+  assert.equal(refused.ok, false);
+  const again = await host(t, dir)('hello');
+  assert.equal(again.data.frame.career.wear.hip, 0.8);
+  assert.equal(again.data.frame.career.injured.hip, true);
+  assert.equal(again.data.frame.career.weeks, 2);
 });

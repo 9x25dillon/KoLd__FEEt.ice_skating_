@@ -15,6 +15,19 @@ const pick=b=>({contact:b.contact,tangent:b.tangent,tilt:b.tilt,weight:b.weight,
 const frames=[],marks=[];
 const record=()=>{const s=e.state;frames.push({low:false,state:{tick:s.tick,pos:s.pos,vel:s.vel,heading:s.heading,yawRate:s.yawRate,lean:s.lean,comZ:s.comZ,knee:s.knee,intAccel:s.intAccel,balanceError:s.balanceError,latAccel:s.latAccel,armsL:s.armsL,strokeTime:s.strokeTime,strokeFoot:s.strokeFoot,twist:s.twist,freeSwing:s.freeSwing,fallen:s.fallen,move:s.move,supportMode:s.supportMode,supportFoot:s.supportFoot,jump:{phase:s.jump.phase,z:s.jump.z,vz:s.jump.vz,rotation:s.jump.rotation,inertia:s.jump.inertia},spin:{position:s.spin.position,inertia:s.spin.inertia,omega:s.spin.omega},blade:s.blade.map(pick)}});};
 const run=(name,ticks,input)=>{marks.push({name,tick:frames.length});for(let i=0;i<ticks;i++){e.tick({...NEUTRAL_INPUT,...input(i)});record();}};
+// --falls: a real fall each way and getting up, instead of the passage below.
+if(process.argv.includes('--falls')){
+ for(const [name,side] of [['fall left',1],['fall right',-1]]){
+  {const {pos,tick}=e.state;e.state=createState(e.params,6);e.state.pos={...pos};e.state.tick=tick;}
+  // The lean is pushed past the limit at a known tick; the sim calls the fall itself.
+  run(name+': over',240,i=>{if(i===60)e.state.lean=side*(e.params.fallLean+.05);return {lean:i<60?side*.3:0,weight:.5,knee:.4};});
+  run(name+': up',120,i=>({lean:0,weight:.5,knee:.4,push:i===0}));
+ }
+ const fallAt=frames.flatMap((f,i)=>f.state.fallen&&!frames[i-1]?.state.fallen?[i]:[]);
+ writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,fallAt,frames}));
+ console.log(JSON.stringify({ticks:frames.length,fallAt,leans:fallAt.map(i=>frames[i].state.lean),marks}));
+ process.exit(0);
+}
 run('two-foot glide',120,()=>({lean:0,weight:.5,knee:.35}));
 run('left outside edge',240,()=>({lean:.32,weight:0,knee:.6}));
 run('crossover stroke',120,i=>({lean:.3,weight:0,knee:.5,push:i===0}));
