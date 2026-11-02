@@ -1,5 +1,9 @@
 import { CareerState, Choreography, CAREER_EVENTS, ELEMENTS, MEDALS } from "./career.ts";
-import { xpToRaise } from "../sim/profile.ts";
+import type { ElementId } from "./career.ts";
+import { addElement, canAdd, moveEarlier, planRows, removeAt } from "./programplan.ts";
+import { ARM_FOCUS, ArmDrill, armExpression, armParams } from "./armfocus.ts";
+import { seasonTable, standings } from "./rivals.ts";
+import { overall, xpToRaise } from "../sim/profile.ts";
 import { createState, step } from "../sim/solver.ts";
 import { SIM_DT } from "../sim/params.ts";
 import { Pad } from "../app/pad.ts";
@@ -29,6 +33,7 @@ import type { HowContext } from "./tutorial.ts";
 import { resolveRinkCollision } from "./rink.ts";
 import { IceGrid } from "../sim/ice.ts";
 let careerMode = false, careerEvent = 0, choreography: Choreography | null = null;
+let armDrill: ArmDrill | null = null, drillNext = false;
 let career = new CareerState();
 try { career = CareerState.restore(localStorage.getItem("edgework-career-v1")); } catch { /* Storage is optional. */ }
 let courseMode = false, rookie: RookieCourse | null = null;
@@ -172,9 +177,13 @@ el("record").textContent = `Personal best · ${best.toLocaleString()} pts`;
 
 function start() {
   params = applyProfile(setup ? setupParams(setup, assistance) : beginner ? BEGINNER_PARAMS : GAME_PARAMS, careerMode ? career.profile : SAMPLE_PROFILES[profileIndex]);
+  // Only career trades balance for line; every other mode has both at once (game/armfocus.ts).
+  armDrill = drillNext ? new ArmDrill(career.armFocus) : null; drillNext = false;
+  if (careerMode || armDrill) params = armParams(params, career.armFocus, career.armBest[career.armFocus]);
+  el("result-standings").hidden = true;
   applyTrack(params);
   document.body.dataset.career = String(careerMode);
-  el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : "ON THE ICE / PRACTICE";
+  el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : armDrill ? "CAREER / ARM DRILL" : "ON THE ICE / PRACTICE";
   coach = new BeginnerCoach(); playground = new Playground(); pendingTrick = false; rookie = courseMode ? new RookieCourse() : null;
   tutorial = tutorialMode ? new Tutorial(setup, 0, lessonCourse ? courseSteps(lessonCourse, setup) : STEPS) : null;
   document.body.dataset.tutorial = String(tutorial !== null);
@@ -187,8 +196,9 @@ function start() {
   // uses, so it is built only after `ice` above is the fresh one for this run.
   rustGate = new RustGate(career.rust);
   choreography = careerMode
-    ? new Choreography(CAREER_EVENTS[careerEvent], tables ?? undefined, spinThresholds ?? undefined, stepThresholds ?? undefined, segmentRules ?? undefined, ice)
+    ? new Choreography(career.planned(careerEvent), tables ?? undefined, spinThresholds ?? undefined, stepThresholds ?? undefined, segmentRules ?? undefined, ice)
     : null;
+  if (choreography) choreography.armExpression = armExpression(career.armFocus, career.armBest[career.armFocus]);
   renderRoutine();
   spinTracker.reset(); lastSpinLabel = ""; wasSpinning = false;
   lastChangeCompletedTick = -1; footChangeFlash = 0;
@@ -379,7 +389,7 @@ function draw(_now: number) {
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode && !tutorial ? playground : null, !playback ? rookie : null, playback ? null : ghost);
+  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode && !tutorial && !armDrill ? playground : null, !playback ? rookie : null, playback ? null : ghost);
   const note = el("ghost-note");
   note.hidden = !ghost || !!playback;
   if (ghost && !playback) {
@@ -448,6 +458,7 @@ function draw(_now: number) {
   el("hint").textContent = skater.fallen ? "Down on the ice — tap Space / A to get up" : footChangeFlash > 0 ? "Foot change!" : comboFlash > 0 ? `Combination ${comboLabel}!` : rookie && rookie.toast>0 ? rookie.message : flash > 0 ? "Light caught. Keep the chain alive!" : freeSkate && playground.toast > 0 ? playground.message : freeSkate && beginner ? coach.message : freeSkate ? practice.toast > 0 ? `✓ ${practice.last} · +250 practice points` : "Hold Space / A to push · V changes the view" : "Follow the gold light · tap Space / A to keep your speed";
   drawCareer();
   drawTutorial();
+  drawDrill();
 }
 function frame(now: number) {
   const elapsed = Math.min((now - (last || now)) / 1000, 0.1); last = now;
@@ -553,7 +564,7 @@ function frame(now: number) {
       wasSpinning = spinning;
       if (sound) audio.onTick(input, events, skater);
       practice.sample(skater, cantilever, SIM_DT);
-      if(freeSkate && !courseMode && !careerMode && !tutorial) {
+      if(freeSkate && !courseMode && !careerMode && !tutorial && !armDrill) {
         playground.sample(skater,SIM_DT);
         for (const reward of playground.rewards) scene.effects.reward(reward);
       }
@@ -594,6 +605,10 @@ function frame(now: number) {
         if (previous !== choreography.index) renderRoutine();
         if (choreography.done) finishCareer();
       }
+      if (armDrill && !playback && mode === "playing") {
+        armDrill.sample(skater, input, SIM_DT);
+        if (armDrill.done) finishDrill();
+      }
     }
   } else { pendingPush = false; pendingToe = false; pendingTrick=false; }
   draw(now); requestAnimationFrame(frame);
@@ -605,40 +620,141 @@ function saveCareer() {
   try { localStorage.setItem("edgework-career-v1", career.serialize()); saveNotice = "Career saved on this browser."; }
   catch { saveNotice = "Storage is unavailable. Your career continues for this session only."; }
 }
+/** Which events' planning panels are open, and the element each one's chooser is on: a redraw keeps both. */
+const openPlans = new Set<number>(), planChoice = new Map<number, ElementId>();
+function makeButton(key: string, text: string, onClick: () => void, disabled = false): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.dataset.focus = key; button.textContent = text; button.disabled = disabled;
+  button.addEventListener("click", onClick);
+  return button;
+}
+function makeText(tag: string, text: string, className?: string): HTMLElement {
+  const node = document.createElement(tag); node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+/** A standings table, your row marked. */
+function standingsTable(rows: readonly { place: number; name: string; you: boolean }[], value: (row: never) => string, heading: string): HTMLElement {
+  const table = document.createElement("table"); table.className = "standings";
+  const head = document.createElement("tr");
+  for (const label of ["", "Skater", heading]) head.append(makeText("th", label));
+  table.append(head);
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    if (row.you) tr.dataset.you = "true";
+    tr.append(makeText("td", String(row.place)), makeText("td", row.name), makeText("td", value(row as never)));
+    table.append(tr);
+  }
+  return table;
+}
+/** An edit programplan.ts allowed; a refused one (null) leaves the plan as it is, never back to the event's own. */
+function setPlan(i: number, plan: ElementId[] | null) {
+  if (!plan || !career.setPlan(i, plan)) return;
+  saveCareer(); refreshCareer();
+}
+/** An event's program as the skater will skate it, and who they are measured against. */
+function planPanel(i: number): HTMLElement {
+  const event = CAREER_EVENTS[i], plan = career.plans[i];
+  const panel = document.createElement("details"); panel.className = "career-plan"; panel.open = openPlans.has(i);
+  panel.addEventListener("toggle", () => { if (panel.open) openPlans.add(i); else openPlans.delete(i); });
+  const summary = makeText("summary", "Your program, and the field"); summary.dataset.focus = `plan-${i}`;
+  panel.append(summary, makeText("p", "It must hold everything this event asks for, in any order, and may add a little of your own. More to skate is more to score, and more to fall on."));
+  const list = document.createElement("ol"); list.className = "plan-rows";
+  planRows(event, plan).forEach((row, at) => {
+    const item = document.createElement("li");
+    item.append(makeText("span", `${row.title}${row.required ? "" : " (yours)"}`));
+    item.append(makeButton(`up-${i}-${at}`, "↑", () => setPlan(i, moveEarlier(event, plan, at)), at === 0));
+    if (!row.required) item.append(makeButton(`out-${i}-${at}`, "×", () => setPlan(i, removeAt(event, plan, at))));
+    list.append(item);
+  });
+  panel.append(list);
+  if (canAdd(event, plan)) {
+    const chooser = document.createElement("select"); chooser.dataset.focus = `pick-${i}`;
+    chooser.setAttribute("aria-label", "Element to add");
+    for (const id of Object.keys(ELEMENTS) as ElementId[]) {
+      const option = makeText("option", ELEMENTS[id].title) as HTMLOptionElement; option.value = id;
+      chooser.append(option);
+    }
+    chooser.value = planChoice.get(i) ?? chooser.value;
+    chooser.addEventListener("change", () => planChoice.set(i, chooser.value as ElementId));
+    panel.append(chooser, makeButton(`add-${i}`, "+ Add to your program", () => setPlan(i, addElement(event, plan, chooser.value as ElementId))));
+  }
+  if (plan) panel.append(makeButton(`reset-${i}`, "Use the event's own program", () => { career.setPlan(i, null); saveCareer(); refreshCareer(); }));
+  panel.append(makeText("p", "They don't decide your medal. They are who you're measured against."));
+  panel.append(standingsTable(standings(i, career.best[i]), (row: { score: number }) => row.score.toFixed(2), "Score"));
+  return panel;
+}
 function refreshCareer() {
-  el("career-summary").textContent = `${career.medals.filter(Boolean).length}/${CAREER_EVENTS.length} events completed · ${career.profile.xp} XP available`;
+  // Everything below is rebuilt, so a pad's place would fall back to the first button: keep it.
+  const before = Array.from(careerBoard.querySelectorAll<HTMLElement>("[data-focus]"));
+  const had = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const key = had?.dataset.focus, at = had ? before.indexOf(had) : -1;
+
+  el("career-summary").textContent = `${career.medals.filter(Boolean).length}/${CAREER_EVENTS.length} events completed · ${career.profile.xp} XP available · overall ${overall(career.profile).toFixed(1)}`;
   const events = el("career-events"); events.replaceChildren();
   CAREER_EVENTS.forEach((event, i) => {
     const card = document.createElement("article"); card.className = "career-event";
     const title = document.createElement("h3"); title.textContent = `${String(i + 1).padStart(2, "0")} / ${event.title}`;
-    const details = document.createElement("p"); details.textContent = `${event.venue} · ${event.seconds}s · ${MEDALS[career.medals[i]]}`;
-    const routine = document.createElement("p"); routine.textContent = event.routine.map(id => ELEMENTS[id].title).join(" → ");
-    const button = document.createElement("button"); button.disabled = i > career.unlocked;
-    button.textContent = !button.disabled ? (career.medals[i] ? "Replay program →" : "Skate this program →")
+    const details = document.createElement("p"); details.textContent = `${event.venue} · ${event.seconds}s · ${MEDALS[career.medals[i]]}${career.best[i] === null ? "" : ` · best ${career.best[i]!.toFixed(2)}`}`;
+    const routine = document.createElement("p"); routine.textContent = career.planned(i).routine.map(id => ELEMENTS[id].title).join(" → ");
+    const locked = i > career.unlocked;
+    const button = makeButton(`skate-${i}`, !locked ? (career.medals[i] ? "Replay program →" : "Skate this program →")
       : i > career.medalCap ? "Complete the previous event to unlock"
-      : career.lockReason(i);
-    button.addEventListener("click", () => {
+      : career.lockReason(i), () => {
       careerEvent = i; careerMode = true; courseMode = false; tutorialMode = false; freeSkate = true; cruise = true;
       resumeAfterCareer = false; careerBoard.close(); start();
-    });
-    card.append(title, details, routine, button); events.append(card);
+    }, locked);
+    card.append(title, details, routine, button, planPanel(i)); events.append(card);
   });
+  const arms = el("career-arms"); arms.replaceChildren();
+  ARM_FOCUS.forEach((tier, i) => {
+    const chosen = i === career.armFocus;
+    const row = document.createElement("div"); row.className = "arm-tier";
+    const button = makeButton(`arm-${i}`, `${chosen ? "● " : ""}${tier.title} · drill best ${career.armBest[i]}`, () => { career.armFocus = i; saveCareer(); refreshCareer(); });
+    button.setAttribute("aria-pressed", String(chosen));
+    row.append(button, makeText("p", tier.blurb));
+    arms.append(row);
+  });
+  arms.append(makeButton("arm-drill", `Drill ${ARM_FOCUS[career.armFocus].title} · 45 seconds`, () => {
+    drillNext = true; careerMode = false; courseMode = false; tutorialMode = false; freeSkate = true; cruise = setup === null;
+    resumeAfterCareer = false; careerBoard.close(); start();
+  }));
   const training = el("career-training"); training.replaceChildren();
   for (const [stat, label] of [["strength", "Push power"], ["spring", "Jump spring"], ["edgeControl", "Edge control"], ["balance", "Balance"], ["stamina", "Stamina"]] as const) {
-    const value = career.profile.stats[stat], cost = xpToRaise(value), button = document.createElement("button");
-    button.textContent = `${label} ${value} · ${value === 100 ? "Max" : `+1 / ${cost} XP, 1 week`}`;
-    button.disabled = value === 100 || career.profile.xp < cost || career.weeks < 1;
-    button.addEventListener("click", () => { career.train(stat); saveCareer(); refreshCareer(); });
-    training.append(button);
+    const value = career.profile.stats[stat], cost = xpToRaise(value);
+    training.append(makeButton(`train-${stat}`, `${label} ${value} · ${value === 100 ? "Max" : `+1 / ${cost} XP, 1 week`}`,
+      () => { career.train(stat); saveCareer(); refreshCareer(); },
+      value === 100 || career.profile.xp < cost || career.weeks < 1));
   }
   for (const family of JUMP_FAMILIES) {
-    const button = document.createElement("button");
-    button.textContent = `${family.title} · rust ${Math.round(career.rust[family.id] * 100)}% · drill 1 week`;
-    button.disabled = career.weeks < 1;
-    button.addEventListener("click", () => { career.drill(family.id); saveCareer(); refreshCareer(); });
-    training.append(button);
+    training.append(makeButton(`rust-${family.id}`, `${family.title} · rust ${Math.round(career.rust[family.id] * 100)}% · drill 1 week`,
+      () => { career.drill(family.id); saveCareer(); refreshCareer(); }, career.weeks < 1));
   }
+  el("career-season").replaceChildren(standingsTable(seasonTable(career.best), (row: { points: number }) => String(row.points), "Points"));
   el("career-save").textContent = `${career.weeks} training weeks left. ${saveNotice}`;
+
+  if (key !== undefined) {
+    const after = Array.from(careerBoard.querySelectorAll<HTMLElement>("[data-focus]")).filter(n => !n.matches(":disabled") && n.getClientRects().length > 0);
+    (after.find(n => n.dataset.focus === key) ?? after[Math.min(Math.max(at, 0), after.length - 1)])?.focus();
+  }
+}
+function drawDrill() {
+  if (!armDrill || playback) return;
+  setText("lesson-title", armDrill.title);
+  setText("lesson-tip", armDrill.hint);
+  setText("lesson-progress", `${Math.ceil(armDrill.seconds)} s left · ${armDrill.score} / 100`);
+  el("time-label").textContent = "Drill time"; el("time").textContent = armDrill.seconds.toFixed(1);
+  el("score").textContent = String(armDrill.score);
+  el("combo-label").textContent = "Best"; el("combo").textContent = String(career.armBest[armDrill.focus]);
+}
+function finishDrill() {
+  if (!armDrill) return;
+  const d = armDrill, tier = ARM_FOCUS[d.focus], gained = career.recordDrill(d.focus, d.score); saveCareer();
+  mode = "done"; musicEl.pause(); armDrill = null;
+  el("title").textContent = `${tier.title} drill: ${d.score} / 100.`;
+  el("description").textContent = `${gained > 0 ? `A new best, up ${gained}. Your arms give up less for ${tier.title} now.` : `Your best stays ${career.armBest[d.focus]}.`} ${saveNotice}`;
+  el("help").hidden = true; el("start").textContent = "Free skate →";
+  el("overlay").hidden = false; el("pause").hidden = true; el("start").focus();
 }
 function openCareer() { resumeAfterCareer = mode === "playing"; pause(); refreshCareer(); careerBoard.showModal(); }
 el("career-menu").addEventListener("click", openCareer);
@@ -684,6 +800,9 @@ function finishCareer() {
   // sim/sheet.ts's protocol: jump elements as called (a repeat marked *), then the segment total.
   const sheet = c.sheet ? ` · Jumps ${c.sheet.lines.join(", ") || "none"} · TES ${c.technicalScore.toFixed(2)}${pcs} · −${c.deductions.toFixed(2)} falls · Total ${c.segmentScore.toFixed(2)}` : pcs;
   el("description").textContent = `${c.index}/${c.event.routine.length} elements · ${c.falls} falls · +${xp} XP${sheet}. ${c.complete ? next : `Time ran out at ${ELEMENTS[c.current].title}. Follow the moves in order and try again.`} ${saveNotice}`;
+  const field = el("result-standings");
+  field.hidden = !c.complete;
+  if (c.complete) field.replaceChildren(standingsTable(standings(careerEvent, c.segmentScore), (row: { score: number }) => row.score.toFixed(2), "Score"));
   el("help").hidden = true; el("start").textContent = "Retry this program →";
   el("overlay").hidden = false; el("pause").hidden = true; el("start").focus();
 }
