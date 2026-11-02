@@ -269,6 +269,12 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       pitchAnkle and pitchIntAccel, present only with both modes on.
 //       Fixture rebased, every digest unchanged; clips from those setups
 //       at /38 must be re-recorded.
+//       Still unfinished at /39: the 17 levers added since (armsWhipMode, the
+//       push-off, the landing-chain modes and others) were not bumped, so that
+//       one /40 can follow the operator's canonicalisation. The fixture was
+//       rebased onto them on 2026-11-02, every digest unchanged: replayed
+//       through 9f622f7 and today's build, all 240 ticks matched on every state
+//       field and event. /39 clips recorded before those levers do not load.
 export const REPLAY_SOLVER = "ice-lab-f64/39";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;

@@ -51,6 +51,8 @@ function perform(id: string, angle = 0.8, speed = 3) {
     back: dot(s.vel, s.heading) < 0, turn: `${codeToString(s.moveDone.fromCode)}>${codeToString(s.moveDone.toCode)}` };
 }
 const near = (x: number, y: number, tol = 0.01) => Math.abs(x - y) < tol;
+/** Revolutions the loop routine turns. MEASURED 2026-11-02. */
+const LOOP_TURNED = 2.02;
 
 test("the tricks keep their ids and order, and index-based start still works", () => {
   assert.deepEqual(TRICKS.map(t => t.id), ["strokes", "dig", "loop", "snowplow", "spin", "three"]);
@@ -61,7 +63,7 @@ test("the tricks keep their ids and order, and index-based start still works", (
 });
 
 test("a stride routine spawns beside the player, travelling their way at their speed — a glide when they stand, capped", () => {
-  for (const angle of ANGLES) for (const t of TRICKS) for (const [speed, want] of [[3, 3], [0, GHOST_GLIDE], [11, GHOST_TOP]] as const) {
+  for (const angle of ANGLES) for (const t of TRICKS.filter(x => x.entry === "stride")) for (const [speed, want] of [[3, 3], [0, GHOST_GLIDE], [11, GHOST_TOP]] as const) {
     const p = player(angle, speed), g = new Ghost(p, 0, [t]);
     const d = Math.hypot(g.s.pos.x - p.pos.x, g.s.pos.y - p.pos.y);
     assert.ok(Math.abs(d - GHOST_BESIDE) < 1e-9, `${t.id}: ${d} m`);
@@ -113,14 +115,14 @@ test("dig: strokes, a three-turn to skate backward, then the gate's dig winds th
   }
 });
 
-test("loop: skated into from the player's stride, the double loop lands clean — from standstill to 7 m/s, every heading", () => {
-  // MEASURED: strokes on a left curve to 5.5 m/s, RFI three-turn onto RBO,
-  // both sticks deepen the edge (lean -0.18 at takeoff, against -0.10 to
-  // -0.15 off the right stick alone), held 1 s, then RT + B + heel 0.35 s:
-  // takeoff L 37.9-38.2 at 4.4-6.6 m/s; B in the air once the landing will
-  // have turned 1.95. A clean double loop, standing through the run-out:
-  // 1.893 revolutions from a standstill, 1.970 from 3 m/s, 1.993 from 5, 1.990 from 7.
-  for (const angle of ANGLES) for (const [v0, turned] of [[0, 1.893], [3, 1.970], [5, 1.993], [7, 1.990]]) {
+test("loop: from its entry at 5.25 m/s, a clean double loop whatever the player is doing, every heading", () => {
+  // Re-scripted 2026-11-02: the old routine held the arms wound through the
+  // load, which under armsWhipMode swings them against the jump (L 0, no turn).
+  // MEASURED: a glide, RFI three-turn onto RBO, both sticks 0.9, RT half for 1 s,
+  // RT full with B then X for 0.4 s, B in the air: a clean double, standing
+  // through the run-out. It spawns at its entry, so the player's speed changes
+  // nothing about the jump.
+  for (const angle of ANGLES) for (const v0 of [0, 3, 5, 7, 8]) {
     const r = perform("loop", angle, v0);
     assert.equal(r.respawned, false);
     assert.equal(r.s.fallen, false, `loop from ${v0} at ${angle}`);
@@ -129,19 +131,16 @@ test("loop: skated into from the player's stride, the double loop lands clean �
     assert.equal(r.s.landed.revolutions, 2);
     assert.equal(r.s.landed.rotationCall, 0);
     assert.equal(r.s.landed.fall, false);
-    assert.ok(near(r.s.landed.turned, turned), `loop from ${v0}: ${r.s.landed.turned.toFixed(3)}`);
+    assert.equal(r.s.landed.stepOut, false);
+    assert.ok(near(r.s.landed.turned, LOOP_TURNED), `loop from ${v0}: ${r.s.landed.turned.toFixed(3)}`);
   }
 });
 
-test("loop: every player speed, 0-8 m/s by 0.5, lands a clean double", () => {
-  // MEASURED (heading 0.8): 1.88-1.99 revolutions, all clean, all standing.
-  // On a 0.05 m/s grid: 161 of 161 land standing, 152 clean, 7 a quarter
-  // short, 2 hit the boards from centre ice.
-  for (let v0 = 0; v0 <= 8; v0 += 0.5) {
-    const r = perform("loop", 0.8, v0);
-    assert.ok(!r.s.fallen && !r.respawned && r.s.landed.revolutions === 2 && r.s.landed.rotationCall === 0,
-      `from ${v0}: ${r.s.landed.turned.toFixed(2)} turned, call ${r.s.landed.rotationCall}`);
-  }
+test("loop: the spawn is the entry, not the player's stride", () => {
+  const p = player(0.8, 3), g = new Ghost(p, 0, [trick("loop")]);
+  assert.equal(trick("loop").entry, undefined);
+  assert.ok(near(len(g.s.vel), trick("loop").speed, 1e-9));
+  assert.ok(dot(g.s.vel, p.vel) > 0, "travelling the player's way");
 });
 
 test("snowplow: pushed up to speed if slow, then toes in and inside edges — it stops, standing", () => {
