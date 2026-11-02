@@ -346,3 +346,33 @@ test('a career run skates your plan, carries your rust, and shows the field only
  const w=e.career.weeks;e.drillFamily('edge');assert.equal(e.career.weeks,w-1);assert.equal(e.career.rust.edge,.75);
  assert.throws(()=>e.drillFamily('hop'),/Unknown/);
 });
+
+test('a worn career run replays exactly: wear reaches the clip as ordinary params',()=>{
+ const e=new IceEngine();e.setup='simulation';e.career.wear={hip:.5,knee:.5,shoulder:.5};
+ e.start({mode:'career',event:0});
+ for(let i=0;i<120;i++)e.tick({...NEUTRAL_INPUT,lean:.2,knee:.4,weight:.5});
+ assert.equal(verifyReplay(parseReplay(e.exportReplay())).divergence,null);
+});
+
+test('career wear: a fall costs the body as it happens, lowers the next run, and can be rested',()=>{
+ const e=new IceEngine();e.setup='simulation';
+ e.career.wear={hip:.5,knee:0,shoulder:0};
+ e.start({mode:'free'});const free=e.params.balanceKd;
+ e.start({mode:'career',event:0});
+ assert.notEqual(e.params.balanceKd,free,'a worn hip lowers what career skates with');
+ const stats=e.career.profile.stats.balance;
+ const before=e.career.wear.hip;
+ e.state.lean=e.params.fallLean+.05;
+ e.tick({...NEUTRAL_INPUT});
+ assert.ok(e.career.wear.hip>before,`wear ${e.career.wear.hip}`);
+ assert.equal(e.career.profile.stats.balance,stats,'trained stats untouched');
+ const after=e.career.wear.hip;e.tick({...NEUTRAL_INPUT});
+ assert.equal(e.career.wear.hip,after,'one fall, once');
+ const weeks=e.career.weeks;e.rest('hip');
+ assert.equal(e.career.weeks,weeks-1);assert.ok(e.career.wear.hip<after);
+ assert.throws(()=>e.rest('elbow'));
+ assert.ok(e.catalog().bodyRegions.length===3);
+ const snap=e.snapshot();assert.deepEqual(snap.career.wear,e.career.wear);
+ e.start({mode:'free'});const w=e.career.wear.hip;e.state.lean=e.params.fallLean+.05;e.tick({...NEUTRAL_INPUT});
+ assert.equal(e.career.wear.hip,w,'other modes cost the body nothing');
+});

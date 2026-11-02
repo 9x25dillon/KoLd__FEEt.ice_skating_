@@ -3,6 +3,7 @@ import type { ElementId } from "./career.ts";
 import { addElement, canAdd, moveEarlier, planRows, removeAt } from "./programplan.ts";
 import { ARM_FOCUS, ArmDrill, armExpression, armParams } from "./armfocus.ts";
 import { seasonTable, standings } from "./rivals.ts";
+import { BODY_REGIONS, FallWatch } from "./wear.ts";
 import { overall, xpToRaise } from "../sim/profile.ts";
 import { createState, step } from "../sim/solver.ts";
 import { SIM_DT } from "../sim/params.ts";
@@ -34,6 +35,8 @@ import { resolveRinkCollision } from "./rink.ts";
 import { IceGrid } from "../sim/ice.ts";
 let careerMode = false, careerEvent = 0, choreography: Choreography | null = null;
 let armDrill: ArmDrill | null = null, drillNext = false;
+let fallWatch: FallWatch | null = null, newInjuries: string[] = [];
+const bodyNote = () => newInjuries.length ? ` ${newInjuries.join(" and ")}: too many falls. It will cost you until you rest it.` : "";
 let career = new CareerState();
 try { career = CareerState.restore(localStorage.getItem("edgework-career-v1")); } catch { /* Storage is optional. */ }
 let courseMode = false, rookie: RookieCourse | null = null;
@@ -176,11 +179,12 @@ try { best = Math.max(0, Number(localStorage.getItem("edgework-ice-run-best")) |
 el("record").textContent = `Personal best · ${best.toLocaleString()} pts`;
 
 function start() {
-  params = applyProfile(setup ? setupParams(setup, assistance) : beginner ? BEGINNER_PARAMS : GAME_PARAMS, careerMode ? career.profile : SAMPLE_PROFILES[profileIndex]);
+  params = applyProfile(setup ? setupParams(setup, assistance) : beginner ? BEGINNER_PARAMS : GAME_PARAMS, careerMode ? career.bodyProfile : SAMPLE_PROFILES[profileIndex]);
   // Only career trades balance for line; every other mode has both at once (game/armfocus.ts).
   armDrill = drillNext ? new ArmDrill(career.armFocus) : null; drillNext = false;
   if (careerMode || armDrill) params = armParams(params, career.armFocus, career.armBest[career.armFocus]);
   el("result-standings").hidden = true;
+  fallWatch = careerMode || armDrill ? new FallWatch() : null; newInjuries = [];
   applyTrack(params);
   document.body.dataset.career = String(careerMode);
   el("coach-label").textContent = careerMode ? "CAREER / CHOREOGRAPHY" : armDrill ? "CAREER / ARM DRILL" : "ON THE ICE / PRACTICE";
@@ -605,6 +609,12 @@ function frame(now: number) {
         if (previous !== choreography.index) renderRoutine();
         if (choreography.done) finishCareer();
       }
+      // Taken as it happens, so walking out of a program does not undo a fall.
+      const hit = playback ? null : fallWatch?.sample(skater);
+      if (hit) {
+        const hurt = career.takeFall(hit); saveCareer();
+        if (hurt) newInjuries.push(BODY_REGIONS.find(r => r.id === hurt)!.injury);
+      }
       if (armDrill && !playback && mode === "playing") {
         armDrill.sample(skater, input, SIM_DT);
         if (armDrill.done) finishDrill();
@@ -730,6 +740,15 @@ function refreshCareer() {
     training.append(makeButton(`rust-${family.id}`, `${family.title} · rust ${Math.round(career.rust[family.id] * 100)}% · drill 1 week`,
       () => { career.drill(family.id); saveCareer(); refreshCareer(); }, career.weeks < 1));
   }
+  const body = el("career-body"); body.replaceChildren();
+  for (const region of BODY_REGIONS) {
+    const wear = career.wear[region.id], injured = career.injured[region.id];
+    const row = document.createElement("div"); row.className = "arm-tier";
+    if (injured) row.dataset.injured = "true";
+    row.append(makeButton(`rest-${region.id}`, `${injured ? region.injury : region.title} · ${injured ? "injured" : `wear ${Math.round(wear * 100)}%`} · rest 1 week`,
+      () => { career.rest(region.id); saveCareer(); refreshCareer(); }, career.weeks < 1 || wear <= 0), makeText("p", region.blurb));
+    body.append(row);
+  }
   el("career-season").replaceChildren(standingsTable(seasonTable(career.best), (row: { points: number }) => String(row.points), "Points"));
   el("career-save").textContent = `${career.weeks} training weeks left. ${saveNotice}`;
 
@@ -752,7 +771,7 @@ function finishDrill() {
   const d = armDrill, tier = ARM_FOCUS[d.focus], gained = career.recordDrill(d.focus, d.score); saveCareer();
   mode = "done"; musicEl.pause(); armDrill = null;
   el("title").textContent = `${tier.title} drill: ${d.score} / 100.`;
-  el("description").textContent = `${gained > 0 ? `A new best, up ${gained}. Your arms give up less for ${tier.title} now.` : `Your best stays ${career.armBest[d.focus]}.`} ${saveNotice}`;
+  el("description").textContent = `${gained > 0 ? `A new best, up ${gained}. Your arms give up less for ${tier.title} now.` : `Your best stays ${career.armBest[d.focus]}.`}${bodyNote()} ${saveNotice}`;
   el("help").hidden = true; el("start").textContent = "Free skate →";
   el("overlay").hidden = false; el("pause").hidden = true; el("start").focus();
 }
@@ -799,7 +818,7 @@ function finishCareer() {
   const pcs = c.pcsScore ? ` · PCS ${c.pcsScore.total.toFixed(2)} (Comp ${c.pcsScore.composition.toFixed(2)} / Pres ${c.pcsScore.presentation.toFixed(2)} / Skills ${c.pcsScore.skatingSkills.toFixed(2)})` : "";
   // sim/sheet.ts's protocol: jump elements as called (a repeat marked *), then the segment total.
   const sheet = c.sheet ? ` · Jumps ${c.sheet.lines.join(", ") || "none"} · TES ${c.technicalScore.toFixed(2)}${pcs} · −${c.deductions.toFixed(2)} falls · Total ${c.segmentScore.toFixed(2)}` : pcs;
-  el("description").textContent = `${c.index}/${c.event.routine.length} elements · ${c.falls} falls · +${xp} XP${sheet}. ${c.complete ? next : `Time ran out at ${ELEMENTS[c.current].title}. Follow the moves in order and try again.`} ${saveNotice}`;
+  el("description").textContent = `${c.index}/${c.event.routine.length} elements · ${c.falls} falls · +${xp} XP${sheet}. ${c.complete ? next : `Time ran out at ${ELEMENTS[c.current].title}. Follow the moves in order and try again.`}${bodyNote()} ${saveNotice}`;
   const field = el("result-standings");
   field.hidden = !c.complete;
   if (c.complete) field.replaceChildren(standingsTable(standings(careerEvent, c.segmentScore), (row: { score: number }) => row.score.toFixed(2), "Score"));

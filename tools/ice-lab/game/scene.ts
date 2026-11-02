@@ -1,3 +1,4 @@
+import { fallSide } from "./wear.ts";
 import { animeHead } from "./anime.ts";
 import { performancePose, SKINS } from "./appearance.ts";
 import type { Skin } from "./appearance.ts";
@@ -23,6 +24,8 @@ const GHOST_SKIN = { ...SKINS[0], bodice: "#cfeaff", highlight: "#ffffff", trim:
   sleeveShade: "#b4d6ea", skirt: "#e8f7ff", skirtShade: "#bcdcee", tights: "#a9c8de", tightsShade: "#8fb0c8", skin: "#f1f9ff", hair: "#cde4f3" } as unknown as Skin;
 
 export class SkateScene {
+  /** Which hip each fallen skater is on, read once as the fall begins. */
+  private fallSides = new WeakMap<object, number>();
   skin: Skin = SKINS[0];
   readonly effects = new IceEffects();
   overview = false;
@@ -209,8 +212,12 @@ export class SkateScene {
           b.hands[i] = { x:b.shoulders[i].x - s.heading.y * side * 0.45, y:b.shoulders[i].y + s.heading.x * side * 0.45, z:b.shoulder.z - 0.1 };
         }
       }
-      if (s.fallen) {
-        const flatten = (v: V3) => { v.x += s.heading.x * v.z * 0.6; v.y += s.heading.y * v.z * 0.6; v.z *= 0.12; };
+      if (!s.fallen) this.fallSides.delete(s);
+      else {
+        // Over onto one hip and outer thigh, not forward onto her front (game/wear.ts).
+        if (!this.fallSides.has(s)) this.fallSides.set(s, fallSide(s));
+        const side = this.fallSides.get(s)!;
+        const flatten = (v: V3) => { v.x -= s.heading.y * side * v.z * 0.6; v.y += s.heading.x * side * v.z * 0.6; v.z *= 0.12; };
         for (const v of [b.hip,b.shoulder,b.head,...b.hips,...b.shoulders,...b.hands,...b.knees,...elbows]) flatten(v);
       }
       const [sx,sy] = project({ ...s.pos, z: 0 });

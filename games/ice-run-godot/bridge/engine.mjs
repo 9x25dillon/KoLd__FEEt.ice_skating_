@@ -18,6 +18,7 @@ import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
 import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS,EVENT_FLOORS,LESSON_XP,PLAN_EXTRA} from '../runtime/game/career.js';
 import {Tutorial,STEPS as TRUST_STEPS} from '../runtime/game/tutorial.js';
 import {RustGate,JUMP_FAMILIES} from '../runtime/game/training.js';
+import {BODY_REGIONS,FallWatch} from '../runtime/game/wear.js';
 import {standings,seasonTable,RIVALS} from '../runtime/game/rivals.js';
 import {COURSES,courseById,courseSteps,howContext,elementHow,recoverHow} from '../runtime/game/padcourse.js';
 import {ARM_FOCUS,ArmDrill,armParams,armExpression} from '../runtime/game/armfocus.js';
@@ -46,7 +47,7 @@ export class IceEngine {
   this.profile=0; this.cruise=true; this.sequence=['glide','edge','jump','spin','pose'];
   this.start({mode:'free'});
  }
- catalog() {return {families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,flakes:SNOWFLAKES,targets:TARGETS};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson'].includes(mode)) throw Error('Unknown skating mode');
@@ -66,9 +67,10 @@ export class IceEngine {
   }
   this.course=course;
   this.mode=mode;this.event=index;
-  this.state=createState(this.params=applyProfile(this.setup?setupParams(this.setup,this.assistance):this.beginner?BEGINNER_PARAMS:GAME_PARAMS,mode==='career'?this.career.profile:SAMPLE_PROFILES[this.profile]),4.5);
+  this.state=createState(this.params=applyProfile(this.setup?setupParams(this.setup,this.assistance):this.beginner?BEGINNER_PARAMS:GAME_PARAMS,mode==='career'?this.career.bodyProfile:SAMPLE_PROFILES[this.profile]),4.5);
   // Only career trades balance for line; every other mode has both at once.
   const armed=mode==='career'||mode==='armdrill',focus=this.career.armFocus;
+  this.fallWatch=armed?new FallWatch():null;this.newInjuries=[];
   if(armed)this.params=armParams(this.params,focus,this.career.armBest[focus]);
   this.drill=mode==='armdrill'?new ArmDrill(focus):null;this.armStyle=armed?ARM_FOCUS[focus].style:1;
   const t=tracks[this.track]; Object.assign(this.params,{musicBpm:t.bpm,musicOffset:t.offset,musicBeatsPerBar:t.beatsPerBar,musicBarsPerPhrase:t.barsPerPhrase});
@@ -149,6 +151,9 @@ export class IceEngine {
   this.recorder.capture(input,this.params,this.state,events,['A','B','C','D'][this.scheme]);
   this.meter.sample(this.state,input,events,SIM_DT);
   resolveRinkCollision(this.state,events);this.events.push(...events);
+  // Taken as it happens, so walking out of a program does not undo a fall.
+  const hit=this.fallWatch?.sample(this.state);
+  if(hit){const hurt=this.career.takeFall(hit);if(hurt)this.newInjuries.push(BODY_REGIONS.find(r=>r.id===hurt).injury);}
   if(this.pairs){
    this.pairs.tick(this.state,input,pairActions);
    if(this.pairFrames.length<this.recorder.ticks)this.pairFrames.push({actions:pairActions,digest:replayDigest(this.pairs.partner,this.pairs.events)});
@@ -182,8 +187,8 @@ export class IceEngine {
    // prose or recalculating scores. Null PCS remains distinguishable from zero.
    const protocol=r.sheet?{lines:r.sheet.lines,tes:r.technicalScore,pcs:r.pcsScore?.total??null,deductions:r.deductions,total:r.segmentScore}:null;
    const stopped=r.complete?null:{element:ELEMENTS[r.current].title,how:elementHow(r.current,howContext(this.setup,this.controllerProfile))};
-   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls`,protocol,xp,complete:r.complete,stopped,standings:this.mode==='career'&&r.complete?standings(this.event,r.segmentScore):null};
-  } else if(this.drill?.done&&!this.finished){const gained=this.career.recordDrill(this.drill.focus,this.drill.score);this.finished=true;this.result={title:`${ARM_FOCUS[this.drill.focus].title} drill: ${this.drill.score} / 100`,detail:gained>0?`A new best, up ${gained}. Your arms give up less for ${ARM_FOCUS[this.drill.focus].title} now.`:`Your best stays ${this.career.armBest[this.drill.focus]}.`,complete:true};
+   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls`,protocol,xp,complete:r.complete,stopped,body:this.bodyNote(),standings:this.mode==='career'&&r.complete?standings(this.event,r.segmentScore):null};
+  } else if(this.drill?.done&&!this.finished){const gained=this.career.recordDrill(this.drill.focus,this.drill.score);this.finished=true;this.result={title:`${ARM_FOCUS[this.drill.focus].title} drill: ${this.drill.score} / 100`,body:this.bodyNote(),detail:gained>0?`A new best, up ${gained}. Your arms give up less for ${ARM_FOCUS[this.drill.focus].title} now.`:`Your best stays ${this.career.armBest[this.drill.focus]}.`,complete:true};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
  }
  finishLesson(){
@@ -206,6 +211,9 @@ export class IceEngine {
  }
  exportReplay(){return this.pairs?JSON.stringify({format:'edgework-pairs/1',challenge:this.pairs.challenge,solo:JSON.parse(this.recorder.toJson()),partners:this.pairFrames}):this.recorder.toJson();}
  setArmFocus(focus){if(![0,1,2].includes(focus))throw Error('Unknown arm focus');this.career.armFocus=focus;}
+ /** A new injury this run, in words; empty when there is none. */
+ bodyNote(){return this.newInjuries.length?`${this.newInjuries.join(' and ')}: too many falls. It will cost you until you rest it.`:'';}
+ rest(region){if(!BODY_REGIONS.some(r=>r.id===region))throw Error('Unknown body region');this.career.rest(region);}
  drillFamily(family){if(!JUMP_FAMILIES.some(f=>f.id===family))throw Error('Unknown jump family');this.career.drill(family);}
  setPlan(event,plan){if(!this.career.setPlan(event,plan))throw Error('That program leaves out what this event asks for');}
  train(stat){if(!STAT_NAMES.includes(stat))throw Error('Unknown training skill');this.career.train(stat);}
@@ -227,6 +235,6 @@ export class IceEngine {
    armStyle:this.armStyle,drill:this.drill?{title:this.drill.title,hint:this.drill.hint,seconds:this.drill.seconds,score:this.drill.score,focus:this.drill.focus}:null,
    rookie:{index:this.rookie.index,cleared:this.rookie.cleared,title:this.rookie.title,hint:this.rookie.hint,target:this.rookie.target},
    run:{seconds:this.run.seconds,score:this.run.score,collected:this.run.collected,target:this.run.target},
-   career:{weeks:this.career.weeks,rust:this.career.rust,plans:this.career.plans,best:this.career.best,field:CAREER_EVENTS.map((_,i)=>standings(i,this.career.best[i])),season:seasonTable(this.career.best),overall:overall(this.career.profile),floors:EVENT_FLOORS,locks:CAREER_EVENTS.map((_,i)=>this.career.lockReason(i)),lessons:this.career.lessons,armFocus:this.career.armFocus,armBest:this.career.armBest,medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
+   career:{wear:this.career.wear,injured:this.career.injured,weeks:this.career.weeks,rust:this.career.rust,plans:this.career.plans,best:this.career.best,field:CAREER_EVENTS.map((_,i)=>standings(i,this.career.best[i])),season:seasonTable(this.career.best),overall:overall(this.career.profile),floors:EVENT_FLOORS,locks:CAREER_EVENTS.map((_,i)=>this.career.lockReason(i)),lessons:this.career.lessons,armFocus:this.career.armFocus,armBest:this.career.armBest,medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
  }
 }
