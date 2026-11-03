@@ -92,3 +92,15 @@ test('the real host keeps the wardrobe in its own file, apart from the career', 
  assert.equal(reply.data.frame.wardrobe.skins[0].name, 'Garnet night');
  assert.equal(reply.data.frame.career.timelines[0].cues.length, 3);
 });
+
+test('a rusty career jump says its higher bar, and the routine carries the rust', () => {
+ const engine = new IceEngine();
+ engine.career.rust = {toe: 1, edge: 0.25};
+ engine.career.medals = [3, 3, 0, 0, 0];
+ engine.career.profile = {...engine.career.profile, stats: {...engine.career.profile.stats, edgeControl: 70}};
+ const frame = engine.start({mode: 'career', event: 2});
+ assert.deepEqual(engine.routine.rust, {toe: 1, edge: 0.25});
+ engine.routine.index = 2;
+ assert.match(engine.snapshot().routine.how, /a toe jump needs 0\.75 of a turn here, an edge jump 0\.56/);
+ assert.ok(frame.routine);
+});

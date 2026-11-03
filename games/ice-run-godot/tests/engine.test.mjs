@@ -112,7 +112,8 @@ test('a foot change mid-spin reaches snapshot().footChange as a brief flash, the
 
 test('bridge runs full physical choreography and persists earned progression',()=>{
  const e=new IceEngine();e.start({mode:'career',event:0});
- for(let i=0;i<9000&&!e.finished;i++){
+ // A career program runs its full 75 s since 2026-11-02: 9,000 ticks, with room to spare.
+ for(let i=0;i<9600&&!e.finished;i++){
   const c=emptyControls();c.kx=e.routine.index===1?-1:0;
   e.advance(c,1,e.routine.index===2);
  }
@@ -125,8 +126,10 @@ test('bridge runs full physical choreography and persists earned progression',()
  assert.equal(protocol.pcs,e.routine.pcsScore.total);
  assert.equal(protocol.deductions,0);
  assert.equal(protocol.total,protocol.pcs);
- const restored=new IceEngine(e.career.serialize());assert.equal(restored.career.unlocked,1);
+ // Re-spaced floors (2026-11-02): a gold alone no longer opens Club debut; training does.
+ const restored=new IceEngine(e.career.serialize());assert.equal(restored.career.unlocked,0);
  restored.train('balance');assert.equal(restored.career.profile.stats.balance,51);
+ restored.train('edgeControl');restored.train('edgeControl');assert.equal(restored.career.unlocked,1);
  assert.throws(()=>restored.start({mode:'career',event:3}),/previous/);
 });
 
@@ -315,7 +318,7 @@ test('career prompts follow the setup, and every stat can be trained',()=>{
  assert.match(f.recover,/Snap a trigger/);
  e.configure({setup:'explorer'});
  assert.match(e.start({mode:'career',event:0}).routine.how,/A \/ Cross/);
- assert.deepEqual(e.snapshot().career.floors,[0,0,51,51.5,52]);
+ assert.deepEqual(e.snapshot().career.floors,[0,50.5,51.35,51.9,52.5]);
  assert.equal(e.snapshot().career.locks[0],'');
  e.career.profile={...e.career.profile,xp:1000};
  e.train('stamina');assert.equal(e.career.profile.stats.stamina,51);

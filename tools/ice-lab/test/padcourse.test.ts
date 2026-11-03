@@ -175,7 +175,32 @@ const ELEMENT_PADS: Partial<Record<ElementId, (h: H, k: number, s: Setup) => voi
     lean(h, s, 0.6);
     if (k > 60 && k % 90 < 3) h.buttons[A] = 1;
   },
-  jump: SCRIPTS.hop.pad as (h: H, k: number, s: Setup) => void,
+  // Half a turn since 2026-11-02: test/tutorial.test.ts's measured "Turn in the air" pad, from an edge.
+  jump: (h, k, s) => {
+    const t = k * SIM_DT;
+    if (s === "simulation") {
+      const load = t >= 1 && t < 1.3;
+      h.axes[0] = t < 1.3 ? 0.5 : 0;
+      h.axes[2] = t < 1.3 ? 0.5 : 0;
+      if (load) { h.buttons[L3] = 1; h.buttons[LT] = h.buttons[RT] = 1; }
+      else if (t >= 1.4) h.buttons[LT] = h.buttons[RT] = 0.5;
+      return;
+    }
+    if (s === "explorer" || s === "repertoire") {
+      // Their own words, as measured 2026-11-02: lean, the right stick with it through the RT load, soft knees after.
+      const [leanBy, arms, load] = s === "explorer" ? [0.5, 0.5, 0.25] : [0.3, 1, 0.35];
+      h.axes[0] = t < 1 + load ? leanBy : 0;
+      h.axes[2] = t >= 1 && t < 1 + load ? arms : 0;
+      if (t >= 1 && t < 1 + load) h.buttons[RT] = 1;
+      else if (t >= 1 + load + 0.1) h.buttons[RT] = 0.8;
+      return;
+    }
+    const end = 1.35;
+    h.axes[0] = h.axes[2] = t < end ? 1 : 0;
+    if (t < 0.1 || (t >= 1 && t < end)) h.buttons[B] = 1;
+    if (t >= 1 && t < end) h.buttons[RT] = 1;
+    if (t >= end + 0.1) h.buttons[RT] = 0.7;
+  },
   spin: (h, k, s) => { lean(h, s, 0.5); if (k > 120) h.buttons[Y] = 1; },
   pose: (h, k, s) => { if (k > 30) { h.buttons[A] = 1; modifier(h, s); } },
 };

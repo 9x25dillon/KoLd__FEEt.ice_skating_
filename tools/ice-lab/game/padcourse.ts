@@ -224,10 +224,16 @@ export function elementHow(id: ElementId, c: HowContext): string {
     case "crossover": return exp(c)
       ? `On a curve (${lean}), tap A to turn backward. Then lean a little deeper with soft knees, LT and RT about halfway: the crossovers come by themselves, on the beat.`
       : `Carve with ${lean} above 2 m/s and tap ${c.push} through the curve.`;
+    // Half a turn, landed clean: career's JUMP_TURN since 2026-11-02, so these are the tutorial's
+    // measured "Turn in the air" words (game/tutorial.ts), which start on an edge.
     case "jump": return c.setup === "simulation"
-      ? "With speed, squeeze LT + RT deep for a third of a second, then let go. Land on soft knees, without a fall or step-out."
-      : exp(c) ? "With speed, press B for the right foot, hold RT deep for a third of a second and let go. Land without a fall or step-out."
-      : "With speed, squeeze RT deep for a third of a second, then let go. Land without a fall or step-out.";
+      ? `On a curve, both sticks halfway to one side. Hold ${c.modifier} and push the right stick halfway the same way (the arms), and squeeze LT + RT deep for a third of a second. Let everything go, then squeeze the triggers about halfway for soft knees. Half a turn or more, landed clean.`
+      : exp(c) ? "The narrowest jump here: near 4.5 m/s, press B for the right foot and hold both sticks all the way to one side. Hold B + RT for a third of a second, then let go of everything and squeeze RT well past halfway for soft knees. Half a turn or more, landed clean."
+      // MEASURED 2026-11-02, 432 scripted takeoffs: both land from 3, 4.5 and 5.5 m/s with soft knees after.
+      // The tutorial's older words (no soft knees) had Blade Explorer at 0.03 rev at best.
+      : c.setup === "explorer"
+      ? "On a curve, left stick halfway to one side. Push the right stick halfway the same way (the arms) and squeeze RT deep for a quarter of a second. Let go of both, then squeeze RT well past halfway for soft knees. Half a turn or more, landed clean."
+      : "On a gentle curve, left stick a little to one side. Push the right stick all the way the same way (the arms) and squeeze RT deep for a third of a second. Let go of both, then squeeze RT well past halfway for soft knees. Half a turn or more, landed clean.";
     case "spin": return `Carve with ${lean} at speed, then hold Y for a new full rotation. Let go to come out.`;
     case "step": return exp(c)
       ? "Chain five different steps, on both feet, inside 12 seconds. A asks for a turn; LB + A a bracket; LB + Y a twizzle."

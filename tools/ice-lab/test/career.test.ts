@@ -3,15 +3,16 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import {
   CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX, TECHNICAL_XP_PER_POINT, SPIN_LEVEL_XP,
-  STEP_LEVEL_XP, EVENT_FLOORS, LESSON_XP, START_WEEKS, WEEKS_PER_TIER, validPlan,
+  STEP_LEVEL_XP, EVENT_FLOORS, JUMP_TURN, LESSON_XP, START_WEEKS, WEEKS_PER_TIER, validPlan,
 } from "../game/career.ts";
-import { RUST_PER_STEP } from "../game/training.ts";
+import { RUST_PER_STEP, RUST_TURN, landingFamily } from "../game/training.ts";
+import { AIR_TURN } from "../game/tutorial.ts";
 import type { CareerEvent, ElementId } from "../game/career.ts";
 import { createState, step } from "../sim/solver.ts";
 import { GAME_PARAMS } from "../game/controls.ts";
 import { MOVE, NEUTRAL_INPUT, TURN_KIND, EVENT, FOOT, DIR, EDGE, makeCode } from "../sim/types.ts";
 import type { SkatingInput } from "../sim/types.ts";
-import { JUMP_PHASE } from "../sim/jump.ts";
+import { JUMP_PHASE, JUMP_NONE } from "../sim/jump.ts";
 import { SIM_DT } from "../sim/params.ts";
 import { applyProfile, overall, TIERS } from "../sim/profile.ts";
 import { loadTables } from "../sim/score.ts";
@@ -49,12 +50,44 @@ test("choreography requires ordered sustained moves, movement and grounded poses
 
 test("old landings and repeated frames cannot satisfy a later jump", () => {
   const c = program("glide", "jump", "jump"), s = state();
-  s.landed.tick = 1; s.landed.height = .2;
+  s.landed.tick = 1; s.landed.height = .2; s.landed.turned = JUMP_TURN;
   c.sample(s, false, 3); c.sample(s, false, .1); assert.equal(c.index, 1);
   s.landed.tick = 2; s.landed.stepOut = true; c.sample(s, false, .1); assert.equal(c.index, 1);
   s.landed.tick = 3; s.landed.stepOut = false; c.sample(s, false, .1); assert.equal(c.index, 2);
   c.sample(s, false, .1); assert.equal(c.index, 2);
   s.landed.tick = 4; c.sample(s, false, .1); assert.equal(c.complete, true);
+});
+
+test("a jump element needs half a turn in the air: a straight hop is not one (owner, 2026-11-02)", () => {
+  const c = program("glide", "jump"), s = state();
+  c.sample(s, false, 3); assert.equal(c.index, 1);
+  s.landed.tick = 1; s.landed.height = .39; s.landed.turned = 0; c.sample(s, false, .1);
+  assert.equal(c.index, 1, "the season's 0-rotation, 0.39 m hop");
+  s.landed.tick = 2; s.landed.turned = JUMP_TURN - .01; c.sample(s, false, .1); assert.equal(c.index, 1);
+  s.landed.tick = 3; s.landed.turned = -JUMP_TURN; c.sample(s, false, .1); assert.equal(c.complete, true, "either way round");
+  assert.equal(JUMP_TURN, AIR_TURN, "the tutorial's turning jump and career's are the same rule");
+});
+
+test("rust raises the turn a jump needs in its own family (owner, 2026-11-02)", () => {
+  const c = program("jump"), s = state();
+  c.rust = { toe: 1, edge: 0.5 };
+  assert.equal(c.jumpBar(0), JUMP_TURN + RUST_TURN, "a fully rusty toe loop needs three-quarters");
+  assert.equal(c.jumpBar(2), JUMP_TURN + RUST_TURN / 2, "a half-rusty loop");
+  assert.equal(c.jumpBar(JUMP_NONE), c.jumpBar(2), "an uncalled landing counts as edge");
+  s.landed.tick = 1; s.landed.height = .3; s.landed.kind = 0; s.landed.turned = 0.65; c.sample(s, false, .1);
+  assert.equal(c.index, 0, "0.65 of a turn is short of a fully rusty toe jump's 0.75");
+  s.landed.tick = 2; s.landed.kind = 2; c.sample(s, false, .1);
+  assert.equal(c.complete, true, "the same 0.65 clears a half-rusty edge jump's 0.625");
+  assert.equal(new Choreography(CAREER_EVENTS[0]).jumpBar(0), JUMP_TURN, "no rust, no extra");
+  assert.equal(landingFamily(4), "toe"); assert.equal(landingFamily(5), "edge");
+});
+
+test("a career program runs its full time; finishing the elements early does not end it", () => {
+  const c = program("glide"), s = state();
+  c.fullTime = true;
+  c.sample(s, false, 3); assert.ok(c.complete); assert.equal(c.done, false);
+  s.fallen = true; c.sample(s, false, 1); assert.equal(c.falls, 1, "a fall after the last element still counts");
+  s.fallen = false; c.sample(s, false, 30); assert.ok(c.done); assert.equal(c.medal, 2);
 });
 
 test("spin needs a new full rotation per element and resets when interrupted", () => {
@@ -92,13 +125,13 @@ test("career unlocks sequentially and pays only improved medals, once", () => {
   assert.equal(c.award(finish(CAREER_EVENTS[0])), 150);
   assert.equal(c.award(finish(CAREER_EVENTS[0])), 0);
   assert.equal(c.award(finish(CAREER_EVENTS[0], 3)), 0); assert.equal(c.medals[0], 3);
-  // Untrained (overall 50) holds the stat gate at regionals (statCap 1), so of
-  // the remaining four events only the one within reach — index 1 — can
-  // actually award; the rest are blocked by stats, not sequence.
+  // Untrained (overall 50) holds the stat gate at Club debut since the floors were
+  // re-spaced on 2026-11-02 (statCap 0), so none of the remaining four events
+  // can award: they are blocked by stats, not sequence.
   for (const event of CAREER_EVENTS.slice(1)) c.award(finish(event));
-  assert.deepEqual(c.medals, [3, 3, 0, 0, 0]);
-  assert.equal(c.statCap, 1); assert.equal(c.unlocked, 1);
-  assert.equal(c.profile.xp, 900, "450 for event 0's climb to gold, 450 for the one event 1 the stat gate allowed");
+  assert.deepEqual(c.medals, [3, 0, 0, 0, 0]);
+  assert.equal(c.statCap, 0); assert.equal(c.unlocked, 0);
+  assert.equal(c.profile.xp, 450, "450 for event 0's climb to gold; the stat gate allowed nothing more");
 });
 
 test("hype and flow, averaged over a real routine, bonus career XP only alongside a medal improvement", () => {
@@ -361,16 +394,18 @@ test("PCS stays unscored, gracefully, without segmentRules or an ice grid", () =
 test("stats gate progression independent of medals: a neutral profile holds at regionals", () => {
   const c = new CareerState();
   assert.equal(overall(c.profile), 50, "every stat starts neutral");
-  assert.equal(c.statCap, 1, "overall 50 clears the first two events, not the third");
+  assert.equal(c.statCap, 0, "overall 50 clears First ice only since 2026-11-02: Club debut asks for training");
   c.medals = CAREER_EVENTS.map(() => 3);         // every medal already earned, by fiat
   assert.equal(c.medalCap, CAREER_EVENTS.length - 1);
-  assert.equal(c.unlocked, 1, "medals in hand cannot outrun the stats behind them");
+  assert.equal(c.unlocked, 0, "medals in hand cannot outrun the stats behind them");
 });
 
 test("training raises overall past an event floor and lifts the stat gate", () => {
   const c = new CareerState();
   c.profile = { ...c.profile, xp: 100000 };
-  c.train("edgeControl"); c.train("edgeControl"); c.train("edgeControl"); c.train("edgeControl");
+  // Five edge points (five weeks): 51.40, past Jump showcase's 51.35 and short of Regional's 51.9.
+  c.weeks = 5;
+  for (let i = 0; i < 5; i++) c.train("edgeControl");
   assert.ok(overall(c.profile) >= EVENT_FLOORS[2] && overall(c.profile) < EVENT_FLOORS[3], `overall ${overall(c.profile)}`);
   assert.equal(c.statCap, 2);
   assert.equal(CAREER_EVENTS.length, TIERS.length, "the five events and the five tiers are the same ladder");
@@ -415,7 +450,7 @@ test("a closed event says why, and which gate", () => {
   assert.equal(c.lockReason(0), "");
   assert.match(c.lockReason(1), /medal/);
   c.medals = [1, 1, 0, 0, 0];
-  assert.match(c.lockReason(2), /Needs overall 51\.0; you are at 50\.0/);
+  assert.match(c.lockReason(2), /Needs overall 51\.35; you are at 50\.00/);
   assert.match(c.lockReason(3), /medal/);
 });
 
