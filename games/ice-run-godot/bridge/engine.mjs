@@ -18,7 +18,7 @@ import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
 import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS,EVENT_FLOORS,LESSON_XP,PLAN_EXTRA} from '../runtime/game/career.js';
 import {Tutorial,STEPS as TRUST_STEPS} from '../runtime/game/tutorial.js';
 import {RustGate,JUMP_FAMILIES} from '../runtime/game/training.js';
-import {BODY_REGIONS,FallWatch} from '../runtime/game/wear.js';
+import {BODY_REGIONS,FallWatch,wearNote} from '../runtime/game/wear.js';
 import {standings,seasonTable,RIVALS} from '../runtime/game/rivals.js';
 import {COURSES,courseById,courseSteps,howContext,elementHow,recoverHow} from '../runtime/game/padcourse.js';
 import {ARM_FOCUS,ArmDrill,armParams,armExpression} from '../runtime/game/armfocus.js';
@@ -73,7 +73,7 @@ export class IceEngine {
   this.state=createState(this.params=applyProfile(this.setup?setupParams(this.setup,this.assistance):this.beginner?BEGINNER_PARAMS:GAME_PARAMS,mode==='career'?this.career.bodyProfile:SAMPLE_PROFILES[this.profile]),4.5);
   // Only career trades balance for line; every other mode has both at once.
   const armed=mode==='career'||mode==='armdrill',focus=this.career.armFocus;
-  this.fallWatch=armed?new FallWatch():null;this.newInjuries=[];
+  this.fallWatch=armed?new FallWatch():null;this.newInjuries=[];this.wearStart={...this.career.wear};
   if(armed)this.params=armParams(this.params,focus,this.career.armBest[focus]);
   this.drill=mode==='armdrill'?new ArmDrill(focus):null;this.armStyle=armed?ARM_FOCUS[focus].style:1;
   // A career program laid on its music skates to that music, whatever the soundtrack setting.
@@ -219,7 +219,10 @@ export class IceEngine {
  exportReplay(){return this.pairs?JSON.stringify({format:'edgework-pairs/1',challenge:this.pairs.challenge,solo:JSON.parse(this.recorder.toJson()),partners:this.pairFrames}):this.recorder.toJson();}
  setArmFocus(focus){if(![0,1,2].includes(focus))throw Error('Unknown arm focus');this.career.armFocus=focus;}
  /** A new injury this run, in words; empty when there is none. */
- bodyNote(){return this.newInjuries.length?`${this.newInjuries.join(' and ')}: too many falls. It will cost you until you rest it.`:'';}
+ bodyNote(){
+  const armed=this.mode==='career'||this.mode==='armdrill',worn=armed?wearNote(this.wearStart,this.career.wear):'';
+  return [this.newInjuries.length?`${this.newInjuries.join(' and ')}: too many falls. It will cost you until you rest it.`:'',worn].filter(Boolean).join(' ');
+ }
  rest(region){if(!BODY_REGIONS.some(r=>r.id===region))throw Error('Unknown body region');this.career.rest(region);}
  drillFamily(family){if(!JUMP_FAMILIES.some(f=>f.id===family))throw Error('Unknown jump family');this.career.drill(family);}
  setPlan(event,plan){if(!this.career.setPlan(event,plan))throw Error('That program leaves out what this event asks for');}

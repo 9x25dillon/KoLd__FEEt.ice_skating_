@@ -48,7 +48,23 @@ export function removeAt(event: CareerEvent, plan: readonly ElementId[] | null, 
   return checked(event, next);
 }
 
-/** One more element at the end. */
+/** Row `i` one place later. */
+export function moveLater(event: CareerEvent, plan: readonly ElementId[] | null, i: number): ElementId[] | null {
+  return moveEarlier(event, plan, i + 1);
+}
+
+/**
+ * Where a new element goes: before a closing pose, which ends the program, or
+ * else at the end. From play, 2026-11-02: added at the end, it pushed the pose
+ * off the end and took one move per row to put back.
+ */
+export function insertAt(rows: readonly ElementId[]): number {
+  return rows.length > 0 && rows[rows.length - 1] === "pose" ? rows.length - 1 : rows.length;
+}
+
+/** One more element, before a closing pose. */
 export function addElement(event: CareerEvent, plan: readonly ElementId[] | null, id: ElementId): ElementId[] | null {
-  return checked(event, [...layout(event, plan), id]);
+  const next = layout(event, plan);
+  next.splice(insertAt(next), 0, id);
+  return checked(event, next);
 }
