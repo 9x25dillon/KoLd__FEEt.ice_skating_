@@ -3,10 +3,15 @@ import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:f
 import {resolve,join} from 'node:path';
 import {IceEngine} from './engine.mjs';
 const saveDir=resolve(process.argv[2]??'.');mkdirSync(saveDir,{recursive:true});
-const savePath=join(saveDir,'career-v1.json');
+const savePath=join(saveDir,'career-v1.json'),wardrobePath=join(saveDir,'wardrobe-v1.json');
 let saved=null;try{saved=readFileSync(savePath,'utf8');}catch{}
-const engine=new IceEngine(saved);
-function save(){const data=engine.career.serialize();if(data===saved)return;writeFileSync(savePath+'.tmp',data);renameSync(savePath+'.tmp',savePath);saved=data;}
+let worn=null;try{worn=readFileSync(wardrobePath,'utf8');}catch{}
+const engine=new IceEngine(saved,worn);
+function keep(path,data){writeFileSync(path+'.tmp',data);renameSync(path+'.tmp',path);}
+function save(){
+ const data=engine.career.serialize();if(data!==saved){keep(savePath,data);saved=data;}
+ const wardrobe=engine.wardrobe.serialize();if(wardrobe!==worn){keep(wardrobePath,wardrobe);worn=wardrobe;}
+}
 const lines=createInterface({input:process.stdin,crlfDelay:Infinity});
 lines.on('line',line=>{
  let req;
@@ -24,6 +29,9 @@ lines.on('line',line=>{
    case 'drill':engine.drillFamily(req.family);data=engine.snapshot();break;
    case 'rest':engine.rest(req.region);data=engine.snapshot();break;
    case 'plan':engine.setPlan(req.event,req.plan);data=engine.snapshot();break;
+   case 'timeline':data=engine.timeline(req.options);break;
+   case 'dress':data={skin:engine.dress(req.design)};break;
+   case 'design':engine.saveDesign(req.slot,req.design);data=engine.snapshot();break;
    case 'skipStep':data=engine.skipStep();break;
    case 'export':{const path=join(saveDir,'ice-run-replay.json');writeFileSync(path,engine.exportReplay());data={path};break;}
    case 'replay':{const path=join(saveDir,'ice-run-replay.json');if(!existsSync(path))throw Error('Save a replay first');data=engine.replay(readFileSync(path,'utf8'));break;}
