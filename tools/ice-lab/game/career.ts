@@ -15,7 +15,7 @@ import { SessionMeter } from "../sim/session.ts";
 import { PcsMeter, pcsInputsFrom, scorePcs } from "../sim/pcs.ts";
 import type { SegmentRule, PcsScore } from "../sim/pcs.ts";
 import type { IceGrid } from "../sim/ice.ts";
-import { JUMP_FAMILIES, RUST_PER_STEP, RUST_PER_WEEK } from "./training.ts";
+import { JUMP_FAMILIES, RUST_PER_STEP, RUST_PER_WEEK, RUST_TURN, landingFamily } from "./training.ts";
 import type { JumpFamily, Rust } from "./training.ts";
 import { BODY_REGIONS, HEALED_UNDER, INJURED_AT, REST_PER_WEEK, noInjury, noWear, wornProfile } from "./wear.ts";
 import type { BodyRegion, FallHit, Injured, Wear } from "./wear.ts";
@@ -203,6 +203,10 @@ export class Choreography {
   cues: CueTime[] | null = null;
   /** Runs the event's whole time even once every element is done: every career program, owner 2026-11-02. */
   fullTime = false;
+  /** game/training.ts: the career's rust, which raises how far a jump must turn. Null skates sharp. */
+  rust: Rust | null = null;
+  /** Revolutions a landing of this call must have turned to count as a jump element. */
+  jumpBar(kind: number): number { return JUMP_TURN + (this.rust ? RUST_TURN * this.rust[landingFamily(kind)] : 0); }
   cueResults: (CueResult | null)[] = [];
   /** Lays the program on its music. The cues must name the routine's elements in its order. */
   setCues(cues: readonly CueTime[]): boolean {
@@ -307,7 +311,7 @@ export class Choreography {
       glide: grounded && s.move === MOVE.None && speed >= 3,
       edge: grounded && s.move === MOVE.None && speed >= 2 && Math.abs(s.lean) > 0.12,
       crossover: grounded && speed >= 2 && s.crossover && s.strokeTime > 0,
-      jump: freshLanding && !s.landed.fall && !s.landed.stepOut && s.landed.height > 0.05 && Math.abs(s.landed.turned) >= JUMP_TURN,
+      jump: freshLanding && !s.landed.fall && !s.landed.stepOut && s.landed.height > 0.05 && Math.abs(s.landed.turned) >= this.jumpBar(s.landed.kind),
       spin: this.spinProgress >= Math.PI * 2,
       step: (stepWindow?.level ?? 0) >= 1,
       spiral: s.move === MOVE.Spiral,

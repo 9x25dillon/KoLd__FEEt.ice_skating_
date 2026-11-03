@@ -5,14 +5,14 @@ import {
   CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX, TECHNICAL_XP_PER_POINT, SPIN_LEVEL_XP,
   STEP_LEVEL_XP, EVENT_FLOORS, JUMP_TURN, LESSON_XP, START_WEEKS, WEEKS_PER_TIER, validPlan,
 } from "../game/career.ts";
-import { RUST_PER_STEP } from "../game/training.ts";
+import { RUST_PER_STEP, RUST_TURN, landingFamily } from "../game/training.ts";
 import { AIR_TURN } from "../game/tutorial.ts";
 import type { CareerEvent, ElementId } from "../game/career.ts";
 import { createState, step } from "../sim/solver.ts";
 import { GAME_PARAMS } from "../game/controls.ts";
 import { MOVE, NEUTRAL_INPUT, TURN_KIND, EVENT, FOOT, DIR, EDGE, makeCode } from "../sim/types.ts";
 import type { SkatingInput } from "../sim/types.ts";
-import { JUMP_PHASE } from "../sim/jump.ts";
+import { JUMP_PHASE, JUMP_NONE } from "../sim/jump.ts";
 import { SIM_DT } from "../sim/params.ts";
 import { applyProfile, overall, TIERS } from "../sim/profile.ts";
 import { loadTables } from "../sim/score.ts";
@@ -66,6 +66,20 @@ test("a jump element needs half a turn in the air: a straight hop is not one (ow
   s.landed.tick = 2; s.landed.turned = JUMP_TURN - .01; c.sample(s, false, .1); assert.equal(c.index, 1);
   s.landed.tick = 3; s.landed.turned = -JUMP_TURN; c.sample(s, false, .1); assert.equal(c.complete, true, "either way round");
   assert.equal(JUMP_TURN, AIR_TURN, "the tutorial's turning jump and career's are the same rule");
+});
+
+test("rust raises the turn a jump needs in its own family (owner, 2026-11-02)", () => {
+  const c = program("jump"), s = state();
+  c.rust = { toe: 1, edge: 0.5 };
+  assert.equal(c.jumpBar(0), JUMP_TURN + RUST_TURN, "a fully rusty toe loop needs three-quarters");
+  assert.equal(c.jumpBar(2), JUMP_TURN + RUST_TURN / 2, "a half-rusty loop");
+  assert.equal(c.jumpBar(JUMP_NONE), c.jumpBar(2), "an uncalled landing counts as edge");
+  s.landed.tick = 1; s.landed.height = .3; s.landed.kind = 0; s.landed.turned = 0.65; c.sample(s, false, .1);
+  assert.equal(c.index, 0, "0.65 of a turn is short of a fully rusty toe jump's 0.75");
+  s.landed.tick = 2; s.landed.kind = 2; c.sample(s, false, .1);
+  assert.equal(c.complete, true, "the same 0.65 clears a half-rusty edge jump's 0.625");
+  assert.equal(new Choreography(CAREER_EVENTS[0]).jumpBar(0), JUMP_TURN, "no rust, no extra");
+  assert.equal(landingFamily(4), "toe"); assert.equal(landingFamily(5), "edge");
 });
 
 test("a career program runs its full time; finishing the elements early does not end it", () => {

@@ -11,7 +11,7 @@
 //
 // THE NUMBERS ARE AUTHORED, NOT MEASURED. No source says how fast a jump goes rusty.
 import type { SkaterState, SkatingInput } from "../sim/types.ts";
-import { JUMP_PHASE } from "../sim/jump.ts";
+import { JUMP_DEFS, JUMP_PHASE } from "../sim/jump.ts";
 import { SIM_DT } from "../sim/params.ts";
 
 /** The panel's own split (sim/jump.ts JUMP_DEFS): a pick off the toe, or the edge alone. */
@@ -21,6 +21,19 @@ export const JUMP_FAMILIES = [
 ] as const;
 export type JumpFamily = typeof JUMP_FAMILIES[number]["id"];
 export type Rust = Record<JumpFamily, number>;
+
+/**
+ * Revolutions a fully rusty family adds to what a career jump must turn: the owner's
+ * call of 2026-11-02, after measurement showed rust on the input alone never made
+ * jumps harder (108 half-turn takeoffs a level; Simulation 14, 14, 17, 14, 4 clean
+ * from rust 0 to 1, Experimental 10 throughout). AUTHORED: sharp needs half a turn,
+ * fully rusty three-quarters.
+ */
+export const RUST_TURN = 0.25;
+/** A landing's family, by its call: a pick (T, F, Lz) is a toe jump; S, Lo, A and an uncalled landing are edge. */
+export function landingFamily(kind: number): JumpFamily {
+  return JUMP_DEFS[kind]?.toe ? "toe" : "edge";
+}
 
 /** Rust gained per season step on a family not drilled in that step, and lost per week drilled. */
 export const RUST_PER_STEP = 0.25, RUST_PER_WEEK = 0.25;
