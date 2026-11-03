@@ -83,3 +83,16 @@ export function wornProfile(profile: SkaterProfile, wear: Wear, injured: Injured
 export function fallSide(s: Readonly<Pick<SkaterState, "lean" | "supportFoot">>): number {
   return Math.abs(s.lean) > 0.02 ? Math.sign(s.lean) : s.supportFoot === 0 ? 1 : -1;
 }
+
+/**
+ * What a run's falls did to the body, in words, for the result screen; empty
+ * when nothing changed. Added 2026-11-02 from play: a fall left no word there.
+ */
+export function wearNote(before: Wear, after: Wear): string {
+  const hit = BODY_REGIONS.filter(r => after[r.id] > before[r.id] + 1e-9);
+  if (!hit.length) return "";
+  const pct = (n: number) => Math.round(n * 100);
+  const parts = hit.map(r => `${r.title.toLowerCase()} +${Math.max(1, pct(after[r.id] - before[r.id]))}% (now ${pct(after[r.id])}%)`);
+  const costs = [...new Set(hit.flatMap(r => r.stats))].map(s => s.replace(/[A-Z]/g, c => " " + c.toLowerCase()));
+  return `The falls wore your ${parts.join(" and ")}. Until you rest it on the Season page, it costs ${costs.join(", ")}.`;
+}

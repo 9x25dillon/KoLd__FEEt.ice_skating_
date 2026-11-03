@@ -103,6 +103,14 @@ const SKIN_SURFACES := 7
 
 func _ready() -> void:
 	boot_test = "--smoke-test" in OS.get_cmdline_user_args()
+	accept_with_pad()
+	if boot_test:
+		var a := InputEventJoypadButton.new()
+		a.button_index = JOY_BUTTON_A
+		a.pressed = true
+		if not a.is_action("ui_accept"):
+			push_error("Pad A does not select in menus")
+			get_tree().quit(1)
 	if boot_test:
 		skating_setup = ""
 		scheme = 1
@@ -360,8 +368,25 @@ func clear_menu(title: String, subtitle: String) -> void:
 	menu.add_child(HSeparator.new())
 	menu_scroll.scroll_vertical = 0
 
+# Godot 4.7's default ui_accept is Enter, Kp Enter and Space only: the D-pad moved focus
+# but A pressed nothing (found in play, 2026-11-02). A joins it, for buttons and popups alike.
+static func accept_with_pad() -> void:
+	for e in InputMap.action_get_events("ui_accept"):
+		if e is InputEventJoypadButton and e.button_index == JOY_BUTTON_A: return
+	var a := InputEventJoypadButton.new()
+	a.button_index = JOY_BUTTON_A
+	a.device = -1
+	InputMap.action_add_event("ui_accept",a)
+
+func unfocus_disabled(node: Node) -> void:
+	for child in node.get_children():
+		if child is BaseButton:
+			child.focus_mode = Control.FOCUS_NONE if child.disabled else Control.FOCUS_ALL
+		unfocus_disabled(child)
+
 func focus_menu() -> void:
 	if not overlay.visible: return
+	unfocus_disabled(menu)
 	if is_instance_valid(preferred_focus) and preferred_focus.is_inside_tree() and not preferred_focus.disabled:
 		preferred_focus.grab_focus()
 		return
@@ -406,7 +431,8 @@ func show_page(page: String) -> void:
 				var medal := str(catalog.medals[int(frame.career.medals[i])])
 				var event_button := button("%02d   %s   /   %s" % [i+1,event.title,medal],func():focus_event=i;show_page("event"),i == int(frame.career.unlocked))
 				event_button.disabled = i > int(frame.career.unlocked)
-				menu.add_child(event_button)
+				if i == int(frame.career.unlocked): preferred_focus = event_button
+				menu.add_child(keyed(event_button,"event-%d" % i))
 				var planned = frame.career.plans[i]
 				menu.add_child(paragraph("%ds · %s" % [int(event.seconds),routine_names(event.routine if planned == null else planned)],12))
 				if not str(frame.career.locks[i]).is_empty():
@@ -417,7 +443,7 @@ func show_page(page: String) -> void:
 			for i in catalog.armFocus.size():
 				var tier: Dictionary = catalog.armFocus[i]
 				var chosen: bool = i == int(frame.career.armFocus)
-				menu.add_child(button("%s%s   /   drill best %d" % ["● " if chosen else "",tier.title,int(frame.career.armBest[i])],func():link.send("armFocus",{"focus":i}),chosen))
+				menu.add_child(keyed(button("%s%s   /   drill best %d" % ["● " if chosen else "",tier.title,int(frame.career.armBest[i])],func():link.send("armFocus",{"focus":i}),chosen),"arm-%d" % i))
 				menu.add_child(paragraph(str(tier.blurb),12))
 			var drill_tier := str(catalog.armFocus[int(frame.career.armFocus)].title)
 			menu.add_child(button("Drill %s   /   45 seconds" % drill_tier,func():start_game("armdrill")))
@@ -428,14 +454,14 @@ func show_page(page: String) -> void:
 				var rust := float(frame.career.rust[family.id])
 				var drill_button := button("%s   /   rust %d%%   /   1 week" % [str(family.title),roundi(rust*100)],func():link.send("drill",{"family":family.id}))
 				drill_button.disabled = int(frame.career.weeks)<1
-				menu.add_child(drill_button)
+				menu.add_child(keyed(drill_button,"drill-%s" % family.id))
 				menu.add_child(paragraph(str(family.blurb),12))
 			for stat in ["edgeControl","balance","spring","strength","stamina"]:
 				var cost := int(frame.career.costs[stat])
 				var value := int(frame.career.stats[stat])
 				var train_button := button("%s  %d → %d    /    %d XP, 1 week" % [stat.capitalize(),value,value+1,cost],func():link.send("train",{"stat":stat}))
 				train_button.disabled = int(frame.career.xp)<cost or value>=100 or int(frame.career.weeks)<1
-				menu.add_child(train_button)
+				menu.add_child(keyed(train_button,"train-%s" % stat))
 			menu.add_child(HSeparator.new())
 			menu.add_child(label("Your body",21))
 			menu.add_child(paragraph("Every fall costs something, and it builds. Wear lowers what you skate with, not what you have trained; enough of it becomes an injury. A week's rest wins it back.",13))
@@ -444,7 +470,7 @@ func show_page(page: String) -> void:
 				var injured: bool = frame.career.injured[region.id]
 				var rest_button := button("%s   /   %s   /   rest 1 week" % [str(region.injury) if injured else str(region.title),"injured" if injured else "wear %d%%" % roundi(wear*100)],func():link.send("rest",{"region":region.id}))
 				rest_button.disabled = int(frame.career.weeks)<1 or wear<=0.0
-				menu.add_child(rest_button)
+				menu.add_child(keyed(rest_button,"rest-%s" % region.id))
 				menu.add_child(paragraph(str(region.blurb),12))
 			menu.add_child(HSeparator.new())
 			menu.add_child(label("Season standings",21))
@@ -463,12 +489,20 @@ func show_page(page: String) -> void:
 			var name_label := label("%02d   %s%s" % [i+1,catalog.elements[plan[i]].title,"" if is_required else "   (yours)"],15)
 			name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.add_child(name_label)
-			row.add_child(button("↑",func():
-				if i>0:
+			if i > 0:
+				row.add_child(keyed(button("↑",func():
 					var moved = plan[i]
 					plan[i] = plan[i-1]
 					plan[i-1] = moved
-					link.send("plan",{"event":focus_event,"plan":plan})))
+					focus_key = "up-%d" % (i-1) if i > 1 else "down-0"
+					link.send("plan",{"event":focus_event,"plan":plan})),"up-%d" % i))
+			if i < plan.size()-1:
+				row.add_child(keyed(button("↓",func():
+					var moved = plan[i]
+					plan[i] = plan[i+1]
+					plan[i+1] = moved
+					focus_key = "down-%d" % (i+1) if i+1 < plan.size()-1 else "up-%d" % (i+1)
+					link.send("plan",{"event":focus_event,"plan":plan})),"down-%d" % i))
 			if not is_required:
 				row.add_child(button("×",func():
 					plan.remove_at(i)
@@ -479,8 +513,9 @@ func show_page(page: String) -> void:
 			for id in catalog.elements:
 				chooser.add_item(catalog.elements[id].title)
 			menu.add_child(chooser)
-			menu.add_child(button("+ Add to your program",func():
-				plan.append(catalog.elements.keys()[chooser.selected])
+			menu.add_child(button("+ Add before the closing pose" if plan.size()>0 and plan[plan.size()-1]=="pose" else "+ Add at the end",func():
+				# game/programplan.ts insertAt: before a closing pose, which ends the program.
+				plan.insert(plan.size()-1 if plan.size()>0 and plan[plan.size()-1]=="pose" else plan.size(),catalog.elements.keys()[chooser.selected])
 				link.send("plan",{"event":focus_event,"plan":plan})))
 		if saved_plan != null:
 			menu.add_child(button("Use the event's own program",func():link.send("plan",{"event":focus_event,"plan":null})))
@@ -953,6 +988,7 @@ func start_lesson(course: String, setup: String) -> void:
 	start_game("lesson")
 
 func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
+	focus_key = ""
 	if not link.operational:
 		on_error("The skating engine is still starting.")
 		return

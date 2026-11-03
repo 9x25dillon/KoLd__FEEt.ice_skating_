@@ -182,3 +182,10 @@ test("the more worn, the less her pushes give: fresh 5.035 m/s, injured 4.709 m/
 test("the more worn, the fewer deep edges she holds: fresh 28 of 36, injured 24", () => {
   assert.deepEqual([0, 0.5, 0.99, 1].map(level => edgesHeld(bodyParams("simulation", level ? "hip" : null, level))), [28, 27, 25, 24]);
 });
+
+test("the result screen names the wear a run's falls cost, and nothing for a clean run", async () => {
+  const { wearNote, noWear } = await import("../game/wear.ts");
+  assert.equal(wearNote(noWear(), noWear()), "");
+  const note = wearNote({ hip: 0, knee: 0.125, shoulder: 0 }, { hip: 0.04, knee: 0.19, shoulder: 0 });
+  assert.equal(note, "The falls wore your hips +4% (now 4%) and knees +7% (now 19%). Until you rest it on the Season page, it costs balance, edge control, spring, stamina.");
+});
