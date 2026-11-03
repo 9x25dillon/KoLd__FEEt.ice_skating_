@@ -5,10 +5,14 @@
 // only your own skating. Difficulty is how much physics is live, not a harsher field
 // (the owner, 2026-11-01), so nothing here changes what the ice or the judges do.
 //
-// AUTHORED, TO BE RETUNED FROM PLAY. BASELINE is what a clean, plain, jumpless scripted
-// run scored at each event on 2026-11-01, Simulation; each rival's level is a share of it.
+// AUTHORED, TO BE RETUNED FROM PLAY. BASELINE is what a clean, plain program scores at each
+// event, skated its full time with half-turn jumps (the rules of 2026-11-02): Simulation,
+// through the native bridge, the median of the clean runs over a grid of scripted pilots,
+// measured 2026-11-03 by games/ice-run-godot/tools/rival_baseline.mjs. A half turn scores no
+// TES, so this is all PCS. Each rival's level is a share of it. It was [10.9, 11.2, 14.4,
+// 11.8, 27.8]: a jumpless script whose programs ended with their last element (2026-11-01).
 
-export const BASELINE = [10.9, 11.2, 14.4, 11.8, 27.8] as const;
+export const BASELINE = [16.5, 16.7, 17.5, 16.0, 30.9] as const;
 export const RIVALS = [
   { name: "Ansa Merrow", level: 0.8, growth: 0.02 },
   { name: "Lio Tarrant", level: 0.9, growth: 0.05 },
