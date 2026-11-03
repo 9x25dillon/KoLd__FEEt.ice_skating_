@@ -15,6 +15,8 @@ const SKIN_SLOTS := {
 	"Champagne crystals": "trim", "Espresso hair": "hair", "Warm porcelain": "skin", "Skin-tone tights": "tights",
 }
 var skin: Dictionary = {}
+# game/atelier.ts FABRICS, in its order; fabric.gdshader's `fabric` indexes it.
+const FABRICS := ["satin","velvet","lycra","mesh"]
 var sprays: Array[CPUParticles3D] = []
 # Each model's own proportions, read from its skeleton (measure_rig); the
 # defaults are tools/build_skater.py's. The solver's comHeight is .95.
@@ -436,6 +438,12 @@ func recolour(node: Node) -> int:
 					painted.metallic_specular = 0.0
 					painted.roughness = 1.0
 				elif base.resource_name in ["Warm porcelain","Skin-tone tights"]:
+					# An atelier design (game/atelier.ts) tints the paint by its swatch against the
+					# paint's own tone, so the texture's detail stays. Presets keep their paint untouched.
+					if bool(skin.get("custom",false)):
+						var wanted := Color.html(str(skin.get("skin" if base.resource_name == "Warm porcelain" else "tights","d4a68b")))
+						var own := Color("e7bfa6") if base.resource_name == "Warm porcelain" else Color("d9b39b")
+						painted.albedo_color = Color(minf(wanted.r/own.r,1.4),minf(wanted.g/own.g,1.4),minf(wanted.b/own.b,1.4))
 					painted.subsurf_scatter_enabled = true
 					painted.subsurf_scatter_skin_mode = true
 					painted.subsurf_scatter_strength = .16
@@ -459,6 +467,12 @@ func recolour(node: Node) -> int:
 				cloth.set_shader_parameter("tint",worn.albedo_color)
 				cloth.set_shader_parameter("is_skirt",slot=="skirt")
 				cloth.set_shader_parameter("is_sleeve",slot=="sleeve")
+				# game/atelier.ts designs; presets carry neither field and stay satin, bare.
+				cloth.set_shader_parameter("fabric",maxi(0,FABRICS.find(str(skin.get("fabric","satin")))))
+				var density := clampf(float(skin.get("crystals",0.0)),0.0,1.0)
+				# Stones gather on the bodice; the skirt gets them only at the heavier settings. Authored.
+				cloth.set_shader_parameter("crystals",density if slot=="bodice" else density*.6 if slot=="sleeve" else density*density)
+				cloth.set_shader_parameter("crystal_tint",Color.html(str(skin.get("trim","e8cca0"))))
 				node.set_surface_override_material(i,cloth)
 				cloth_materials.append(cloth)
 			else:

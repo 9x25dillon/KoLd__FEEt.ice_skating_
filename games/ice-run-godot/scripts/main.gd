@@ -78,6 +78,11 @@ var track := 0
 var profile := 0
 var character := 0
 var costume := 3
+# The Composer's music preview and the atelier's design in hand (game/composer.ts, game/atelier.ts).
+var preview: AudioStreamPlayer
+var design_slot := -1
+var design: Dictionary = {}
+var focus_key := ""
 var cruise := false
 var push_pending := false
 var toe_pending := false
@@ -140,6 +145,9 @@ func _ready() -> void:
 	music = AudioStreamPlayer.new()
 	music.volume_db = -12
 	add_child(music)
+	preview = AudioStreamPlayer.new()
+	preview.volume_db = -12
+	add_child(preview)
 	blade_audio = AudioStreamPlayer.new()
 	var stream := AudioStreamGenerator.new()
 	stream.mix_rate = 22050
@@ -364,6 +372,7 @@ func focus_menu() -> void:
 
 func show_page(page: String) -> void:
 	current_page = page
+	if page != "music" and preview: preview.stop()
 	overlay.show()
 	playing = false
 	music.stream_paused = true
@@ -475,6 +484,10 @@ func show_page(page: String) -> void:
 				link.send("plan",{"event":focus_event,"plan":plan})))
 		if saved_plan != null:
 			menu.add_child(button("Use the event's own program",func():link.send("plan",{"event":focus_event,"plan":null})))
+		var laid = frame.career.timelines[focus_event] if frame.career.has("timelines") else null
+		if laid != null:
+			menu.add_child(paragraph("On its music: %s. It runs the full %d s, and each element has its bar. Changing the order above takes it off the music." % [str(catalog.tracks[int(laid.track)].title),int(event.seconds)],13))
+		menu.add_child(button("♪  Edit it on the music →" if laid != null else "♪  Lay it on the music →",func():timeline_edit({"action":"open"},focus_event)))
 		var lock := str(frame.career.locks[focus_event])
 		if not lock.is_empty():
 			menu.add_child(paragraph(lock,14))
@@ -546,6 +559,12 @@ func show_page(page: String) -> void:
 		skate.disabled = sequence.is_empty()
 		menu.add_child(skate)
 		menu.add_child(button("← Back",func():show_page("home")))
+	elif page == "music":
+		show_music_page()
+	elif page == "atelier":
+		show_atelier_page()
+	elif page == "design":
+		show_design_page()
 	elif page == "settings":
 		clear_menu("Your skating setup", "Changes apply to your next skate. Keyboard and analog controller are supported. Face buttons request moves; the physics decides what is possible.")
 		for entry in catalog.get("setups",[]):
@@ -582,11 +601,14 @@ func show_page(page: String) -> void:
 		if not catalog.is_empty() and character != 1:
 			menu.add_child(label("Costume",16))
 			var costume_picker := OptionButton.new()
-			for entry in catalog.skins:
-				costume_picker.add_item("%s — %s" % [entry.name, entry.description])
-			costume_picker.selected = costume
-			costume_picker.item_selected.connect(func(index: int):costume=index;skater.apply_skin(catalog.skins[costume]))
+			var worn := costume_skins()
+			for i in worn.size():
+				if worn[i] != null:
+					costume_picker.add_item("%s — %s" % [worn[i].name, worn[i].description],i)
+			costume_picker.select(costume_picker.get_item_index(costume) if costume_picker.get_item_index(costume) >= 0 else 0)
+			costume_picker.item_selected.connect(func(index: int):costume=costume_picker.get_item_id(index);skater.apply_skin(current_skin());save_preferences())
 			menu.add_child(costume_picker)
+			menu.add_child(button("Atelier  /  make your own costume →",func():show_page("atelier")))
 		if not catalog.is_empty():
 			menu.add_child(label("Soundtrack",16))
 			var track_picker := OptionButton.new()
@@ -715,6 +737,204 @@ func protocol_total(title: String, value: String, emphasis: bool = false) -> voi
 	row.add_child(label(value,18 if emphasis else 15,color))
 	menu.add_child(row)
 
+# ---- The Composer on the music (game/composer.ts, through the bridge) ----
+
+func clock(seconds: float) -> String:
+	return "%d:%02d" % [int(seconds)/60,int(seconds)%60]
+
+func timeline_edit(options: Dictionary, event: int = -1) -> void:
+	var draft = frame.get("draft")
+	options["event"] = event if event >= 0 else (int(draft.event) if draft != null else event_index)
+	link.send("timeline",{"options":options})
+
+func cue_line(r: Dictionary) -> String:
+	var cues: Array = r.cues
+	var i := int(r.index)
+	var words := {"on":"on the music","early":"early","late":"late"}
+	var line := ""
+	if i < cues.size():
+		var wait := float(cues[i].at) - float(r.elapsed)
+		line = "\n♪  " + ("Your bar in %d s" % ceili(wait) if wait > .5 else "Your bar is now" if float(r.elapsed) <= float(cues[i].late) else "Past your bar")
+	if i > 0 and cues[i-1].result != null:
+		line += "   ·   last: " + str(words.get(str(cues[i-1].result),""))
+	return line
+
+func preview_music(track_index: int, at: float) -> void:
+	preview.stream = load("res://assets/generated/audio/"+str(catalog.tracks[track_index].file))
+	if DisplayServer.get_name() != "headless":
+		preview.play(maxf(0.0,at-.5))
+
+func keyed(b: Button, key: String) -> Button:
+	if key == focus_key: preferred_focus = b
+	b.focus_entered.connect(func():focus_key=key)
+	return b
+
+func timeline_strip(d: Dictionary) -> Control:
+	var strip := Control.new()
+	strip.custom_minimum_size = Vector2(0,70)
+	strip.draw.connect(func():
+		var w := strip.size.x
+		var bars := int(d.bars)
+		var font := ThemeDB.fallback_font
+		strip.draw_rect(Rect2(0,10,w,40),Color(.04,.08,.12,.9))
+		var span := float(d.seconds)
+		var x_of := func(t: float) -> float: return clampf(t/span,0,1)*w
+		strip.draw_line(Vector2(x_of.call(span/2),6),Vector2(x_of.call(span/2),54),Color("d5c29a",.5),1)
+		for b in bars+1:
+			var t: float = float(d.offset) + b*float(d.barSeconds)
+			var phrase: bool = b % int(d.barsPerPhrase) == 0
+			strip.draw_line(Vector2(x_of.call(t),10 if phrase else 34),Vector2(x_of.call(t),50),Color(1,1,1,.35 if phrase else .12),2 if phrase else 1)
+		var colour := Color("9fd8c5") if bool(d.check.ok) else Color("f08a7a")
+		for cue in d.cues:
+			var x: float = x_of.call(float(cue.at))
+			strip.draw_rect(Rect2(x,14,maxf(4,x_of.call(float(d.barSeconds))-2),32),colour if cue.required else Color("d5c29a"))
+			strip.draw_string(font,Vector2(x+3,66),str(cue.title).left(10),HORIZONTAL_ALIGNMENT_LEFT,-1,11,Color("e6edef")))
+	return strip
+
+func show_music_page() -> void:
+	var d = frame.get("draft")
+	if d == null:
+		show_page("event")
+		return
+	var event: Dictionary = catalog.events[int(d.event)]
+	clear_menu("%s  ·  on the music" % str(event.title),"Anchor each element to a bar of your music. The program then runs the full %d s, and the cue tells you when each bar comes round. Hitting your bar is shown, not scored. Gold bars are your own elements; the line marks half time." % int(event.seconds))
+	var track_picker := OptionButton.new()
+	for song in catalog.tracks:
+		track_picker.add_item("%s   ·   %.0f bpm" % [str(song.title),float(song.bpm)])
+	track_picker.selected = int(d.track)
+	track_picker.item_selected.connect(func(i: int):timeline_edit({"action":"track","track":i}))
+	menu.add_child(track_picker)
+	menu.add_child(timeline_strip(d))
+	for i in d.cues.size():
+		var cue: Dictionary = d.cues[i]
+		var row := HBoxContainer.new()
+		var name_label := label("Bar %02d   %s   %s%s" % [int(cue.bar)+1,clock(float(cue.at)),str(cue.title),"" if cue.required else "   (yours)"],15)
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(name_label)
+		row.add_child(keyed(button("◀",func():timeline_edit({"action":"nudge","index":i,"by":-1})),"early-%d" % i))
+		row.add_child(keyed(button("▶",func():timeline_edit({"action":"nudge","index":i,"by":1})),"late-%d" % i))
+		row.add_child(button("♪",func():preview_music(int(d.track),float(cue.at))))
+		if not bool(cue.required):
+			row.add_child(button("×",func():timeline_edit({"action":"remove","index":i})))
+		menu.add_child(row)
+	if d.cues.size() < event.routine.size()+int(catalog.planExtra):
+		var chooser := OptionButton.new()
+		for id in catalog.elements:
+			chooser.add_item(catalog.elements[id].title)
+		menu.add_child(chooser)
+		menu.add_child(button("+ Add after the last element",func():timeline_edit({"action":"add","id":catalog.elements.keys()[chooser.selected]})))
+	for problem in d.check.problems:
+		menu.add_child(label("✕  "+str(problem),14,Color("f08a7a")))
+	for note in d.check.notes:
+		menu.add_child(paragraph("·  "+str(note),13))
+	menu.add_child(button("Spread them evenly over the music",func():timeline_edit({"action":"spread"})))
+	var save := button("Saved ✓" if bool(d.saved) else "Save this program on its music",func():timeline_edit({"action":"save"}),true)
+	save.disabled = bool(d.saved) or not bool(d.check.ok)
+	menu.add_child(save)
+	if frame.career.timelines[int(d.event)] != null:
+		menu.add_child(button("Take it off the music  /  the order stays",func():timeline_edit({"action":"clear"})))
+	menu.add_child(button("← Back to the event",func():timeline_edit({"action":"close"})))
+
+# ---- The atelier (game/atelier.ts, through the bridge) ----
+
+func costume_skins() -> Array:
+	var worn: Array = catalog.get("skins",[]).duplicate()
+	if not frame.is_empty() and frame.has("wardrobe"):
+		worn.append_array(frame.wardrobe.skins)
+	return worn
+
+func current_skin() -> Dictionary:
+	var worn := costume_skins()
+	if costume >= 0 and costume < worn.size() and worn[costume] != null:
+		return worn[costume]
+	costume = clampi(3,0,catalog.skins.size()-1)
+	return catalog.skins[costume]
+
+func show_atelier_page() -> void:
+	var atelier: Dictionary = catalog.atelier
+	clear_menu("Atelier","Make up to %d costumes of your own. Every choice is a swatch from the list; the four presets are always there." % int(atelier.maxDesigns))
+	for slot in int(atelier.maxDesigns):
+		var skin = frame.wardrobe.skins[slot]
+		if skin == null:
+			menu.add_child(label("Slot %d  ·  empty" % (slot+1),18))
+			var start := OptionButton.new()
+			for preset in catalog.skins:
+				start.add_item("Start from %s" % str(preset.name))
+			menu.add_child(start)
+			menu.add_child(button("Make it →",func():
+				design_slot = slot
+				design = atelier.starts[start.selected].duplicate(true)
+				focus_key = ""
+				show_page("design")
+				link.send("dress",{"design":design})))
+		else:
+			var wearing: bool = costume == catalog.skins.size()+slot
+			menu.add_child(label("Slot %d  ·  %s%s" % [slot+1,str(skin.name),"   (wearing)" if wearing else ""],18))
+			menu.add_child(paragraph(str(skin.description),13))
+			var row := HBoxContainer.new()
+			row.add_child(button("Wear it",func():
+				costume = catalog.skins.size()+slot
+				skater.apply_skin(current_skin())
+				save_preferences()
+				show_page("atelier")))
+			row.add_child(button("Change it →",func():
+				design_slot = slot
+				design = frame.wardrobe.designs[slot].duplicate(true)
+				focus_key = ""
+				show_page("design")
+				link.send("dress",{"design":design})))
+			menu.add_child(row)
+		menu.add_child(HSeparator.new())
+	menu.add_child(button("← Back to settings",func():show_page("settings")))
+
+func cycle_design(key: String, list: Array, by: int, field: String = "id") -> void:
+	var at := 0
+	for i in list.size():
+		if list[i][field] == design[key]: at = i
+	design[key] = list[(at+by+list.size())%list.size()][field]
+	show_page("design")
+	link.send("dress",{"design":design})
+
+func show_design_page() -> void:
+	var atelier: Dictionary = catalog.atelier
+	clear_menu("Atelier  ·  slot %d" % (design_slot+1),"The skater behind this menu wears each change as you make it. B leaves without keeping it.")
+	var name_edit := LineEdit.new()
+	name_edit.text = str(design.name)
+	name_edit.max_length = int(atelier.nameLimit)
+	name_edit.custom_minimum_size.y = 44
+	name_edit.text_changed.connect(func(text: String):design.name = text)
+	menu.add_child(name_edit)
+	for part in atelier.parts:
+		var at := 0
+		for i in part.swatches.size():
+			if part.swatches[i].id == design[part.id]: at = i
+		var row := HBoxContainer.new()
+		var title := label(str(part.title),15)
+		title.custom_minimum_size.x = 170
+		row.add_child(title)
+		row.add_child(keyed(button("◀",func():cycle_design(part.id,part.swatches,-1)),"%s-" % part.id))
+		var chip := ColorRect.new()
+		chip.color = Color.html(str(part.swatches[at].hex))
+		chip.custom_minimum_size = Vector2(36,36)
+		chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(chip)
+		var swatch_name := label("  %s" % str(part.swatches[at].name),15)
+		swatch_name.custom_minimum_size.x = 150
+		row.add_child(swatch_name)
+		row.add_child(keyed(button("▶",func():cycle_design(part.id,part.swatches,1)),"%s+" % part.id))
+		menu.add_child(row)
+	var fabric: Dictionary = atelier.fabrics.filter(func(f):return f.id == design.fabric)[0]
+	menu.add_child(keyed(button("Fabric: %s  /  %s" % [str(fabric.name),str(fabric.description)],func():cycle_design("fabric",atelier.fabrics,1)),"fabric"))
+	var crystals: Dictionary = atelier.crystals.filter(func(c):return c.id == design.crystals)[0]
+	menu.add_child(keyed(button("Crystals: %s" % str(crystals.name),func():cycle_design("crystals",atelier.crystals,1)),"crystals"))
+	menu.add_child(keyed(button("Hair: %s  /  the browser's skater; this one keeps her own" % ("bun" if bool(design.bun) else "ponytail"),func():
+		design.bun = not bool(design.bun)
+		show_page("design")),"bun"))
+	menu.add_child(button("Keep it in slot %d and wear it" % (design_slot+1),func():link.send("design",{"slot":design_slot,"design":design}),true))
+	menu.add_child(button("← Leave without keeping it",func():
+		skater.apply_skin(current_skin())
+		show_page("atelier")))
+
 func routine_names(ids: Array) -> String:
 	var names := PackedStringArray()
 	for id in ids:
@@ -747,8 +967,8 @@ func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
 func on_engine(op: String, data: Dictionary) -> void:
 	if op == "hello":
 		catalog = data.catalog
-		costume = clampi(costume,0,catalog.skins.size()-1)
-		var worn: int = skater.apply_skin(catalog.skins[costume])
+		frame = data.frame
+		var worn: int = skater.apply_skin(current_skin())
 		if boot_test and worn < SKIN_SURFACES:
 			push_error("Costume reached %d of %d surfaces" % [worn, SKIN_SURFACES])
 			get_tree().quit(1)
@@ -759,7 +979,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		skater.apply_frame(frame,true)
 		show_page(current_page)
 		if boot_test:
-			for page in ["career","composer","settings","controller","home"]:
+			for page in ["career","composer","settings","atelier","controller","home"]:
 				show_page(page)
 		if boot_test:
 			start_game("career")
@@ -773,6 +993,9 @@ func on_engine(op: String, data: Dictionary) -> void:
 		if overlay.visible and current_page == "controller":
 			show_page("controller")
 		return
+	if op == "dress":
+		skater.apply_skin(data.skin)
+		return
 	if op == "export" or op == "metrics":
 		notice.text = "Saved: "+str(data.path)
 		return
@@ -782,6 +1005,16 @@ func on_engine(op: String, data: Dictionary) -> void:
 		return
 	if op == "plan":
 		show_page("event")
+		return
+	if op == "timeline":
+		show_page("music" if frame.get("draft") != null else "event")
+		return
+	if op == "design":
+		costume = catalog.skins.size()+design_slot
+		skater.apply_skin(current_skin())
+		save_preferences()
+		notice.text = "Saved to slot %d, and wearing it." % (design_slot+1)
+		show_page("atelier")
 		return
 	if op == "configure":
 		return
@@ -900,6 +1133,11 @@ func update_hud() -> void:
 			coach_progress.text = "%02d / %02d    ·    %s" % [int(r.index)+1,r.sequence.size(),r.title]
 			if float(element.duration)>0:
 				coach_progress.text += "\nHold %.1f / %.1f s" % [float(r.held),float(element.duration)]
+		elif r.get("cues") != null:
+			coach_title.text = "Program skated"
+			coach_tip.text = "Skate it out to the end of the music."
+		if r.get("cues") != null:
+			coach_progress.text += cue_line(r)
 	elif frame.get("tutorial") != null:
 		var l: Dictionary = frame.tutorial
 		coach_title.text = str(l.title)
@@ -1061,6 +1299,9 @@ func _input(event: InputEvent) -> void:
 		if overlay.visible:
 			if event.button_index == JOY_BUTTON_B:
 				if current_page == "home": resume_game()
+				elif current_page == "music": timeline_edit({"action":"close"})
+				elif current_page == "design": skater.apply_skin(current_skin()); show_page("atelier")
+				elif current_page == "atelier": show_page("settings")
 				else: show_page("career" if current_page == "event" else "home")
 				get_viewport().set_input_as_handled()
 			elif event.button_index == JOY_BUTTON_START:
@@ -1252,6 +1493,28 @@ func capture() -> void:
 		await get_tree().create_timer(1.2).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-%s.png" % ("menu" if page == "home" else page))
+	# The Composer on the music, then the atelier with a velvet, full-crystal design on the skater.
+	timeline_edit({"action":"open"},0)
+	await get_tree().create_timer(1.2).timeout
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-music.png")
+	timeline_edit({"action":"close"})
+	await get_tree().create_timer(.4).timeout
+	show_page("atelier")
+	await get_tree().create_timer(1.2).timeout
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-atelier.png")
+	design_slot = 0
+	design = catalog.atelier.starts[2].duplicate(true)
+	design.fabric = "velvet"
+	design.crystals = "full"
+	design.tights = "black"
+	design.skin = "brown"
+	show_page("design")
+	link.send("dress",{"design":design})
+	await get_tree().create_timer(2.0).timeout
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-design.png")
 	start_lesson("experimental","experimental")
 	await get_tree().create_timer(2.0).timeout
 	await RenderingServer.frame_post_draw

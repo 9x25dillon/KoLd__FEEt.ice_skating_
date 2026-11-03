@@ -19,6 +19,8 @@ import { JUMP_FAMILIES, RUST_PER_STEP, RUST_PER_WEEK } from "./training.ts";
 import type { JumpFamily, Rust } from "./training.ts";
 import { BODY_REGIONS, HEALED_UNDER, INJURED_AT, REST_PER_WEEK, noInjury, noWear, wornProfile } from "./wear.ts";
 import type { BodyRegion, FallHit, Injured, Wear } from "./wear.ts";
+import { checkTimeline, cueResult, parseTimeline, timelineOrder } from "./composer.ts";
+import type { BeatGrid, CueResult, CueTime, Timeline } from "./composer.ts";
 
 export const ELEMENTS = {
   glide: { title: "Opening glide", hint: "Hold Space / A to push. Glide upright above 3 m/s for 3 seconds.", duration: 3 },
@@ -181,8 +183,23 @@ export class Choreography {
     this.stepThresholds = stepThresholds; this.segmentRules = segmentRules; this.ice = ice;
     this.sheet = tables ? new ProtocolSheet(tables) : undefined;
   }
+  /**
+   * game/composer.ts: the program on its music, index for index with the
+   * routine, or null. With cues the program runs to the end of its time, the
+   * owner's choice of 2026-11-02, and each element's timing is recorded in
+   * cueResults. Nothing scores that timing.
+   */
+  cues: CueTime[] | null = null;
+  cueResults: (CueResult | null)[] = [];
+  /** Lays the program on its music. The cues must name the routine's elements in its order. */
+  setCues(cues: readonly CueTime[]): boolean {
+    if (cues.length !== this.event.routine.length || cues.some((c, i) => c.id !== this.event.routine[i])) return false;
+    this.cues = [...cues];
+    this.cueResults = cues.map(() => null);
+    return true;
+  }
   get complete() { return this.index === this.event.routine.length; }
-  get done() { return this.complete || this.elapsed >= this.event.seconds; }
+  get done() { return this.cues ? this.elapsed >= this.event.seconds : this.complete || this.elapsed >= this.event.seconds; }
   get seconds() { return Math.max(0, this.event.seconds - this.elapsed); }
   get current() { return this.event.routine[this.index]; }
   /** Fall deductions, by data/calls-and-deductions.csv's schedule; 0 without score tables. */
@@ -286,6 +303,7 @@ export class Choreography {
     };
     this.held = active[this.current] ? this.held + dt : 0;
     if (active[this.current] && this.held + 1e-9 >= ELEMENTS[this.current].duration) {
+      if (this.cues) this.cueResults[this.index] = cueResult(this.cues[this.index], this.elapsed);
       this.index++; this.held = 0; this.spinProgress = 0;
     }
     if (this.done) this.finalizePcs(s);
@@ -327,6 +345,8 @@ export class CareerState {
   drilled: Record<JumpFamily, boolean> = { toe: false, edge: false };
   /** The player's own layout for each event; null skates the event's. */
   plans: (ElementId[] | null)[] = CAREER_EVENTS.map(() => null);
+  /** game/composer.ts: each event's program on its music, or null. Its order is plans[i]. */
+  timelines: (Timeline | null)[] = CAREER_EVENTS.map(() => null);
   /** Best segment score at each event, for the standings; null until skated. */
   best: (number | null)[] = CAREER_EVENTS.map(() => null);
   /** game/wear.ts: what falling has done to the body, 0 fresh upward, by region. */
@@ -435,14 +455,26 @@ export class CareerState {
   setPlan(i: number, plan: ElementId[] | null): boolean {
     if (!CAREER_EVENTS[i] || (plan !== null && !validPlan(CAREER_EVENTS[i], plan))) return false;
     this.plans[i] = plan && [...plan];
+    // A layout edited without its music no longer matches the timeline's bars.
+    this.timelines[i] = null;
     return true;
   }
+  /** Lays event `i`'s program on its music; its order becomes the plan. Returns whether it was allowed. */
+  setTimeline(i: number, timeline: unknown, grid: BeatGrid): boolean {
+    const t = parseTimeline(timeline);
+    if (!CAREER_EVENTS[i] || !t || !checkTimeline(CAREER_EVENTS[i], grid, t).ok) return false;
+    this.timelines[i] = t;
+    this.plans[i] = timelineOrder(t);
+    return true;
+  }
+  /** Takes event `i`'s program off its music; the order stays. */
+  clearTimeline(i: number) { if (CAREER_EVENTS[i]) this.timelines[i] = null; }
   /** Event `i` as this skater will skate it. */
   planned(i: number): CareerEvent {
     const plan = this.plans[i];
     return plan ? { ...CAREER_EVENTS[i], routine: plan } : CAREER_EVENTS[i];
   }
-  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, best: this.best, wear: this.wear, injured: this.injured }); }
+  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, timelines: this.timelines, best: this.best, wear: this.wear, injured: this.injured }); }
   static restore(json: string | null): CareerState {
     const career = new CareerState();
     try {
@@ -465,6 +497,12 @@ export class CareerState {
       if (unit(saved.rust?.toe) && unit(saved.rust?.edge)) career.rust = { toe: saved.rust.toe, edge: saved.rust.edge };
       if (typeof saved.drilled?.toe === "boolean" && typeof saved.drilled?.edge === "boolean") career.drilled = { toe: saved.drilled.toe, edge: saved.drilled.edge };
       if (Array.isArray(saved.plans) && saved.plans.length === CAREER_EVENTS.length) career.plans = saved.plans.map((plan: unknown, i: number) => validPlan(CAREER_EVENTS[i], plan) ? plan : null);
+      // Saves from before the Composer have no timelines. One must still match its event's plan.
+      if (Array.isArray(saved.timelines) && saved.timelines.length === CAREER_EVENTS.length)
+        career.timelines = saved.timelines.map((value: unknown, i: number) => {
+          const t = value === null ? null : parseTimeline(value), plan = career.plans[i];
+          return t && plan && timelineOrder(t).join() === plan.join() ? t : null;
+        });
       if (Array.isArray(saved.best) && saved.best.length === CAREER_EVENTS.length && saved.best.every((b: unknown) => b === null || Number.isFinite(b))) career.best = [...saved.best];
       // Saves from before wear keep a fresh body. A bad field keeps the default.
       const regions = BODY_REGIONS.map(r => r.id);
