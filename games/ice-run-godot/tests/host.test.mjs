@@ -30,7 +30,8 @@ test('real host saves a career, reloads training and replays without awarding XP
   assert.equal(hello.ok, true);
   assert.equal(hello.data.frame.career.xp, 0);
   let reply = await send('start', {options: {mode: 'career', event: 0}});
-  for (let i = 0; i < 750 && !reply.data.finished; i++) {
+  // The full 75 s since 2026-11-02: 750 batches of 12 ticks, with room to spare.
+  for (let i = 0; i < 800 && !reply.data.finished; i++) {
     const index = reply.data.routine.index;
     reply = await send('frame', {ticks: 12, controls: {kx: index === 1 ? -1 : 0}, low: index === 2});
     assert.equal(reply.ok, true);
@@ -45,11 +46,11 @@ test('real host saves a career, reloads training and replays without awarding XP
   const saved = readFileSync(join(dir, 'career-v1.json'), 'utf8');
   const restored = await host(t, dir)('hello');
   assert.equal(restored.data.frame.career.stats.balance, 51);
-  assert.equal(restored.data.frame.career.unlocked, 1);
+  assert.equal(restored.data.frame.career.unlocked, 0, 'a gold alone no longer opens Club debut (floors re-spaced 2026-11-02)');
   const exported = await send('export');
   assert.equal(exported.data.path, join(dir, 'ice-run-replay.json'));
   reply = await send('replay');
-  for (let i = 0; i < 750 && !reply.data.finished; i++) reply = await send('frame', {ticks: 12});
+  for (let i = 0; i < 800 && !reply.data.finished; i++) reply = await send('frame', {ticks: 12});
   assert.equal(reply.data.result.title, 'Replay verified');
   assert.equal(readFileSync(join(dir, 'career-v1.json'), 'utf8'), saved);
 });

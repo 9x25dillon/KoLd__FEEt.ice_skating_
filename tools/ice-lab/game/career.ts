@@ -26,7 +26,7 @@ export const ELEMENTS = {
   glide: { title: "Opening glide", hint: "Hold Space / A to push. Glide upright above 3 m/s for 3 seconds.", duration: 3 },
   edge: { title: "Carving phrase", hint: "Hold A / D or steer gently with the left stick. Hold a moving edge for 2 seconds.", duration: 2 },
   crossover: { title: "Crossover phrase", hint: "Carve and push with Space / A. Keep the curve through a crossover.", duration: 0.08 },
-  jump: { title: "Jump accent", hint: "Build speed, then J / D-pad up in Beginner. In Simulation, load Shift / RT and release. Land without a fall or step-out.", duration: 0 },
+  jump: { title: "Jump accent", hint: "Build speed on a curve, then J / D-pad up in Beginner. In Simulation, load Shift / RT and release. Turn at least half a revolution in the air and land without a fall or step-out.", duration: 0 },
   spin: { title: "Spin phrase", hint: "Carve at speed, then hold Y for one new full rotation. Release to exit.", duration: 0 },
   step: { title: "Step sequence", hint: "Chain different footwork: three-turns, mohawks, brackets, loops and rockers (hold B through the cusp), counters (hold N), twizzles, crossovers, edge changes. Five distinct types, both feet, inside a rolling stretch of skating.", duration: 2 },
   spiral: { title: "Spiral", hint: "Carve with weight fully on one foot, then hold I / LB+RB. The free leg extends; works backward too. Hold for 2 seconds.", duration: 2 },
@@ -89,12 +89,23 @@ export const PCS_XP_PER_POINT = 3;
  * (300 XP an event) trained into edge control, the stat `overall` weights most:
  * test/career.test.ts pins that. Bronze alone falls short, so a clean program
  * still does not skip the training it needs. TIERS still names a skater's level.
+ *
+ * Re-spaced 2026-11-02 from the owner's season: the old 0, 0, 51, 51.5, 52 were
+ * all cleared after two events. Measured, the most overall silver XP buys before
+ * each event is 50, 50.56, 51.40, 51.96, 52.52; each floor sits just under it, so
+ * every event asks for the XP of the ones before it spent on training. Owner's call.
  */
-export const EVENT_FLOORS = [0, 0, 51, 51.5, 52] as const;
+export const EVENT_FLOORS = [0, 50.5, 51.35, 51.9, 52.5] as const;
 /** Training weeks a new career starts with, and what each improved medal tier adds. Authored. */
 export const START_WEEKS = 4, WEEKS_PER_TIER = 2;
 /** Elements a planned program may add past its event's own. Authored. */
 export const PLAN_EXTRA = 2;
+/**
+ * Revolutions a career jump element must turn in the air, landed clean: the
+ * tutorial's AIR_TURN. The owner's rule of 2026-11-02, after a season of golds
+ * on straight hops that scored no jump at all.
+ */
+export const JUMP_TURN = 0.5;
 /**
  * Whether a program can be skated at this event: every element the event asks for,
  * in any order, and up to PLAN_EXTRA more of any kind. Null is the event's own layout.
@@ -190,6 +201,8 @@ export class Choreography {
    * cueResults. Nothing scores that timing.
    */
   cues: CueTime[] | null = null;
+  /** Runs the event's whole time even once every element is done: every career program, owner 2026-11-02. */
+  fullTime = false;
   cueResults: (CueResult | null)[] = [];
   /** Lays the program on its music. The cues must name the routine's elements in its order. */
   setCues(cues: readonly CueTime[]): boolean {
@@ -199,7 +212,7 @@ export class Choreography {
     return true;
   }
   get complete() { return this.index === this.event.routine.length; }
-  get done() { return this.cues ? this.elapsed >= this.event.seconds : this.complete || this.elapsed >= this.event.seconds; }
+  get done() { return this.cues || this.fullTime ? this.elapsed >= this.event.seconds : this.complete || this.elapsed >= this.event.seconds; }
   get seconds() { return Math.max(0, this.event.seconds - this.elapsed); }
   get current() { return this.event.routine[this.index]; }
   /** Fall deductions, by data/calls-and-deductions.csv's schedule; 0 without score tables. */
@@ -294,7 +307,7 @@ export class Choreography {
       glide: grounded && s.move === MOVE.None && speed >= 3,
       edge: grounded && s.move === MOVE.None && speed >= 2 && Math.abs(s.lean) > 0.12,
       crossover: grounded && speed >= 2 && s.crossover && s.strokeTime > 0,
-      jump: freshLanding && !s.landed.fall && !s.landed.stepOut && s.landed.height > 0.05,
+      jump: freshLanding && !s.landed.fall && !s.landed.stepOut && s.landed.height > 0.05 && Math.abs(s.landed.turned) >= JUMP_TURN,
       spin: this.spinProgress >= Math.PI * 2,
       step: (stepWindow?.level ?? 0) >= 1,
       spiral: s.move === MOVE.Spiral,
@@ -413,7 +426,7 @@ export class CareerState {
     if (i <= this.unlocked) return "";
     if (i > this.medalCap) return "Earn a medal at the event before it.";
     const need = EVENT_FLOORS[i], have = overall(this.profile);
-    return `Needs overall ${need.toFixed(1)}; you are at ${have.toFixed(1)}. Train below, or better a medal for more XP.`;
+    return `Needs overall ${need.toFixed(2)}; you are at ${have.toFixed(2)}. Train below, or better a medal for more XP.`;
   }
   /** Raises a stat by one, for its XP and a week. Does nothing unless both are in hand. */
   train(stat: StatName) {

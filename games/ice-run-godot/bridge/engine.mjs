@@ -87,6 +87,7 @@ export class IceEngine {
   this.steering=newSchemeState();this.coach=new BeginnerCoach();this.practice=new Practice();this.run=new IceRun();this.rookie=new RookieCourse();this.playground=new Playground();
   this.rusty=mode==='career'?new RustGate(this.career.rust):null;
   this.routine=mode==='career'?new Choreography(this.career.planned(index),tables,spinThresholds,stepThresholds,segmentRules,this.ice):mode==='composer'?new Choreography({id:'authored',title:'Your signature program',venue:'Composer rehearsal',seconds:180,routine:this.sequence,discipline:'women',segment:'free'},tables,spinThresholds,stepThresholds,segmentRules,this.ice):null;
+  if(mode==='career')this.routine.fullTime=true;
   if(mode==='career')this.routine.armExpression=armExpression(focus,this.career.armBest[focus]);
   if(timeline&&!this.routine.setCues(cueTimes(tracks[timeline.track],timeline)))throw Error('This program no longer matches its music');
   this.lesson=mode==='lesson'?(course==='trust'?new Tutorial(this.setup):new Tutorial(this.setup,0,courseSteps(courseById(course),this.setup))):null;this.lessonXp=0;

@@ -1169,7 +1169,7 @@ func update_hud() -> void:
 			coach_progress.text = "%02d / %02d    ·    %s" % [int(r.index)+1,r.sequence.size(),r.title]
 			if float(element.duration)>0:
 				coach_progress.text += "\nHold %.1f / %.1f s" % [float(r.held),float(element.duration)]
-		elif r.get("cues") != null:
+		else:
 			coach_title.text = "Program skated"
 			coach_tip.text = "Skate it out to the end of the music."
 		if r.get("cues") != null:
@@ -1425,7 +1425,8 @@ func _process(dt: float) -> void:
 			elif test_seconds > 10.0:
 				push_error("Pairs smoke test: the hand offer never reached the partner")
 				get_tree().quit(1)
-		elif test_seconds>60:
+		# First ice runs its full 75 s since 2026-11-02, so each stage gets 100.
+		elif test_seconds>100:
 			push_error("Godot smoke test timed out")
 			get_tree().quit(1)
 	if screenshot_test and not frame.is_empty():
