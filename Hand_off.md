@@ -2,7 +2,7 @@
 
 ## Resume here
 **Newest close:** 2 November 2026, 23:55 PST · Claude Code, Opus 5.5 · session `c1239b45`
-**Where things stand:** Everything is on `main` (`8519b10`, PRs #64–#69). The owner played a full native season on the Elite 2 (Simulation, a fresh career). Today's PRs act on those notes. Pad A now selects in menus. A career jump needs a clean half turn. Every career program runs its full time. Floors were re-spaced by measurement, and rust raises the turn a jump needs. Two new features: the Composer timeline (lay a career program on its music) and the costume atelier (three custom costumes built from swatches). None of today's changes have been played on the pad yet. CI is green on #68 and #69, and `main`'s Ice Lab run was still going at close.
+**Where things stand:** Everything is on `main` (`8519b10`, PRs #64–#69). The owner played a full native season on the Elite 2 (Simulation, a fresh career). Today's PRs act on those notes. Pad A now selects in menus. A career jump needs a clean half turn. Every career program runs its full time. Floors were re-spaced by measurement, and rust raises the turn a jump needs. Two new features: the Composer timeline (lay a career program on its music) and the costume atelier (three custom costumes built from swatches). None of today's changes have been played on the pad yet. CI is green on `main` at `8519b10`.
 **Corrects the previous hand-off:** "CI red on 5 older tests, public build does not deploy" is false: #64 cleared them and the build deploys. "Browser career lacks planning and standings" is false: #65 added them. "Blade Explorer can't land a turning jump" is false: it lands half a turn from 3–5.5 m/s with soft knees after (see Decisions).
 **Decision needed:** none to continue. Rival baselines are the next owner call (Open questions).
 **Start with:**
@@ -53,7 +53,7 @@
 - Carried over: skirt fullness, the eyelid band, the paddle preset order, whether the name "Edgework" is clear.
 
 ## State (verified 23:50 PST)
-- `main` `8519b10`. #68 and #69 CI green before merge. On `main`, Native replay is green; the Ice Lab run was in progress at close.
+- `main` `8519b10`. #68 and #69 CI green before merge. `main` CI green (Ice Lab checks, Native replay).
 - Outer checkout `phase17-assurance`: old dirty work, not today's. Never sweep it.
 - No game instance left open. The season pilot's Godot (pid 88198) was closed by request.
 
