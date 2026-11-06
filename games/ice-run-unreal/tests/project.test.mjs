@@ -66,6 +66,19 @@ test('the menus walk a career round through the live engine: plan, music, skate,
   assert.match(out, /UNREAL_MENUS_PASS/);
 });
 
+test('the landing the client senses carries every field it reads', async () => {
+  // SenseLanding (the thud, the crowd's swell, the rumble, CLEAN LANDING) reads the snapshot's state.landed.
+  const {IceEngine} = await import('../../ice-run-godot/bridge/engine.mjs');
+  const e = new IceEngine();
+  e.start({mode: 'free'});
+  const landed = e.snapshot().state.landed;
+  const cpp = read('Source/IceRun/IceRunGameMode.cpp');
+  const body = cpp.slice(cpp.indexOf('void AIceRunGameMode::SenseLanding'));
+  const fields = [...body.slice(0, body.indexOf('\n}\n')).matchAll(/\(\*Landed\)->TryGet\w+Field\(TEXT\("(\w+)"\)/g)].map(m => m[1]);
+  assert.deepEqual(fields.sort(), ['fall', 'stepOut', 'tick', 'turned']);
+  for (const field of fields) assert.ok(Object.hasOwn(landed, field), `state.landed has no '${field}'`);
+});
+
 test('the story and the coach reach the bridge catalog and snapshot the menus read', async () => {
   const {IceEngine} = await import('../../ice-run-godot/bridge/engine.mjs');
   const e = new IceEngine();

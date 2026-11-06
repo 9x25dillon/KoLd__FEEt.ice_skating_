@@ -5,6 +5,7 @@
 #include "IceShotCamera.h"
 #include "IceRunHUD.h"
 #include "IceRunPlayerController.h"
+#include "IceSound.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "GameFramework/GameUserSettings.h"
@@ -136,6 +137,14 @@ void AIceRunGameMode::StartPlay()
 	Preview = NewObject<UAudioComponent>(this);
 	Preview->bAutoActivate = false;
 	Preview->RegisterComponent();
+	// main.gd plays the blade at -22 dB under music at -12: the same 10 dB under the music here.
+	IceSound = NewObject<UIceSound>(this);
+	Ambience = NewObject<UAudioComponent>(this);
+	Ambience->bAutoActivate = false;
+	Ambience->RegisterComponent();
+	Ambience->SetSound(IceSound);
+	Ambience->SetVolumeMultiplier(.316f);
+	Ambience->Play();
 	ShotCamera->Watch(Skater);
 	for (int32 I = 0; I < StartCamera % 4; ++I)
 	{
@@ -458,7 +467,9 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		Present(FIceFrame::Parse(Reply.Data), true);
 		bPlaying = true;
 		TickDebt = 0.0;
+		LastLandingTick = -1;
 		StartMusic();
+		Announce(TEXT("TAKE THE ICE"), RunPlace());
 		UE_LOG(LogIceRun, Log, TEXT("Skating: mode %s, setup %s, scheme %d."), *RunMode, SetupId.IsEmpty() ? TEXT("(original schemes)") : *SetupId, Scheme);
 		FString OpenPage;
 		if (ShotTimes.Num() > 0 && FParse::Value(FCommandLine::Get(), TEXT("IceOpenMenu="), OpenPage))
@@ -491,6 +502,7 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 	else if (Reply.Op == TEXT("frame"))
 	{
 		Present(FIceFrame::Parse(Reply.Data), false);
+		SenseLanding();
 		if (Latest.bFinished)
 		{
 			bPlaying = false;
@@ -514,8 +526,10 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		Present(FIceFrame::Parse(Reply.Data), true);
 		bPlaying = true;
 		FinishedFor = -1.0;
+		LastLandingTick = -1;
 		CloseMenu();
 		StartMusic();
+		Announce(TEXT("THE REPLAY"), RunPlace());
 	}
 	else if (Reply.Op == TEXT("dress"))
 	{
@@ -694,6 +708,17 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 	{
 		PreviewLeft -= DeltaSeconds;
 		if (PreviewLeft <= 0.0 && Preview) Preview->FadeOut(.6f, 0.f);
+	}
+	AnnounceLeft = FMath::Max(0.0, AnnounceLeft - DeltaSeconds);
+	if (IceSound && Latest.bValid)
+	{
+		// main.gd fill_audio's inputs: the blade's level by speed (quiet in the air, down, or under a menu), the slip's scrape.
+		const FIceState& S = Latest.State;
+		const bool bLive = bPlaying && !bPaused;
+		const float Speed = float(S.Vel.Size());
+		const float Level = bLive && S.JumpPhase != IceJumpPhase::Air && !S.bFallen ? FMath::Clamp(Speed / 12.f, 0.f, .55f) : 0.f;
+		const float Scrape = FMath::Clamp(float(S.Blade[0].LatSlipAccel + S.Blade[1].LatSlipAccel), 0.f, 4.f) * .08f;
+		IceSound->Set(Speed, Level, Scrape, bLive);
 	}
 	// The music waits with the run while a menu is up.
 	const bool bHold = bPaused && RunLive();
@@ -1051,6 +1076,70 @@ void AIceRunGameMode::StartMusic()
 	Music->SetSound(Sound);
 	Music->Play(0.f);
 	UE_LOG(LogIceRun, Log, TEXT("Music: %s from its start."), *Id);
+}
+
+void AIceRunGameMode::Announce(const FString& Title, const FString& Detail)
+{
+	// main.gd broadcast.announce: three and a half seconds on the broadcast plate.
+	AnnounceTitle = Title;
+	AnnounceDetail = Detail;
+	AnnounceLeft = 3.5;
+}
+
+FString AIceRunGameMode::RunPlace() const
+{
+	if (RunMode == TEXT("career"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>& Events = CatalogList(TEXT("events"));
+		if (Events.IsValidIndex(EventIndex) && Events[EventIndex]->Type == EJson::Object)
+		{
+			const TSharedPtr<FJsonObject> E = Events[EventIndex]->AsObject();
+			return FString::Printf(TEXT("%s   /   %s"), *E->GetStringField(TEXT("venue")), *E->GetStringField(TEXT("title")));
+		}
+	}
+	if (RunMode == TEXT("lesson")) return TEXT("Lessons");
+	if (RunMode == TEXT("rookie")) return TEXT("Rookie gates");
+	if (RunMode == TEXT("timed")) return TEXT("The light course");
+	if (RunMode == TEXT("composer")) return TEXT("Your own program");
+	if (RunMode == TEXT("armdrill")) return TEXT("The arm drill");
+	return TEXT("Free skate");
+}
+
+void AIceRunGameMode::SenseLanding()
+{
+	// main.gd: a landing the engine has not reported before (its tick), clean or not.
+	const TSharedPtr<FJsonObject>* State = nullptr;
+	const TSharedPtr<FJsonObject>* Landed = nullptr;
+	if (!Latest.bValid || !Latest.Raw->TryGetObjectField(TEXT("state"), State) || !(*State)->TryGetObjectField(TEXT("landed"), Landed))
+	{
+		return;
+	}
+	double Tick = -1.0;
+	(*Landed)->TryGetNumberField(TEXT("tick"), Tick);
+	if (int32(Tick) <= LastLandingTick || Tick < 0.0)
+	{
+		return;
+	}
+	LastLandingTick = int32(Tick);
+	bool bFall = false, bStepOut = false;
+	(*Landed)->TryGetBoolField(TEXT("fall"), bFall);
+	(*Landed)->TryGetBoolField(TEXT("stepOut"), bStepOut);
+	const bool bClean = !bFall && !bStepOut;
+	double Turned = 0.0;
+	(*Landed)->TryGetNumberField(TEXT("turned"), Turned);
+	if (IceSound)
+	{
+		IceSound->Land(bClean);
+	}
+	Announce(bClean ? TEXT("CLEAN LANDING") : TEXT("FIND YOUR EDGE"), FString::Printf(TEXT("%.2f rotations   /   Jump TES %.2f"), Turned, Latest.Technical));
+	AIceRunPlayerController* PC = Player();
+	if (bRumbleOn && PC)
+	{
+		// main.gd's vibration: the strong (large, low) motor and the weak (small, high) one, longer and harder for a fall.
+		const float For = bClean ? .16f : .28f;
+		PC->PlayDynamicForceFeedback(bClean ? .30f : .7f, For, true, false, true, false);
+		PC->PlayDynamicForceFeedback(bClean ? .18f : .48f, For, false, true, false, true);
+	}
 }
 
 USoundBase* AIceRunGameMode::TrackSound(int32 Track) const

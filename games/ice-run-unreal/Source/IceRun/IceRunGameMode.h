@@ -11,6 +11,7 @@ class AIceRink;
 class AIceShotCamera;
 class AIceRunPlayerController;
 class USoundBase;
+class UIceSound;
 
 /**
  * One skating session against the Ice Lab engine: starts the bridge, builds
@@ -103,6 +104,10 @@ public:
 	bool Showcase() const { return bPaused && !bShotsWithoutMenu; }
 
 	const FIceFrame& Frame() const { return Latest; }
+	/** The broadcast's announcement (main.gd broadcast.announce): a title, its detail, and the seconds it has left. */
+	const FString& AnnouncementTitle() const { return AnnounceTitle; }
+	const FString& AnnouncementDetail() const { return AnnounceDetail; }
+	double AnnouncementLeft() const { return AnnounceLeft; }
 	const FString& Notice() const { return NoticeText; }
 	const FString& Setup() const { return SetupId; }
 	bool Operational() const { return bOperational; }
@@ -221,6 +226,17 @@ private:
 	FString PageNotice;
 	/** The cue being taken out on the music page, among your own. */
 	int32 RemovePick = 0;
+	void Announce(const FString& Title, const FString& Detail);
+	/** Where a run is, for its first announcement: a career event's venue, else the mode. */
+	FString RunPlace() const;
+	/** After each frame: a landing's thud, the crowd's swell, the pad's rumble, and its announcement (main.gd). */
+	void SenseLanding();
+	FString AnnounceTitle;
+	FString AnnounceDetail;
+	double AnnounceLeft = 0.0;
+	int32 LastLandingTick = -1;
+	/** The pad shakes on a landing (main.gd rumble_enabled; Settings → Controller vibration). */
+	bool bRumbleOn = true;
 	/** An atelier slot just kept: worn once the wardrobe comes back with it. */
 	int32 PendingWearSlot = -1;
 	/** The title screen comes up once, over the first run. */
@@ -270,4 +286,11 @@ private:
 	/** The music page's bar preview: its own voice, so the run's paused music keeps its place. */
 	UPROPERTY()
 	TObjectPtr<class UAudioComponent> Preview;
+
+	/** The blade, the crowd and a landing's thud, made live (IceSound), and the voice it plays on. */
+	UPROPERTY()
+	TObjectPtr<UIceSound> IceSound;
+
+	UPROPERTY()
+	TObjectPtr<class UAudioComponent> Ambience;
 };

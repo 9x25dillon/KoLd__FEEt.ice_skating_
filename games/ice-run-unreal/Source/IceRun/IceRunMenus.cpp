@@ -333,6 +333,7 @@ void AIceRunGameMode::LoadPreferences()
 	if (P->TryGetNumberField(TEXT("costume"), V)) CostumeIndex = FMath::Max(0, int32(V));
 	if (P->TryGetNumberField(TEXT("track"), V)) TrackIndex = FMath::Max(0, int32(V));
 	P->TryGetBoolField(TEXT("music"), bMusicOn);
+	P->TryGetBoolField(TEXT("rumble"), bRumbleOn);
 	TArray<FString> Ids;
 	if (P->TryGetStringArrayField(TEXT("sequence"), Ids) && Ids.Num() <= 16)
 	{
@@ -355,6 +356,7 @@ void AIceRunGameMode::SavePreferences() const
 	P->SetNumberField(TEXT("costume"), CostumeIndex);
 	P->SetNumberField(TEXT("track"), TrackIndex);
 	P->SetBoolField(TEXT("music"), bMusicOn);
+	P->SetBoolField(TEXT("rumble"), bRumbleOn);
 	TArray<TSharedPtr<FJsonValue>> Ids;
 	for (const FString& Id : Sequence)
 	{
@@ -881,6 +883,13 @@ void AIceRunGameMode::BuildSettings(FMenuPage& P)
 		};
 		P.Items.Add(Line(FString::Printf(TEXT("Music playing   ◀  %s  ▶"), bMusicOn ? TEXT("On") : TEXT("Off")), TEXT(""), TEXT("The beat still counts when it is off."), [Toggle] { Toggle(); }, [Toggle](int32) { Toggle(); }));
 	}
+	auto Rumble = [this]
+	{
+		bRumbleOn = !bRumbleOn;
+		SavePreferences();
+		RebuildPage();
+	};
+	P.Items.Add(Line(FString::Printf(TEXT("Controller vibration   ◀  %s  ▶"), bRumbleOn ? TEXT("On") : TEXT("Off")), TEXT(""), TEXT("The pad shakes on a landing: briefly for a clean one, harder for a fall."), [Rumble] { Rumble(); }, [Rumble](int32) { Rumble(); }));
 	P.Items.Add(Line(FString::Printf(TEXT("Camera   ◀  %s  ▶"), *CameraName()), TEXT(""), TEXT("View / V changes it while skating, except in the air."),
 		[this] { if (Latest.bValid) ShotCamera->Cycle(Latest.State); RebuildPage(); },
 		[this](int32) { if (Latest.bValid) ShotCamera->Cycle(Latest.State); RebuildPage(); }));

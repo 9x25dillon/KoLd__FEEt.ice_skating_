@@ -463,6 +463,23 @@ void AIceRunHUD::DrawHUD()
 		Line(Cue, Margin, BY, Ink, .95f * U, Medium);
 	}
 
+	// main.gd's broadcast plate: TAKE THE ICE, CLEAN LANDING, FIND YOUR EDGE, for three and a half seconds.
+	if (Mode->AnnouncementLeft() > 0.0 && !Mode->AnnouncementTitle().IsEmpty())
+	{
+		const float Fade = FMath::Clamp(float(Mode->AnnouncementLeft()) / .4f, 0.f, 1.f);
+		// Sized to its words: a title and a detail line, with a margin round them.
+		float TW = 0.f, TH = 0.f, DW = 0.f, DH = 0.f;
+		Canvas->StrLen(Large, Mode->AnnouncementTitle(), TW, TH);
+		Canvas->StrLen(Medium, Mode->AnnouncementDetail(), DW, DH);
+		const float PW = FMath::Max(360.f * U, FMath::Max(TW * 1.25f, DW * .85f) * U + 44.f * U);
+		const float PH = (TH * 1.25f + DH * .85f) * 1.15f * U + 24.f * U;
+		const float PX = (Canvas->ClipX - PW) * .5f, PY = 96.f * U;
+		Panel(PX, PY, PW, PH, FLinearColor(.035f, .065f, .10f, .9f * Fade));
+		Panel(PX, PY, PW, 2.f * U, FLinearColor(Champagne.R, Champagne.G, Champagne.B, Fade));
+		float AY = PY + 12.f * U;
+		Line(Mode->AnnouncementTitle(), PX + 22.f * U, AY, FLinearColor(Champagne.R, Champagne.G, Champagne.B, Fade), 1.25f * U, Large);
+		Line(Mode->AnnouncementDetail(), PX + 22.f * U, AY, FLinearColor(Ink.R, Ink.G, Ink.B, Fade), .85f * U, Medium);
+	}
 	float NY = Canvas->ClipY - Margin - 20.f * U;
 	if (!Mode->Notice().IsEmpty())
 	{

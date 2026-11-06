@@ -16,5 +16,7 @@ public class IceRun : ModuleRules
 			"Slate",
 			"SlateCore",
 		});
+		// IceSound is a procedural sound wave: its base class's proxy factory lives here.
+		PrivateDependencyModuleNames.Add("AudioExtensions");
 	}
 }
