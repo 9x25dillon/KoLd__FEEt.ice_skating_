@@ -89,6 +89,11 @@ with speed and when an edge slips sideways, quiet in the air and on a fall; the 
 which swells after a landing (more for a clean one); and a landing's thud. The pad rumbles on a
 landing, briefly for a clean one and harder for a fall. The broadcast plate says TAKE THE ICE
 where you are skating, then CLEAN LANDING or FIND YOUR EDGE with the rotations and the jump TES.
+Under the readouts are `main.gd`'s broadcast meters: wind and legs (what the program has left in
+her), each blade's share of the load, the knee, and the coil where the setup winds the shoulders
+against the hips. At the bottom right, YOUR LINE: the rink from above, the line skated since the
+run began, where she is and which way she faces, and in a lesson the next target to reach.
+
 Snow comes off a blade whose edge slips sideways at speed (a skid, a hard carve), thrown back and
 up, harder the more that blade is loaded, as `skater.gd`'s sprays do (`IceSpray`); it settles on
 the ice. A plain glide or the Explorer brake hardly slips, so it throws little.
@@ -142,7 +147,7 @@ writes PNGs at those seconds of the run and quits. `-IceOpenMenu=<page>` stills 
 | `Source/IceRun/IceRink.*` | The sheet from the catalog's rink, boards, hall, roof fixtures, blade grooves |
 | `Source/IceRun/IceShotCamera.*` | `main.gd`'s four cameras with `shot.gd`'s framing |
 | `Source/IceRun/IceRunMenus.cpp` | The menu pages as data: the Season, briefing, music, training, style, result, Composer, wardrobe, atelier, lessons, settings |
-| `Source/IceRun/IceRunHUD.*` | Move, edges, TES, coach and cue lines, the lesson card, the balance meter, the broadcast plate, and the menu pages, in the engine's words |
+| `Source/IceRun/IceRunHUD.*` | Move, edges, TES, coach and cue lines, the lesson card, the balance meter, the broadcast plate, meters and rink map, and the menu pages, in the engine's words |
 | `Source/IceRun/IceSound.*` | The blade, the crowd and a landing's thud, synthesized as `main.gd` does |
 | `Source/IceRun/IceSpray.*` | The snow off each blade, as `skater.gd`'s two particle sprays |
 | `Source/IceRun/IceSimSpace.h` | Sim metres (y left) to Unreal centimetres (Y right), the twin of `sim_space.gd` |
@@ -153,6 +158,5 @@ Godot's body frame so it reads against `skater.gd`; the one conversion to Unreal
 frame is `IceSimSpace::FromBody`. A turn about an axis changes sense across that conversion,
 which is why the spine and head twists are negated there.
 
-Not yet here: the face and eyes, the crowd in the stands, the broadcast's meters and rink map,
-Elite paddles, and a packaged build. The venue is plain next to the Godot Northlight
+Not yet here: the face and eyes, the crowd in the stands, Elite paddles, and a packaged build. The venue is plain next to the Godot Northlight
 arena.

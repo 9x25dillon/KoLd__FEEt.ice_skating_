@@ -3,6 +3,7 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
+#include "CanvasItem.h"
 
 namespace
 {
@@ -347,6 +348,7 @@ void AIceRunHUD::DrawHUD()
 		Technical += FString::Printf(TEXT("   ·   PCS %.2f"), Num(Pcs, TEXT("total")));
 	}
 	Line(Technical, Margin, Y, Champagne, 1.05f * U, Medium);
+	Meters(F, Margin, Y, U);
 	const TSharedPtr<FJsonObject> Landed = Obj(Raw, TEXT("jump"));
 	if (Landed.IsValid())
 	{
@@ -491,6 +493,153 @@ void AIceRunHUD::DrawHUD()
 	Canvas->StrLen(Medium, Keys, W, H);
 	Line(Keys, Canvas->ClipX - Margin - W * .85f * U, NY, FLinearColor(.6f, .66f, .72f, 1.f), .85f * U, Medium);
 	BalanceMeter(Obj(Raw, TEXT("balance")), Obj(Raw, TEXT("steady")), U);
+	RinkMap(Mode, F, U);
+}
+
+void AIceRunHUD::Bar(float X, float Y, float W, float Fill, const FLinearColor& Color, float U)
+{
+	Panel(X, Y, W, 3.f * U, FLinearColor(.19f, .26f, .31f, .9f));
+	Panel(X, Y, W * FMath::Clamp(Fill, 0.f, 1.f), 3.f * U, Color);
+}
+
+void AIceRunHUD::Stroke(const FVector2D& A, const FVector2D& B, const FLinearColor& Color, float Thickness)
+{
+	FCanvasLineItem Item(A, B);
+	Item.SetColor(Color);
+	// Under a pixel and a half, a hairline: a thin quad can fall between pixel rows and vanish.
+	Item.LineThickness = Thickness < 1.5f ? 0.f : Thickness;
+	Canvas->DrawItem(Item);
+}
+
+void AIceRunHUD::Meters(const FIceFrame& F, float X, float& Y, float U)
+{
+	// main.gd broadcast: the presentation reads the solver; none of these meters alters skating.
+	UFont* Medium = GEngine->GetMediumFont();
+	const FLinearColor Muted(.62f, .71f, .76f, 1.f);
+	const TSharedPtr<FJsonObject> S = Obj(F.Raw, TEXT("state"));
+	if (!S.IsValid())
+	{
+		return;
+	}
+	Y += 6.f * U;
+	const float Label = 54.f * U, Long = 110.f * U, Gap = 30.f * U;
+	auto Row = [&](const TCHAR* LeftName, float LeftFill, const FLinearColor& LeftColor, const FString& RightName, float RightFill, const FLinearColor& RightColor)
+	{
+		float LY = Y - 7.f * U;
+		Line(LeftName, X, LY, Muted, .78f * U, Medium);
+		Bar(X + Label, Y, Long, LeftFill, LeftColor, U);
+		if (!RightName.IsEmpty())
+		{
+			float RY = Y - 7.f * U;
+			const float RX = X + Label + Long + Gap;
+			Line(RightName, RX, RY, Muted, .78f * U, Medium);
+			Bar(RX + Label, Y, Long, RightFill, RightColor, U);
+		}
+		Y += 18.f * U;
+	};
+	// Wind and legs: what the program has left in her (1 is fresh).
+	Row(TEXT("WIND"), float(Num(S, TEXT("wind"), 1.0)), Ink, TEXT("LEGS"), float(Num(S, TEXT("legs"), 1.0)), Champagne);
+	// Each blade's actual share of the support load.
+	Row(TEXT("LEFT"), float(F.State.Blade[0].Weight), Champagne, TEXT("RIGHT"), float(F.State.Blade[1].Weight), Champagne);
+	Row(TEXT("KNEE"), float(F.State.Knee), Ink, FString(), 0.f, Ink);
+	// The shoulders against the hips (the sim's own twist), left or right of centre by which way they
+	// are wound; dim while the feet pivot, when the wind is going nowhere.
+	double Twist = 0.0;
+	if (S->TryGetNumberField(TEXT("twist"), Twist))
+	{
+		const bool bHolding = FMath::Abs(Num(S, TEXT("yawDev"))) < 1.5;
+		const float Wound = FMath::Clamp(float(Twist / .8), -1.f, 1.f);
+		const FLinearColor C = bHolding ? Champagne : Muted;
+		float LY = Y - 7.f * U;
+		Line(TEXT("COIL"), X, LY, C, .78f * U, Medium);
+		const float Mid = X + Label + Long;
+		Panel(X + Label, Y, Long * 2.f, 3.f * U, FLinearColor(.19f, .26f, .31f, .9f));
+		Panel(FMath::Min(Mid, Mid + Long * Wound), Y, Long * FMath::Abs(Wound), 3.f * U, C);
+		Panel(Mid - 1.f, Y - 2.f * U, 2.f, 7.f * U, Muted);
+		Y += 18.f * U;
+	}
+}
+
+void AIceRunHUD::RinkMap(const AIceRunGameMode* Mode, const FIceFrame& F, float U)
+{
+	const TSharedPtr<FJsonObject> R = Mode->RinkShape();
+	if (!R.IsValid())
+	{
+		return;
+	}
+	UFont* Medium = GEngine->GetMediumFont();
+	const double MinX = Num(R, TEXT("minX")), MaxX = Num(R, TEXT("maxX")), MinY = Num(R, TEXT("minY")), MaxY = Num(R, TEXT("maxY"));
+	const double Corner = Num(R, TEXT("corner"));
+	// A new run starts the line again: the tick goes back.
+	const int32 Tick = F.State.Tick;
+	if (Tick < LineTick)
+	{
+		LinePath.Reset();
+		LineTick = -1;
+	}
+	if (LineTick < 0 || Tick >= LineTick + 8)
+	{
+		LinePath.Add(F.State.Pos);
+		LineTick = Tick;
+		if (LinePath.Num() > 900)
+		{
+			LinePath.RemoveAt(0);
+		}
+	}
+	// The plate, over the keys line at the bottom right.
+	const float Side = 170.f * U, PW = Side + 32.f * U, PH = Side + 48.f * U;
+	const float PX = Canvas->ClipX - 36.f * U - PW, PY = Canvas->ClipY - 36.f * U - 40.f * U - PH;
+	Panel(PX, PY, PW, PH, FLinearColor(.035f, .065f, .10f, .82f));
+	Panel(PX, PY, PW, 2.f * U, FLinearColor(.4f, .6f, .7f, .35f));
+	float TY = PY + 8.f * U;
+	Line(TEXT("YOUR LINE"), PX + 16.f * U, TY, Champagne, .7f * U, Medium);
+	// The rink from above, the same way round as the arena: sim x to the right, sim y up the screen.
+	const double Scale = Side / FMath::Max(MaxX - MinX, MaxY - MinY);
+	const FVector2D Centre(PX + PW * .5f, PY + 34.f * U + Side * .5f);
+	const FVector2D Middle((MinX + MaxX) * .5, (MinY + MaxY) * .5);
+	auto At = [&](const FVector2D& P) { return Centre + FVector2D(P.X - Middle.X, -(P.Y - Middle.Y)) * Scale; };
+	TArray<FVector2D> Outline;
+	const FVector2D Centres[4] = {{MaxX - Corner, MaxY - Corner}, {MinX + Corner, MaxY - Corner}, {MinX + Corner, MinY + Corner}, {MaxX - Corner, MinY + Corner}};
+	for (int32 C = 0; C < 4; ++C)
+	{
+		for (int32 J = 0; J <= 12; ++J)
+		{
+			const double A = C * UE_DOUBLE_PI * .5 + J * UE_DOUBLE_PI * .5 / 12.0;
+			Outline.Add(At(Centres[C] + FVector2D(FMath::Cos(A), FMath::Sin(A)) * Corner));
+		}
+	}
+	for (int32 I = 0; I < Outline.Num(); ++I)
+	{
+		Stroke(Outline[I], Outline[(I + 1) % Outline.Num()], FLinearColor(.39f, .49f, .57f, 1.f), 1.f * U);
+	}
+	for (int32 I = 1; I < LinePath.Num(); ++I)
+	{
+		Stroke(At(LinePath[I - 1]), At(LinePath[I]), FLinearColor(.6f, .77f, .83f, .55f), 1.f * U);
+	}
+	// A lesson's targets: the next one marked as the ice marks it, the rest dim.
+	const TSharedPtr<FJsonObject> Tutorial = Obj(F.Raw, TEXT("tutorial"));
+	const TSharedPtr<FJsonObject> Next = Obj(Tutorial, TEXT("target"));
+	const TArray<TSharedPtr<FJsonValue>>* Targets = nullptr;
+	if (Tutorial.IsValid() && Tutorial->TryGetArrayField(TEXT("targets"), Targets))
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Targets)
+		{
+			const TSharedPtr<FJsonObject> T = V->AsObject();
+			const FVector2D P = At(FVector2D(Num(T, TEXT("x")), Num(T, TEXT("y"))));
+			const bool bNext = Next.IsValid() && Num(Next, TEXT("x")) == Num(T, TEXT("x")) && Num(Next, TEXT("y")) == Num(T, TEXT("y"));
+			const float D = (bNext ? 5.f : 3.f) * U;
+			const FLinearColor C = bNext ? Champagne : FLinearColor(.6f, .66f, .72f, .6f);
+			Stroke(P + FVector2D(0, -D), P + FVector2D(D, 0), C, 1.5f * U);
+			Stroke(P + FVector2D(D, 0), P + FVector2D(0, D), C, 1.5f * U);
+			Stroke(P + FVector2D(0, D), P + FVector2D(-D, 0), C, 1.5f * U);
+			Stroke(P + FVector2D(-D, 0), P + FVector2D(0, -D), C, 1.5f * U);
+		}
+	}
+	// Where she is, and which way she faces.
+	const FVector2D Here = At(F.State.Pos);
+	const FVector2D Facing = FVector2D(F.State.Heading.X, -F.State.Heading.Y).GetSafeNormal();
+	Panel(Here.X - 3.f * U, Here.Y - 3.f * U, 6.f * U, 6.f * U, Champagne);
+	Stroke(Here, Here + Facing * 9.f * U, Ink, 1.5f * U);
 }
 
 void AIceRunHUD::BalanceMeter(const TSharedPtr<FJsonObject>& B, const TSharedPtr<FJsonObject>& Steady, float U)

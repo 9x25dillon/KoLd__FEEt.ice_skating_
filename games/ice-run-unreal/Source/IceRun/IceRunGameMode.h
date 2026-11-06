@@ -104,6 +104,12 @@ public:
 	bool Showcase() const { return bPaused && !bShotsWithoutMenu; }
 
 	const FIceFrame& Frame() const { return Latest; }
+	/** The catalog's rink (minX, maxX, minY, maxY, corner, in sim metres), for the HUD's map. */
+	TSharedPtr<FJsonObject> RinkShape() const
+	{
+		const TSharedPtr<FJsonObject>* Found = nullptr;
+		return Catalog.IsValid() && Catalog->TryGetObjectField(TEXT("rink"), Found) ? *Found : nullptr;
+	}
 	/** The broadcast's announcement (main.gd broadcast.announce): a title, its detail, and the seconds it has left. */
 	const FString& AnnouncementTitle() const { return AnnounceTitle; }
 	const FString& AnnouncementDetail() const { return AnnounceDetail; }
