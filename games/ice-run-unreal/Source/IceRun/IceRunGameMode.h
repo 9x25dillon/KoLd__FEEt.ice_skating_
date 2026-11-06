@@ -243,6 +243,8 @@ private:
 	int32 LastLandingTick = -1;
 	/** The pad shakes on a landing (main.gd rumble_enabled; Settings → Controller vibration). */
 	bool bRumbleOn = true;
+	/** main.gd paddle_layout, kept here for the preferences and handed to the controller. */
+	int32 PaddleLayout = 0;
 	/** An atelier slot just kept: worn once the wardrobe comes back with it. */
 	int32 PendingWearSlot = -1;
 	/** The title screen comes up once, over the first run. */

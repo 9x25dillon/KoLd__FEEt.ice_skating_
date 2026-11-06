@@ -44,6 +44,7 @@ bool AIceRunPlayerController::Down(const FKey& Key) const
 void AIceRunPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
+	Elite.Poll(FPlatformTime::Seconds());
 	auto Pressed = [this](const FKey& Key) { return WasInputKeyJustPressed(Key); };
 	if (Pressed(EKeys::SpaceBar) || Pressed(EKeys::Gamepad_FaceButton_Bottom)) bPushPending = true;
 	if (Pressed(EKeys::F)) bToePending = true;
@@ -92,7 +93,8 @@ TSharedRef<FJsonObject> AIceRunPlayerController::Hardware() const
 		EKeys::Gamepad_LeftShoulder, EKeys::Gamepad_RightShoulder, EKeys::Invalid, EKeys::Invalid,
 		EKeys::Gamepad_Special_Left, EKeys::Gamepad_Special_Right, EKeys::Gamepad_LeftThumbstick, EKeys::Gamepad_RightThumbstick,
 		EKeys::Gamepad_DPad_Up, EKeys::Gamepad_DPad_Down, EKeys::Gamepad_DPad_Left, EKeys::Gamepad_DPad_Right};
-	TArray<TSharedPtr<FJsonValue>> Pressed;
+	TArray<double> Values;
+	Values.Init(0.0, 16);
 	for (int32 I = 0; I < 16; ++I)
 	{
 		double Value = 0.0;
@@ -108,7 +110,31 @@ TSharedRef<FJsonObject> AIceRunPlayerController::Hardware() const
 		{
 			Value = 1.0;
 		}
-		Pressed.Add(MakeShared<FJsonValueNumber>(Value));
+		Values[I] = Value;
+	}
+	// main.gd full_hardware: the paddles onto the buttons the layout names, or onto the game's own layer.
+	if (PaddleLayout > 0)
+	{
+		static const int32 Footwork[4] = {4, 5, 0, 11};
+		static const int32 Moves[4] = {2, 1, 0, 3};
+		// pad_map.gd LAYER_BUTTON: 18 top right, 20 top left, 19 bottom right, 21 bottom left.
+		static const int32 Layer[4] = {18, 20, 19, 21};
+		if (PaddleLayout == PaddleLayer)
+		{
+			Values.SetNumZeroed(22);
+		}
+		for (int32 P = 0; P < 4; ++P)
+		{
+			if (Elite.Held[P])
+			{
+				Values[PaddleLayout == PaddleLayer ? Layer[P] : PaddleLayout == 1 ? Footwork[P] : Moves[P]] = 1.0;
+			}
+		}
+	}
+	TArray<TSharedPtr<FJsonValue>> Pressed;
+	for (const double V : Values)
+	{
+		Pressed.Add(MakeShared<FJsonValueNumber>(V));
 	}
 	struct FKeyName { FKey Key; const TCHAR* Name; };
 	static const FKeyName Keys[] = {

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "Dom/JsonObject.h"
+#include "IcePaddles.h"
 #include "IceRunPlayerController.generated.h"
 
 /** What the player asked of the game itself, this frame: not skating input. */
@@ -50,11 +51,21 @@ public:
 	/** Forgets skating presses made while the menu was open, so resuming is not a push. */
 	void ClearPending();
 
+	/**
+	 * main.gd's Elite paddle layouts: 0 the controller's own profile (the game leaves them alone),
+	 * 1 Footwork (LB, RB, A, R3), 2 Moves (X, B, A, Y), 3 the game's own layer (buttons 18-21,
+	 * game/full-controls.ts PADDLE_POSITIONS). The names are main.gd's.
+	 */
+	static constexpr int32 PaddleLayer = 3;
+	int32 PaddleLayout = 0;
+	const FIcePaddles& Paddles() const { return Elite; }
+
 private:
 	TSharedRef<FJsonObject> Hardware() const;
 	float Axis(const FKey& Key) const;
 	bool Down(const FKey& Key) const;
 
+	FIcePaddles Elite;
 	bool bPushPending = false;
 	bool bToePending = false;
 	bool bTrickPending = false;

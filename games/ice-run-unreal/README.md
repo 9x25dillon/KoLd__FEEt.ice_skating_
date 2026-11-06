@@ -82,7 +82,14 @@ its ops, so the career, the plans and the wardrobe live where they always have (
   sleeves, trim and crystals, tights, hair colour, skin tone, then the fabric and how many
   crystals), previewed on the skater and worn when kept.
 - **Settings**: setup, steadying hand, Explorer assistance, skater level, music track and on or
-  off, controller vibration, camera, display. Kept in `Saved/IceRun/preferences.json`.
+  off, controller vibration, Elite paddles, camera, display. Kept in `Saved/IceRun/preferences.json`.
+
+**Elite paddles** (a wired Xbox Elite Series 2): Unreal's Linux input drops the paddles, so the
+client reads them from the kernel itself (`IcePaddles`: the pad found through sysfs, its event node
+opened read only, its held keys polled). Settings → Elite paddles chooses `main.gd`'s layouts: the
+controller's own profile, Footwork (LB, RB, A, R3), Moves (X, B, A, Y), or the game's own layer
+(buttons 18-21: feet, free leg or weight). Lessons → Elite paddles starts their course and sets the
+game layer. The presets and the layer need the Elite on its default profile, profile LEDs off.
 
 The sound is `main.gd`'s, made live on the audio thread (`IceSound`): the blade on the ice, louder
 with speed and when an edge slips sideways, quiet in the air and on a fall; the hall's crowd,
@@ -169,5 +176,5 @@ Godot's body frame so it reads against `skater.gd`; the one conversion to Unreal
 frame is `IceSimSpace::FromBody`. A turn about an axis changes sense across that conversion,
 which is why the spine and head twists are negated there.
 
-Not yet here: Elite paddles, and a packaged build. The venue is plain next to the Godot Northlight
+Not yet here: a packaged build. The venue is plain next to the Godot Northlight
 arena.

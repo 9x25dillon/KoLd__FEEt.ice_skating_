@@ -334,6 +334,9 @@ void AIceRunGameMode::LoadPreferences()
 	if (P->TryGetNumberField(TEXT("track"), V)) TrackIndex = FMath::Max(0, int32(V));
 	P->TryGetBoolField(TEXT("music"), bMusicOn);
 	P->TryGetBoolField(TEXT("rumble"), bRumbleOn);
+	double Paddles = 0.0;
+	P->TryGetNumberField(TEXT("paddles"), Paddles);
+	PaddleLayout = FMath::Clamp(int32(Paddles), 0, AIceRunPlayerController::PaddleLayer);
 	TArray<FString> Ids;
 	if (P->TryGetStringArrayField(TEXT("sequence"), Ids) && Ids.Num() <= 16)
 	{
@@ -357,6 +360,7 @@ void AIceRunGameMode::SavePreferences() const
 	P->SetNumberField(TEXT("track"), TrackIndex);
 	P->SetBoolField(TEXT("music"), bMusicOn);
 	P->SetBoolField(TEXT("rumble"), bRumbleOn);
+	P->SetNumberField(TEXT("paddles"), PaddleLayout);
 	TArray<TSharedPtr<FJsonValue>> Ids;
 	for (const FString& Id : Sequence)
 	{
@@ -820,6 +824,28 @@ void AIceRunGameMode::BuildLessons(FMenuPage& P)
 			Str(C, TEXT("blurb")) + (Needed.IsEmpty() ? FString() : FString::Printf(TEXT("\n\nStarting it makes %s your setup."), *SetupName(Needed))),
 			[this, Id, Needed] { StartLesson(Id, Needed); }));
 	}
+	// main.gd: the paddles' own course, on your setup when it has one, else Experimental; it sets the paddles to the game's layer.
+	for (const TSharedPtr<FJsonValue>& V : CatalogList(TEXT("courses")))
+	{
+		const TSharedPtr<FJsonObject> C = V->AsObject();
+		if (Str(C, TEXT("id")) != TEXT("paddles"))
+		{
+			continue;
+		}
+		TArray<FString> Fits;
+		C->TryGetStringArrayField(TEXT("setups"), Fits);
+		const FString Target = Fits.Contains(SetupId) ? SetupId : FString(TEXT("experimental"));
+		P.Items.Add(Header(TEXT("Elite paddles")));
+		P.Items.Add(Line(FString::Printf(TEXT("%s"), *Str(C, TEXT("title"))), FString::Printf(TEXT("on %s"), *SetupName(Target)),
+			Str(C, TEXT("blurb")) + TEXT(" Starting it sets Elite paddles to the game's layer."),
+			[this, Target]
+			{
+				PaddleLayout = AIceRunPlayerController::PaddleLayer;
+				if (AIceRunPlayerController* Pc = Player()) Pc->PaddleLayout = PaddleLayout;
+				SavePreferences();
+				StartLesson(TEXT("paddles"), Target);
+			}));
+	}
 }
 
 void AIceRunGameMode::BuildSettings(FMenuPage& P)
@@ -890,6 +916,22 @@ void AIceRunGameMode::BuildSettings(FMenuPage& P)
 		RebuildPage();
 	};
 	P.Items.Add(Line(FString::Printf(TEXT("Controller vibration   ◀  %s  ▶"), bRumbleOn ? TEXT("On") : TEXT("Off")), TEXT(""), TEXT("The pad shakes on a landing: briefly for a clean one, harder for a fall."), [Rumble] { Rumble(); }, [Rumble](int32) { Rumble(); }));
+	{
+		// main.gd's Elite paddles: its four layouts, its words.
+		static const TCHAR* const Layouts[] = {TEXT("Controller's own profile"), TEXT("Footwork · LB / RB / A / R3"), TEXT("Moves · X / B / A / Y"), TEXT("Game layer · feet, free leg or weight")};
+		const AIceRunPlayerController* PC = Player();
+		const FString Pad = PC && PC->Paddles().Found() ? FString::Printf(TEXT("Elite 2 at %s: paddles ready."), *PC->Paddles().Where()) : FString(TEXT("No wired Elite 2 found: plug it in by USB."));
+		auto Paddle = [this](int32 By)
+		{
+			PaddleLayout = Wrap(PaddleLayout + By, UE_ARRAY_COUNT(Layouts));
+			if (AIceRunPlayerController* Pc = Player()) Pc->PaddleLayout = PaddleLayout;
+			SavePreferences();
+			RebuildPage();
+		};
+		P.Items.Add(Line(FString::Printf(TEXT("Elite paddles   ◀  %s  ▶"), Layouts[Wrap(PaddleLayout, UE_ARRAY_COUNT(Layouts))]), TEXT(""),
+			Pad + TEXT(" Presets and the game layer need the Elite on its default profile, profile LEDs off: a stored profile sends the paddles as ordinary buttons, which Controller's own profile uses as they are."),
+			[Paddle] { Paddle(1); }, [Paddle](int32 By) { Paddle(By); }));
+	}
 	P.Items.Add(Line(FString::Printf(TEXT("Camera   ◀  %s  ▶"), *CameraName()), TEXT(""), TEXT("View / V changes it while skating, except in the air."),
 		[this] { if (Latest.bValid) ShotCamera->Cycle(Latest.State); RebuildPage(); },
 		[this](int32) { if (Latest.bValid) ShotCamera->Cycle(Latest.State); RebuildPage(); }));

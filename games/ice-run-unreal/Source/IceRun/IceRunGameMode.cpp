@@ -720,6 +720,11 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 		const float Scrape = FMath::Clamp(float(S.Blade[0].LatSlipAccel + S.Blade[1].LatSlipAccel), 0.f, 4.f) * .08f;
 		IceSound->Set(Speed, Level, Scrape, bLive);
 	}
+	if (AIceRunPlayerController* PC = Player())
+	{
+		// The saved paddle layout reaches the controller once it exists.
+		PC->PaddleLayout = PaddleLayout;
+	}
 	if (Skater)
 	{
 		Skater->SetEffects(bPlaying && !bPaused);
