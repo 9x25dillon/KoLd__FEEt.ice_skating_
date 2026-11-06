@@ -347,6 +347,12 @@ void AIceRunHUD::DrawHUD()
 	{
 		Technical += FString::Printf(TEXT("   ·   PCS %.2f"), Num(Pcs, TEXT("total")));
 	}
+	const TSharedPtr<FJsonObject> Pairs = Obj(Raw, TEXT("pairs"));
+	if (Pairs.IsValid())
+	{
+		// main.gd: the pairs score and how much of it you skated in unison.
+		Technical = FString::Printf(TEXT("Pairs %d   ·   unison %.0f%%"), int32(Num(Pairs, TEXT("score"))), Num(Pairs, TEXT("sync")) * 100.0);
+	}
 	Line(Technical, Margin, Y, Champagne, 1.05f * U, Medium);
 	Meters(F, Margin, Y, U);
 	const TSharedPtr<FJsonObject> Landed = Obj(Raw, TEXT("jump"));
@@ -360,7 +366,9 @@ void AIceRunHUD::DrawHUD()
 	// Top right: what is being skated, on what, through which camera, and the clock.
 	{
 		const FString Setup = Mode->Setup().IsEmpty() ? FString(TEXT("Original schemes")) : Mode->Setup();
-		const double Seconds = Routine.IsValid() ? Num(Routine, TEXT("seconds")) : F.Elapsed;
+		bool bChallenge = false;
+		if (Pairs.IsValid()) Pairs->TryGetBoolField(TEXT("challenge"), bChallenge);
+		const double Seconds = Routine.IsValid() ? Num(Routine, TEXT("seconds")) : bChallenge ? Num(Pairs, TEXT("seconds")) : F.Elapsed;
 		const FString Right = FString::Printf(TEXT("%s   ·   %s   ·   %s camera   ·   %s"), *F.Mode, *Setup, *Mode->CameraName(), *Clock(Seconds));
 		float W = 0.f, H = 0.f;
 		Canvas->StrLen(Medium, Right, W, H);
@@ -414,6 +422,14 @@ void AIceRunHUD::DrawHUD()
 			Title = TEXT("Program skated");
 			Tip = TEXT("Skate it out to the end of the music.");
 		}
+	}
+	else if (F.Mode == TEXT("pairs") && Pairs.IsValid())
+	{
+		// main.gd update_hud: the phrase, its hint, where you are in it, and what your partner says.
+		Title = Str(Pairs, TEXT("title"));
+		Tip = Str(Pairs, TEXT("hint"));
+		Progress = FString::Printf(TEXT("%s   ·   phrase %d / %d"), *Str(Pairs, TEXT("status")), FMath::Min(int32(Num(Pairs, TEXT("phrase"))) + 1, int32(Num(Pairs, TEXT("phrases")))), int32(Num(Pairs, TEXT("phrases"))));
+		Cue = Str(Pairs, TEXT("message"));
 	}
 	else if (F.Mode == TEXT("rookie"))
 	{

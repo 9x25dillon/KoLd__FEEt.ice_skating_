@@ -130,6 +130,8 @@ void AIceRunGameMode::StartPlay()
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	Rink = GetWorld()->SpawnActor<AIceRink>(Params);
 	Skater = GetWorld()->SpawnActor<AIceSkater>(Params);
+	Partner = GetWorld()->SpawnActor<AIceSkater>(Params);
+	Partner->SetActorHiddenInGame(true);
 	ShotCamera = GetWorld()->SpawnActor<AIceShotCamera>(Params);
 	Music = NewObject<UAudioComponent>(this);
 	Music->bAutoActivate = false;
@@ -268,6 +270,10 @@ void AIceRunGameMode::StartRun()
 	{
 		Options->SetStringField(TEXT("course"), Course);
 	}
+	if (RunMode == TEXT("pairs"))
+	{
+		Options->SetBoolField(TEXT("pairsChallenge"), bPairsChallenge);
+	}
 	if (RunMode == TEXT("composer"))
 	{
 		TArray<TSharedPtr<FJsonValue>> Ids;
@@ -348,6 +354,39 @@ void AIceRunGameMode::Present(const FIceFrame& Frame, bool bSnap)
 	}
 	Latest = Frame;
 	Skater->ApplyFrame(Latest, bSnap);
+	// main.gd apply_partner: the partner's own sim state, carried up by the lift's height.
+	const TSharedPtr<FJsonObject>* Pairs = nullptr;
+	const bool bPairs = Latest.Raw->TryGetObjectField(TEXT("pairs"), Pairs) && Pairs->IsValid();
+	if (Partner)
+	{
+		if (bPairs && !Partner->HasModel())
+		{
+			// main.gd CHARACTERS[2]: the Black Berserker skates with you.
+			FString Manifest, Path;
+			TSharedPtr<FJsonObject> Skaters;
+			if (FFileHelper::LoadFileToString(Manifest, *FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Generated/skaters.json"))) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Manifest), Skaters) && Skaters.IsValid())
+			{
+				Skaters->TryGetStringField(TEXT("Berserker"), Path);
+			}
+			if (!Path.IsEmpty())
+			{
+				Partner->LoadModel(Path);
+			}
+		}
+		Partner->SetActorHiddenInGame(!bPairs);
+		if (bPairs)
+		{
+			const FIceFrame Theirs = FIceFrame::Parse(*Pairs);
+			if (Theirs.bValid)
+			{
+				double Height = 0.0;
+				const TSharedPtr<FJsonObject>* Lift = nullptr;
+				if ((*Pairs)->TryGetObjectField(TEXT("lift"), Lift)) (*Lift)->TryGetNumberField(TEXT("height"), Height);
+				Partner->SetLift(Height);
+				Partner->ApplyFrame(Theirs, bSnap);
+			}
+		}
+	}
 	Rink->AddTraces(Latest.Trace, Skater->LiftedBlade());
 	// A lesson's travel targets (game/tutorial.ts), the next one glowing, and an arrow on the ice toward it.
 	TArray<FIceTarget> Targets;
@@ -725,6 +764,10 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 		// The saved paddle layout reaches the controller once it exists.
 		PC->PaddleLayout = PaddleLayout;
 	}
+	if (Partner)
+	{
+		Partner->SetEffects(bPlaying && !bPaused);
+	}
 	if (Skater)
 	{
 		Skater->SetEffects(bPlaying && !bPaused);
@@ -907,7 +950,7 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 	MenuTestClock += Dt;
 	auto Pass = [this]
 	{
-		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, the program laid on its music, a career run to its result and story, training, wardrobe (skaters wear their own materials), atelier and Composer, through the live bridge"));
+		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, the program laid on its music, a career run to its result and story, training, wardrobe (skaters wear their own materials), atelier and Composer, pairs (a partner, a hand offered), through the live bridge"));
 		FPlatformMisc::RequestExitWithStatus(false, 0);
 		MenuTestStage = 99;
 	};
@@ -917,13 +960,18 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 		FPlatformMisc::RequestExitWithStatus(false, 1);
 		MenuTestStage = 99;
 	};
-	if (MenuTestStage >= 99 || Bridge.Busy())
+	if (MenuTestStage >= 99)
 	{
 		return;
 	}
 	if (MenuTestClock > 400.0)
 	{
 		Stop(TEXT("ran out of time"));
+		return;
+	}
+	// A menu op's reply first; a live run always has a frame in flight, and the walk acts during runs too.
+	if (Bridge.BusyBeyondFrames())
+	{
 		return;
 	}
 	const TSharedPtr<FJsonObject> Career = Latest.Raw.IsValid() ? Latest.Raw->GetObjectField(TEXT("career")) : nullptr;
@@ -1056,7 +1104,41 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 		const int32 Before = Sequence.Num();
 		AcceptItem(TEXT("+ Add"));
 		if (Sequence.Num() != Before + 1) { Stop(TEXT("the Composer did not add a phrase")); break; }
-		Pass();
+		PopPage();
+		MenuTestStage = AcceptItem(TEXT("Pairs")) ? 14 : (Stop(TEXT("no Pairs on the title")), 99);
+		MenuTestValue = MenuTestClock;
+		break;
+	}
+	case 14:
+	{
+		// main.gd's pairs boot test: the partner is on the ice, then a hand offered reaches them.
+		const TSharedPtr<FJsonObject>* Pairs = nullptr;
+		if (bPaused || Latest.Mode != TEXT("pairs") || !Latest.Raw->TryGetObjectField(TEXT("pairs"), Pairs))
+		{
+			if (MenuTestClock - MenuTestValue > 20.0) Stop(TEXT("pairs did not start"));
+			break;
+		}
+		if (!Partner || Partner->IsHidden() || !Partner->HasModel()) { Stop(TEXT("no partner was presented")); break; }
+		if (MenuTestClock - MenuTestValue < 1.0) break;
+		if (AIceRunPlayerController* PC = Player()) PC->OfferHand();
+		MenuTestValue = MenuTestClock;
+		MenuTestStage = 15;
+		break;
+	}
+	case 15:
+	{
+		const TSharedPtr<FJsonObject>* Pairs = nullptr;
+		bool bOffered = false;
+		if (Latest.Raw->TryGetObjectField(TEXT("pairs"), Pairs)) (*Pairs)->TryGetBoolField(TEXT("holdRequested"), bOffered);
+		if (bOffered)
+		{
+			UE_LOG(LogIceRun, Display, TEXT("Menu walk: pairs, the partner %.2f m away took the offered hand."), (*Pairs)->GetNumberField(TEXT("distance")));
+			Pass();
+		}
+		else if (MenuTestClock - MenuTestValue > 5.0)
+		{
+			Stop(TEXT("the hand offer never reached the partner"));
+		}
 		break;
 	}
 	default:

@@ -66,9 +66,12 @@ public:
 public:
 	/** skater.gd effects_active: the snow flies only while a run is being skated, not under a menu. */
 	void SetEffects(bool bOn) { bEffects = bOn; }
+	/** skater.gd lift_height: a pairs partner carried this high, metres, over her own jump height. */
+	void SetLift(double Height) { LiftHeight = FMath::Max(0.0, Height); }
 
 private:
 	bool bEffects = true;
+	double LiftHeight = 0.0;
 
 private:
 	void MeasureRig();

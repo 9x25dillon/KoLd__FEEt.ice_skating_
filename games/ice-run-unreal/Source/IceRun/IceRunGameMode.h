@@ -282,6 +282,12 @@ private:
 	UPROPERTY()
 	TObjectPtr<AIceSkater> Skater;
 
+	/** The pairs partner (main.gd's partner: the sim skates them too), shown only in pairs. */
+	UPROPERTY()
+	TObjectPtr<AIceSkater> Partner;
+	/** The next pairs run is the 90-second challenge. */
+	bool bPairsChallenge = false;
+
 	UPROPERTY()
 	TObjectPtr<AIceRink> Rink;
 

@@ -78,6 +78,10 @@ its ops, so the career, the plans and the wardrobe live where they always have (
   region; **Style** picks the arm focus and its drill.
 - **The result**: the chapter's ending, the protocol, the XP, the standings, and the replay.
 - **The Composer**: your own free program, phrase by phrase.
+- **Pairs** (`game/pairs.ts`): a partner the sim skates too, the Black Berserker as in the Godot
+  game, through five phrases: matching edges, hand in hand (G / D-pad left), a side-by-side spin,
+  a supported lift (T / D-pad right; the partner rises with it), a final line. The HUD keeps the
+  pairs score and how much of it you skated in unison. **Pairs challenge** runs it against 90 s.
 - **Wardrobe**: four skaters, the costumes, and the atelier: a design in a slot (bodice, skirt,
   sleeves, trim and crystals, tights, hair colour, skin tone, then the fabric and how many
   crystals), previewed on the skater and worn when kept.
@@ -139,7 +143,9 @@ skates the 75-second program in a few seconds.
 
 The menus have their own walk, a player's way through them against the live bridge: the
 Season, a plan changed and put back, the first event laid on its music and skated to its result
-and story, a stat trained, a costume changed, a design kept and worn, a Composer phrase added.
+and story, a stat trained, a costume changed, the skater changed and back (each wearing only its
+own materials), a design kept and worn, a Composer phrase added, and pairs started with a hand
+offered to the partner.
 
 ```sh
 UnrealEditor-Cmd games/ice-run-unreal/IceRun.uproject -game -nullrhi -unattended -IceMenuTest -UseFixedTimeStep -FPS=60

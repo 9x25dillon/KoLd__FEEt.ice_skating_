@@ -50,6 +50,8 @@ public:
 	FIceMenuPresses TakeMenuPresses();
 	/** Forgets skating presses made while the menu was open, so resuming is not a push. */
 	void ClearPending();
+	/** G / D-pad left, as the menu walk presses it: offer the pairs partner a hand. */
+	void OfferHand() { bPairHoldPending = true; }
 
 	/**
 	 * main.gd's Elite paddle layouts: 0 the controller's own profile (the game leaves them alone),

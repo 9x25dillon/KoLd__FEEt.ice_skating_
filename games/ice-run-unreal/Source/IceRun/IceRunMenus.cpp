@@ -400,6 +400,9 @@ void AIceRunGameMode::BuildHome(FMenuPage& P)
 		if (RunLive() && Latest.Mode == TEXT("free")) CloseMenu();
 		else StartMode(TEXT("free"));
 	}));
+	P.Items.Add(Line(TEXT("Pairs"), TEXT("with a partner"), TEXT("Skate with a partner the sim skates too: matching edges, hand in hand, a side-by-side spin, a supported lift, a final line together."),
+		[this] { bPairsChallenge = false; StartMode(TEXT("pairs")); }));
+	P.Items.Add(Line(TEXT("Pairs challenge"), TEXT("90 s"), TEXT("The pairs phrases against the clock."), [this] { bPairsChallenge = true; StartMode(TEXT("pairs")); }));
 	P.Items.Add(Line(TEXT("Rookie gates"), TEXT(""), TEXT("A curved lane of eight gates and two foam bars to jump."), [this] { StartMode(TEXT("rookie")); }));
 	P.Items.Add(Line(TEXT("Light course"), TEXT("90 s"), TEXT("Carve from light to light against the clock."), [this] { StartMode(TEXT("timed")); }));
 	const TArray<TSharedPtr<FJsonObject>> Worn = Costumes();

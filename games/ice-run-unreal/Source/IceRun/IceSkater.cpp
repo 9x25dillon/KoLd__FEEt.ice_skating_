@@ -315,7 +315,7 @@ void AIceSkater::ApplyFrame(const FIceFrame& Frame, bool bSnap)
 		Spray->Clear();
 		bSkirtDirty = true;
 		Facing = FMath::Atan2(State.Heading.Y, State.Heading.X);
-		SetActorLocationAndRotation(IceSimSpace::Point(State.Pos.X, State.Pos.Y, FMath::Max(0.0, State.JumpZ)),
+		SetActorLocationAndRotation(IceSimSpace::Point(State.Pos.X, State.Pos.Y, FMath::Max(0.0, State.JumpZ) + LiftHeight),
 			FRotator(0.0, -FMath::RadiansToDegrees(Facing), 0.0));
 		bInitialized = true;
 	}
@@ -501,7 +501,7 @@ void AIceSkater::Pose(float Dt)
 	// velocity between them and only ease out what that leaves.
 	const FVector Velocity = IceSimSpace::Direction(S.Vel.X, S.Vel.Y) * IceSimSpace::CmPerM;
 	const double Rise = bAir ? S.JumpVz : 0.0;
-	const FVector Truth = IceSimSpace::Point(S.Pos.X, S.Pos.Y, FMath::Max(0.0, S.JumpZ + Rise * FrameAge)) + Velocity * FrameAge;
+	const FVector Truth = IceSimSpace::Point(S.Pos.X, S.Pos.Y, FMath::Max(0.0, S.JumpZ + Rise * FrameAge) + LiftHeight) + Velocity * FrameAge;
 	const FVector Position = bInitialized
 		? FMath::Lerp(GetActorLocation() + (Velocity + FVector::UpVector * Rise * IceSimSpace::CmPerM) * Dt, Truth, Ease(18.0, Dt))
 		: Truth;

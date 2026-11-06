@@ -61,7 +61,7 @@ test('the live engine skates the first career routine in Unreal', {skip: !exists
   assert.match(out, /UNREAL_SMOKE_PASS/);
 });
 
-test('the menus walk a career round through the live engine: plan, music, skate, result and story, train, dress, compose', {skip: !existsSync(editorCmd) || !built ? 'needs UE_ROOT, a built module and the prepared runtime' : false, timeout: 600_000}, () => {
+test('the menus walk a career round through the live engine: plan, music, skate, result and story, train, dress, compose, pairs', {skip: !existsSync(editorCmd) || !built ? 'needs UE_ROOT, a built module and the prepared runtime' : false, timeout: 600_000}, () => {
   const out = execFileSync(editorCmd, [join(root, 'IceRun.uproject'), '-game', '-nullrhi', '-unattended', '-nosplash', '-nosound', '-IceMenuTest', '-UseFixedTimeStep', '-FPS=60', '-stdout', '-FullStdOutLogOutput'], {encoding: 'utf8', maxBuffer: 256 << 20});
   assert.match(out, /UNREAL_MENUS_PASS/);
 });
