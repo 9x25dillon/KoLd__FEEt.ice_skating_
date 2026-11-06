@@ -306,6 +306,35 @@ void AIceSkater::MeasureRig()
 void AIceSkater::ApplyFrame(const FIceFrame& Frame, bool bSnap)
 {
 	State = Frame.State;
+	bPreviewFall = false;
+	// game/choreo.ts: the bridge's plans; one it has dropped fades out from where it is.
+	if (bSnap)
+	{
+		BasePlan = FIcePlan();
+		TopPlan = FIcePlan();
+	}
+	auto Take = [](FIcePlan& Mine, double& MyAt, const FIcePlan& Theirs)
+	{
+		if (Theirs.bValid)
+		{
+			if (!Mine.bValid || Mine.Id != Theirs.Id)
+			{
+				Mine = Theirs;
+			}
+			else
+			{
+				Mine.Dur = Theirs.Dur;
+				Mine.BlendOut = Theirs.BlendOut;
+			}
+			MyAt = Theirs.At;
+		}
+		else if (Mine.bValid)
+		{
+			Mine.Dur = FMath::Min(Mine.Dur, MyAt + FMath::Min(Mine.BlendOut, .3));
+		}
+	};
+	Take(BasePlan, BaseAt, Frame.Base);
+	Take(TopPlan, TopAt, Frame.Top);
 	bHaveState = true;
 	bPoseLow = Frame.bLow;
 	ArmStyle = Frame.ArmStyle;
@@ -492,6 +521,18 @@ void AIceSkater::FollowSpin(float Dt, bool bUpright, bool bAir)
 
 void AIceSkater::Pose(float Dt)
 {
+	// game/choreo.ts: where each plan is now, and how much of it shows.
+	BaseAt += Dt;
+	TopAt += Dt;
+	if (bPreviewFall && TopAt >= TopPlan.Dur)
+	{
+		bPreviewFall = false;
+		State.bFallen = false;
+	}
+	const FIceKey BaseKey = BasePlan.bValid ? BasePlan.Sample(BaseAt) : FIceKey();
+	const FIceKey TopKey = TopPlan.bValid ? TopPlan.Sample(TopAt) : FIceKey();
+	const double BaseW = BasePlan.bValid ? BasePlan.Blend(BaseAt) * BasePlan.Weight : 0.0;
+	const double TopW = TopPlan.bValid ? TopPlan.Blend(TopAt) * TopPlan.Weight : 0.0;
 	const FIceState& S = State;
 	const bool bAir = S.JumpPhase == IceJumpPhase::Air;
 	// The last moment of a flight opens up for the ice: arms, free leg, landing foot.
@@ -583,6 +624,15 @@ void AIceSkater::Pose(float Dt)
 		Spine = Hip + FMath::Lerp(FVector(-FallSide * .03, .20, -.04), FVector(FallSide * .16, .14, .03), FallRoll);
 		Neck = Spine + FMath::Lerp(FVector(-FallSide * .02, .36, -.02), FVector(FallSide * .30, .22, .05), FallRoll);
 		Head = Neck + FVector(-FallSide * .02, .10, -.03);
+		if (TopW > 0.0 && TopKey.Fall.bHas)
+		{
+			// The way down the physics chose (game/choreo.ts), x toward the side she falls on.
+			const FVector Mirror(FallSide, 1.0, 1.0);
+			Hip = FMath::Lerp(Hip, TopKey.Fall.Hip * Mirror, TopW);
+			Spine = FMath::Lerp(Spine, TopKey.Fall.Spine * Mirror, TopW);
+			Neck = FMath::Lerp(Neck, TopKey.Fall.Neck * Mirror, TopW);
+			Head = FMath::Lerp(Head, TopKey.Fall.Head * Mirror, TopW);
+		}
 	}
 	// Authored poses ease in as offsets, so a settled skater is the sim exactly.
 	const double EasePose = Ease(PoseRate, Dt);
@@ -594,6 +644,35 @@ void AIceSkater::Pose(float Dt)
 	Spine = SettledSpine + TrunkOffsets[1];
 	Neck = SettledNeck + TrunkOffsets[2];
 	Head = SettledHead + TrunkOffsets[3];
+	// game/choreo.ts: the plans' bend of the trunk (a bow, an absorb, an arch), and their shoulder
+	// twist, head turn and chin, toward side A where a side applies. Zero with no plan.
+	double PlanTwist = 0.0, PlanTurn = 0.0, PlanChin = 0.0;
+	{
+		double Pitch = 0.0, Roll = 0.0;
+		auto AddTrunk = [&](const FIcePlan& Plan, const FIceKey& Key, double W)
+		{
+			if (W <= 0.0 || !Key.Trunk.bHas)
+			{
+				return;
+			}
+			const double A = SideA(Plan) == 1 ? 1.0 : -1.0;
+			Pitch = FMath::Lerp(Pitch, Key.Trunk.Pitch, W);
+			Roll = FMath::Lerp(Roll, -A * Key.Trunk.Roll, W);
+			PlanTwist = FMath::Lerp(PlanTwist, -A * Key.Trunk.Twist, W);
+			PlanTurn = FMath::Lerp(PlanTurn, -A * Key.Trunk.Turn, W);
+			PlanChin = FMath::Lerp(PlanChin, Key.Trunk.Chin, W);
+		};
+		AddTrunk(BasePlan, BaseKey, BaseW);
+		AddTrunk(TopPlan, TopKey, TopW);
+		if (!S.bFallen && (Pitch != 0.0 || Roll != 0.0))
+		{
+			// A forward bend turns up toward -z about x; a roll toward +x is negative about z.
+			const FQuat Bend = FQuat(Right, -Pitch) * FQuat(FVector(0.0, 0.0, 1.0), Roll);
+			Spine = Hip + Bend.RotateVector(Spine - Hip);
+			Neck = Hip + Bend.RotateVector(Neck - Hip);
+			Head = Hip + Bend.RotateVector(Head - Hip);
+		}
+	}
 	// The trunk's bones keep their lengths through every authored shape.
 	Spine = Hip + (Spine - Hip).GetSafeNormal() * HipsLength;
 	Neck = Spine + (Neck - Spine).GetSafeNormal() * SpineLength;
@@ -623,6 +702,8 @@ void AIceSkater::Pose(float Dt)
 		OverTheHips = OffLine * Smooth(0.0, .5, UE_DOUBLE_PI / 2.0 - FMath::Abs(OffLine));
 	}
 	UpperTurn = FMath::Lerp(UpperTurn, S.Twist + Curve + TrunkSwing + FMath::Clamp(OverTheHips, -ShoulderHold, ShoulderHold), EaseArm);
+	// The shoulders as drawn: the physics' turn and the plan's twist (zero with no plan).
+	const double Shoulders = UpperTurn + PlanTwist;
 	// Forward, the eyes go where the ice is going; backward, down along the blade's own line.
 	double Looking = 0.0;
 	double EyesDown = 0.0;
@@ -630,18 +711,19 @@ void AIceSkater::Pose(float Dt)
 	if (bGrounded && !bSpinning && SkatingBlade.LongSpeed < -.8)
 	{
 		const FVector2D Along = SkatingBlade.Tangent;
-		Looking = FMath::Clamp(FMath::Atan2(Cross2(S.Heading, Along), FVector2D::DotProduct(S.Heading, Along)), -1.25, 1.25) - UpperTurn;
+		Looking = FMath::Clamp(FMath::Atan2(Cross2(S.Heading, Along), FVector2D::DotProduct(S.Heading, Along)), -1.25, 1.25) - Shoulders;
 		EyesDown = 1.0;
 	}
 	else if (S.Vel.Size() > .8 && !bAir)
 	{
-		Looking = FMath::Clamp(FMath::Atan2(Cross2(S.Heading, S.Vel), FVector2D::DotProduct(S.Heading, S.Vel)), -1.25, 1.25) - UpperTurn;
+		Looking = FMath::Clamp(FMath::Atan2(Cross2(S.Heading, S.Vel), FVector2D::DotProduct(S.Heading, S.Vel)), -1.25, 1.25) - Shoulders;
 	}
 	HeadTurn = FMath::Lerp(HeadTurn, Looking, Ease(5.0, Dt));
 	HeadDown = FMath::Lerp(HeadDown, EyesDown, Ease(4.0, Dt));
 	UpdateFace(Dt, Looking, EyesDown, bAir);
-	AimBone(TEXT("Spine"), Spine, Neck, UpperTurn);
-	AimBone(TEXT("Head"), Neck, Head + FVector(0.0, .17, 0.0) + RotY(FVector(0.0, 0.0, -GazeDown * HeadDown), HeadTurn + UpperTurn), HeadTurn);
+	AimBone(TEXT("Spine"), Spine, Neck, Shoulders);
+	// The chin lifts the head's aim back (+z); a plan's turn adds to where she looks.
+	AimBone(TEXT("Head"), Neck, Head + FVector(0.0, .17, 0.0) + RotY(FVector(0.0, 0.0, -GazeDown * HeadDown + PlanChin * .17), HeadTurn + PlanTurn + Shoulders), HeadTurn + PlanTurn);
 	const FQuat TrunkTilt = FQuat::FindBetweenNormals(Up, BodyAxis);
 	// The trunk leans with the edge; the shoulders stay nearer level than it does.
 	const FQuat ShoulderTilt = FQuat::FindBetweenNormals(Up, FMath::Lerp(BodyAxis, Up, ShouldersLevel).GetSafeNormal());
@@ -691,6 +773,27 @@ void AIceSkater::Pose(float Dt)
 			// The other knee up and that foot flat ahead of her, ready to get up from.
 			Free = FVector(-FallSide * .10, AnkleHeight, -.50);
 		}
+		if (S.bFallen && TopW > 0.0 && TopKey.Fall.bHas)
+		{
+			const FVector Mirror(FallSide, 1.0, 1.0);
+			Free = FMath::Lerp(Free, (bUnder ? TopKey.Fall.Under : TopKey.Fall.Other) * Mirror, TopW);
+		}
+		else if (!S.bFallen && I != S.SupportFoot)
+		{
+			// game/choreo.ts: the free leg's line, a landing's extension, an arabesque, a curtsey.
+			auto LegTo = [&](const FIceKey& Key, double W)
+			{
+				if (W > 0.0 && Key.bHasLeg)
+				{
+					// Within the leg's own length: a line authored past reach straightens the knee
+					// without placing the boot beyond the shin (measured: 0.91 m asked of a 0.77 m leg).
+					const FVector Line(Side * Key.Leg.X + (bGrounded ? Base.X / Support : 0.0), Key.Leg.Y, Key.Leg.Z);
+					Free = FMath::Lerp(Free, H + (Line - H).GetClampedToMaxSize(Thigh + Shin - .01), W);
+				}
+			};
+			LegTo(BaseKey, BaseW);
+			LegTo(TopKey, TopW);
+		}
 		// Spinning, the free foot draws in to cross the skating knee as the arms do.
 		if (bUprightSpin)
 		{
@@ -729,6 +832,12 @@ void AIceSkater::Pose(float Dt)
 		const FVector Pointed = FVector(Side * FMath::Sin(FreeToeTurnout), -.32, -FMath::Cos(FreeToeTurnout)).GetSafeNormal();
 		FVector LooseToe = FMath::Lerp(FMath::Lerp(RotY(FVector(0.0, 0.0, -1.0), -Side * .6), Pointed, Backing), Toe, Planting);
 		FVector LooseUp = FMath::Lerp(Up, BladeUp, Planting);
+		if (!S.bFallen && I != S.SupportFoot)
+		{
+			// A plan's extended leg points its toe, turned out.
+			const double Pointing = FMath::Max(BaseKey.bHasLeg ? BaseKey.Point * BaseW : 0.0, TopKey.bHasLeg ? TopKey.Point * TopW : 0.0);
+			LooseToe = FMath::Lerp(LooseToe, Pointed, Pointing * (1.0 - Planting)).GetSafeNormal();
+		}
 		FVector Pole = FMath::Lerp(FVector(0.0, 0.0, -1.0), Toe, .5 * Planting);
 		if (bUnder)
 		{
@@ -760,7 +869,7 @@ void AIceSkater::Pose(float Dt)
 			float(1.0 + 1.6 * FMath::Clamp(Blade.NormalLoad / BodyWeight, 0.0, 1.5)),
 			bEffects && bOnIce && Blade.LatSlipAccel > .3 && FMath::Abs(Blade.LongSpeed) > 1.0);
 
-		const FVector Shoulder = Neck + ShoulderTilt.RotateVector(RotY(FVector(Side * ShoulderRest.X, -ShoulderRest.Y, 0.0), UpperTurn));
+		const FVector Shoulder = Neck + ShoulderTilt.RotateVector(RotY(FVector(Side * ShoulderRest.X, -ShoulderRest.Y, 0.0), Shoulders));
 		double Spread = !bAir ? .43 : FMath::Clamp(S.JumpInertia / 6.0, .12, .44);
 		if (bSpinning)
 		{
@@ -834,6 +943,35 @@ void AIceSkater::Pose(float Dt)
 			Elbow = RotY(RotX(Elbow, UpperAngle), ArmLag * .35 * ArmEnergy);
 			Hand = Elbow + RotY(RotX(HangingForearm, ForearmAngle), ArmLag);
 		}
+		// game/choreo.ts: the plans' arms over the pose the physics gave. Balance first: a phrase gives
+		// way as the arms catch an edge; a spin's line follows the sim's own inertia; the air is the
+		// physics' alone. The wrist lengthens with the position.
+		double DroopScale = 1.0;
+		{
+			auto ArmTo = [&](const FIcePlan& Plan, const FIceKey& Key, double W)
+			{
+				const FIceArmShape& Shape = I == SideA(Plan) ? Key.ArmA : Key.ArmB;
+				if (W <= 0.0 || !Shape.bHas)
+				{
+					return;
+				}
+				FVector Reach(Side * Shape.H.X, Shape.H.Y, Shape.H.Z);
+				if (Shape.bIce)
+				{
+					// A hand down: its height is above the ice, the shoulder's own height below it.
+					Reach.Y = Shape.H.Y - Shoulder.Y;
+				}
+				Elbow = FMath::Lerp(Elbow, FVector(Side * Shape.E.X, Shape.E.Y, Shape.E.Z), W);
+				Hand = FMath::Lerp(Hand, Reach, W);
+				DroopScale = FMath::Lerp(DroopScale, 1.0 - Shape.W, W);
+			};
+			const bool bFlying = bAir && !bComingDown;
+			double WB = BaseW;
+			if (BasePlan.Kind == TEXT("phrase")) WB *= 1.0 - .6 * Catching;
+			if (BasePlan.Kind == TEXT("spin") && bUprightSpin) WB *= ArmOpen[I];
+			ArmTo(BasePlan, BaseKey, bFlying ? 0.0 : WB);
+			ArmTo(TopPlan, TopKey, bFlying ? 0.0 : TopW);
+		}
 		// A save is quick at any tier; only free carriage takes its time.
 		double LimbEase = EaseArm;
 		if (bFreeToSwing && Finish <= 0.0)
@@ -843,7 +981,7 @@ void AIceSkater::Pose(float Dt)
 		ArmTargets[I * 2] = FMath::Lerp(ArmTargets[I * 2], Elbow, LimbEase);
 		ArmTargets[I * 2 + 1] = FMath::Lerp(ArmTargets[I * 2 + 1], Hand, LimbEase);
 		// The arms ride the shoulders round and over with the trunk.
-		const FQuat Carried = ShoulderTilt * FQuat(Up, UpperTurn);
+		const FQuat Carried = ShoulderTilt * FQuat(Up, Shoulders);
 		const FVector ElbowAt = Shoulder + Carried.RotateVector(ArmTargets[I * 2]).GetSafeNormal() * UpperArm;
 		const FVector HandAt = ElbowAt + (Shoulder + Carried.RotateVector(ArmTargets[I * 2 + 1]) - ElbowAt).GetSafeNormal() * Forearm;
 		AimBone(FName(TEXT("Arm") + Suffix), Shoulder, ElbowAt);
@@ -852,7 +990,7 @@ void AIceSkater::Pose(float Dt)
 		const FVector Along = (HandAt - ElbowAt).GetSafeNormal();
 		const FVector HandMoved = (HandAt - HandLast[I]) / FMath::Max(double(Dt), .001);
 		HandLast[I] = HandAt;
-		const double Droop = FMath::Lerp(WristDroopFunction, WristDroopExpression, ArmStyle);
+		const double Droop = FMath::Lerp(WristDroopFunction, WristDroopExpression, ArmStyle) * DroopScale;
 		const FVector Bend = LimitLength(Down * Droop - HandMoved * WristDrag * ArmStyle, .7);
 		HandAim[I] = FMath::Lerp(HandAim[I], (Along + Bend).GetSafeNormal(), Ease(WristRate, Dt)).GetSafeNormal();
 		AimBone(FName(TEXT("Hand") + Suffix), HandAt, HandAt + HandAim[I] * .1);
@@ -1150,4 +1288,38 @@ int32 AIceSkater::ForeignMaterials() const
 		Count += Worn != Own[I].MaterialInterface ? 1 : 0;
 	}
 	return Count;
+}
+
+int32 AIceSkater::SideA(const FIcePlan& Plan) const
+{
+	if (Plan.Rel == TEXT("left")) return 0;
+	if (Plan.Rel == TEXT("right")) return 1;
+	// FallSide is +1 when she goes down to her right (x right in the body frame).
+	if (Plan.Rel == TEXT("fall")) return FallSide > 0.0 ? 1 : 0;
+	return FMath::Clamp(State.SupportFoot, 0, 1);
+}
+
+void AIceSkater::PlayPreview(const FIcePlan& Plan)
+{
+	if (!Plan.bValid)
+	{
+		return;
+	}
+	FIcePlan Shown = Plan;
+	Shown.Id = -1;
+	const bool bBase = Plan.Kind == TEXT("phrase") || Plan.Kind == TEXT("spin") || Plan.Kind == TEXT("spiral");
+	(bBase ? BasePlan : TopPlan) = Shown;
+	(bBase ? BaseAt : TopAt) = 0.0;
+	if (!bBase && BasePlan.bValid)
+	{
+		// The preview is the whole show: what she was dancing before lets go.
+		BasePlan.Dur = FMath::Min(BasePlan.Dur, BaseAt + .2);
+	}
+	if (Plan.Kind == TEXT("fall"))
+	{
+		// Down for the length of the preview, then up again.
+		bPreviewFall = true;
+		State.bFallen = true;
+		FallClock = -1.0;
+	}
 }

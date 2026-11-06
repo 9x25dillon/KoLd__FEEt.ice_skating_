@@ -439,3 +439,39 @@ test('the season has its story: chapters in the catalog, the coach in the snapsh
  assert.ok(r.story.length>40,r.story);
  assert.equal(r.finale,'','no season ending before the championship');
 });
+
+test('the choreographer dances on the snapshot: a landing names its exit and the element call, a style is configured, a preview plays',()=>{
+ // game/choreo.ts through the bridge: chosen from the landing record, carried in snapshot.choreo.
+ const e=new IceEngine();
+ e.configure({style:'showman'});
+ e.start({mode:'free'});
+ assert.equal(e.snapshot().choreo.style,'showman');
+ assert.throws(()=>e.configure({style:'disco'}),/Unknown style/);
+ assert.deepEqual(e.catalog().styles.map(s=>s.id),['classical','contemporary','athletic','showman']);
+ // A clean triple Lutz, as the solver would leave it: the exit, the call, the GOE.
+ e.state.landed={...e.state.landed,tick:e.state.tick+1,kind:4,revolutions:3,turned:3,landingQuality:.92,takeoffQuality:.8,height:.3,airTime:.5};
+ e.tick({...NEUTRAL_INPUT});
+ const s=e.snapshot();
+ assert.equal(s.choreo.top.kind,'landing');
+ assert.match(s.choreo.top.label,/^Flowing exit · Triple Lutz · Showman, the counter check/);
+ assert.equal(s.element.label,'3Lz');
+ assert.equal(s.element.tier,'flow');
+ assert.equal(s.element.name,'Triple Lutz');
+ assert.ok(Number.isFinite(s.element.goe),'the panel graded it');
+ // The menu's preview: a fall onto the hip, no run needed.
+ const fall=e.previewChoreo({what:'fall',variant:'boards'}).plan;
+ assert.equal(fall.kind,'fall');assert.equal(fall.rel,'fall');assert.ok(fall.keys.length>=2&&fall.dur>1);
+ assert.throws(()=>e.previewChoreo({what:'cartwheel'}),/Unknown preview/);
+});
+
+test('a replay dances as its run did: the same plans at the same ticks',()=>{
+ const e=new IceEngine();
+ e.start({mode:'free'});
+ const live=[];
+ for(let i=0;i<120;i++){const f=e.advance({kx:i%60<30?-.4:.4},6,false);live.push(JSON.stringify([f.choreo.base?.label??null,f.choreo.top?.label??null]));}
+ const clip=e.exportReplay();
+ e.replay(clip);
+ const again=[];
+ for(let i=0;i<120;i++){const f=e.advance({},6,false);again.push(JSON.stringify([f.choreo.base?.label??null,f.choreo.top?.label??null]));}
+ assert.deepEqual(again,live);
+});

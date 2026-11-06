@@ -66,6 +66,80 @@ struct FIceTraceSample
 	bool bContact[2] = {false, false};
 };
 
+/** game/choreo.ts's arm: the elbow's direction and the hand's point from the shoulder, x outward on its own side. */
+struct FIceArmShape
+{
+	FVector E = FVector::ZeroVector;
+	FVector H = FVector::ZeroVector;
+	/** The wrist: 0 soft, 1 long (allongé). */
+	double W = .5;
+	/** The hand's y is its height above the ice. */
+	bool bIce = false;
+	bool bHas = false;
+};
+
+/** game/choreo.ts's trunk and head, radians, toward the plan's side A where a side applies. */
+struct FIceTrunk
+{
+	double Pitch = 0.0;
+	double Roll = 0.0;
+	double Twist = 0.0;
+	double Chin = 0.0;
+	double Turn = 0.0;
+	bool bHas = false;
+};
+
+/** A fall's trunk on the ice, x toward the side she falls on. */
+struct FIceFallFrame
+{
+	FVector Hip = FVector::ZeroVector;
+	FVector Spine = FVector::ZeroVector;
+	FVector Neck = FVector::ZeroVector;
+	FVector Head = FVector::ZeroVector;
+	FVector Under = FVector::ZeroVector;
+	FVector Other = FVector::ZeroVector;
+	bool bHas = false;
+};
+
+struct FIceKey
+{
+	double T = 0.0;
+	FIceArmShape ArmA;
+	FIceArmShape ArmB;
+	FVector Leg = FVector::ZeroVector;
+	bool bHasLeg = false;
+	double Point = 0.0;
+	FIceTrunk Trunk;
+	FIceFallFrame Fall;
+};
+
+/**
+ * A choreography plan (game/choreo.ts): a short timeline in the body frame that the skater blends
+ * over the pose the physics gives. Played on the client's own clock from where the bridge said it was.
+ */
+struct FIcePlan
+{
+	bool bValid = false;
+	int32 Id = 0;
+	FString Kind;
+	FString Label;
+	/** left, right, support, fall: which side is A. */
+	FString Rel;
+	double Dur = 0.0;
+	double BlendIn = .1;
+	double BlendOut = .3;
+	double Weight = 1.0;
+	/** Seconds into the plan when the bridge sent it. */
+	double At = 0.0;
+	TArray<FIceKey> Keys;
+
+	static FIcePlan Parse(const TSharedPtr<FJsonObject>& Object);
+	/** The plan at T seconds: between its keys, smoothstepped. */
+	FIceKey Sample(double T) const;
+	/** Its weight at T seconds: eased in over BlendIn, out over the last BlendOut. */
+	double Blend(double T) const;
+};
+
 /**
  * One bridge snapshot (bridge/engine.mjs IceEngine.snapshot): the state in
  * typed fields, the words and scores the HUD shows, and the rest kept as JSON.
@@ -86,6 +160,9 @@ struct FIceFrame
 	int32 SpinLevel = -1;
 	FString Combo;
 	TArray<FIceTraceSample> Trace;
+	/** game/choreo.ts: the base plan (port de bras, a spin's line) and the top one (a landing, a fall, the bow). */
+	FIcePlan Base;
+	FIcePlan Top;
 	TSharedPtr<FJsonObject> Raw;
 
 	static FIceFrame Parse(const TSharedPtr<FJsonObject>& Snapshot);

@@ -92,6 +92,9 @@ FIceFrame FIceFrame::Parse(const TSharedPtr<FJsonObject>& Snapshot)
 	Snapshot->TryGetStringField(TEXT("move"), Frame.MoveLabel);
 	Snapshot->TryGetStringField(TEXT("recover"), Frame.Recover);
 	Snapshot->TryGetStringField(TEXT("combo"), Frame.Combo);
+	const TSharedPtr<FJsonObject> Choreo = Child(Snapshot, TEXT("choreo"));
+	Frame.Base = FIcePlan::Parse(Child(Choreo, TEXT("base")));
+	Frame.Top = FIcePlan::Parse(Child(Choreo, TEXT("top")));
 	Frame.bLow = Flag(Snapshot, TEXT("low"));
 	Frame.bFinished = Flag(Snapshot, TEXT("finished"));
 	Frame.Elapsed = Number(Snapshot, TEXT("elapsed"));
@@ -127,4 +130,169 @@ FIceFrame FIceFrame::Parse(const TSharedPtr<FJsonObject>& Snapshot)
 		}
 	}
 	return Frame;
+}
+
+namespace
+{
+	FVector Vec3(const TSharedPtr<FJsonObject>& O, const TCHAR* Key, bool& bHas)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* A = nullptr;
+		if (!O.IsValid() || !O->TryGetArrayField(Key, A) || A->Num() < 3)
+		{
+			return FVector::ZeroVector;
+		}
+		bHas = true;
+		return FVector((*A)[0]->AsNumber(), (*A)[1]->AsNumber(), (*A)[2]->AsNumber());
+	}
+
+	FIceArmShape ArmOf(const TSharedPtr<FJsonObject>& O)
+	{
+		FIceArmShape Arm;
+		if (!O.IsValid())
+		{
+			return Arm;
+		}
+		bool bE = false, bH = false;
+		Arm.E = Vec3(O, TEXT("e"), bE);
+		Arm.H = Vec3(O, TEXT("h"), bH);
+		Arm.W = Number(O, TEXT("w"), .5);
+		Arm.bIce = Flag(O, TEXT("ice"));
+		Arm.bHas = bE && bH;
+		return Arm;
+	}
+
+	FIceArmShape MixArm(const FIceArmShape& A, const FIceArmShape& B, double T)
+	{
+		if (!A.bHas || !B.bHas)
+		{
+			return B.bHas ? B : A;
+		}
+		FIceArmShape Out = B;
+		Out.E = FMath::Lerp(A.E, B.E, T);
+		Out.H = FMath::Lerp(A.H, B.H, T);
+		Out.W = FMath::Lerp(A.W, B.W, T);
+		return Out;
+	}
+}
+
+FIcePlan FIcePlan::Parse(const TSharedPtr<FJsonObject>& O)
+{
+	FIcePlan Plan;
+	if (!O.IsValid())
+	{
+		return Plan;
+	}
+	Plan.Id = int32(Number(O, TEXT("id")));
+	O->TryGetStringField(TEXT("kind"), Plan.Kind);
+	O->TryGetStringField(TEXT("label"), Plan.Label);
+	O->TryGetStringField(TEXT("rel"), Plan.Rel);
+	Plan.Dur = Number(O, TEXT("dur"));
+	Plan.BlendIn = Number(O, TEXT("blendIn"), .1);
+	Plan.BlendOut = Number(O, TEXT("blendOut"), .3);
+	Plan.Weight = Number(O, TEXT("weight"), 1.0);
+	Plan.At = Number(O, TEXT("at"));
+	const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
+	if (O->TryGetArrayField(TEXT("keys"), Keys))
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Keys)
+		{
+			const TSharedPtr<FJsonObject> K = V->AsObject();
+			if (!K.IsValid())
+			{
+				continue;
+			}
+			FIceKey Key;
+			Key.T = Number(K, TEXT("t"));
+			Key.ArmA = ArmOf(Child(K, TEXT("armA")));
+			Key.ArmB = ArmOf(Child(K, TEXT("armB")));
+			Key.Leg = Vec3(K, TEXT("leg"), Key.bHasLeg);
+			Key.Point = Number(K, TEXT("point"));
+			if (const TSharedPtr<FJsonObject> T = Child(K, TEXT("trunk")))
+			{
+				Key.Trunk.bHas = true;
+				Key.Trunk.Pitch = Number(T, TEXT("pitch"));
+				Key.Trunk.Roll = Number(T, TEXT("roll"));
+				Key.Trunk.Twist = Number(T, TEXT("twist"));
+				Key.Trunk.Chin = Number(T, TEXT("chin"));
+				Key.Trunk.Turn = Number(T, TEXT("turn"));
+			}
+			if (const TSharedPtr<FJsonObject> F = Child(K, TEXT("fall")))
+			{
+				bool bAll = true, bOne = false;
+				Key.Fall.Hip = Vec3(F, TEXT("hip"), bOne); bAll &= bOne; bOne = false;
+				Key.Fall.Spine = Vec3(F, TEXT("spine"), bOne); bAll &= bOne; bOne = false;
+				Key.Fall.Neck = Vec3(F, TEXT("neck"), bOne); bAll &= bOne; bOne = false;
+				Key.Fall.Head = Vec3(F, TEXT("head"), bOne); bAll &= bOne; bOne = false;
+				Key.Fall.Under = Vec3(F, TEXT("under"), bOne); bAll &= bOne; bOne = false;
+				Key.Fall.Other = Vec3(F, TEXT("other"), bOne); bAll &= bOne;
+				Key.Fall.bHas = bAll;
+			}
+			Plan.Keys.Add(Key);
+		}
+	}
+	Plan.bValid = Plan.Keys.Num() > 0 && Plan.Dur > 0.0;
+	return Plan;
+}
+
+FIceKey FIcePlan::Sample(double T) const
+{
+	if (Keys.Num() == 0)
+	{
+		return FIceKey();
+	}
+	if (T <= Keys[0].T)
+	{
+		return Keys[0];
+	}
+	for (int32 I = 1; I < Keys.Num(); ++I)
+	{
+		const FIceKey& A = Keys[I - 1];
+		const FIceKey& B = Keys[I];
+		if (T > B.T)
+		{
+			continue;
+		}
+		const double U = B.T > A.T ? (T - A.T) / (B.T - A.T) : 1.0;
+		const double S = U * U * (3.0 - 2.0 * U);
+		FIceKey Out = B;
+		Out.T = T;
+		Out.ArmA = MixArm(A.ArmA, B.ArmA, S);
+		Out.ArmB = MixArm(A.ArmB, B.ArmB, S);
+		if (A.bHasLeg && B.bHasLeg)
+		{
+			Out.Leg = FMath::Lerp(A.Leg, B.Leg, S);
+		}
+		Out.Point = FMath::Lerp(A.Point, B.Point, S);
+		if (A.Trunk.bHas && B.Trunk.bHas)
+		{
+			Out.Trunk.Pitch = FMath::Lerp(A.Trunk.Pitch, B.Trunk.Pitch, S);
+			Out.Trunk.Roll = FMath::Lerp(A.Trunk.Roll, B.Trunk.Roll, S);
+			Out.Trunk.Twist = FMath::Lerp(A.Trunk.Twist, B.Trunk.Twist, S);
+			Out.Trunk.Chin = FMath::Lerp(A.Trunk.Chin, B.Trunk.Chin, S);
+			Out.Trunk.Turn = FMath::Lerp(A.Trunk.Turn, B.Trunk.Turn, S);
+		}
+		if (A.Fall.bHas && B.Fall.bHas)
+		{
+			Out.Fall.Hip = FMath::Lerp(A.Fall.Hip, B.Fall.Hip, S);
+			Out.Fall.Spine = FMath::Lerp(A.Fall.Spine, B.Fall.Spine, S);
+			Out.Fall.Neck = FMath::Lerp(A.Fall.Neck, B.Fall.Neck, S);
+			Out.Fall.Head = FMath::Lerp(A.Fall.Head, B.Fall.Head, S);
+			Out.Fall.Under = FMath::Lerp(A.Fall.Under, B.Fall.Under, S);
+			Out.Fall.Other = FMath::Lerp(A.Fall.Other, B.Fall.Other, S);
+		}
+		return Out;
+	}
+	return Keys.Last();
+}
+
+double FIcePlan::Blend(double T) const
+{
+	if (!bValid || T < 0.0 || T >= Dur)
+	{
+		return 0.0;
+	}
+	const double In = BlendIn > 0.0 ? FMath::Clamp(T / BlendIn, 0.0, 1.0) : 1.0;
+	const double Out = BlendOut > 0.0 ? FMath::Clamp((Dur - T) / BlendOut, 0.0, 1.0) : 1.0;
+	const double W = FMath::Min(In, Out);
+	return W * W * (3.0 - 2.0 * W);
 }

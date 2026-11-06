@@ -34,6 +34,8 @@ import {ComboTracker} from '../runtime/sim/combo.js';
 import {Playground,SNOWFLAKES,TARGETS} from '../runtime/game/playground.js';
 import {resolveRinkCollision,RINK} from '../runtime/game/rink.js';
 import {PairsSession,PAIRS_PHRASES} from '../runtime/game/pairs.js';
+import {Choreographer,physiqueOf,isStyle,STYLES,landingTier,TIER_TITLES,jumpName,styleOf,phraseKeys,landingPlanKeys,fallKeys,FALL_TITLES,riseKeys,RISE_TITLES,bowKeys} from '../runtime/game/choreo.js';
+import {noResult} from '../runtime/sim/jump.js';
 import {readFileSync} from 'node:fs';
 
 const tables=loadTables(readFileSync(new URL('../runtime/data/scale-of-values.csv',import.meta.url),'utf8'),readFileSync(new URL('../runtime/data/calls-and-deductions.csv',import.meta.url),'utf8'));
@@ -52,9 +54,11 @@ export class IceEngine {
   this.profile=0; this.cruise=true; this.sequence=['glide','edge','jump','spin','pose'];
   // game/steady.ts: null follows the setup's own default (the owner's pick); a level is the player's choice.
   this.steadyChoice=null; this.hand=new SteadyHand(steadyStrength(this.steadyLevel()));
+  // game/choreo.ts: the skater's style of movement, and the choreographer that dances it on the states.
+  this.style='classical'; this.choreo=new Choreographer(this.style);
   this.start({mode:'free'});
  }
- catalog() {return {story:{coach:COACH,season:SEASON,chapters:CHAPTERS,cast:cast(),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {story:{coach:COACH,season:SEASON,chapters:CHAPTERS,cast:cast(),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,styles:STYLES.map(s=>({id:s.id,title:s.title,blurb:s.blurb})),setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson'].includes(mode)) throw Error('Unknown skating mode');
@@ -96,6 +100,9 @@ export class IceEngine {
   if(timeline&&!this.routine.setCues(cueTimes(tracks[timeline.track],timeline)))throw Error('This program no longer matches its music');
   this.lesson=mode==='lesson'?(course==='trust'?new Tutorial(this.setup):new Tutorial(this.setup,0,courseSteps(courseById(course),this.setup))):null;this.lessonXp=0;
   this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
+  // A new run dances from nothing, in the chosen style, with this body (the career's own, worn).
+  this.choreo.reset();this.choreo.setStyle(this.style);this.choreo.setPhysique(physiqueOf(mode==='career'?this.career.bodyProfile:SAMPLE_PROFILES[this.profile]));
+  this.lastElement=null;this.comboLinked='';
   // The live free-skate readout game/main.ts already has (frame.technical above is its jump half) —
   // sample every tick a spin is live, score the moment it ends. -1 means no spin has finished yet;
   // scoreSpinLevel's own 0 is a real result, "level B", so it cannot double as that sentinel.
@@ -119,6 +126,7 @@ export class IceEngine {
   if(o.profile!==undefined){if(!Number.isInteger(o.profile)||!SAMPLE_PROFILES[o.profile])throw Error('Unknown profile');this.profile=o.profile;}
   if(this.setup){this.scheme=3;if(this.setup!=='repertoire')this.beginner=false;if(this.setup==='simulation'||this.setup==='experimental')this.cruise=false;}
   if(o.steady!==undefined)this.steadyChoice=o.steady;
+  if(o.style!==undefined){if(!isStyle(o.style))throw Error('Unknown style');this.style=o.style;this.choreo.setStyle(o.style);}
   // At once, mid-run too: it is a hand on the input, nothing in the params.
   this.hand.strength=steadyStrength(this.steadyLevel());
  }
@@ -144,6 +152,8 @@ export class IceEngine {
      if(replayDigest(this.pairs.partner,this.pairs.events)!==recorded.digest)this.pairMismatch=true;
     }
     if(this.player.done||this.pairMismatch){this.finished=true;this.result={title:this.player.divergence||this.pairMismatch?'Replay mismatch':'Replay verified',detail:`${this.player.index} ticks${this.pairs?' · both partners':''}`,replay:true};}
+    // The replay's states dance as the run's did: the same choreographer on the same states.
+    this.comboLinked=this.combo.sample(this.state);this.dance();
    } else {
     const s=this.state;
     const canPush=!s.fallen&&s.move===MOVE.None&&s.jump.phase===JUMP_PHASE.None&&!c.brake&&!c.spin&&!c.turn&&!c.twizzle&&!c.inaBauer&&!low;
@@ -189,12 +199,17 @@ export class IceEngine {
   }
   if(this.mode==='timed')this.run.sample(this.state,SIM_DT);
   // Free Skate stays quiet per the bible. The original playground remains available in runtime.
-  if(this.state.landed.tick>=0&&this.scoredTick!==this.state.landed.tick){this.scoredTick=this.state.landed.tick;this.technical+=scoreJump(tables,this.state.landed)?.score??0;}
+  if(this.state.landed.tick>=0&&this.scoredTick!==this.state.landed.tick){
+   this.scoredTick=this.state.landed.tick;const landed=this.state.landed,scored=scoreJump(tables,landed);this.technical+=scored?.score??0;
+   // The element call the broadcast shows: the protocol's label and the panel's GOE, beside the landing's own tier.
+   const tier=landingTier(landed);
+   this.lastElement={tick:landed.tick,label:scored?.label??'',name:jumpName(landed),goe:scored?.goe??null,score:scored?.score??0,base:scored?.baseValue??0,tier,tierTitle:TIER_TITLES[tier],landingQuality:landed.landingQuality,takeoffQuality:landed.takeoffQuality};
+  }
   if(this.state.spin.changeCompletedTick>=0&&this.state.spin.changeCompletedTick!==this.lastChangeCompletedTick){
    this.lastChangeCompletedTick=this.state.spin.changeCompletedTick;this.footChangeFlash=1.2;
   }
   this.footChangeFlash=Math.max(0,this.footChangeFlash-SIM_DT);
-  const linked=this.combo.sample(this.state);if(linked){this.comboLabel=linked;this.comboFlash=1.8;}
+  const linked=this.combo.sample(this.state);this.comboLinked=linked;if(linked){this.comboLabel=linked;this.comboFlash=1.8;}
   this.comboFlash=Math.max(0,this.comboFlash-SIM_DT);
   const spinning=this.state.move===MOVE.Spin;
   if(spinning)this.spinTracker.sample(this.state.spin);
@@ -214,6 +229,34 @@ export class IceEngine {
    this.finished=true;this.result={story,finale:last?finale(place):'',title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls${r.cues?` · ${r.cueResults.filter(x=>x==='on').length}/${r.cues.length} on the music`:''}`,protocol,xp,complete:r.complete,stopped,body:this.bodyNote(),standings:this.mode==='career'&&r.complete?standings(this.event,r.segmentScore):null};
   } else if(this.drill?.done&&!this.finished){const gained=this.career.recordDrill(this.drill.focus,this.drill.score);this.finished=true;this.result={title:`${ARM_FOCUS[this.drill.focus].title} drill: ${this.drill.score} / 100`,body:this.bodyNote(),detail:gained>0?`A new best, up ${gained}. Your arms give up less for ${ARM_FOCUS[this.drill.focus].title} now.`:`Your best stays ${this.career.armBest[this.drill.focus]}.`,complete:true};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
+  this.dance();
+ }
+ /**
+  * A plan for a menu's preview, with no run: the style's port de bras, a jump's exit at a quality,
+  * a combination's finale, a fall, a rise, the bow (game/choreo.ts), on this skater's body.
+  */
+ previewChoreo(o={}){
+  const style=styleOf(isStyle(o.style)?o.style:this.style),ph=physiqueOf(this.mode==='career'?this.career.bodyProfile:SAMPLE_PROFILES[this.profile]);
+  const what=String(o.what??'phrase');let kind='phrase',label='',rel='right',keys=[],dur=0;
+  if(what==='phrase'){const n=style.phrases.length,i=((Number.isInteger(o.index)?o.index:0)%n+n)%n;keys=phraseKeys(style.phrases[i],0.6,style,0);label=`${style.title} port de bras ${i+1}`;}
+  else if(what==='landing'){
+   const revs=Number.isInteger(o.revolutions)?o.revolutions:3,tier=String(o.tier??'flow');
+   const r={...noResult(),tick:0,kind:Number.isInteger(o.jump)?o.jump:4,revolutions:revs,turned:revs,takeoffQuality:.8,height:.3,airTime:.5,
+    landingQuality:{flow:.92,solid:.66,tight:.42,stepout:.28,twofoot:.6,under:.6}[tier]??.92,stepOut:tier==='stepout',twoFoot:tier==='twofoot',rotationCall:tier==='under'?2:0,shortBy:tier==='under'?.3:0};
+   const built=landingPlanKeys(r,{style,physique:ph,fatigue:0,finale:Boolean(o.finale),combo:o.finale?'3Lz+3T':''});keys=built.keys;dur=built.dur;label=built.label;kind='landing';rel='support';
+  }
+  else if(what==='fall'){const v=Object.hasOwn(FALL_TITLES,o.variant)?o.variant:'washout';keys=fallKeys(v,ph);kind='fall';rel='fall';label=FALL_TITLES[v];dur=keys.at(-1).t+1.8;}
+  else if(what==='rise'){const v=Object.hasOwn(RISE_TITLES,o.variant)?o.variant:'kneel';keys=riseKeys(v);kind='rise';rel='fall';label=RISE_TITLES[v];}
+  else if(what==='bow'){keys=bowKeys(style);kind='bow';rel='left';label=`The bow · ${style.title}`;}
+  else throw Error('Unknown preview');
+  if(!dur)dur=keys.at(-1).t+.4;
+  return {plan:{id:-1,kind,label,rel,at:0,dur,blendIn:.25,blendOut:.4,weight:1,keys}};
+ }
+ /** game/choreo.ts on the state this tick left: presentation only, so a replay of the same states dances the same. */
+ dance(){
+  const t=tracks[this.runTrack??this.track];
+  this.choreo.sample(this.state,{time:this.elapsed,beat:t?{bpm:t.bpm,offset:t.offset}:null,combo:this.comboLinked??'',expression:this.armStyle??1,finished:this.finished,bows:this.mode==='career'||this.mode==='composer',fallError:this.params.fallError});
+  this.comboLinked='';
  }
  finishLesson(){
   const l=this.lesson,title=this.course==='trust'?'You trust the ice.':'Your hands know the way.';
@@ -294,7 +337,7 @@ export class IceEngine {
    :s.turn.kind===TURN_KIND.Loop?'Loop':s.turn.kind===TURN_KIND.Rocker?'Rocker'
    :'Three-turn';
   const move=s.fallen?`Recover · ${recoverHow(words)}`:s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
-  return {pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+  return {choreo:this.choreo.view(this.elapsed),element:this.lastElement,style:this.style,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    recover:recoverHow(words),
    tutorial:l?{unproven:l.step?.id==='spin'&&this.setup==='explorer'?UNPROVEN_AIR:'',course:this.course,index:l.index,total:l.steps.length,title:l.step?.title??'',

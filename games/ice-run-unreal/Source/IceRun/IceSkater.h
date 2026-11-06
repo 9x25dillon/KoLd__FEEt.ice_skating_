@@ -68,10 +68,26 @@ public:
 	void SetEffects(bool bOn) { bEffects = bOn; }
 	/** skater.gd lift_height: a pairs partner carried this high, metres, over her own jump height. */
 	void SetLift(double Height) { LiftHeight = FMath::Max(0.0, Height); }
+	/**
+	 * A plan from a menu's preview (game/choreo.ts through the bridge's choreo op), played on the
+	 * skater's own clock with no frames: a phrase on the base, anything else on top; a fall's plan
+	 * puts her down for its length.
+	 */
+	void PlayPreview(const FIcePlan& Plan);
+	/** The top plan she is dancing now, for the HUD, or empty. */
+	FString DancingLabel() const { return TopPlan.bValid && TopAt < TopPlan.Dur ? TopPlan.Label : FString(); }
 
 private:
 	bool bEffects = true;
 	double LiftHeight = 0.0;
+	// game/choreo.ts: the plans she is dancing, each on her own clock from where the bridge last said.
+	FIcePlan BasePlan;
+	FIcePlan TopPlan;
+	double BaseAt = 0.0;
+	double TopAt = 0.0;
+	bool bPreviewFall = false;
+	/** Which arm is a plan's side A: 0 left, 1 right. */
+	int32 SideA(const FIcePlan& Plan) const;
 
 private:
 	void MeasureRig();

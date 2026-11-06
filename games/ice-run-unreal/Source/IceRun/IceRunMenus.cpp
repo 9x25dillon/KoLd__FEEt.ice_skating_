@@ -231,6 +231,7 @@ void AIceRunGameMode::BuildPage(const FString& Id, FMenuPage& P)
 	else if (Id == TEXT("result")) BuildResult(P);
 	else if (Id == TEXT("music")) BuildMusic(P);
 	else if (Id == TEXT("controller")) BuildController(P);
+	else if (Id == TEXT("gallery")) BuildGallery(P);
 	else BuildHome(P);
 	if (!PageNotice.IsEmpty())
 	{
@@ -335,6 +336,11 @@ void AIceRunGameMode::LoadPreferences()
 	if (P->TryGetNumberField(TEXT("track"), V)) TrackIndex = FMath::Max(0, int32(V));
 	P->TryGetBoolField(TEXT("music"), bMusicOn);
 	P->TryGetBoolField(TEXT("rumble"), bRumbleOn);
+	FString Style;
+	if (P->TryGetStringField(TEXT("style"), Style) && !Style.IsEmpty())
+	{
+		StyleId = Style;
+	}
 	const TSharedPtr<FJsonObject>* Profile = nullptr;
 	if (P->TryGetObjectField(TEXT("controllerProfile"), Profile))
 	{
@@ -366,6 +372,7 @@ void AIceRunGameMode::SavePreferences() const
 	P->SetNumberField(TEXT("track"), TrackIndex);
 	P->SetBoolField(TEXT("music"), bMusicOn);
 	P->SetBoolField(TEXT("rumble"), bRumbleOn);
+	P->SetStringField(TEXT("style"), StyleId);
 	if (ControllerProfile.IsValid())
 	{
 		P->SetObjectField(TEXT("controllerProfile"), ControllerProfile);
@@ -706,6 +713,29 @@ void AIceRunGameMode::BuildWardrobe(FMenuPage& P)
 	P.Items.Add(Line(FString::Printf(TEXT("Skater   ◀  %s  ▶"), Characters[Wrap(CharacterIndex, UE_ARRAY_COUNT(Characters))].Name), TEXT(""), TEXT("Four models, one skeleton: every one is posed from the same physics."),
 		[this] { CharacterIndex++; LoadSkaterModel(); SavePreferences(); RebuildPage(); },
 		[this](int32 By) { CharacterIndex += By; LoadSkaterModel(); SavePreferences(); RebuildPage(); }));
+	{
+		// game/choreo.ts: how she moves, in every mode: the arms' vocabulary, the exits' flourishes, the bow.
+		const TArray<TSharedPtr<FJsonValue>>& Styles = CatalogList(TEXT("styles"));
+		int32 Picked = 0;
+		for (int32 I = 0; I < Styles.Num(); ++I) if (Str(At(Styles, I), TEXT("id")) == StyleId) Picked = I;
+		const TSharedPtr<FJsonObject> Now = At(Styles, Picked);
+		auto Move = [this, Picked, Count = Styles.Num()](int32 By)
+		{
+			const TSharedPtr<FJsonObject> Next = At(CatalogList(TEXT("styles")), Wrap(Picked + By, FMath::Max(1, Count)));
+			if (!Next.IsValid()) return;
+			StyleId = Str(Next, TEXT("id"));
+			SavePreferences();
+			Configure();
+			// A taste of it at once: the style's first phrase on the showcase skater.
+			TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("what"), TEXT("phrase"));
+			PreviewChoreo(O);
+			RebuildPage();
+		};
+		P.Items.Add(Line(FString::Printf(TEXT("Style of movement   ◀  %s  ▶"), *Str(Now, TEXT("title"))), TEXT(""), Str(Now, TEXT("blurb")),
+			[Move] { Move(1); }, [Move](int32 By) { Move(By); }));
+		P.Items.Add(Line(TEXT("Movement gallery →"), TEXT(""), TEXT("Every arm phrase, landing, fall, rise and bow she has, danced on demand."), [this] { PushPage(TEXT("gallery")); }));
+	}
 	P.Items.Add(Line(FString::Printf(TEXT("Costume   ◀  %s  ▶"), List.IsValidIndex(CostumeIndex) ? *Str(List[CostumeIndex], TEXT("name")) : TEXT("")), TEXT(""),
 		List.IsValidIndex(CostumeIndex) ? Str(List[CostumeIndex], TEXT("description")) : FString(),
 		[this] { CostumeIndex++; WearCostume(); SavePreferences(); RebuildPage(); },
@@ -1222,4 +1252,89 @@ void AIceRunGameMode::BuildController(FMenuPage& P)
 		const FString Press = (bModified ? ButtonName(int32(Num(Now, TEXT("modifier")))) + TEXT(" + ") : FString()) + ButtonName(int32(Num(B, TEXT("button"))));
 		P.Rows.Add({FString(), Str(A, TEXT("name")), Press, false});
 	}
+}
+
+void AIceRunGameMode::PreviewChoreo(const TSharedRef<FJsonObject>& Options)
+{
+	Options->SetStringField(TEXT("style"), StyleId);
+	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetObjectField(TEXT("options"), Options);
+	SendOp(TEXT("choreo"), Payload);
+}
+
+void AIceRunGameMode::BuildGallery(FMenuPage& P)
+{
+	const TArray<TSharedPtr<FJsonValue>>& Styles = CatalogList(TEXT("styles"));
+	FString StyleTitle = StyleId;
+	for (const TSharedPtr<FJsonValue>& V : Styles) if (Str(V->AsObject(), TEXT("id")) == StyleId) StyleTitle = Str(V->AsObject(), TEXT("title"));
+	P.Title = TEXT("Movement gallery");
+	P.Subtitle = FString::Printf(TEXT("%s   ·   A plays it on the skater"), *StyleTitle);
+	P.Story = TEXT("Every animation is chosen on the ice by what the physics did: the landing's quality and calls, the jump and its combination, the way she fell and how fast, how fresh her legs are. Here each one plays on demand. Falls always take her down onto the hip, never her front.");
+	auto Play = [this](TFunction<void(FJsonObject&)> Fill)
+	{
+		return [this, Fill]
+		{
+			TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+			Fill(*O);
+			PreviewChoreo(O);
+		};
+	};
+	P.Items.Add(Header(TEXT("Port de bras · while she glides")));
+	for (int32 I = 0; I < 3; ++I)
+	{
+		P.Items.Add(Line(FString::Printf(TEXT("Phrase %d"), I + 1), StyleTitle, TEXT("On the music's beat, a position every bar or two; it gives way whenever her arms are needed for balance."),
+			Play([I](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("phrase")); O.SetNumberField(TEXT("index"), I); })));
+	}
+	static const TCHAR* const Jumps[] = {TEXT("Toe loop"), TEXT("Salchow"), TEXT("Loop"), TEXT("Flip"), TEXT("Lutz"), TEXT("Axel")};
+	static const TCHAR* const Exits[] = {TEXT("the classic check"), TEXT("the sweep"), TEXT("the crossed release"), TEXT("the lifted line"), TEXT("the counter check"), TEXT("the forward carry")};
+	P.Items.Add(Header(TEXT("Each jump's own exit · a clean triple")));
+	for (int32 J = 0; J < 6; ++J)
+	{
+		P.Items.Add(Line(FString::Printf(TEXT("Triple %s"), Jumps[J]), Exits[J], TEXT("A flowing exit: the jump's own check, the free leg's line, the style's flourish."),
+			Play([J](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("landing")); O.SetNumberField(TEXT("jump"), J); O.SetStringField(TEXT("tier"), TEXT("flow")); })));
+	}
+	struct FTier { const TCHAR* Id; const TCHAR* Title; const TCHAR* Why; };
+	static const FTier Tiers[] = {
+		{TEXT("flow"), TEXT("Flowing exit"), TEXT("High landing quality and clean calls: held long, finished by the style.")},
+		{TEXT("solid"), TEXT("Clean landing"), TEXT("Landed well: a shorter hold, no flourish.")},
+		{TEXT("tight"), TEXT("Tight landing"), TEXT("Just held: the arms snap out for balance and the trunk folds over the knee.")},
+		{TEXT("stepout"), TEXT("Step out"), TEXT("The free foot goes down; the arms fight for it. A steadier body flails less.")},
+		{TEXT("twofoot"), TEXT("Two-footed"), TEXT("Both blades take it, arms forward low.")},
+		{TEXT("under"), TEXT("Under-rotated"), TEXT("Short of rotation: the shoulders still turning as the blade meets the ice.")},
+	};
+	P.Items.Add(Header(TEXT("How well it was done · a triple Lutz")));
+	for (const FTier& T : Tiers)
+	{
+		const FString Tier = T.Id;
+		P.Items.Add(Line(T.Title, TEXT(""), T.Why, Play([Tier](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("landing")); O.SetNumberField(TEXT("jump"), 4); O.SetStringField(TEXT("tier"), Tier); })));
+	}
+	P.Items.Add(Header(TEXT("Combinations")));
+	P.Items.Add(Line(TEXT("Combination finale"), TEXT("3Lz+3T"), TEXT("The landing that ends a combination: held longer, and the style's flourish whatever the jump. The landings inside it gather for the next takeoff instead."),
+		Play([](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("landing")); O.SetNumberField(TEXT("jump"), 0); O.SetStringField(TEXT("tier"), TEXT("flow")); O.SetBoolField(TEXT("finale"), true); })));
+	P.Items.Add(Line(TEXT("A quad's exit"), TEXT("4T"), TEXT("More revolutions hold longer."),
+		Play([](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("landing")); O.SetNumberField(TEXT("jump"), 0); O.SetNumberField(TEXT("revolutions"), 4); O.SetStringField(TEXT("tier"), TEXT("flow")); })));
+	struct FFall { const TCHAR* Id; const TCHAR* Title; const TCHAR* When; };
+	static const FFall Falls[] = {
+		{TEXT("washout"), TEXT("Edge washes out"), TEXT("Leaning past what the edge can hold, at speed.")},
+		{TEXT("sitdown"), TEXT("Sits down"), TEXT("Balance lost slowly, or pitched back onto the heel.")},
+		{TEXT("spinout"), TEXT("Spins out"), TEXT("Going down out of a spin, or with the rotation still on.")},
+		{TEXT("toepick"), TEXT("Toe pick"), TEXT("Caught by the toe pick, or pitched forward: she turns as she goes, onto the outer thigh.")},
+		{TEXT("hard"), TEXT("Hard landing"), TEXT("A fall from a big jump: a harder bounce.")},
+		{TEXT("under"), TEXT("Short of rotation"), TEXT("A landing too far short: the heel skids out from under.")},
+		{TEXT("boards"), TEXT("Into the boards"), TEXT("Hitting the boards hard enough to fall.")},
+		{TEXT("collapse"), TEXT("Both feet go"), TEXT("A two-footed landing that does not hold.")},
+	};
+	P.Items.Add(Header(TEXT("Falls · always onto the hip")));
+	for (const FFall& F : Falls)
+	{
+		const FString Variant = F.Id;
+		P.Items.Add(Line(F.Title, TEXT(""), F.When, Play([Variant](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("fall")); O.SetStringField(TEXT("variant"), Variant); })));
+	}
+	P.Items.Add(Header(TEXT("Getting up")));
+	P.Items.Add(Line(TEXT("Up by the knee"), TEXT(""), TEXT("Most skaters, most days."), Play([](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("rise")); O.SetStringField(TEXT("variant"), TEXT("kneel")); })));
+	P.Items.Add(Line(TEXT("Pops straight up"), TEXT(""), TEXT("A strong, springy, fresh body."), Play([](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("rise")); O.SetStringField(TEXT("variant"), TEXT("pop")); })));
+	P.Items.Add(Line(TEXT("Slowly back up"), TEXT(""), TEXT("Spent legs, late in a program."), Play([](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("rise")); O.SetStringField(TEXT("variant"), TEXT("slow")); })));
+	P.Items.Add(Header(TEXT("The end of a program")));
+	P.Items.Add(Line(TEXT("The bow"), StyleTitle, TEXT("A curtsey, a bow from the waist, an arm across the heart or a wave: each style its own."),
+		Play([](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("bow")); })));
 }

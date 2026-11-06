@@ -30,6 +30,7 @@ lines.on('line',line=>{
    case 'rest':engine.rest(req.region);data=engine.snapshot();break;
    case 'plan':engine.setPlan(req.event,req.plan);data=engine.snapshot();break;
    case 'timeline':data=engine.timeline(req.options);break;
+   case 'choreo':data=engine.previewChoreo(req.options);break;
    case 'dress':data={skin:engine.dress(req.design)};break;
    case 'design':engine.saveDesign(req.slot,req.design);data=engine.snapshot();break;
    case 'skipStep':data=engine.skipStep();break;

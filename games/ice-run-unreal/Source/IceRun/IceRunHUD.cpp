@@ -481,6 +481,15 @@ void AIceRunHUD::DrawHUD()
 		Line(Cue, Margin, BY, Ink, .95f * U, Medium);
 	}
 
+	// game/choreo.ts names each animation as it begins (an exit, a fall, a rise, the bow): a caption above the balance meter.
+	if (Mode->CaptionLeft() > 0.0 && !Mode->Caption().IsEmpty())
+	{
+		const float Fade = FMath::Clamp(float(Mode->CaptionLeft()) / .5f, 0.f, 1.f);
+		float CW = 0.f, CH = 0.f;
+		Canvas->StrLen(Medium, Mode->Caption(), CW, CH);
+		float CY = Canvas->ClipY - 104.f * U;
+		Line(Mode->Caption(), (Canvas->ClipX - CW * .85f * U) * .5f, CY, FLinearColor(Champagne.R, Champagne.G, Champagne.B, Fade), .85f * U, Medium);
+	}
 	// main.gd's broadcast plate: TAKE THE ICE, CLEAN LANDING, FIND YOUR EDGE, for three and a half seconds.
 	if (Mode->AnnouncementLeft() > 0.0 && !Mode->AnnouncementTitle().IsEmpty())
 	{

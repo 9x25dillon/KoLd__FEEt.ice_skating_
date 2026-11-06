@@ -112,6 +112,9 @@ public:
 	}
 	/** The broadcast's announcement (main.gd broadcast.announce): a title, its detail, and the seconds it has left. */
 	const FString& AnnouncementTitle() const { return AnnounceTitle; }
+	/** The animation just begun (game/choreo.ts's plan label: a landing's exit, a fall, a rise, the bow), and its seconds left. */
+	const FString& Caption() const { return CaptionText; }
+	double CaptionLeft() const { return CaptionTime; }
 	const FString& AnnouncementDetail() const { return AnnounceDetail; }
 	double AnnouncementLeft() const { return AnnounceLeft; }
 	const FString& Notice() const { return NoticeText; }
@@ -150,6 +153,8 @@ private:
 	void BuildResult(FMenuPage& P);
 	/** A career program laid on its music (game/composer.ts through the bridge's timeline op). */
 	void BuildMusic(FMenuPage& P);
+	/** Every animation game/choreo.ts has, played on demand on the showcase skater. */
+	void BuildGallery(FMenuPage& P);
 	/** main.gd's controller page: tuning, the feet layout, the bindings, defaults. */
 	void BuildController(FMenuPage& P);
 	void TimelineOp(const TSharedRef<FJsonObject>& Options);
@@ -247,6 +252,13 @@ private:
 	bool bRumbleOn = true;
 	/** main.gd paddle_layout, kept here for the preferences and handed to the controller. */
 	int32 PaddleLayout = 0;
+	/** game/choreo.ts's style of movement: classical, contemporary, athletic, showman. Sent with configure. */
+	FString StyleId = TEXT("classical");
+	/** Asks the bridge for a preview plan (game/choreo.ts) and plays it on the showcase skater. */
+	void PreviewChoreo(const TSharedRef<FJsonObject>& Options);
+	FString CaptionText;
+	double CaptionTime = 0.0;
+	int32 CaptionPlan = 0;
 	/**
 	 * The controller profile (game/controller.ts: stick deadzone and curve, lean and trigger
 	 * sensitivity, the feet layout, the bindings): the bridge's, as its `controller` op last

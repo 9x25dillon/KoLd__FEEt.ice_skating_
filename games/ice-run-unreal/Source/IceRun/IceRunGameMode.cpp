@@ -68,6 +68,8 @@ void AIceRunGameMode::StartPlay()
 	bAuto = FParse::Param(Line, TEXT("IceAuto"));
 	FParse::Value(Line, TEXT("IceSetup="), SetupId);
 	FParse::Value(Line, TEXT("IceMode="), RunMode);
+	// game/choreo.ts's style of movement, for stills and tests (the menus keep the player's).
+	FParse::Value(Line, TEXT("IceStyle="), StyleId);
 	FParse::Value(Line, TEXT("IceEvent="), EventIndex);
 	FParse::Value(Line, TEXT("IceCourse="), Course);
 	FParse::Value(Line, TEXT("IceSteady="), SteadyChoice);
@@ -248,6 +250,7 @@ void AIceRunGameMode::Configure()
 	Options->SetNumberField(TEXT("scheme"), Scheme);
 	Options->SetBoolField(TEXT("beginner"), bBeginner);
 	Options->SetBoolField(TEXT("cruise"), bCruise);
+	Options->SetStringField(TEXT("style"), StyleId);
 	if (SteadyChoice.IsEmpty())
 	{
 		Options->SetField(TEXT("steady"), MakeShared<FJsonValueNull>());
@@ -354,6 +357,13 @@ void AIceRunGameMode::Present(const FIceFrame& Frame, bool bSnap)
 	}
 	Latest = Frame;
 	Skater->ApplyFrame(Latest, bSnap);
+	if (Latest.Top.bValid && Latest.Top.Id != CaptionPlan && Latest.Top.Kind != TEXT("phrase"))
+	{
+		// game/choreo.ts names each animation as it begins: shown under the skating for a few seconds.
+		CaptionPlan = Latest.Top.Id;
+		CaptionText = Latest.Top.Label;
+		CaptionTime = 3.0;
+	}
 	// main.gd apply_partner: the partner's own sim state, carried up by the lift's height.
 	const TSharedPtr<FJsonObject>* Pairs = nullptr;
 	const bool bPairs = Latest.Raw->TryGetObjectField(TEXT("pairs"), Pairs) && Pairs->IsValid();
@@ -526,6 +536,12 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 				TimelineOp(Open);
 			}
 			OpenMenu(OpenPage);
+			FString GalleryPick;
+			// -IceGallery=Triple_Lutz: underscores for spaces, which the command line will not carry.
+			if (FParse::Value(FCommandLine::Get(), TEXT("IceGallery="), GalleryPick) && !AcceptItem(GalleryPick.Replace(TEXT("_"), TEXT(" "))))
+			{
+				UE_LOG(LogIceRun, Warning, TEXT("No gallery entry starts with \"%s\"."), *GalleryPick);
+			}
 		}
 		else if (!bTitleShown && !bSmoke && ShotTimes.Num() == 0)
 		{
@@ -574,6 +590,19 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		CloseMenu();
 		StartMusic();
 		Announce(TEXT("THE REPLAY"), RunPlace());
+	}
+	else if (Reply.Op == TEXT("choreo"))
+	{
+		// A preview plan: danced on the showcase skater with no frames (the menu is up).
+		const TSharedPtr<FJsonObject>* Plan = nullptr;
+		if (Reply.Data->TryGetObjectField(TEXT("plan"), Plan))
+		{
+			const FIcePlan Shown = FIcePlan::Parse(*Plan);
+			Skater->PlayPreview(Shown);
+			CaptionText = Shown.Label;
+			CaptionTime = FMath::Max(3.0, Shown.Dur);
+			UE_LOG(LogIceRun, Log, TEXT("Preview: %s (%.1f s)."), *Shown.Label, Shown.Dur);
+		}
 	}
 	else if (Reply.Op == TEXT("controller"))
 	{
@@ -768,6 +797,7 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 		if (PreviewLeft <= 0.0 && Preview) Preview->FadeOut(.6f, 0.f);
 	}
 	AnnounceLeft = FMath::Max(0.0, AnnounceLeft - DeltaSeconds);
+	CaptionTime = FMath::Max(0.0, CaptionTime - DeltaSeconds);
 	if (IceSound && Latest.bValid)
 	{
 		// main.gd fill_audio's inputs: the blade's level by speed (quiet in the air, down, or under a menu), the slip's scrape.
@@ -969,7 +999,7 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 	MenuTestClock += Dt;
 	auto Pass = [this]
 	{
-		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, the program laid on its music, a career run to its result and story, training, wardrobe (skaters wear their own materials), atelier and Composer, controller tuning, pairs (a partner, a hand offered), through the live bridge"));
+		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, the program laid on its music, a career run to its result and story, training, wardrobe (skaters wear their own materials), movement gallery, atelier and Composer, controller tuning, pairs (a partner, a hand offered), through the live bridge"));
 		FPlatformMisc::RequestExitWithStatus(false, 0);
 		MenuTestStage = 99;
 	};
@@ -1097,9 +1127,20 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 		AdjustItem(TEXT("Skater"), -1);
 		if (Skater->ForeignMaterials() > 0) { Stop(TEXT("back on the athlete, a slot wears another model's material")); break; }
 		if (!Skater->FaceMoves()) { Stop(TEXT("the athlete's face does not move")); break; }
-		MenuTestStage = AcceptItem(TEXT("Slot 1")) ? 10 : (Stop(TEXT("no atelier slot")), 99);
+		// The movement gallery: an exit played on the skater through the bridge's choreo op.
+		MenuTestStage = AcceptItem(TEXT("Movement gallery")) ? 25 : (Stop(TEXT("no Movement gallery in the Wardrobe")), 99);
 		break;
 	}
+	case 25:
+		if (MenuPage.Id != TEXT("gallery")) { Stop(TEXT("the gallery did not open")); break; }
+		MenuTestStage = AcceptItem(TEXT("Triple Lutz")) ? 26 : (Stop(TEXT("no Triple Lutz in the gallery")), 99);
+		break;
+	case 26:
+		if (!Skater->DancingLabel().Contains(TEXT("Triple Lutz"))) { Stop(TEXT("the preview did not reach the skater")); break; }
+		UE_LOG(LogIceRun, Display, TEXT("Menu walk: the gallery played \"%s\"."), *Skater->DancingLabel());
+		PopPage();
+		MenuTestStage = AcceptItem(TEXT("Slot 1")) ? 10 : (Stop(TEXT("no atelier slot")), 99);
+		break;
 	case 10:
 		if (MenuPage.Id != TEXT("design")) { Stop(TEXT("the atelier did not open")); break; }
 		AdjustItem(TEXT("Bodice"), 1);
@@ -1278,7 +1319,31 @@ void AIceRunGameMode::SenseLanding()
 	}
 	// main.gd: the hall rises for a clean landing, barely for one that is not.
 	Rink->CrowdReact(bClean ? 1.0 : .12);
-	Announce(bClean ? TEXT("CLEAN LANDING") : TEXT("FIND YOUR EDGE"), FString::Printf(TEXT("%.2f rotations   /   Jump TES %.2f"), Turned, Latest.Technical));
+	FString Title = bClean ? TEXT("CLEAN LANDING") : TEXT("FIND YOUR EDGE");
+	FString Detail = FString::Printf(TEXT("%.2f rotations   /   Jump TES %.2f"), Turned, Latest.Technical);
+	const TSharedPtr<FJsonObject>* Element = nullptr;
+	double ElementTick = -1.0;
+	if (Latest.Raw->TryGetObjectField(TEXT("element"), Element) && (*Element)->TryGetNumberField(TEXT("tick"), ElementTick) && int32(ElementTick) == LastLandingTick)
+	{
+		// The broadcast's element call (bridge element): "TRIPLE LUTZ  3Lz<", the landing's tier, the panel's GOE.
+		FString Label, Name, Tier;
+		(*Element)->TryGetStringField(TEXT("label"), Label);
+		(*Element)->TryGetStringField(TEXT("name"), Name);
+		(*Element)->TryGetStringField(TEXT("tierTitle"), Tier);
+		double Goe = 0.0, Score = 0.0;
+		const bool bGoe = (*Element)->TryGetNumberField(TEXT("goe"), Goe);
+		(*Element)->TryGetNumberField(TEXT("score"), Score);
+		if (!Label.IsEmpty())
+		{
+			Title = FString::Printf(TEXT("%s   %s"), *Name.ToUpper(), *Label);
+			Detail = bGoe ? FString::Printf(TEXT("%s   ·   GOE %+.2f   ·   %.2f points"), *Tier, Goe, Score) : FString::Printf(TEXT("%s   ·   %.2f points"), *Tier, Score);
+		}
+		else if (!Tier.IsEmpty())
+		{
+			Title = Tier.ToUpper();
+		}
+	}
+	Announce(Title, Detail);
 	AIceRunPlayerController* PC = Player();
 	if (bRumbleOn && PC)
 	{
