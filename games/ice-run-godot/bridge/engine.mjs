@@ -16,7 +16,8 @@ import {gameInput,GAME_PARAMS} from '../runtime/game/controls.js';
 import {defaultControllerProfile,parseControllerProfile,validHardware,ACTIONS,BUTTON_NAMES,TUNING,bindingLabel} from '../runtime/game/full-controls.js';
 import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
 import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS,EVENT_FLOORS,LESSON_XP,PLAN_EXTRA} from '../runtime/game/career.js';
-import {Tutorial,STEPS as TRUST_STEPS} from '../runtime/game/tutorial.js';
+import {Tutorial,STEPS as TRUST_STEPS,STAGES as TRUST_STAGES} from '../runtime/game/tutorial.js';
+import {SteadyHand,STEADY_LEVELS,steadyDefault,isSteadyLevel,steadyStrength,steadyName,safeLean,SAFE_SHARE} from '../runtime/game/steady.js';
 import {RustGate,JUMP_FAMILIES} from '../runtime/game/training.js';
 import {BODY_REGIONS,FallWatch,wearNote} from '../runtime/game/wear.js';
 import {standings,seasonTable,RIVALS} from '../runtime/game/rivals.js';
@@ -48,9 +49,11 @@ export class IceEngine {
   this.controllerProfile=defaultControllerProfile();this.setup=null;this.assistance=.75;
   this.career=CareerState.restore(save); this.track=0; this.scheme=1; this.beginner=true;
   this.profile=0; this.cruise=true; this.sequence=['glide','edge','jump','spin','pose'];
+  // game/steady.ts: null follows the setup's own default (the owner's pick); a level is the player's choice.
+  this.steadyChoice=null; this.hand=new SteadyHand(steadyStrength(this.steadyLevel()));
   this.start({mode:'free'});
  }
- catalog() {return {bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson'].includes(mode)) throw Error('Unknown skating mode');
@@ -104,6 +107,7 @@ export class IceEngine {
  configure(o) {
   if(o.setup!==undefined&&o.setup!==null&&!isSetup(o.setup))throw Error('Unknown skating setup');
   if(o.assistance!==undefined&&(!Number.isFinite(o.assistance)||o.assistance<.5||o.assistance>1))throw Error('Assistance must be 0.5–1');
+  if(o.steady!==undefined&&o.steady!==null&&!isSteadyLevel(o.steady))throw Error('Unknown steadying hand');
   if(o.setup!==undefined){this.setup=o.setup;this.steering=newSchemeState();}
   if(o.assistance!==undefined)this.assistance=o.assistance;
   if(o.controllerProfile!==undefined) {this.controllerProfile=parseControllerProfile(o.controllerProfile);this.steering=newSchemeState();}
@@ -113,7 +117,12 @@ export class IceEngine {
   if(o.track!==undefined){if(!Number.isInteger(o.track)||!tracks[o.track])throw Error('Unknown track');this.track=o.track;}
   if(o.profile!==undefined){if(!Number.isInteger(o.profile)||!SAMPLE_PROFILES[o.profile])throw Error('Unknown profile');this.profile=o.profile;}
   if(this.setup){this.scheme=3;if(this.setup!=='repertoire')this.beginner=false;if(this.setup==='simulation'||this.setup==='experimental')this.cruise=false;}
+  if(o.steady!==undefined)this.steadyChoice=o.steady;
+  // At once, mid-run too: it is a hand on the input, nothing in the params.
+  this.hand.strength=steadyStrength(this.steadyLevel());
  }
+ /** The steadying hand in force: the player's choice, else the setup's default. */
+ steadyLevel(){return this.steadyChoice??steadyDefault(this.setup);}
  advance(controls={},ticks=2,low=false) {
   if(!Number.isInteger(ticks)||ticks<1||ticks>12)throw Error('Tick batches must contain 1–12 ticks');
   const c={...emptyControls(),...controls};
@@ -142,7 +151,9 @@ export class IceEngine {
     const live={...c,push:(i===0&&c.push)||repeat,autoPush:repeat,toe:i===0&&c.toe};
     const mapped=this.setup?setupInput(live,s,this.setup,this.steering,this.params,this.controllerProfile,this.assistance)
       :gameInput(live,s,this.scheme,this.steering,low,this.params,this.controllerProfile);
-    const input=this.beginner?this.coach.apply(mapped.input,s,this.params,this.scheme!==3&&i===0&&c.cycleJump,SIM_DT):mapped.input;
+    const coached=this.beginner?this.coach.apply(mapped.input,s,this.params,this.scheme!==3&&i===0&&c.cycleJump,SIM_DT):mapped.input;
+    // The steadying hand (game/steady.ts) on what the player asked; the recorder keeps what it handed on.
+    const input=this.hand.apply(coached,s,this.params);
     this.low=mapped.cantilever;
     this.tick(this.rusty?this.rusty.apply(input,s):input,(c.pairHold?1:0)|(c.pairLift?2:0));
    }
@@ -281,10 +292,15 @@ export class IceEngine {
   return {pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    recover:recoverHow(words),
-   tutorial:l?{unproven:l.step?.id==='spin'&&this.setup==='explorer'?UNPROVEN_AIR:'',course:this.course,index:l.index,total:l.steps.length,title:l.step?.title??'',prose:l.step?.prose??'',how:l.step?l.step.how(words):'',keys:l.step?.keys?.(words)??'',hold:l.step?.hold??0,progress:l.progress,fraction:l.fraction,status:l.status,message:l.toast>0?l.message:'',falls:l.falls}:null,
+   tutorial:l?{unproven:l.step?.id==='spin'&&this.setup==='explorer'?UNPROVEN_AIR:'',course:this.course,index:l.index,total:l.steps.length,title:l.step?.title??'',
+    stage:TRUST_STAGES[l.stage]?.name??'',targets:l.targets,target:l.target,
+    offer:l.falls>=2&&this.hand.strength===0?'Falling a lot? The steadying hand keeps your lean to what your speed can carry: turn it on in the menu.':'',prose:l.step?.prose??'',how:l.step?l.step.how(words):'',keys:l.step?.keys?.(words)??'',hold:l.step?.hold??0,progress:l.progress,fraction:l.fraction,status:l.status,message:l.toast>0?l.message:'',falls:l.falls}:null,
    routine:r?{how:r.current?elementHow(r.current,words)+this.rustNote(r):'',title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal,pcsScore:r.pcsScore,elapsed:r.elapsed,cues:r.cues?r.cues.map((c,k)=>({id:c.id,bar:c.bar,at:c.at,early:c.early,late:c.late,result:r.cueResults[k]})):null}:null,
    draft:this.draftView(),wardrobe:{designs:this.wardrobe.designs,skins:this.wardrobe.skins()},
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},
+   steady:{level:this.steadyLevel(),choice:this.steadyChoice,name:steadyName(this.steadyLevel()),held:this.hand.held},
+   // For a meter: the lean now, the lean this speed's edge can hold, the hand's limit when it is on, and where she falls.
+   balance:{lean:s.lean,edge:safeLean(s,this.params)/SAFE_SHARE*this.params.maxLean,limit:this.hand.strength>0?this.hand.limit(s,this.params)*this.params.maxLean:null,fallLean:this.params.fallLean},
    armStyle:this.armStyle,drill:this.drill?{title:this.drill.title,hint:this.drill.hint,seconds:this.drill.seconds,score:this.drill.score,focus:this.drill.focus}:null,
    rookie:{index:this.rookie.index,cleared:this.rookie.cleared,title:this.rookie.title,hint:this.rookie.hint,target:this.rookie.target},
    run:{seconds:this.run.seconds,score:this.run.score,collected:this.run.collected,target:this.run.target},

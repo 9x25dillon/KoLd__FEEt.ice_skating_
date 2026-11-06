@@ -1,5 +1,5 @@
-// game/tutorial.ts — the Tutorial: balance, then edges, then scrape and dig,
-// then the air (the operator, 2026-09-23: "every thing you learn about moving
+// game/tutorial.ts — the Tutorial: balance, then edges, then travel, then
+// scrape and dig, then the air (the operator, 2026-09-23: "every thing you learn about moving
 // across such a pristine beautiful perfect surface goes directly into your
 // faith in the intuition of your inner ears ability to keep you upright...
 // drill into the player how to stay stable and keep stable with your learned
@@ -13,17 +13,25 @@
 //
 // Each step's numbers were measured on the solver with a scripted pad, the
 // way the test suite plays (test/tutorial.test.ts pins them per setup).
+//
+// Travel (the owner, 2026-11-05: "teaches the player to navigate and travel"):
+// a step may place targets on the ice when it begins — a marker to reach, a cone
+// to round, checkpoints to pass — from where the skater is, inside the boards.
+// Clients draw them (Tutorial.targets); the pass conditions still read only the
+// solver's state, now measured against those places.
 
 import { MOVE, REGIME } from "../sim/types.ts";
 import type { SkaterState } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import type { Setup } from "./setups.ts";
+import { RINK } from "./rink.ts";
 import type { FeetLayout, PaddleAction } from "./full-controls.ts";
 import { Ghost, TRICKS } from "./ghost.ts";
 
 export const STAGES = [
   { id: "balance", name: "Balance", line: "Everything starts with standing still on something that moves." },
   { id: "edges", name: "Edges", line: "The blade is a curve. Lean, and the ice answers." },
+  { id: "travel", name: "Travel", line: "Where you look is where you go. Lean early, arrive upright." },
   { id: "scrape", name: "Scrape & dig", line: "Control is knowing how to spend your speed." },
   { id: "air", name: "Air", line: "You trust the ice now. Let go of it." },
 ] as const;
@@ -60,8 +68,16 @@ export interface StepMemory {
   landed: boolean;
   /** game/padcourse.ts: which of a step's two sides have been seen, as bits. */
   sides: number;
+  /** Travel: how many of the step's targets have been passed, in order. */
+  reached: number;
+  /** Travel: rad the skater has gone round the step's cone, and the bearing last seen from it. */
+  swept: number;
+  bearing: number | null;
 }
-const freshMemory = (): StepMemory => ({ pushes: 0, stroking: false, armed: false, scraped: false, wind: 0, quiet: 0, wound: false, landedBase: null, landed: false, sides: 0 });
+const freshMemory = (): StepMemory => ({ pushes: 0, stroking: false, armed: false, scraped: false, wind: 0, quiet: 0, wound: false, landedBase: null, landed: false, sides: 0, reached: 0, swept: 0, bearing: null });
+
+/** A place on the ice a step asks for: a marker to reach, a cone to round, a checkpoint to pass; r in metres. */
+export interface TutorialTarget { x: number; y: number; r: number; kind: "marker" | "cone" | "checkpoint" }
 
 export interface TutorialStep {
   id: string;
@@ -83,6 +99,8 @@ export interface TutorialStep {
   available?: (setup: Setup | null) => boolean;
   /** True while the step's condition holds this tick. Reads only solver state. */
   check: (s: SkaterState, m: StepMemory, t: Tutorial, dt: number) => boolean;
+  /** Travel: the targets this step puts on the ice, placed once as it begins, from where the skater is. */
+  place?: (s: SkaterState, t: Tutorial) => TutorialTarget[];
 }
 
 // ── measured thresholds ─────────────────────────────────────────────────────
@@ -134,6 +152,66 @@ function turnFeet(c: HowContext): string {
   return "hold the D-pad toward your lean (→ if the sticks lean right) for half a second";
 }
 const straighten = (c: HowContext) => c.feet === "dpad" ? " D-pad ↑ straightens the feet after." : "";
+
+// ── travel ──────────────────────────────────────────────────────────────────
+
+/** AUTHORED: m ahead a marker goes, and m to the middle's side; the reach is the ring a client draws. */
+export const MARKER_AHEAD = 12, MARKER_ASIDE = 5, MARKER_REACH = 1.8;
+/** AUTHORED: m to the side a cone goes, and how far round it (rad) counts as rounding it. MEASURED: sticks at 0.5 curve about 7 m round at 3.7 m/s. */
+export const CONE_ASIDE = 6, CONE_SWEEP = 1.5 * Math.PI, CONE_LEASH = 12;
+/** AUTHORED: the far marker's reach, and the least distance across it is placed. */
+export const FAR_REACH = 2.5, FAR_LEAST = 20;
+/** AUTHORED: a checkpoint's reach, and m from the boards that is touching them. */
+export const CHECKPOINT_REACH = 4, TOUCH_BOARDS = 0.6;
+/** AUTHORED: how close to the mark a stop must end. */
+export const SPOT_REACH = 2;
+const CENTRE = { x: (RINK.minX + RINK.maxX) / 2, y: (RINK.minY + RINK.maxY) / 2 };
+/** The half lap's checkpoints, anticlockwise round the sheet, 12 m in from each end's boards. */
+export const CHECKPOINTS = [{ x: 16, y: CENTRE.y - 16 }, { x: 16, y: CENTRE.y + 16 }, { x: -16, y: CENTRE.y + 16 }, { x: -16, y: CENTRE.y - 16 }];
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+/** m inside game/rink.ts's boards (negative: past them): its rounded rectangle as a distance field. */
+export function insideBoards(x: number, y: number): number {
+  const { minX, maxX, minY, maxY, corner } = RINK;
+  const x0 = minX + corner, x1 = maxX - corner, y0 = minY + corner, y1 = maxY - corner;
+  const d = Math.hypot(x - clamp(x, x0, x1), y - clamp(y, y0, y1));
+  return d > 0 ? corner - d : corner + Math.min(x - x0, x1 - x, y - y0, y1 - y);
+}
+/** The point, pulled in toward the middle until it is `margin` m inside the boards. */
+export function insideBy(x: number, y: number, margin: number): { x: number; y: number } {
+  if (insideBoards(x, y) >= margin) return { x, y };
+  const { minX, maxX, minY, maxY, corner } = RINK;
+  const x0 = minX + corner, x1 = maxX - corner, y0 = minY + corner, y1 = maxY - corner, r = corner - margin;
+  if (r < 0) return { x: clamp(x, x0 - r, x1 + r), y: clamp(y, y0 - r, y1 + r) };
+  const cx = clamp(x, x0, x1), cy = clamp(y, y0, y1), d = Math.hypot(x - cx, y - cy);
+  return { x: cx + (x - cx) / d * r, y: cy + (y - cy) / d * r };
+}
+/** Which way the skater is going: along the velocity when moving, else facing. */
+function along(s: SkaterState): { x: number; y: number } {
+  const v = speed(s);
+  return v > 0.5 ? { x: s.vel.x / v, y: s.vel.y / v } : { x: s.heading.x, y: s.heading.y };
+}
+/** +1 if the middle of the sheet is to the left of the way the skater is going, else -1. */
+function middleSide(s: SkaterState, d: { x: number; y: number }): number {
+  return d.x * (CENTRE.y - s.pos.y) - d.y * (CENTRE.x - s.pos.x) >= 0 ? 1 : -1;
+}
+const near = (s: SkaterState, t: TutorialTarget | undefined) => !!t && Math.hypot(s.pos.x - t.x, s.pos.y - t.y) <= t.r;
+/** A marker ahead and to the middle's side, at least 7 m off (else past the middle). */
+function ahead(s: SkaterState, forward: number, aside: number, margin: number): { x: number; y: number } {
+  const d = along(s), side = middleSide(s, d);
+  let p = insideBy(s.pos.x + d.x * forward - d.y * aside * side, s.pos.y + d.y * forward + d.x * aside * side, margin);
+  if (Math.hypot(p.x - s.pos.x, p.y - s.pos.y) < 7) p = insideBy(2 * CENTRE.x - s.pos.x, 2 * CENTRE.y - s.pos.y, margin);
+  return p;
+}
+const twoSticks = (c: HowContext) => c.setup === "simulation" || exp(c);
+const pushWords = (c: HowContext) => exp(c) ? "snap LT, then RT, to push" : `tap ${c.push} to push`;
+const Push = (c: HowContext) => { const w = pushWords(c); return w[0].toUpperCase() + w.slice(1); };
+// MEASURED (both two-stick setups and Explorer): a stick pushed right, or D, curves the skater anticlockwise,
+// to her own left. The words name no side: the client points at the target, and the edge steps have taught
+// which way a side curves.
+const steerWords = (c: HowContext) => twoSticks(c) ? "both sticks a little to one side" : "the left stick a little to one side";
+const steerKeys = (c: HowContext) => twoSticks(c) ? "Keyboard: D and → together curve one way, A and ← the other; Space pushes." : "Keyboard: D or A curves; Space pushes.";
 
 export const STEPS: readonly TutorialStep[] = [
   // ── Balance ──
@@ -207,6 +285,71 @@ export const STEPS: readonly TutorialStep[] = [
     // MEASURED (both setups): from 4.5 m/s, sticks 0.5, the turn tapped at 2 s: backward at 2.30 s, 3.26 m/s.
     check: s => settled(s) && backward(s) && speed(s) >= 1,
   },
+  // ── Travel ──
+  {
+    id: "marker", stage: "travel", title: "Go where you look", hold: 0.25,
+    prose: "A marker glows on the ice. Look at it, lean toward it early and gently, and let the edge carry you round to it. Arriving upright is the whole trick of getting anywhere.",
+    how: c => `Skating forward (a three-turn brings you round if you're going backward): ${steerWords(c)}, the side that curves you toward the marker; centre ${twoSticks(c) ? "them" : "it"} to straighten, and ${pushWords(c)} if you slow. Arrive inside the ring.`,
+    keys: steerKeys,
+    trust: "You went where you meant to. That's skating.",
+    place: s => [{ ...ahead(s, MARKER_AHEAD, MARKER_ASIDE, 5), r: MARKER_REACH, kind: "marker" }],
+    check: (s, _m, t) => settled(s) && near(s, t.targets[0]),
+  },
+  {
+    id: "cone", stage: "travel", title: "Round the cone", hold: 0.25,
+    prose: "To come back you don't stop and turn round: you keep the curve. Hold one edge round the cone, and the ice brings you home.",
+    how: c => `Hold ${steerWords(c)}, the side whose curve keeps the cone inside it, and go round it three quarters of the way, upright. ${Push(c)} across the curve if you slow down.`,
+    keys: c => twoSticks(c) ? "Keyboard: hold D and → (or A and ←), whichever keeps the cone inside your curve; Space pushes." : "Keyboard: hold D (or A), whichever keeps the cone inside your curve; Space pushes.",
+    trust: "One edge took you round. Direction is only a lean held long enough.",
+    // The cone 6 m to the middle's side, 9 m in from the boards: a 7 m curve round it stays on the ice.
+    place: s => { const d = along(s), side = middleSide(s, d); return [{ ...insideBy(s.pos.x - d.y * CONE_ASIDE * side, s.pos.y + d.x * CONE_ASIDE * side, 9), r: 0.4, kind: "cone" }]; },
+    check: (s, m, t) => {
+      const c = t.targets[0];
+      if (!c) return false;
+      const dx = s.pos.x - c.x, dy = s.pos.y - c.y;
+      // Wandered off: start the circle again.
+      if (Math.hypot(dx, dy) > CONE_LEASH) { m.swept = 0; m.bearing = null; return false; }
+      const b = Math.atan2(dy, dx);
+      if (m.bearing !== null) m.swept += wrap(b - m.bearing);
+      m.bearing = b;
+      return Math.abs(m.swept) >= CONE_SWEEP && settled(s);
+    },
+  },
+  {
+    id: "cross", stage: "travel", title: "Across the ice", hold: 0.25,
+    prose: "The sheet is yours. Build speed with a few pushes, find the far marker, and carry your balance all the way there.",
+    how: c => `${Push(c)} a few times, then steer for the far marker (${steerWords(c)}, then centred) and reach it upright.`,
+    keys: steerKeys,
+    trust: "Across the ice and still upright. Distance is only balance, kept.",
+    // Across the middle from where the skater is; from near the middle, straight on.
+    place: s => {
+      let p = insideBy(2 * CENTRE.x - s.pos.x, 2 * CENTRE.y - s.pos.y, 6);
+      if (Math.hypot(p.x - s.pos.x, p.y - s.pos.y) < FAR_LEAST) { const d = along(s); p = insideBy(s.pos.x + d.x * 22, s.pos.y + d.y * 22, 6); }
+      return [{ ...p, r: FAR_REACH, kind: "marker" }];
+    },
+    check: (s, _m, t) => settled(s) && near(s, t.targets[0]),
+  },
+  {
+    id: "lap", stage: "travel", title: "Half a lap", hold: 0.25,
+    prose: "Skaters travel round the rink, not across it: down the side, round the end, along the next. Keep a few metres off the boards and carry your speed through the curve.",
+    how: c => `Skate through the two glowing checkpoints in turn, round the end of the rink: ${pushWords(c)} on the straight, and hold ${steerWords(c)} through the corner. Touching the boards starts it again.`,
+    keys: steerKeys,
+    trust: "Round the end and down the side. You can go anywhere on this ice now.",
+    // The next two checkpoints the way the skater is already going round the sheet (anticlockwise when still).
+    place: s => {
+      const d = along(s), turning = (s.pos.x - CENTRE.x) * d.y - (s.pos.y - CENTRE.y) * d.x >= 0 || speed(s) <= 0.5 ? 1 : -1;
+      const at = Math.atan2(s.pos.y - CENTRE.y, s.pos.x - CENTRE.x);
+      const ahead = CHECKPOINTS.map((c, i) => ({ i, a: ((Math.atan2(c.y - CENTRE.y, c.x - CENTRE.x) - at) * turning % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) }))
+        .filter(c => c.a > 0.35).sort((a, b) => a.a - b.a);
+      const first = ahead[0].i, second = (first + turning + 4) % 4;
+      return [first, second].map(i => ({ ...CHECKPOINTS[i], r: CHECKPOINT_REACH, kind: "checkpoint" as const }));
+    },
+    check: (s, m, t) => {
+      if (insideBoards(s.pos.x, s.pos.y) < TOUCH_BOARDS) { m.reached = 0; return false; }
+      if (near(s, t.targets[m.reached])) m.reached++;
+      return m.reached >= t.targets.length && settled(s);
+    },
+  },
   // ── Scrape & dig ──
   {
     id: "plow", stage: "scrape", title: "Snowplow to a stop", hold: 1.5, ghost: "snowplow",
@@ -221,6 +364,20 @@ export const STEPS: readonly TutorialStep[] = [
       if (speed(s) >= STOP_FROM) m.armed = true;
       if (m.armed && (skidding(s) || (!feetSetup(t.setup) && s.blade.some(b => b.regime === REGIME.Brake)))) m.scraped = true;
       return m.armed && m.scraped && onIce(s) && s.jump.phase === JUMP_PHASE.None && speed(s) < STOP_UNDER;
+    },
+  },
+  {
+    id: "spot", stage: "scrape", title: "Stop on the mark", hold: 1,
+    prose: "Going somewhere means arriving. Build a little speed and stop with your blades on the mark: not short of it, not past it.",
+    how: c => feetSetup(c.setup)
+      ? `Skate at the mark faster than 2.5 m/s, then snowplow as you just did (${c.setup === "simulation" ? "both bumpers" : "X + B"}, toes in, sticks eased apart) so you stop inside the ring. Stay still 1 s.`
+      : "Skate at the mark faster than 2.5 m/s, then hold LT to brake so you stop inside the ring. Stay still 1 s.",
+    keys: c => feetSetup(c.setup) ? "Keyboard: Space pushes; Q + E, hold - a second, then A and → to plow." : "Keyboard: Space pushes; hold X to brake.",
+    trust: "Right where you meant to stop. That's control.",
+    place: s => [{ ...ahead(s, MARKER_AHEAD, 0, 5), r: SPOT_REACH, kind: "marker" }],
+    check: (s, m, t) => {
+      if (speed(s) >= STOP_FROM) m.armed = true;
+      return m.armed && onIce(s) && s.jump.phase === JUMP_PHASE.None && speed(s) < STOP_UNDER && near(s, t.targets[0]);
     },
   },
   {
@@ -296,6 +453,9 @@ export class Tutorial {
   /** Steps skipped by hand or because this setup cannot do them. */
   skipped: string[] = [];
   memory: StepMemory = freshMemory();
+  /** Travel: what the current step put on the ice (TutorialStep.place); empty for the others. */
+  targets: TutorialTarget[] = [];
+  private placed = false;
   private wasFallen = false;
 
   constructor(setup: Setup | null, start = 0, steps: readonly TutorialStep[] = STEPS) {
@@ -309,12 +469,16 @@ export class Tutorial {
   get stage() { return this.step ? STAGES.findIndex(g => g.id === this.step!.stage) : STAGES.length; }
   /** 0..1 through the current step's hold. */
   get fraction() { return this.step ? Math.min(1, this.progress / this.step.hold) : 1; }
+  /** The target to make for next: the first not yet passed. */
+  get target(): TutorialTarget | null { return this.targets[Math.min(this.memory.reached, this.targets.length - 1)] ?? null; }
 
   /** Watch one solver tick. Never writes to `s`. */
   sample(s: SkaterState, dt: number): void {
     this.toast = Math.max(0, this.toast - dt);
     const step = this.step;
     if (!step) return;
+    // Placed once, from where the skater is as the step begins; a fall keeps them where they are.
+    if (step.place && !this.placed) { this.targets = step.place(s, this); this.placed = true; }
     if (s.fallen) {
       if (!this.wasFallen) {
         this.falls++;
@@ -350,6 +514,7 @@ export class Tutorial {
 
   private advance(): void {
     this.index++; this.progress = 0; this.settle = 0; this.memory = freshMemory();
+    this.targets = []; this.placed = false;
     this.skipUnavailable();
   }
 
@@ -362,7 +527,8 @@ export class Tutorial {
     if (!this.step) return "Tutorial complete";
     if (this.wasFallen) return "Down is part of it. Get up when you're ready.";
     if (this.settle > 0) return `Back on your feet. Stand still a moment — ${this.settle.toFixed(1)} s — and let your balance come back.`;
-    return `${(Math.min(this.progress, this.step.hold)).toFixed(1)} / ${this.step.hold} s${this.falls ? ` · ${this.falls} fall${this.falls > 1 ? "s" : ""}` : ""}`;
+    const passed = this.targets.length > 1 ? ` · ${this.memory.reached} / ${this.targets.length} checkpoints` : "";
+    return `${(Math.min(this.progress, this.step.hold)).toFixed(1)} / ${this.step.hold} s${passed}${this.falls ? ` · ${this.falls} fall${this.falls > 1 ? "s" : ""}` : ""}`;
   }
 }
 

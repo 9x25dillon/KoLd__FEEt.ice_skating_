@@ -1,4 +1,4 @@
-// The Tutorial (game/tutorial.ts): balance, edges, scrape & dig, air. Its
+// The Tutorial (game/tutorial.ts): balance, edges, travel, scrape & dig, air. Its
 // pass conditions read only solver state, so each step is played here the way
 // the suite plays everything — a scripted pad through the setup's own mapping
 // into the solver — and the time it passed is pinned. Every number below was
@@ -16,16 +16,43 @@ import { defaultControllerProfile } from "../game/full-controls.ts";
 import type { GameControlState } from "../game/full-controls.ts";
 import { newSchemeState } from "../app/schemes.ts";
 import type { Controls, ControllerHardware } from "../app/pad.ts";
-import { Tutorial, STEPS, STAGES, SETTLE_S, tutorialGhost } from "../game/tutorial.ts";
+import { Tutorial, STEPS, STAGES, SETTLE_S, tutorialGhost, insideBoards, CHECKPOINTS, TOUCH_BOARDS } from "../game/tutorial.ts";
 import type { HowContext } from "../game/tutorial.ts";
+import type { SkaterState } from "../sim/types.ts";
 import { TRICKS } from "../game/ghost.ts";
 
 let SPIN_LOAD = 0.35;
 const A = 0, B = 1, X = 2, LB = 4, RB = 5, LT = 6, RT = 7, L3 = 10, UP = 12, LEFT = 14, RIGHT = 15;
 type Pad = "simulation" | "experimental";
 const released = (): ControllerHardware => ({ axes: [0, 0, 0, 0], buttons: Array(16).fill(0), keys: [], connected: true });
-/** Press the pad for tick `k` of the step; `h` arrives released. */
-type Script = (h: ControllerHardware, k: number, setup: Pad) => void;
+/**
+ * Press the pad for tick `k` of the step; `h` arrives released. The travel steps
+ * steer by what they see — the skater, the tutorial's targets — and keep what
+ * they need between ticks in `memo`.
+ */
+type Script = (h: ControllerHardware, k: number, setup: Pad, s: SkaterState, tut: Tutorial, memo: Record<string, number>) => void;
+
+/**
+ * A pilot for the travel steps: both sticks follow the bearing to (x, y). MEASURED: a
+ * stick pushed right curves the skater anticlockwise, so the stick goes the way the
+ * target lies, anticlockwise positive.
+ */
+function steer(h: ControllerHardware, s: SkaterState, x: number, y: number, gain = 1.4, max = 0.55) {
+  const v = Math.hypot(s.vel.x, s.vel.y);
+  const d = v > 0.5 ? { x: s.vel.x / v, y: s.vel.y / v } : s.heading;
+  const tx = x - s.pos.x, ty = y - s.pos.y;
+  const stick = Math.max(-max, Math.min(max, gain * Math.atan2(d.x * ty - d.y * tx, d.x * tx + d.y * ty)));
+  h.axes[0] = h.axes[2] = stick;
+}
+/** Keeps the speed above `under`: Simulation taps A; Experimental, on its right foot, snaps LT and RT in turn. */
+function keepSpeed(h: ControllerHardware, k: number, setup: Pad, s: SkaterState, memo: Record<string, number>, under: number) {
+  if (setup === "experimental" && k < 2) h.buttons[B] = 1;
+  const v = Math.hypot(s.vel.x, s.vel.y), since = k - (memo.push ?? -999);
+  if (v < under && since >= 60) { memo.push = k; memo.side = (memo.side ?? 0) + 1; }
+  const at = k - (memo.push ?? -999);
+  if (setup === "simulation" && at < 3) h.buttons[A] = 1;
+  if (setup === "experimental" && at >= 10 && at < 18) h.buttons[(memo.side ?? 0) % 2 ? LT : RT] = 1;
+}
 
 /**
  * Each step's script, and the speed it starts from (m/s, negative backward):
@@ -51,6 +78,35 @@ const SCRIPTS: Record<string, { speed: number; pad: Script }> = {
   turn: { speed: 3.7, pad: (h, k, s) => {
     h.axes = k < 144 ? [0.5, 0, 0.5, 0] : [0, 0, 0, 0];
     if (k >= 120 && k < 124) h.buttons[s === "simulation" ? B : A] = 1;
+  } },
+  // Travel: steer for the target, keeping above 3 m/s.
+  marker: { speed: 3.7, pad: (h, k, s, st, tut, memo) => {
+    const t = tut.target; if (t) steer(h, st, t.x, t.y);
+    keepSpeed(h, k, s, st, memo, 3);
+  } },
+  // Round the cone: hold the curve that keeps it inside (the side it lies on), and keep the speed.
+  cone: { speed: 3.7, pad: (h, k, s, st, tut, memo) => {
+    const c = tut.targets[0];
+    if (c) { const side = Math.sign(st.heading.x * (c.y - st.pos.y) - st.heading.y * (c.x - st.pos.x)) || 1; memo.side0 ??= side; h.axes[0] = h.axes[2] = 0.5 * memo.side0; }
+    keepSpeed(h, k, s, st, memo, 3.2);
+  } },
+  cross: { speed: 3.7, pad: (h, k, s, st, tut, memo) => {
+    const t = tut.target; if (t) steer(h, st, t.x, t.y);
+    keepSpeed(h, k, s, st, memo, 3.5);
+  } },
+  // Experimental's corner is gentler, and it pushes only on the straights: a snap mid-curve put it down.
+  lap: { speed: 3.7, pad: (h, k, s, st, tut, memo) => {
+    const t = tut.target; if (t) steer(h, st, t.x, t.y, 1.4, s === "experimental" ? LAP_MAX : 0.55);
+    if (s === "simulation" || Math.abs(h.axes[0]) < 0.25) keepSpeed(h, k, s, st, memo, 3.5);
+  } },
+  // Steer for the mark; inside STOP_AT m of it, the step before's snowplow, from its first tick.
+  spot: { speed: 3.7, pad: (h, k, s, st, tut, memo) => {
+    const t = tut.target;
+    if (!t) return;
+    const d = Math.hypot(t.x - st.pos.x, t.y - st.pos.y);
+    if (memo.plow === undefined && d < STOP_AT[s]) memo.plow = k;
+    if (memo.plow === undefined) { steer(h, st, t.x, t.y); return; }
+    SCRIPTS.plow.pad(h, k - memo.plow, s, st, tut, memo);
   } },
   // test/setups.test.ts's pad snowplow, on each setup's buttons.
   plow: { speed: 4.5, pad: (h, k, s) => {
@@ -95,6 +151,14 @@ const SCRIPTS: Record<string, { speed: number; pad: Script }> = {
   } },
 };
 
+/**
+ * Experimental's lap pilot steers at most 0.35 of a stick: the narrowest travel step, like its turning
+ * jump. MEASURED: at 0.3 the corner runs wide past its checkpoint; at 0.4 and 0.45 it falls once.
+ */
+const LAP_MAX = 0.35;
+/** m from the mark the spot step's pilot starts its snowplow, per setup: MEASURED, the plow's own run-out. */
+// From 3.7 m/s the snowplow runs out about 8.8 m: plowing from 8 to 10 m out stops inside the 2 m ring.
+const STOP_AT: Record<Pad, number> = { simulation: 9, experimental: 9 };
 /** Play one step from its script's entry speed; when it passed (s, or -1) and what the solver did. */
 function play(setup: Pad, id: string, T = 15, side = 1, entry?: number) {
   const { pad } = SCRIPTS[id], speed = entry ?? SCRIPTS[id].speed;
@@ -105,9 +169,10 @@ function play(setup: Pad, id: string, T = 15, side = 1, entry?: number) {
   const at = STEPS.findIndex(x => x.id === id), tut = new Tutorial(setup, at);
   tut.side = side;
   let k = 0, maxWind = 0;
+  const memo: Record<string, number> = {};
   for (; k < T / SIM_DT && tut.index === at; k++) {
     h.buttons.fill(0); h.axes = [0, 0, 0, 0];
-    pad(h, k, setup);
+    pad(h, k, setup, s, tut, memo);
     step(s, setupInput({ hardware: h } as Controls, s, setup, st, p, profile).input, p, SIM_DT, [], ice);
     tut.sample(s, SIM_DT);
     maxWind = Math.max(maxWind, Math.abs(tut.memory.wind));
@@ -115,9 +180,11 @@ function play(setup: Pad, id: string, T = 15, side = 1, entry?: number) {
   return { passed: tut.index > at ? +(k * SIM_DT).toFixed(3) : -1, s, tut, maxWind, v: Math.hypot(s.vel.x, s.vel.y) };
 }
 
-test("four stages in order — balance, edges, scrape & dig, air — and the steps follow them", () => {
-  assert.deepEqual(STAGES.map(g => g.id), ["balance", "edges", "scrape", "air"]);
-  assert.deepEqual(STEPS.map(x => x.id), ["glide", "push", "knees", "edge", "other", "turn", "plow", "dig", "hop", "spin"]);
+// Re-pinned 2026-11-05, deliberately: the Travel stage (the owner's ask) sits between Edges and
+// Scrape & dig, and "Stop on the mark" follows the snowplow it uses; the words are found by id now.
+test("five stages in order — balance, edges, travel, scrape & dig, air — and the steps follow them", () => {
+  assert.deepEqual(STAGES.map(g => g.id), ["balance", "edges", "travel", "scrape", "air"]);
+  assert.deepEqual(STEPS.map(x => x.id), ["glide", "push", "knees", "edge", "other", "turn", "marker", "cone", "cross", "lap", "plow", "spot", "dig", "hop", "spin"]);
   const order = STEPS.map(x => STAGES.findIndex(g => g.id === x.stage));
   assert.deepEqual(order, [...order].sort((a, b) => a - b), "a stage never comes back");
   for (const g of STAGES) assert.ok(STEPS.some(x => x.stage === g.id), `${g.id} has steps`);
@@ -126,13 +193,20 @@ test("four stages in order — balance, edges, scrape & dig, air — and the ste
   // Each step has words for Simulation and Experimental, and they differ where the pads differ.
   const c = (setup: Setup | null): HowContext => ({ setup, push: "A / Cross", three: "B / Circle", modifier: "L3", feet: "dpad" });
   for (const x of STEPS) for (const setup of ["simulation", "experimental", "diggate", "explorer", "repertoire", null] as const) assert.ok(x.how(c(setup)).length > 20, `${x.id} ${setup}`);
-  assert.match(STEPS[1].how(c("simulation")), /Tap A \/ Cross three times/);
-  assert.match(STEPS[1].how(c("experimental")), /Snap LT, then RT/);
-  assert.match(STEPS[5].how(c("experimental")), /tap A: a three-turn/);
-  assert.match(STEPS[5].how(c("simulation")), /tap B \/ Circle: a three-turn/);
-  assert.match(STEPS[6].how(c("simulation")), /hold L3 \+ D-pad ←/);
-  assert.match(STEPS[6].how(c("experimental")), /X \+ B \(both feet\), hold LB \+ D-pad ←/);
-  assert.match(STEPS[7].how(c("diggate")), /hold LB \+ RB/);
+  const step = (id: string) => STEPS.find(x => x.id === id)!;
+  assert.match(step("push").how(c("simulation")), /Tap A \/ Cross three times/);
+  assert.match(step("push").how(c("experimental")), /Snap LT, then RT/);
+  assert.match(step("turn").how(c("experimental")), /tap A: a three-turn/);
+  assert.match(step("turn").how(c("simulation")), /tap B \/ Circle: a three-turn/);
+  assert.match(step("plow").how(c("simulation")), /hold L3 \+ D-pad ←/);
+  assert.match(step("plow").how(c("experimental")), /X \+ B \(both feet\), hold LB \+ D-pad ←/);
+  assert.match(step("dig").how(c("diggate")), /hold LB \+ RB/);
+  // Travel speaks each pad's own push, and never names a side: a stick right curves her left (measured).
+  assert.match(step("marker").how(c("simulation")), /tap A \/ Cross to push/);
+  assert.match(step("cross").how(c("experimental")), /Snap LT, then RT, to push/);
+  assert.match(step("spot").how(c("explorer")), /hold LT to brake/);
+  assert.match(step("spot").how(c("simulation")), /snowplow/);
+  for (const id of ["marker", "cone", "cross", "lap"]) for (const setup of ["simulation", "explorer"] as const) assert.doesNotMatch(step(id).how(c(setup)), /\b(left|right) (curve|turn)/i, id);
 });
 
 test("the steps run in order: passing one starts the next, with a trust message", () => {
@@ -199,14 +273,19 @@ const PASS: Record<string, Record<Pad, number>> = {
   edge: { simulation: 3.542, experimental: 3.542 },
   other: { simulation: 3.542, experimental: 3.542 },
   turn: { simulation: 3.308, experimental: 3.308 },
+  marker: { simulation: 4.033, experimental: 4.033 },
+  cone: { simulation: 8.4, experimental: 8.375 },
+  cross: { simulation: 11.508, experimental: 11.4 },
+  lap: { simulation: 13.3, experimental: 15.65 },
   plow: { simulation: 5.933, experimental: 5.933 },
+  spot: { simulation: 5.408, experimental: 5.408 },
   dig: { simulation: 2.967, experimental: 2.967 },
   hop: { simulation: 3.933, experimental: 3.933 },
   spin: { simulation: 3.9, experimental: 3.933 },
 };
 
 for (const setup of ["simulation", "experimental"] as const) for (const x of STEPS) test(`${setup}: "${x.title}" passes on the pad`, () => {
-  const r = play(setup, x.id);
+  const r = play(setup, x.id, 40);
   assert.equal(r.tut.falls, 0, "without a fall");
   assert.ok(Math.abs(r.passed - PASS[x.id][setup]) < 0.02, `${x.id}: passed at ${r.passed} s (pinned ${PASS[x.id][setup]})`);
 });
@@ -253,7 +332,7 @@ test("setups whose blades cannot dig skip the dig; the brake stops them, not Sim
     assert.equal(t.step!.id, "hop", `${setup}: dig skipped`);
     assert.deepEqual(t.skipped, ["dig"]);
   }
-  for (const setup of ["simulation", "experimental", "diggate"] as const) assert.equal(new Tutorial(setup, 7).step!.id, "dig");
+  for (const setup of ["simulation", "experimental", "diggate"] as const) assert.equal(new Tutorial(setup, STEPS.findIndex(x => x.id === "dig")).step!.id, "dig");
   // The snowplow step, braked to a stop: Blade Explorer's LT is its stop and passes;
   // Simulation's keyboard X still brakes, but its stops come from the feet, so it does not.
   const brake = (setup: "explorer" | "simulation") => {
@@ -287,4 +366,151 @@ test("the ghost shows the step's trick, keeps it on a loop, and stays away where
   assert.notEqual(g.trick.id, "snowplow");
   const again = tutorialGhost(trick("plow"), g, player, true)!;
   assert.ok(again !== g && again.trick.id === "snowplow");
+});
+
+
+// ── Travel ─────────────────────────────────────────────────────────────────
+
+const TRAVEL = ["marker", "cone", "cross", "lap", "spot"];
+/** A state at (x, y) going `speed` m/s along `angle` (rad, anticlockwise from +x). */
+function at(x: number, y: number, angle: number, speed = 3.5): SkaterState {
+  const s = createState(setupParams("simulation"), speed);
+  s.pos = { x, y };
+  s.heading = { x: Math.cos(angle), y: Math.sin(angle) };
+  s.vel = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
+  return s;
+}
+
+test("every travel target is on the ice, inside the boards, wherever its step begins", () => {
+  // Margins the steps ask for: markers 5 m in, the cone 9 m (its curve stays on the ice), the far marker 6 m.
+  const margin: Record<string, number> = { marker: 5, cone: 9, cross: 6, spot: 5, lap: 12 };
+  let placed = 0;
+  for (const id of TRAVEL) {
+    const x = STEPS.find(s => s.id === id)!;
+    for (let px = -26; px <= 26; px += 4) for (let py = -8; py <= 44; py += 4) for (let a = 0; a < 8; a++) {
+      if (insideBoards(px, py) < 1) continue;
+      const s = at(px, py, a * Math.PI / 4), targets = x.place!(s, new Tutorial("simulation"));
+      assert.ok(targets.length >= 1, id);
+      for (const t of targets) {
+        assert.ok(insideBoards(t.x, t.y) >= margin[id] - 1e-9, `${id} from (${px}, ${py}) heading ${a}: (${t.x.toFixed(2)}, ${t.y.toFixed(2)}) is ${insideBoards(t.x, t.y).toFixed(2)} m in`);
+        placed++;
+      }
+      if (id === "marker" || id === "spot") assert.ok(Math.hypot(targets[0].x - px, targets[0].y - py) >= 7 - 1e-9, `${id} not on top of the skater`);
+      if (id === "cross") assert.ok(Math.hypot(targets[0].x - px, targets[0].y - py) >= 12, "across means across");
+    }
+  }
+  assert.ok(placed > 1000, `${placed}`);
+});
+
+test("the half lap goes the way the skater is already going round, two checkpoints in order", () => {
+  const lap = STEPS.find(s => s.id === "lap")!;
+  // At the bottom of the sheet heading +x is anticlockwise round the middle: the bottom-right, then the top-right.
+  assert.deepEqual(lap.place!(at(0, 0, 0), new Tutorial("simulation")).map(t => [t.x, t.y]), [[CHECKPOINTS[0].x, CHECKPOINTS[0].y], [CHECKPOINTS[1].x, CHECKPOINTS[1].y]]);
+  // Heading -x there is clockwise: the bottom-left, then the top-left.
+  assert.deepEqual(lap.place!(at(0, 0, Math.PI), new Tutorial("simulation")).map(t => [t.x, t.y]), [[CHECKPOINTS[3].x, CHECKPOINTS[3].y], [CHECKPOINTS[2].x, CHECKPOINTS[2].y]]);
+});
+
+test("targets are placed as the step begins and kept through a fall; the step's progress is not", () => {
+  const tut = new Tutorial("simulation", STEPS.findIndex(x => x.id === "lap"));
+  const s = at(0, 0, 0);
+  tut.sample(s, SIM_DT);
+  const placed = JSON.stringify(tut.targets);
+  assert.equal(tut.targets.length, 2);
+  assert.equal(tut.target, tut.targets[0]);
+  // Through the first checkpoint: the second is next.
+  s.pos = { ...CHECKPOINTS[0] };
+  tut.sample(s, SIM_DT);
+  assert.equal(tut.memory.reached, 1);
+  assert.equal(tut.target, tut.targets[1]);
+  assert.match(tut.status, /1 \/ 2 checkpoints/);
+  s.fallen = true;
+  tut.sample(s, SIM_DT);
+  assert.equal(JSON.stringify(tut.targets), placed, "the checkpoints stay where they were");
+  assert.equal(tut.memory.reached, 0, "a fall starts the half lap again");
+  // Passing a step clears its targets for the next.
+  tut.skip();
+  assert.deepEqual(tut.targets, []);
+});
+
+test("touching the boards starts the half lap again", () => {
+  const tut = new Tutorial("simulation", STEPS.findIndex(x => x.id === "lap"));
+  const s = at(0, 0, 0);
+  tut.sample(s, SIM_DT);
+  s.pos = { ...CHECKPOINTS[0] };
+  tut.sample(s, SIM_DT);
+  assert.equal(tut.memory.reached, 1);
+  s.pos = { x: 27.7, y: 18 };   // 0.3 m off the side boards
+  assert.ok(insideBoards(s.pos.x, s.pos.y) < TOUCH_BOARDS);
+  tut.sample(s, SIM_DT);
+  assert.equal(tut.memory.reached, 0);
+});
+
+test("the cone counts going round it, not going past it", () => {
+  const cone = STEPS.findIndex(x => x.id === "cone");
+  // A straight glide past the cone sweeps under half a turn round it.
+  const tut = new Tutorial("simulation", cone), s = at(0, 0, 0);
+  for (let k = 0; k < 600; k++) { s.pos = { x: -8 + k * 0.03, y: 0 }; tut.sample(s, SIM_DT); }
+  assert.equal(tut.index, cone);
+  assert.ok(Math.abs(tut.memory.swept) < Math.PI, `swept ${tut.memory.swept}`);
+  // Round it, three quarters and more: passed.
+  const round = new Tutorial("simulation", cone), r = at(0, 0, 0);
+  round.sample(r, SIM_DT);
+  const c = round.targets[0];
+  for (let k = 0; k <= 700 && round.index === cone; k++) {
+    const a = -Math.PI / 2 + k * 0.012;
+    r.pos = { x: c.x + 6 * Math.cos(a), y: c.y + 6 * Math.sin(a) };
+    r.vel = { x: -Math.sin(a) * 3.5, y: Math.cos(a) * 3.5 };
+    round.sample(r, SIM_DT);
+  }
+  assert.equal(round.index, cone + 1);
+});
+
+// ── Travel on the one-stick pads ────────────────────────────────────────────
+
+type OneStick = "explorer" | "repertoire";
+/**
+ * MEASURED: held from 3.7 m/s, LT stops both one-stick pads inside the 2 m ring when held from 2 to 3 m
+ * out; from 4 m on they stop short. Repertoire's pilot steers at most 0.4 of a stick: at 0.55 and 0.7
+ * it loses the far marker and skates away; Explorer's holds 0.55.
+ */
+const BRAKE_AT: Record<OneStick, number> = { explorer: 2.5, repertoire: 2.5 };
+const STEER_MAX: Record<OneStick, number> = { explorer: 0.55, repertoire: 0.4 };
+/**
+ * Blade Explorer's and Full Repertoire's pads, playing a travel step as its words say: the left stick
+ * alone steers (the right one is the arms), A pushes, LT brakes.
+ */
+function playOne(setup: OneStick, id: string, T = 40) {
+  const p = setupParams(setup), s = createState(p, 3.7), profile = defaultControllerProfile();
+  const st: GameControlState = newSchemeState(), ice = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
+  const at = STEPS.findIndex(x => x.id === id), tut = new Tutorial(setup, at);
+  const memo: Record<string, number> = {};
+  let k = 0;
+  for (; k < T / SIM_DT && tut.index === at; k++) {
+    const h: ControllerHardware = { axes: [0, 0, 0, 0], buttons: Array(16).fill(0), keys: [], connected: true };
+    const t = tut.target, v = Math.hypot(s.vel.x, s.vel.y);
+    if (t && id === "cone") {
+      memo.side ??= Math.sign(s.heading.x * (t.y - s.pos.y) - s.heading.y * (t.x - s.pos.x)) || 1;
+      h.axes[0] = 0.5 * memo.side;
+    } else if (t) {
+      const d = v > 0.5 ? { x: s.vel.x / v, y: s.vel.y / v } : s.heading;
+      const tx = t.x - s.pos.x, ty = t.y - s.pos.y;
+      h.axes[0] = Math.max(-STEER_MAX[setup], Math.min(STEER_MAX[setup], 1.4 * Math.atan2(d.x * ty - d.y * tx, d.x * tx + d.y * ty)));
+      if (id === "spot" && (memo.brake !== undefined || Math.hypot(tx, ty) < BRAKE_AT[setup])) { memo.brake ??= k; h.axes[0] = 0; h.buttons[LT] = 1; }
+    }
+    if (id !== "spot" && v < 3.2 && k - (memo.push ?? -999) >= 60) memo.push = k;
+    if (k - (memo.push ?? -999) < 3) h.buttons[A] = 1;
+    step(s, setupInput({ hardware: h } as Controls, s, setup, st, p, profile).input, p, SIM_DT, [], ice);
+    tut.sample(s, SIM_DT);
+  }
+  return { passed: tut.index > at ? +(k * SIM_DT).toFixed(3) : -1, tut, s };
+}
+
+const ONE_STICK_PASS: Record<OneStick, Record<string, number>> = {
+  explorer: { marker: 4.233, cone: 8.3, cross: 12.842, lap: 13.2, spot: 4.383 },
+  repertoire: { marker: 3.825, cone: 11.942, cross: 17.967, lap: 14.067, spot: 4.383 },
+};
+for (const setup of ["explorer", "repertoire"] as const) for (const id of TRAVEL) test(`${setup}: "${STEPS.find(x => x.id === id)!.title}" passes on the pad`, () => {
+  const r = playOne(setup, id);
+  assert.equal(r.tut.falls, 0, "without a fall");
+  assert.ok(Math.abs(r.passed - ONE_STICK_PASS[setup][id]) < 0.02, `${id}: passed at ${r.passed} s (pinned ${ONE_STICK_PASS[setup][id]})`);
 });
