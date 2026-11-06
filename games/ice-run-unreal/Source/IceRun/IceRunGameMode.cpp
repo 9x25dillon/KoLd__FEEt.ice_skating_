@@ -723,6 +723,7 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 	if (Skater)
 	{
 		Skater->SetEffects(bPlaying && !bPaused);
+		Rink->UpdateCrowd(Skater->GetActorLocation(), DeltaSeconds);
 	}
 	// The music waits with the run while a menu is up.
 	const bool bHold = bPaused && RunLive();
@@ -1135,6 +1136,8 @@ void AIceRunGameMode::SenseLanding()
 	{
 		IceSound->Land(bClean);
 	}
+	// main.gd: the hall rises for a clean landing, barely for one that is not.
+	Rink->CrowdReact(bClean ? 1.0 : .12);
 	Announce(bClean ? TEXT("CLEAN LANDING") : TEXT("FIND YOUR EDGE"), FString::Printf(TEXT("%.2f rotations   /   Jump TES %.2f"), Turned, Latest.Technical));
 	AIceRunPlayerController* PC = Player();
 	if (bRumbleOn && PC)

@@ -94,6 +94,12 @@ her), each blade's share of the load, the knee, and the coil where the setup win
 against the hips. At the bottom right, YOUR LINE: the rink from above, the line skated since the
 run began, where she is and which way she faces, and in a lesson the next target to reach.
 
+The stands hold arena.gd's audience: about three thousand seated spectators (the Godot arena's
+own model, instanced), each with a coat, a skin tone and their own timing. Their heads follow the
+skater; after a landing the hall rises (most of them for a clean one, a few for one that is not),
+arms up and clapping, and settles over a few seconds. `M_Crowd` is `crowd.gdshader` as two HLSL
+nodes, built by `tools/build_content.py`.
+
 Snow comes off a blade whose edge slips sideways at speed (a skid, a hard carve), thrown back and
 up, harder the more that blade is loaded, as `skater.gd`'s sprays do (`IceSpray`); it settles on
 the ice. A plain glide or the Explorer brake hardly slips, so it throws little.
@@ -151,12 +157,12 @@ writes PNGs at those seconds of the run and quits. `-IceOpenMenu=<page>` stills 
 | `Source/IceRun/IceSound.*` | The blade, the crowd and a landing's thud, synthesized as `main.gd` does |
 | `Source/IceRun/IceSpray.*` | The snow off each blade, as `skater.gd`'s two particle sprays |
 | `Source/IceRun/IceSimSpace.h` | Sim metres (y left) to Unreal centimetres (Y right), the twin of `sim_space.gd` |
-| `tools/build_content.py` | Imports the Godot `.glb` skaters through Interchange; makes `M_Surface` and `M_Ice` |
+| `tools/build_content.py` | Imports the Godot `.glb` skaters and spectator through Interchange; makes `M_Surface`, `M_Ice` and `M_Crowd`; imports the music |
 
 Every sim position reaches the world through `IceSimSpace`, and the skater's pose is worked in
 Godot's body frame so it reads against `skater.gd`; the one conversion to Unreal's left-handed
 frame is `IceSimSpace::FromBody`. A turn about an axis changes sense across that conversion,
 which is why the spine and head twists are negated there.
 
-Not yet here: the face and eyes, the crowd in the stands, Elite paddles, and a packaged build. The venue is plain next to the Godot Northlight
+Not yet here: the face and eyes, Elite paddles, and a packaged build. The venue is plain next to the Godot Northlight
 arena.
