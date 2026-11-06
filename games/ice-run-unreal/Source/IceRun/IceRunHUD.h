@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
+#include "IceRunGameMode.h"
 #include "IceRunHUD.generated.h"
 
 /**
@@ -26,6 +27,8 @@ private:
 	void TutorialCard(const TSharedPtr<FJsonObject>& Tutorial, float U);
 	void PauseMenu(const class AIceRunGameMode* Mode, float U);
 	void DrawPage(const class AIceRunGameMode* Mode, float U);
+	/** The music page's program on its bars; Focused is the cue under the list's focus, or out of range. */
+	void Strip(const AIceRunGameMode::FMenuStrip& S, int32 Focused, float X, float& Y, float W, float U);
 	/** The balance meter: the lean now against what this speed's edge can hold, the hand's limit, where she falls. */
 	void BalanceMeter(const TSharedPtr<FJsonObject>& Balance, const TSharedPtr<FJsonObject>& Steady, float U);
 	/** True while laying a card out to measure it: Line and Paragraph only advance. */

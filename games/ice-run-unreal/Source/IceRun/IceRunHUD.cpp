@@ -196,6 +196,12 @@ void AIceRunHUD::DrawPage(const AIceRunGameMode* Mode, float U)
 		Paragraph(Note, RightX, SY, RightW, Champagne, .9f * U, Medium);
 		SY += 4.f * U;
 	}
+	if (Page.Strip.Bars > 0 && Page.Strip.Seconds > 0.0)
+	{
+		// Room above the band for the names that sit over it.
+		SY += 26.f * U;
+		Strip(Page.Strip, Mode->MenuIndex() - Page.Strip.FirstCueItem, RightX, SY, RightW, U);
+	}
 	if (!Page.RowsTitle.IsEmpty() && Page.Rows.Num() > 0)
 	{
 		SY += 14.f * U;
@@ -221,6 +227,40 @@ void AIceRunHUD::DrawPage(const AIceRunGameMode* Mode, float U)
 			SY = FMath::Max(RY, MY);
 		}
 	}
+}
+
+void AIceRunHUD::Strip(const AIceRunGameMode::FMenuStrip& S, int32 Focused, float X, float& Y, float W, float U)
+{
+	// main.gd timeline_strip: the program's seconds across, a tick per bar (taller each phrase), the half-time line, a block per element.
+	UFont* Medium = GEngine->GetMediumFont();
+	const float Top = Y, Band = 40.f * U;
+	auto XOf = [&](double T) { return X + float(FMath::Clamp(T / S.Seconds, 0.0, 1.0)) * W; };
+	Panel(X, Top, W, Band, FLinearColor(.04f, .08f, .12f, .9f));
+	const float Half = XOf(S.Seconds * .5);
+	Panel(Half - .5f * U, Top - 4.f * U, 1.f * U, Band + 8.f * U, FLinearColor(.86f, .76f, .58f, .5f));
+	for (int32 B = 0; B <= S.Bars; ++B)
+	{
+		const bool bPhrase = B % S.BarsPerPhrase == 0;
+		const float BX = XOf(S.Offset + B * S.BarSeconds);
+		const float From = bPhrase ? 0.f : Band * .6f;
+		Panel(BX, Top + From, (bPhrase ? 2.f : 1.f) * U, Band - From, FLinearColor(1.f, 1.f, 1.f, bPhrase ? .35f : .12f));
+	}
+	const FLinearColor Asked = S.bOk ? FLinearColor(.62f, .85f, .77f, 1.f) : FLinearColor(.94f, .54f, .48f, 1.f);
+	const float BarW = FMath::Max(4.f * U, XOf(S.BarSeconds) - X - 2.f * U);
+	for (int32 I = 0; I < S.Cues.Num(); ++I)
+	{
+		const AIceRunGameMode::FMenuStrip::FCue& C = S.Cues[I];
+		const float CX = XOf(C.At);
+		if (I == Focused)
+		{
+			Panel(CX - 2.f * U, Top + 2.f * U, BarW + 4.f * U, Band - 4.f * U, FLinearColor(1.f, 1.f, 1.f, .9f));
+		}
+		Panel(CX, Top + 4.f * U, BarW, Band - 8.f * U, C.bRequired ? Asked : Champagne);
+		// Names alternate above and below the band so neighbours two bars apart stay readable.
+		float TY = I % 2 == 0 ? Top + Band + 3.f * U : Top - 18.f * U;
+		Line(C.Title.Len() > 16 ? C.Title.Left(15) + TEXT("…") : C.Title, CX, TY, I == Focused ? Ink : Soft, .7f * U, Medium);
+	}
+	Y = Top + Band + 26.f * U;
 }
 
 void AIceRunHUD::Paragraph(const FString& Text, float X, float& Y, float Width, const FLinearColor& Color, float Scale, UFont* Font)
@@ -327,7 +367,7 @@ void AIceRunHUD::DrawHUD()
 	}
 
 	// Bottom: the coach line for this mode, as main.gd update_hud chooses it.
-	FString Title, Tip, Progress;
+	FString Title, Tip, Progress, Cue;
 	const TSharedPtr<FJsonObject> Result = Obj(Raw, TEXT("result"));
 	if (F.bFinished && Result.IsValid())
 	{
@@ -350,6 +390,22 @@ void AIceRunHUD::DrawHUD()
 			Title = (*Sequence)[Index]->AsString();
 			Tip = Str(Routine, TEXT("how"));
 			Progress = FString::Printf(TEXT("%02d / %02d    ·    %s"), Index + 1, Count, *Str(Routine, TEXT("title")));
+			// On its music: when this element's bar comes round, and how the last one went (main.gd cue_line; shown, not scored).
+			const TArray<TSharedPtr<FJsonValue>>* Cues = nullptr;
+			if (Routine->TryGetArrayField(TEXT("cues"), Cues) && Cues->IsValidIndex(Index))
+			{
+				const TSharedPtr<FJsonObject> Next = (*Cues)[Index]->AsObject();
+				const double Elapsed = Num(Routine, TEXT("elapsed"));
+				const double Wait = Num(Next, TEXT("at")) - Elapsed;
+				Cue = Wait > .5 ? FString::Printf(TEXT("♪  Your bar in %d s"), FMath::CeilToInt32(Wait))
+					: Elapsed <= Num(Next, TEXT("late")) ? FString(TEXT("♪  Your bar is now")) : FString(TEXT("♪  Past your bar"));
+				const FString Last = Index > 0 ? Str((*Cues)[Index - 1]->AsObject(), TEXT("result")) : FString();
+				const TCHAR* Said = Last == TEXT("on") ? TEXT("on the music") : Last == TEXT("early") ? TEXT("early") : Last == TEXT("late") ? TEXT("late") : nullptr;
+				if (Said)
+				{
+					Cue += FString::Printf(TEXT("   ·   last: %s"), Said);
+				}
+			}
 		}
 		else
 		{
@@ -404,6 +460,7 @@ void AIceRunHUD::DrawHUD()
 		Line(Title, Margin, BY, Ink, 1.3f * U, Large);
 		Paragraph(Tip, Margin, BY, Width, Soft, 1.0f * U, Medium);
 		Line(Progress, Margin, BY, Champagne, .95f * U, Medium);
+		Line(Cue, Margin, BY, Ink, .95f * U, Medium);
 	}
 
 	float NY = Canvas->ClipY - Margin - 20.f * U;

@@ -23,9 +23,11 @@ test('the project names its module and the plugins it builds on', () => {
 test('every op the client sends is one the bridge answers', () => {
   const host = readFileSync(join(godot, 'bridge/host.mjs'), 'utf8');
   const answered = new Set([...host.matchAll(/case '([a-zA-Z]+)'/g)].map(m => m[1]));
-  const sent = new Set([...read('Source/IceRun/IceRunGameMode.cpp').matchAll(/Bridge\.Send\(TEXT\("([a-zA-Z]+)"\)/g)].map(m => m[1]));
+  // The session's own sends, and the menus' (SendOp).
+  const source = ['Source/IceRun/IceRunGameMode.cpp', 'Source/IceRun/IceRunMenus.cpp'].map(read).join('\n');
+  const sent = new Set([...source.matchAll(/(?:Bridge\.Send|SendOp)\(TEXT\("([a-zA-Z]+)"\)/g)].map(m => m[1]));
   sent.add('quit');
-  assert.ok(sent.size >= 5, [...sent].join());
+  for (const op of ['start', 'frame', 'configure', 'plan', 'timeline', 'train', 'drill', 'rest', 'armFocus', 'dress', 'design']) assert.ok(sent.has(op), `the client never sends '${op}'`);
   for (const op of sent) assert.ok(answered.has(op), `host.mjs has no '${op}'`);
 });
 
@@ -59,7 +61,7 @@ test('the live engine skates the first career routine in Unreal', {skip: !exists
   assert.match(out, /UNREAL_SMOKE_PASS/);
 });
 
-test('the menus walk a career round through the live engine: plan, skate, result and story, train, dress, compose', {skip: !existsSync(editorCmd) || !built ? 'needs UE_ROOT, a built module and the prepared runtime' : false, timeout: 600_000}, () => {
+test('the menus walk a career round through the live engine: plan, music, skate, result and story, train, dress, compose', {skip: !existsSync(editorCmd) || !built ? 'needs UE_ROOT, a built module and the prepared runtime' : false, timeout: 600_000}, () => {
   const out = execFileSync(editorCmd, [join(root, 'IceRun.uproject'), '-game', '-nullrhi', '-unattended', '-nosplash', '-nosound', '-IceMenuTest', '-UseFixedTimeStep', '-FPS=60', '-stdout', '-FullStdOutLogOutput'], {encoding: 'utf8', maxBuffer: 256 << 20});
   assert.match(out, /UNREAL_MENUS_PASS/);
 });

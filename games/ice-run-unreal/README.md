@@ -8,8 +8,9 @@ other two games. A native C++ port of the solver is a separate, later track, ver
 recorded replays.
 
 This follows the owner's choice of 3 November 2026 ("bridge-first is fine") under D2 in
-[`docs/open-decisions.md`](../../docs/open-decisions.md) (Unreal Engine 5.4+). The Godot game
-stays the playable build until this one has its menus.
+[`docs/open-decisions.md`](../../docs/open-decisions.md) (Unreal Engine 5.4+). It carries the
+Godot game's menus: the Season and its story, training, the Composer, the wardrobe and atelier,
+lessons and settings, all through the same bridge ops.
 
 ## Run
 
@@ -31,7 +32,7 @@ which takes several minutes once.
 | Key | Does |
 | --- | --- |
 | Pad / keyboard | Skating, exactly as the Godot game: a setup sends the raw pad (`game/full-controls.ts` maps it), the original schemes send named inputs |
-| Esc / Menu | The menu: continue, skip a lesson step, the tutorial and each setup's lesson, free skate, career, rookie gates, light course, setup, camera, quit. D-pad or stick to move, A / Enter to choose, ◀ ▶ to change, B / Esc to go back |
+| Esc / Menu | The menus: Continue, The Season, Lessons, The Composer, Free skate, Rookie gates, Light course, Wardrobe, Settings, Quit. D-pad or stick to move, A / Enter to choose, ◀ ▶ to change, B / Esc to go back |
 | Tab | Next setup (Explorer → Simulation → Experimental → Dig Gate → Repertoire → original schemes) |
 | M | Next mode: free skate, the tutorial, career (First ice), rookie gates, the light course |
 | R | Skate again |
@@ -57,6 +58,32 @@ sets it from the command line.
 More options: `-IceMode=free|lesson|career|rookie|timed`, `-IceCourse=trust|<course id>`, `-IceEvent=N`,
 `-IceSkater=Athlete|Competition|Berserker|Violet`, `-IceCamera=N`.
 
+## The Season, training and the wardrobe
+
+The menus are the Godot game's pages, drawn from the bridge's snapshot and acting only through
+its ops, so the career, the plans and the wardrobe live where they always have (`game/career.ts`,
+`game/atelier.ts`, saved by `host.mjs`).
+
+- **The Season** (`game/story.ts`): five events told by a coach, Mara Ellison, with the rivals
+  from `game/rivals.ts` and the season's table. Each event has a briefing before it and a chapter
+  ending after it, by medal; the words change no score. The coach's advice reads your career
+  (an injury, rust before a jump, wear, your weakest stat) and changes nothing.
+- **The briefing**: your program for the event (◀ ▶ moves an element, `+ Add` up to two of your
+  own, A takes one of yours out), the field, and **♪ Lay it on the music**: each element on a bar
+  of a track (`game/composer.ts`). ◀ ▶ moves an element a bar, A plays the music from its bar,
+  and the strip shows the program on its bars (gold for your own, the line at half time). A
+  program on its music runs the full time, and the run shows when each bar comes round and how
+  the last one went: shown, not scored.
+- **Training**: raise a stat with XP and a week, drill a jump family against rust, rest a worn
+  region; **Style** picks the arm focus and its drill.
+- **The result**: the chapter's ending, the protocol, the XP, the standings, and the replay.
+- **The Composer**: your own free program, phrase by phrase.
+- **Wardrobe**: four skaters, the costumes, and the atelier: a design in a slot (bodice, skirt,
+  sleeves, trim and crystals, tights, hair colour, skin tone, then the fabric and how many
+  crystals), previewed on the skater and worn when kept.
+- **Settings**: setup, steadying hand, Explorer assistance, skater level, music track and on or
+  off, camera, display. Kept in `Saved/IceRun/preferences.json`.
+
 The career saves to `games/ice-run-unreal/Saved/IceRun/career-v1.json`, apart from the Godot
 game's save: the two builds do not share a career yet.
 
@@ -78,8 +105,21 @@ which skates the first career event's three elements through the real bridge (ca
 crouch, as the Godot smoke test does) and prints `UNREAL_SMOKE_PASS`. On a fixed time step it
 skates the 75-second program in a few seconds.
 
+The menus have their own walk, a player's way through them against the live bridge: the
+Season, a plan changed and put back, the first event laid on its music and skated to its result
+and story, a stat trained, a costume changed, a design kept and worn, a Composer phrase added.
+
+```sh
+UnrealEditor-Cmd games/ice-run-unreal/IceRun.uproject -game -nullrhi -unattended -IceMenuTest -UseFixedTimeStep -FPS=60
+```
+
+prints `UNREAL_MENUS_PASS`. Both tests, and stills, skate on a throwaway save under
+`Saved/IceRun/test-runs/`, never the player's career.
+
 For stills without anyone at the machine: `-RenderOffscreen -IceShots=2,4,6 -IceShotDir=<dir>`
-writes PNGs at those seconds of the run and quits.
+writes PNGs at those seconds of the run and quits. `-IceOpenMenu=<page>` stills a menu page
+(`season`, `training`, `wardrobe`, `music`, …), `-IceSkipSteps=N` a later lesson step, and
+`-IceOnMusic` (with `-IceMode=career`) a career program laid on its music.
 
 ## How it is built
 
@@ -92,7 +132,8 @@ writes PNGs at those seconds of the run and quits.
 | `Source/IceRun/IceSkater.*` | `skater.gd`'s pose from physics, ported line for line |
 | `Source/IceRun/IceRink.*` | The sheet from the catalog's rink, boards, hall, roof fixtures, blade grooves |
 | `Source/IceRun/IceShotCamera.*` | `main.gd`'s four cameras with `shot.gd`'s framing |
-| `Source/IceRun/IceRunHUD.*` | Move, edges, TES, coach line and results, in the engine's words |
+| `Source/IceRun/IceRunMenus.cpp` | The menu pages as data: the Season, briefing, music, training, style, result, Composer, wardrobe, atelier, lessons, settings |
+| `Source/IceRun/IceRunHUD.*` | Move, edges, TES, coach and cue lines, the lesson card, the balance meter, and the menu pages, in the engine's words |
 | `Source/IceRun/IceSimSpace.h` | Sim metres (y left) to Unreal centimetres (Y right), the twin of `sim_space.gd` |
 | `tools/build_content.py` | Imports the Godot `.glb` skaters through Interchange; makes `M_Surface` and `M_Ice` |
 
@@ -101,6 +142,5 @@ Godot's body frame so it reads against `skater.gd`; the one conversion to Unreal
 frame is `IceSimSpace::FromBody`. A turn about an axis changes sense across that conversion,
 which is why the spine and head twists are negated there.
 
-Not yet here: the full menus (career pages, Composer, atelier, settings), music and sound, the
-skirt's springs, face and eyes, snow spray, the crowd, costume recolouring, Elite paddles, and a
-packaged build. The venue is plain next to the Godot Northlight arena.
+Not yet here: the face and eyes, snow spray, the crowd, blade and crowd sound, Elite paddles,
+and a packaged build. The venue is plain next to the Godot Northlight arena.

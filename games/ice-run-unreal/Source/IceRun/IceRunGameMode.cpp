@@ -133,6 +133,9 @@ void AIceRunGameMode::StartPlay()
 	Music = NewObject<UAudioComponent>(this);
 	Music->bAutoActivate = false;
 	Music->RegisterComponent();
+	Preview = NewObject<UAudioComponent>(this);
+	Preview->bAutoActivate = false;
+	Preview->RegisterComponent();
 	ShotCamera->Watch(Skater);
 	for (int32 I = 0; I < StartCamera % 4; ++I)
 	{
@@ -170,9 +173,9 @@ void AIceRunGameMode::StartPlay()
 		Node = TEXT("node");
 	}
 	FString SaveDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("IceRun")));
-	if (bSmoke || bMenuTest)
+	if (bSmoke || bMenuTest || ShotTimes.Num() > 0)
 	{
-		// Test runs never touch the player's career.
+		// Test runs and stills never touch the player's career.
 		SaveDir = FPaths::Combine(SaveDir, TEXT("test-runs"), FString::FromInt(FPlatformProcess::GetCurrentProcessId()));
 	}
 	FString Error;
@@ -384,6 +387,12 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 	{
 		NoticeText = Reply.Error;
 		UE_LOG(LogIceRun, Warning, TEXT("Engine refused %s: %s"), *Reply.Op, *Reply.Error);
+		if (bPaused)
+		{
+			// Said on the page where it was asked.
+			PageNotice = Reply.Error;
+			RebuildPage();
+		}
 		if (bSmoke)
 		{
 			Fail(FString::Printf(TEXT("%s failed: %s"), *Reply.Op, *Reply.Error));
@@ -418,6 +427,17 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		{
 			Present(FIceFrame::Parse(*First), true);
 		}
+		if (RunMode == TEXT("career") && FParse::Param(FCommandLine::Get(), TEXT("IceOnMusic")))
+		{
+			// For looking at a career program on its music: the event's own program, spread over its bars and kept.
+			FocusEvent = EventIndex;
+			for (const TCHAR* Action : {TEXT("open"), TEXT("save"), TEXT("close")})
+			{
+				TSharedRef<FJsonObject> Step = MakeShared<FJsonObject>();
+				Step->SetStringField(TEXT("action"), Action);
+				TimelineOp(Step);
+			}
+		}
 		Configure();
 		StartRun();
 		if (!bPrefsLoaded)
@@ -443,7 +463,13 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		FString OpenPage;
 		if (ShotTimes.Num() > 0 && FParse::Value(FCommandLine::Get(), TEXT("IceOpenMenu="), OpenPage))
 		{
-			// For a still of a menu page itself.
+			// For a still of a menu page itself; the music page opens the first event's program on its music.
+			if (OpenPage == TEXT("music"))
+			{
+				TSharedRef<FJsonObject> Open = MakeShared<FJsonObject>();
+				Open->SetStringField(TEXT("action"), TEXT("open"));
+				TimelineOp(Open);
+			}
 			OpenMenu(OpenPage);
 		}
 		else if (!bTitleShown && !bSmoke && ShotTimes.Num() == 0)
@@ -528,6 +554,7 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		}
 		if (bPaused)
 		{
+			PageNotice.Reset();
 			RebuildPage();
 		}
 	}
@@ -663,6 +690,11 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 		return;
 	}
 	HandleMenus();
+	if (PreviewLeft > 0.0)
+	{
+		PreviewLeft -= DeltaSeconds;
+		if (PreviewLeft <= 0.0 && Preview) Preview->FadeOut(.6f, 0.f);
+	}
 	// The music waits with the run while a menu is up.
 	const bool bHold = bPaused && RunLive();
 	if (Music && bHold != bMusicPaused)
@@ -840,7 +872,7 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 	MenuTestClock += Dt;
 	auto Pass = [this]
 	{
-		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, a career run to its result and story, training, wardrobe, atelier and Composer, through the live bridge"));
+		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, the program laid on its music, a career run to its result and story, training, wardrobe, atelier and Composer, through the live bridge"));
 		FPlatformMisc::RequestExitWithStatus(false, 0);
 		MenuTestStage = 99;
 	};
@@ -889,12 +921,49 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 		break;
 	case 4:
 		if (PlanLength() != -1) { Stop(TEXT("the plan did not go back")); break; }
+		MenuTestStage = AcceptItem(TEXT("♪  Lay it on the music")) ? 20 : (Stop(TEXT("no way onto the music")), 99);
+		break;
+	case 20:
+	{
+		// The program on its music: the first element a bar later, then saved.
+		const TSharedPtr<FJsonObject>* Draft = nullptr;
+		if (MenuPage.Id != TEXT("music") || !Latest.Raw->TryGetObjectField(TEXT("draft"), Draft) || (*Draft)->GetArrayField(TEXT("cues")).Num() == 0) { Stop(TEXT("the music page did not open on a draft")); break; }
+		if (MenuPage.Strip.Bars <= 0 || MenuPage.Strip.Cues.Num() == 0) { Stop(TEXT("the music page has no strip")); break; }
+		MenuTestValue = (*Draft)->GetArrayField(TEXT("cues"))[0]->AsObject()->GetNumberField(TEXT("bar"));
+		MenuTestStage = AdjustItem(TEXT("Bar "), 1) ? 21 : (Stop(TEXT("no cue to move")), 99);
+		break;
+	}
+	case 21:
+	{
+		const TSharedPtr<FJsonObject>* Draft = nullptr;
+		if (!Latest.Raw->TryGetObjectField(TEXT("draft"), Draft) || (*Draft)->GetArrayField(TEXT("cues"))[0]->AsObject()->GetNumberField(TEXT("bar")) != MenuTestValue + 1) { Stop(TEXT("the first element did not move a bar later")); break; }
+		MenuTestStage = AcceptItem(TEXT("Save this program")) ? 22 : (Stop(TEXT("could not save the program on its music")), 99);
+		break;
+	}
+	case 22:
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Timelines = nullptr;
+		if (!Career->TryGetArrayField(TEXT("timelines"), Timelines) || !Timelines->IsValidIndex(0) || (*Timelines)[0]->Type != EJson::Object) { Stop(TEXT("the career did not keep the timeline")); break; }
+		PopPage();
+		if (MenuPage.Id != TEXT("event") || !FindItem(TEXT("♪  Edit it on the music"))) { Stop(TEXT("the briefing does not say the program is on its music")); break; }
 		MenuTestStage = AcceptItem(TEXT("Skate this program")) ? 5 : (Stop(TEXT("could not skate the event")), 99);
 		break;
+	}
 	case 5:
 		// The run, skated by the pad script, then its result after a moment on the ice.
+		if (!bPaused && Latest.Raw.IsValid())
+		{
+			const TSharedPtr<FJsonObject>* Routine = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Cues = nullptr;
+			bMenuTestSawCues |= Latest.Raw->TryGetObjectField(TEXT("routine"), Routine) && (*Routine)->TryGetArrayField(TEXT("cues"), Cues) && Cues->Num() > 0;
+		}
 		if (bPaused && MenuPage.Id == TEXT("result"))
 		{
+			const TSharedPtr<FJsonObject>* Result = nullptr;
+			FString Detail;
+			if (Latest.Raw->TryGetObjectField(TEXT("result"), Result)) (*Result)->TryGetStringField(TEXT("detail"), Detail);
+			UE_LOG(LogIceRun, Display, TEXT("Menu walk: the career run ended at %.1f s of skating, %s"), Latest.Elapsed, *Detail);
+			if (!bMenuTestSawCues) { Stop(TEXT("the run did not carry its music cues")); break; }
 			if (MenuPage.Story.IsEmpty()) { Stop(TEXT("the result has no chapter ending")); break; }
 			MenuTestStage = AcceptItem(TEXT("Back to the Season")) ? 6 : (Stop(TEXT("no way back to the Season")), 99);
 		}
@@ -974,14 +1043,7 @@ void AIceRunGameMode::StartMusic()
 		return;
 	}
 	const FString Id = Tracks[int32(Track)]->AsObject()->GetStringField(TEXT("id"));
-	// tools/build_content.py records where each track went.
-	FString Manifest, Path;
-	TSharedPtr<FJsonObject> Paths;
-	if (FFileHelper::LoadFileToString(Manifest, *FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Generated/music.json"))) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Manifest), Paths) && Paths.IsValid())
-	{
-		Paths->TryGetStringField(Id, Path);
-	}
-	USoundBase* Sound = Path.IsEmpty() ? nullptr : LoadObject<USoundBase>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+	USoundBase* Sound = TrackSound(int32(Track));
 	if (!Sound)
 	{
 		return;
@@ -989,4 +1051,38 @@ void AIceRunGameMode::StartMusic()
 	Music->SetSound(Sound);
 	Music->Play(0.f);
 	UE_LOG(LogIceRun, Log, TEXT("Music: %s from its start."), *Id);
+}
+
+USoundBase* AIceRunGameMode::TrackSound(int32 Track) const
+{
+	const TArray<TSharedPtr<FJsonValue>>& Tracks = CatalogList(TEXT("tracks"));
+	if (!Tracks.IsValidIndex(Track))
+	{
+		return nullptr;
+	}
+	const FString Id = Tracks[Track]->AsObject()->GetStringField(TEXT("id"));
+	// tools/build_content.py records where each track went.
+	FString Manifest, Path;
+	TSharedPtr<FJsonObject> Paths;
+	if (FFileHelper::LoadFileToString(Manifest, *FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Generated/music.json"))) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Manifest), Paths) && Paths.IsValid())
+	{
+		Paths->TryGetStringField(Id, Path);
+	}
+	return Path.IsEmpty() ? nullptr : LoadObject<USoundBase>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+}
+
+void AIceRunGameMode::PreviewMusic(int32 Track, double At)
+{
+	// Asked for by name, so it plays with the run's music off too (main.gd preview_music).
+	USoundBase* Sound = Preview ? TrackSound(Track) : nullptr;
+	if (!Sound)
+	{
+		return;
+	}
+	const double From = FMath::Max(0.0, At - .5);
+	Preview->Stop();
+	Preview->SetSound(Sound);
+	Preview->Play(float(From));
+	PreviewLeft = 8.0;
+	UE_LOG(LogIceRun, Log, TEXT("Music: preview from %.1f s."), From);
 }

@@ -10,6 +10,7 @@ class AIceSkater;
 class AIceRink;
 class AIceShotCamera;
 class AIceRunPlayerController;
+class USoundBase;
 
 /**
  * One skating session against the Ice Lab engine: starts the bridge, builds
@@ -59,6 +60,26 @@ public:
 		FString Right;
 		bool bYou = false;
 	};
+	/** A program on its music, drawn as bars (main.gd timeline_strip): gold bars are your own elements. */
+	struct FMenuStrip
+	{
+		struct FCue
+		{
+			double At = 0.0;
+			FString Title;
+			bool bRequired = true;
+		};
+		double Seconds = 0.0;
+		double Offset = 0.0;
+		double BarSeconds = 0.0;
+		int32 Bars = 0;
+		int32 BarsPerPhrase = 8;
+		/** The check passes: the event's elements green, else red. */
+		bool bOk = true;
+		/** The list line of the first cue, so the focused cue is marked on the strip. */
+		int32 FirstCueItem = -1;
+		TArray<FCue> Cues;
+	};
 	/** A whole menu page, rebuilt from the latest snapshot whenever it changes. */
 	struct FMenuPage
 	{
@@ -72,6 +93,7 @@ public:
 		TArray<FMenuItem> Items;
 		FString RowsTitle;
 		TArray<FMenuRow> Rows;
+		FMenuStrip Strip;
 	};
 
 	bool Paused() const { return bPaused; }
@@ -115,6 +137,11 @@ private:
 	void BuildLessons(FMenuPage& P);
 	void BuildSettings(FMenuPage& P);
 	void BuildResult(FMenuPage& P);
+	/** A career program laid on its music (game/composer.ts through the bridge's timeline op). */
+	void BuildMusic(FMenuPage& P);
+	void TimelineOp(const TSharedRef<FJsonObject>& Options);
+	/** A few seconds of a track from a point in it, to hear where a bar falls. */
+	void PreviewMusic(int32 Track, double At);
 	void MoveFocus(int32 By);
 	void SendOp(const FString& Op, const TSharedRef<FJsonObject>& Payload);
 	/** The costume list: the catalog's presets, then your atelier designs that exist. */
@@ -187,6 +214,13 @@ private:
 	bool bMusicPaused = false;
 	/** Plays the run's own track from its start (the snapshot's track: a career program's laid music, else yours). */
 	void StartMusic();
+	USoundBase* TrackSound(int32 Track) const;
+	/** Seconds the bar's preview has left to play (it fades then). */
+	double PreviewLeft = 0.0;
+	/** The engine's refusal of the last thing asked on this page (No room, The event asks for that one). */
+	FString PageNotice;
+	/** The cue being taken out on the music page, among your own. */
+	int32 RemovePick = 0;
 	/** An atelier slot just kept: worn once the wardrobe comes back with it. */
 	int32 PendingWearSlot = -1;
 	/** The title screen comes up once, over the first run. */
@@ -208,6 +242,8 @@ private:
 	int32 MenuTestStage = 0;
 	double MenuTestClock = 0.0;
 	double MenuTestValue = 0.0;
+	/** The career run in the walk carried its music cues. */
+	bool bMenuTestSawCues = false;
 	void MenuTestStep(float Dt);
 	const FMenuItem* FindItem(const FString& Prefix) const;
 	bool AcceptItem(const FString& Prefix);
@@ -230,4 +266,8 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<class UAudioComponent> Music;
+
+	/** The music page's bar preview: its own voice, so the run's paused music keeps its place. */
+	UPROPERTY()
+	TObjectPtr<class UAudioComponent> Preview;
 };

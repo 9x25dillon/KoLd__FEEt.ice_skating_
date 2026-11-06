@@ -116,6 +116,7 @@ namespace
 void AIceRunGameMode::OpenMenu(const FString& PageId)
 {
 	bPaused = true;
+	PageNotice.Reset();
 	TickDebt = 0.0;
 	PageStack = {TEXT("home")};
 	FocusStack.Reset();
@@ -141,6 +142,7 @@ void AIceRunGameMode::CloseMenu()
 
 void AIceRunGameMode::PushPage(const FString& PageId)
 {
+	PageNotice.Reset();
 	FocusStack.Add(MenuAt);
 	PageStack.Add(PageId);
 	MenuAt = 0;
@@ -151,10 +153,19 @@ void AIceRunGameMode::PushPage(const FString& PageId)
 void AIceRunGameMode::PopPage()
 {
 	const FString Leaving = PageStack.Num() > 0 ? PageStack.Last() : FString();
+	PageNotice.Reset();
 	if (Leaving == TEXT("design"))
 	{
 		// Leaving the atelier without keeping: back into what you were wearing.
 		WearCostume();
+	}
+	if (Leaving == TEXT("music"))
+	{
+		TSharedRef<FJsonObject> Close = MakeShared<FJsonObject>();
+		Close->SetStringField(TEXT("action"), TEXT("close"));
+		TimelineOp(Close);
+		PreviewLeft = 0.0;
+		if (Preview) Preview->Stop();
 	}
 	if (PageStack.Num() > 1)
 	{
@@ -218,7 +229,12 @@ void AIceRunGameMode::BuildPage(const FString& Id, FMenuPage& P)
 	else if (Id == TEXT("lessons")) BuildLessons(P);
 	else if (Id == TEXT("settings")) BuildSettings(P);
 	else if (Id == TEXT("result")) BuildResult(P);
+	else if (Id == TEXT("music")) BuildMusic(P);
 	else BuildHome(P);
+	if (!PageNotice.IsEmpty())
+	{
+		P.Notes.Insert(TEXT("✕  ") + PageNotice, 0);
+	}
 }
 
 void AIceRunGameMode::SendOp(const FString& Op, const TSharedRef<FJsonObject>& Payload)
@@ -519,6 +535,20 @@ void AIceRunGameMode::BuildEvent(FMenuPage& P)
 			SendOp(TEXT("plan"), Payload);
 		}));
 	}
+	const TArray<TSharedPtr<FJsonValue>>& Laid = Arr(Career, TEXT("timelines"));
+	const bool bLaid = Laid.IsValidIndex(FocusEvent) && Laid[FocusEvent]->Type == EJson::Object;
+	if (bLaid)
+	{
+		const TSharedPtr<FJsonObject> T = At(CatalogList(TEXT("tracks")), int32(Num(Laid[FocusEvent]->AsObject(), TEXT("track"))));
+		P.Notes.Add(FString::Printf(TEXT("On its music: %s. It runs the full %d s, and each element has its bar. Changing the order above takes it off the music."), *Str(T, TEXT("title")), int32(Num(E, TEXT("seconds")))));
+	}
+	P.Items.Add(Line(bLaid ? TEXT("♪  Edit it on the music →") : TEXT("♪  Lay it on the music →"), TEXT(""), TEXT("Anchor each element to a bar of your music. Hitting your bar is shown, not scored."), [this]
+	{
+		TSharedRef<FJsonObject> Open = MakeShared<FJsonObject>();
+		Open->SetStringField(TEXT("action"), TEXT("open"));
+		TimelineOp(Open);
+		PushPage(TEXT("music"));
+	}));
 	P.Items.Add(Line(TEXT("Skate this program →"), TEXT(""), Lock.IsEmpty() ? TEXT("Every career program runs its full time. Gold: no falls. Silver: at most two. Bronze: finish.") : Lock,
 		[this] { StartMode(TEXT("career"), FocusEvent); }, nullptr, Lock.IsEmpty()));
 	P.RowsTitle = TEXT("The field  ·  they don't decide your medal");
@@ -927,5 +957,112 @@ void AIceRunGameMode::BuildResult(FMenuPage& P)
 		{
 			P.Rows.Add({FString::FromInt(++N), V->Type == EJson::String ? V->AsString() : FString(), FString(), false});
 		}
+	}
+}
+
+void AIceRunGameMode::TimelineOp(const TSharedRef<FJsonObject>& Options)
+{
+	Options->SetNumberField(TEXT("event"), FocusEvent);
+	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetObjectField(TEXT("options"), Options);
+	SendOp(TEXT("timeline"), Payload);
+}
+
+void AIceRunGameMode::BuildMusic(FMenuPage& P)
+{
+	const TSharedPtr<FJsonObject> D = Obj(Latest.Raw, TEXT("draft"));
+	const TSharedPtr<FJsonObject> E = At(CatalogList(TEXT("events")), FocusEvent);
+	P.Title = FString::Printf(TEXT("%s   ·   on the music"), *Str(E, TEXT("title")));
+	P.Story = FString::Printf(TEXT("Anchor each element to a bar of your music. The program then runs the full %d s, and the cue tells you when each bar comes round. Hitting your bar is shown, not scored. Gold bars are your own elements; the line marks half time."), int32(Num(E, TEXT("seconds"))));
+	if (!D.IsValid())
+	{
+		P.Subtitle = TEXT("Opening the program on its music…");
+		return;
+	}
+	const TArray<TSharedPtr<FJsonValue>>& Tracks = CatalogList(TEXT("tracks"));
+	const int32 Track = int32(Num(D, TEXT("track")));
+	const TSharedPtr<FJsonObject> T = At(Tracks, Track);
+	P.Subtitle = FString::Printf(TEXT("%s   ·   %.0f bpm   ·   %d bars of %.1f s"), *Str(T, TEXT("title")), Num(T, TEXT("bpm")), int32(Num(D, TEXT("bars"))), Num(D, TEXT("barSeconds")));
+	auto Op = [this](const TCHAR* Action, TFunction<void(FJsonObject&)> Fill = nullptr)
+	{
+		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("action"), Action);
+		if (Fill) Fill(*O);
+		TimelineOp(O);
+	};
+	P.Items.Add(Line(FString::Printf(TEXT("Track   ◀  %s  ▶"), *Str(T, TEXT("title"))), FString::Printf(TEXT("%.0f bpm"), Num(T, TEXT("bpm"))), TEXT("The program keeps its order; the bars move to the new music."),
+		[Op, Track, Count = Tracks.Num()] { Op(TEXT("track"), [Track, Count](FJsonObject& O) { O.SetNumberField(TEXT("track"), Wrap(Track + 1, Count)); }); },
+		[Op, Track, Count = Tracks.Num()](int32 By) { Op(TEXT("track"), [Track, Count, By](FJsonObject& O) { O.SetNumberField(TEXT("track"), Wrap(Track + By, Count)); }); }));
+	P.Items.Add(Header(TEXT("Your elements   ·   ◀ ▶ a bar earlier or later   ·   A to hear it")));
+	const TArray<TSharedPtr<FJsonValue>>& Cues = Arr(D, TEXT("cues"));
+	FMenuStrip& S = P.Strip;
+	S.Seconds = Num(D, TEXT("seconds"));
+	S.Offset = Num(D, TEXT("offset"));
+	S.BarSeconds = Num(D, TEXT("barSeconds"));
+	S.Bars = int32(Num(D, TEXT("bars")));
+	S.BarsPerPhrase = FMath::Max(1, int32(Num(D, TEXT("barsPerPhrase"), 8)));
+	S.FirstCueItem = P.Items.Num();
+	for (const TSharedPtr<FJsonValue>& V : Cues)
+	{
+		const TSharedPtr<FJsonObject> C = V->AsObject();
+		FMenuStrip::FCue Cue;
+		Cue.At = Num(C, TEXT("at"));
+		Cue.Title = Str(C, TEXT("title"));
+		C->TryGetBoolField(TEXT("required"), Cue.bRequired);
+		S.Cues.Add(Cue);
+	}
+	TArray<int32> Yours;
+	for (int32 I = 0; I < Cues.Num(); ++I)
+	{
+		const TSharedPtr<FJsonObject> C = Cues[I]->AsObject();
+		bool bRequired = true;
+		C->TryGetBoolField(TEXT("required"), bRequired);
+		if (!bRequired) Yours.Add(I);
+		const double AtSeconds = Num(C, TEXT("at"));
+		const int32 Clock = FMath::FloorToInt32(AtSeconds);
+		P.Items.Add(Line(FString::Printf(TEXT("Bar %02d   %d:%02d   %s%s"), int32(Num(C, TEXT("bar"))) + 1, Clock / 60, Clock % 60, *Str(C, TEXT("title")), bRequired ? TEXT("") : TEXT("   (yours)")), TEXT("◀ ▶"),
+			TEXT("A plays the music from this bar for a few seconds."),
+			[this, Track, AtSeconds] { PreviewMusic(Track, AtSeconds); },
+			[Op, I](int32 By) { Op(TEXT("nudge"), [I, By](FJsonObject& O) { O.SetNumberField(TEXT("index"), I); O.SetNumberField(TEXT("by"), By); }); }));
+	}
+	const int32 Extra = int32(Num(Catalog, TEXT("planExtra"), 2));
+	const TArray<FString> Ids = Keys(Obj(Catalog, TEXT("elements")));
+	if (Cues.Num() < Arr(E, TEXT("routine")).Num() + Extra && Ids.Num() > 0)
+	{
+		const FString Pick = Ids[Wrap(AddPick, Ids.Num())];
+		P.Items.Add(Line(FString::Printf(TEXT("+ Add after the last   ◀  %s  ▶"), *ElementTitle(Pick)), TEXT(""), TEXT("One of your own, after the last element, where the music has room."),
+			[Op, Pick] { Op(TEXT("add"), [Pick](FJsonObject& O) { O.SetStringField(TEXT("id"), Pick); }); },
+			[this](int32 By) { AddPick += By; RebuildPage(); }));
+	}
+	if (Yours.Num() > 0)
+	{
+		const int32 Which = Yours[Wrap(RemovePick, Yours.Num())];
+		P.Items.Add(Line(FString::Printf(TEXT("Take one of yours out   ◀  %s  ▶"), *Str(Cues[Which]->AsObject(), TEXT("title"))), TEXT(""), TEXT("The event's own elements stay."),
+			[Op, Which] { Op(TEXT("remove"), [Which](FJsonObject& O) { O.SetNumberField(TEXT("index"), Which); }); },
+			[this](int32 By) { RemovePick += By; RebuildPage(); }));
+	}
+	P.Items.Add(Line(TEXT("Spread them evenly over the music"), TEXT(""), TEXT("Every element on its own bar, the gaps even."), [Op] { Op(TEXT("spread")); }));
+	const TSharedPtr<FJsonObject> Check = Obj(D, TEXT("check"));
+	bool bOk = false, bSaved = false;
+	if (Check.IsValid()) Check->TryGetBoolField(TEXT("ok"), bOk);
+	S.bOk = bOk;
+	D->TryGetBoolField(TEXT("saved"), bSaved);
+	for (const TSharedPtr<FJsonValue>& V : Arr(Check, TEXT("problems"))) P.Notes.Add(TEXT("✕  ") + V->AsString());
+	for (const TSharedPtr<FJsonValue>& V : Arr(Check, TEXT("notes"))) P.Notes.Add(TEXT("·  ") + V->AsString());
+	P.Items.Add(Line(bSaved ? TEXT("Saved ✓") : TEXT("Save this program on its music"), TEXT(""), bOk ? TEXT("The career program then skates to this music, every element on its bar.") : TEXT("Fix what is marked first."),
+		[Op] { Op(TEXT("save")); }, nullptr, !bSaved && bOk));
+	const TArray<TSharedPtr<FJsonValue>>& Laid = Arr(CareerObject(), TEXT("timelines"));
+	if (Laid.IsValidIndex(FocusEvent) && Laid[FocusEvent]->Type == EJson::Object)
+	{
+		P.Items.Add(Line(TEXT("Take it off the music"), TEXT("the order stays"), TEXT("The program goes back to running as it is skated."), [this, Op] { Op(TEXT("clear")); PopPage(); }));
+	}
+	P.RowsTitle = TEXT("Where the elements fall");
+	for (const TSharedPtr<FJsonValue>& V : Cues)
+	{
+		const TSharedPtr<FJsonObject> C = V->AsObject();
+		bool bRequired = true;
+		C->TryGetBoolField(TEXT("required"), bRequired);
+		const int32 Clock = FMath::FloorToInt32(Num(C, TEXT("at")));
+		P.Rows.Add({FString::Printf(TEXT("%02d"), int32(Num(C, TEXT("bar"))) + 1), Str(C, TEXT("title")), FString::Printf(TEXT("%d:%02d"), Clock / 60, Clock % 60), !bRequired});
 	}
 }
