@@ -72,6 +72,8 @@ var beginner := false
 var scheme := 3
 var skating_setup := "explorer"
 var assistance := 0.75
+## game/steady.ts: "" follows the setup's default (off in Simulation, Experimental and Dig Gate, light elsewhere).
+var steady_choice := ""
 var controller_profile: Dictionary = {}
 var saved_controller_profile: Dictionary = {}
 var track := 0
@@ -541,7 +543,7 @@ func show_page(page: String) -> void:
 			menu.add_child(paragraph("Preparing your lessons…"))
 		else:
 			menu.add_child(button("Trust the ice   /   Balance to air, %d steps" % int(catalog.trustSteps),func():start_lesson("trust",skating_setup),true))
-			menu.add_child(paragraph("Skating itself, in your current setup's words: stand still on something that moves, then edges, stops, and only then the air.",12))
+			menu.add_child(paragraph("Skating itself, in your current setup's words: stand still on something that moves, then edges, getting where you mean to go, stops, and only then the air.",12))
 			for course in catalog.courses:
 				if str(course.id) == "paddles": continue
 				var mine: bool = skating_setup in course.setups
@@ -617,6 +619,12 @@ func show_page(page: String) -> void:
 			menu.add_child(assist_slider)
 		if skating_setup.is_empty() or skating_setup == "repertoire":
 			menu.add_child(button("Landing coach: "+("On" if beginner else "Off"),func():beginner=not beginner;show_page("settings")))
+		var steady_default := str(catalog.get("steady",{}).get("defaults",{}).get(skating_setup,"light"))
+		var steady_names := {"":"Setup default (%s)" % steady_default.capitalize(),"off":"Off","light":"Light","firm":"Firm"}
+		menu.add_child(button("Steadying hand: "+str(steady_names[steady_choice]),func():
+			var order := ["","off","light","firm"]
+			steady_choice=order[(order.find(steady_choice)+1)%order.size()];save_preferences();show_page("settings")))
+		menu.add_child(paragraph("A hand on your stick, never the physics: it keeps the lean you ask for to what your speed can carry. Off by default where a setup promises minimal assistance.",12))
 		menu.add_child(button("Legacy override: "+["Lean & load","Assisted steering","Two-foot control","Full repertoire"][scheme],func():skating_setup="";scheme=(scheme+1)%4;show_page("settings")))
 		menu.add_child(button("Controller tuning & bindings",func():show_page("controller")))
 		if skating_setup not in ["simulation","experimental"]:
@@ -997,7 +1005,7 @@ func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
 	playing = false
 	skater.load_model(CHARACTERS[character].path)
 	partner.visible = false
-	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile}})
+	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile,"steady":steady_choice if not steady_choice.is_empty() else null}})
 	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null}})
 
 func on_engine(op: String, data: Dictionary) -> void:
@@ -1138,6 +1146,17 @@ func cycle_camera() -> void:
 
 func update_hud() -> void:
 	var s: Dictionary = frame.state
+	var lesson = frame.get("tutorial")
+	if lesson is Dictionary and lesson.get("targets") is Array:
+		var next := -1
+		var list: Array = lesson.targets
+		if lesson.get("target") is Dictionary:
+			for i in list.size():
+				if float(list[i].x) == float(lesson.target.x) and float(list[i].y) == float(lesson.target.y):
+					next = i
+		arena.set_lesson_targets(list,next)
+	else:
+		arena.set_lesson_targets([],-1)
 	hud_move.text = "%s   ·   %.1f m/s" % [str(frame.move),Vector2(s.vel.x,s.vel.y).length()]
 	# sim/moves.ts spinTick's foot change, never surfaced here before: a brief
 	# flash beside the move name, the same decaying-flash idiom game/main.ts's
@@ -1180,7 +1199,10 @@ func update_hud() -> void:
 		coach_tip.text = str(l.how) if str(l.message).is_empty() else "✓ "+str(l.message)+"\n\n"+str(l.how)
 		if not str(l.unproven).is_empty():
 			coach_tip.text += "\n\n"+str(l.unproven)
-		coach_progress.text = "Step %d of %d    ·    %s\nPause to skip" % [mini(int(l.index)+1,int(l.total)),int(l.total),str(l.status)]
+		if not str(l.get("offer","")).is_empty():
+			coach_tip.text += "\n\n"+str(l.offer)
+		var stage := str(l.get("stage",""))
+		coach_progress.text = "Step %d of %d%s    ·    %s\nPause to skip" % [mini(int(l.index)+1,int(l.total)),int(l.total),("  ·  "+stage) if not stage.is_empty() else "",str(l.status)]
 		hud_time.text = "%02d:%02d" % [int(frame.elapsed)/60,int(frame.elapsed)%60]
 	elif frame.mode == "armdrill" and frame.get("drill") != null:
 		coach_title.text = str(frame.drill.title)
@@ -1633,6 +1655,9 @@ func load_preferences() -> void:
 	if skating_setup not in ["simulation","explorer","experimental","repertoire"]:
 		skating_setup = ""
 	assistance = clampf(float(saved.get("assistance",.75)),.5,1)
+	steady_choice = str(saved.get("steady",""))
+	if steady_choice not in ["","off","light","firm"]:
+		steady_choice = ""
 	beginner = bool(saved.get("beginner",true))
 	scheme = clampi(int(saved.get("scheme",1)),0,3)
 	if saved.get("controllerProfile") is Dictionary:
@@ -1658,6 +1683,6 @@ func save_preferences() -> void:
 		return
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"rumble":rumble_enabled,"paddles":paddle_layout,"sequence":sequence}))
+		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"steady":steady_choice,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"rumble":rumble_enabled,"paddles":paddle_layout,"sequence":sequence}))
 	else:
 		on_error("Preferences could not be saved.")

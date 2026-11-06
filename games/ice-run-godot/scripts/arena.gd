@@ -409,6 +409,49 @@ func set_course(mode: String, catalog: Dictionary) -> void:
 		markers.add_child(node)
 		targets.append(node)
 
+# A lesson's travel targets (game/tutorial.ts TutorialTarget): a ring at each reach, a cone to round;
+# the next one glows. Rebuilt only when the step's targets change.
+var lesson_markers: Node3D
+var lesson_key := ""
+var lesson_next := -2
+var lesson_nodes: Array[MeshInstance3D] = []
+func set_lesson_targets(list: Array, next: int) -> void:
+	if lesson_markers == null:
+		lesson_markers = Node3D.new()
+		add_child(lesson_markers)
+	var key := JSON.stringify(list)
+	if key == lesson_key and next == lesson_next:
+		return
+	lesson_next = next
+	if key != lesson_key:
+		lesson_key = key
+		for child in lesson_markers.get_children():
+			child.queue_free()
+		lesson_nodes.clear()
+		for t in list:
+			var node := MeshInstance3D.new()
+			if str(t.kind) == "cone":
+				var cone := CylinderMesh.new()
+				cone.top_radius = 0.0
+				cone.bottom_radius = .25
+				cone.height = .7
+				node.mesh = cone
+				node.position = SimSpace.point(t.x,t.y,.35)
+			else:
+				var torus := TorusMesh.new()
+				torus.inner_radius = float(t.r)-.12
+				torus.outer_radius = float(t.r)
+				torus.rings = 48
+				torus.ring_segments = 8
+				node.mesh = torus
+				node.position = SimSpace.point(t.x,t.y,.04)
+			lesson_markers.add_child(node)
+			lesson_nodes.append(node)
+	for i in lesson_nodes.size():
+		var kind := str(list[i].kind)
+		var color := Color("ff7a2f") if kind == "cone" else Color("9fe0b8") if kind == "checkpoint" else Color("d8c295")
+		lesson_nodes[i].material_override = mat(color,.1,.4,2.5 if i == next else .3)
+
 func update_course(frame: Dictionary) -> void:
 	var index := int(frame.rookie.index) if frame.mode == "rookie" else int(frame.run.collected)%12
 	for i in targets.size():

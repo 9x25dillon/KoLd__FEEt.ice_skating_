@@ -9,6 +9,7 @@ import {NEUTRAL_INPUT,MOVE,TURN_KIND} from '../runtime/sim/types.js';
 import {verifyReplay,parseReplay} from '../runtime/sim/replay.js';
 import {JUMP_PHASE} from '../runtime/sim/jump.js';
 import {readFileSync} from 'node:fs';
+import {STEPS as STEPS_FOR_TESTS} from '../runtime/game/tutorial.js';
 import {createHash} from 'node:crypto';
 
 test('Godot host executes the exact Ice Lab solver across 240 input ticks',()=>{
@@ -176,17 +177,21 @@ test('every prepared module is sourced from the entire current Ice Lab tree',()=
  }
 });
 
+// Re-pinned 2026-11-05, deliberately: the bridge hands every mapped input to the steadying hand
+// (game/steady.ts) at the setup's default, as the browser does, so the reference does too.
 test('Full repertoire uses shared raw mapping in Godot, including batched taps and D replay', async()=>{
  const {gameInput}=await import('../runtime/game/controls.js');
  const {newSchemeState}=await import('../runtime/app/schemes.js');
+ const {SteadyHand,steadyStrength,steadyDefault}=await import('../runtime/game/steady.js');
  const e=new IceEngine();e.configure({scheme:3,beginner:false,cruise:false});e.start({mode:'free'});
+ const hand=new SteadyHand(steadyStrength(steadyDefault(null)));
  const s=createState(e.params,4.5),st=newSchemeState(),ice=new IceGrid(e.params.rinkHalfLength,e.params.rinkHalfWidth);
  const hardware={connected:true,axes:[-.5,0,0,0],buttons:Array(16).fill(0),keys:[]};hardware.buttons[7]=.38;
  for(let batch=0;batch<180;batch++){
   hardware.buttons[15]=batch===120?1:0;
   for(let i=0;i<2;i++){
    const {input}=gameInput({...emptyControls(),hardware},s,3,st,false,e.params,e.controllerProfile);
-   step(s,input,e.params,1/120,[],ice);
+   step(s,hand.apply(input,s,e.params),e.params,1/120,[],ice);
   }
   e.advance({hardware},2);
   assert.deepEqual(e.state,s,`raw mapping parity, batch ${batch}`);
@@ -210,7 +215,9 @@ test('controller profiles validate before replacing settings and raw payloads ar
 for(const setup of ['simulation','explorer','experimental','repertoire']) test(`${setup} raw controls match browser mapping in batched Godot ticks`,async()=>{
  const {setupInput}=await import('../runtime/game/setups.js');
  const {newSchemeState}=await import('../runtime/app/schemes.js');
+ const {SteadyHand,steadyStrength,steadyDefault}=await import('../runtime/game/steady.js');
  const e=new IceEngine();e.configure({setup,assistance:.75,beginner:false,cruise:false});e.start({mode:'free'});
+ const hand=new SteadyHand(steadyStrength(steadyDefault(setup)));
  const s=createState(e.params,4.5),st=newSchemeState(),ice=new IceGrid(e.params.rinkHalfLength,e.params.rinkHalfWidth);
  const hardware={connected:true,axes:[-.35,0,setup==='simulation'?-.35:0,0],buttons:Array(16).fill(0),keys:[]};hardware.buttons[7]=.38;
  for(let batch=0;batch<120;batch++){
@@ -219,7 +226,7 @@ for(const setup of ['simulation','explorer','experimental','repertoire']) test(`
   hardware.axes[2]=batch>=50&&batch<60?.5:setup==='simulation'?-.35:0;
   for(let i=0;i<2;i++){
    const {input}=setupInput({...emptyControls(),hardware},s,setup,st,e.params,e.controllerProfile,.75);
-   step(s,input,e.params,1/120,[],ice);
+   step(s,hand.apply(input,s,e.params),e.params,1/120,[],ice);
   }
   e.advance({hardware},2);assert.deepEqual(e.state,s,`${setup}, batch ${batch}`);
  }
@@ -378,4 +385,40 @@ test('career wear: a fall costs the body as it happens, lowers the next run, and
  const snap=e.snapshot();assert.deepEqual(snap.career.wear,e.career.wear);
  e.start({mode:'free'});const w=e.career.wear.hip;e.state.lean=e.params.fallLean+.05;e.tick({...NEUTRAL_INPUT});
  assert.equal(e.career.wear.hip,w,'other modes cost the body nothing');
+});
+
+test("the steadying hand: the setup's default unless chosen, at once mid-run, recorded, and its replay verifies",()=>{
+ const e=new IceEngine();
+ for(const [setup,level] of [['simulation','off'],['experimental','off'],['diggate','off'],['explorer','light'],['repertoire','light']]){
+  e.configure({setup});assert.equal(e.snapshot().steady.level,level,setup);
+ }
+ assert.deepEqual(e.catalog().steady.defaults,{simulation:'off',explorer:'light',experimental:'off',diggate:'off',repertoire:'light'});
+ e.configure({steady:'firm'});assert.equal(e.steadyLevel(),'firm');assert.equal(e.hand.strength,1);
+ e.configure({setup:'simulation'});assert.equal(e.steadyLevel(),'firm','a choice holds across setups');
+ e.configure({steady:null});assert.equal(e.steadyLevel(),'off','back to the setup default');
+ assert.throws(()=>e.configure({steady:'tight'}));assert.equal(e.steadyLevel(),'off');
+ // Firm, a slow skater, the stick slammed: the hand holds the lean back and the replay records what it handed on.
+ e.configure({setup:'explorer',steady:'firm'});e.start({mode:'free'});
+ const hardware={connected:true,axes:[1,0,0,0],buttons:Array(16).fill(0),keys:[]};
+ let held=0;
+ for(let i=0;i<120;i++){const f=e.advance({hardware},2);held=Math.max(held,f.steady.held);}
+ assert.ok(held>0,'it held');
+ const b=e.snapshot().balance;
+ assert.ok(b.edge>0&&b.fallLean>1&&b.limit<=b.edge+1e-9,JSON.stringify(b));
+ assert.equal(verifyReplay(parseReplay(e.exportReplay())).divergence,null);
+});
+
+test("a lesson's travel steps reach the snapshot with their targets, and the offer comes after falls with the hand off",()=>{
+ const e=new IceEngine();e.configure({setup:'simulation'});e.start({mode:'lesson',course:'trust'});
+ const lap=STEPS_FOR_TESTS.findIndex(x=>x.id==='lap');
+ while(e.lesson.index<lap)e.lesson.skip();
+ const f=e.advance({hardware:{connected:true,axes:[0,0,0,0],buttons:Array(16).fill(0),keys:[]}},2);
+ assert.equal(f.tutorial.stage,'Travel');
+ assert.equal(f.tutorial.targets.length,2);
+ assert.deepEqual(f.tutorial.target,f.tutorial.targets[0]);
+ assert.equal(f.tutorial.offer,'');
+ e.lesson.falls=2;
+ assert.match(e.snapshot().tutorial.offer,/steadying hand/);
+ e.configure({steady:'light'});
+ assert.equal(e.snapshot().tutorial.offer,'','not once it is on');
 });

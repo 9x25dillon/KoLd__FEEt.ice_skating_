@@ -13,6 +13,7 @@ import { LIGHTS, LIGHT_RADIUS } from "./run.ts";
 import { SNOWFLAKES, TARGETS } from "./playground.ts";
 import type { Playground } from "./playground.ts";
 import { ROOKIE_GATES } from "./rookie.ts";
+import type { TutorialTarget } from "./tutorial.ts";
 import type { RookieCourse } from "./rookie.ts";
 import { Camera, VIEW } from "../app/camera.ts";
 import type { Ghost } from "./ghost.ts";
@@ -42,7 +43,7 @@ export class SkateScene {
   }
   draw(ctx: CanvasRenderingContext2D, w: number, h: number, s: SkaterState, p: Params,
     trail: Array<Array<{x:number; y:number; contact:boolean}>>, low: boolean, target: number | null, playground: Playground | null = null, rookie: RookieCourse | null = null,
-    ghost: Ghost | null = null) {
+    ghost: Ghost | null = null, lesson: { targets: TutorialTarget[]; next: TutorialTarget | null } | null = null) {
     const scale = this.overview ? Math.max(5, Math.min(w / 67, h / 45)) : Math.min(94, Math.max(48, h / 9)) * this.zoom;
     const cam = this.overview ? this.map : this.camera;
     if(this.overview) { cam.cx=0; cam.cy=18; }
@@ -119,6 +120,13 @@ export class SkateScene {
       ctx.strokeStyle = "#458baf65"; ctx.lineWidth = 0.035; ctx.stroke();
       ctx.strokeStyle = "#ffffff99"; ctx.lineWidth = 0.012; ctx.stroke();
     }
+    // A lesson's travel targets (game/tutorial.ts): each ring is the reach its step measures; a cone to go round.
+    if (lesson) lesson.targets.forEach(t => {
+      const next = t === lesson.next, cone = t.kind === "cone";
+      ctx.beginPath(); ctx.arc(t.x, t.y, cone ? 0.35 : t.r, 0, Math.PI * 2);
+      ctx.fillStyle = cone ? "#e3934ecc" : next ? "#e8ab4433" : "#7085a740"; ctx.fill();
+      ctx.strokeStyle = cone ? "#a85a20" : next ? "#b77b28" : "#5d7390"; ctx.lineWidth = 0.08; ctx.stroke();
+    });
     if (target !== null) LIGHTS.forEach((v, i) => {
       ctx.beginPath(); ctx.arc(v.x, v.y, i === target ? LIGHT_RADIUS : 0.2, 0, Math.PI * 2);
       ctx.fillStyle = i === target ? "#e8ab4433" : "#7085a780"; ctx.fill();
@@ -331,8 +339,9 @@ export class SkateScene {
       ctx.lineTo(x, y + radius); ctx.lineTo(x - radius * .5, y); ctx.closePath(); ctx.fill();
     }
     ctx.restore();
-    if (target !== null || (rookie && !rookie.done)) {
-      const dest=rookie && !rookie.done ? rookie.target : LIGHTS[target!], [tx,ty]=project({...dest,z:.4});
+    const lessonDest = lesson?.next && lesson.next.kind !== "cone" ? lesson.next : null;
+    if (target !== null || (rookie && !rookie.done) || lessonDest) {
+      const dest=lessonDest ?? (rookie && !rookie.done ? rookie.target : LIGHTS[target!]), [tx,ty]=project({...dest,z:.4});
       const ax=Math.max(35,Math.min(w-35,tx)), ay=Math.max(140,Math.min(h-160,ty));
       ctx.fillStyle="#95601b";ctx.textAlign="center";ctx.font="700 13px system-ui";
       ctx.fillText(`◆ ${Math.round(Math.hypot(dest.x-s.pos.x,dest.y-s.pos.y))} m`,ax,ay);

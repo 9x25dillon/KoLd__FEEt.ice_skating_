@@ -27,6 +27,8 @@ import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
 import { RookieCourse } from "./rookie.ts";
 import { Tutorial, STAGES, STEPS, tutorialGhost } from "./tutorial.ts";
+import { SteadyHand, steadyDefault, steadyStrength, isSteadyLevel } from "./steady.ts";
+import type { SteadyLevel } from "./steady.ts";
 import { RustGate, JUMP_FAMILIES } from "./training.ts";
 import { COURSES, courseSteps, howContext as padContext, elementHow } from "./padcourse.ts";
 import type { PadCourse } from "./padcourse.ts";
@@ -40,7 +42,7 @@ const bodyNote = () => newInjuries.length ? ` ${newInjuries.join(" and ")}: too 
 let career = new CareerState();
 try { career = CareerState.restore(localStorage.getItem("edgework-career-v1")); } catch { /* Storage is optional. */ }
 let courseMode = false, rookie: RookieCourse | null = null;
-/** The Tutorial (game/tutorial.ts): balance, edges, scrape & dig, air. */
+/** The Tutorial (game/tutorial.ts): balance, edges, travel, scrape & dig, air. */
 let rustGate = new RustGate({ toe: 0, edge: 0 });
 let tutorialMode = false, tutorial: Tutorial | null = null, lessonCourse: PadCourse | null = null;
 import { EdgeAudio } from "../app/audio.ts";
@@ -132,13 +134,18 @@ window.addEventListener("focus", () => { controllerProfile = loadControllerProfi
 let scheme: Scheme = SCHEME.B;
 try { const saved = Number(localStorage.getItem("edgework-control-scheme") ?? SCHEME.B); if ([0, 1, 2, 3].includes(saved)) scheme = saved as Scheme; } catch { /* Session controls work without storage. */ }
 let setup: Setup | null = "explorer", assistance = 0.75;
+/** game/steady.ts: null follows the setup's default (off in Simulation, Experimental and Dig Gate, light elsewhere). */
+let steadyChoice: SteadyLevel | null = null;
 try {
   const saved = JSON.parse(localStorage.getItem(SETUP_KEY) ?? "null");
   if (saved && (isSetup(saved.setup) || saved.setup === null)) {
     setup = saved.setup;
     if (Number.isFinite(saved.assistance) && saved.assistance >= 0.5 && saved.assistance <= 1) assistance = saved.assistance;
+    if (isSteadyLevel(saved.steady)) steadyChoice = saved.steady;
   }
 } catch { /* Use the exploration starting point. */ }
+const steadyLevel = (): SteadyLevel => steadyChoice ?? steadyDefault(setup);
+const hand = new SteadyHand(steadyStrength(steadyLevel()));
 if (setup) { scheme = FULL_SCHEME; beginner = setup === "repertoire"; cruise = false; }
 let freeSkate = true, cantilever = false, lowHeld = false;
 let elapsedSkate = 0, pendingToe = false;
@@ -320,7 +327,7 @@ function renderFullBindings() {
 const setupSelect = el("setup-select") as HTMLSelectElement;
 (el("ghost-toggle") as HTMLInputElement).checked = ghostOn;
 el("ghost-toggle").addEventListener("change", e => setGhost((e.target as HTMLInputElement).checked));
-function saveSetup() { try { localStorage.setItem(SETUP_KEY, JSON.stringify({ setup, assistance })); } catch { /* Session only. */ } }
+function saveSetup() { try { localStorage.setItem(SETUP_KEY, JSON.stringify({ setup, assistance, steady: steadyChoice })); } catch { /* Session only. */ } }
 function renderSetup() {
   renderCourses();
   setupSelect.value = setup ?? "custom";
@@ -328,6 +335,9 @@ function renderSetup() {
   el("manual-guide").hidden = setup === null || setup === "repertoire";
   (el("assistance") as HTMLInputElement).value = String(assistance);
   (el("assistance") as HTMLInputElement).disabled = setup !== "explorer";
+  hand.strength = steadyStrength(steadyLevel());
+  (el("steady-select") as HTMLSelectElement).value = steadyChoice ?? "";
+  (el("steady-select") as HTMLSelectElement).options[0].text = `Setup default (${steadyDefault(setup)})`;
   el("assistance-value").textContent = `${Math.round(assistance * 100)}%`;
   (el("difficulty") as HTMLSelectElement).disabled = setup !== null && setup !== "repertoire";
   (el("difficulty") as HTMLSelectElement).value = beginner ? "beginner" : "simulation";
@@ -338,6 +348,10 @@ setupSelect.addEventListener("change", () => {
   setup = isSetup(setupSelect.value) ? setupSelect.value : null;
   if (setup) { scheme = FULL_SCHEME; beginner = setup === "repertoire"; cruise = false; }
   saveSetup(); saveControlScheme(); renderSetup(); start(); pause();
+});
+el("steady-select").addEventListener("change", e => {
+  const value = (e.target as HTMLSelectElement).value;
+  steadyChoice = isSteadyLevel(value) ? value : null; saveSetup(); renderSetup();
 });
 el("assistance").addEventListener("change", e => {
   assistance = Number((e.target as HTMLInputElement).value); saveSetup(); renderSetup(); start(); pause();
@@ -393,7 +407,7 @@ function draw(_now: number) {
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode && !tutorial && !armDrill ? playground : null, !playback ? rookie : null, playback ? null : ghost);
+  scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode && !tutorial && !armDrill ? playground : null, !playback ? rookie : null, playback ? null : ghost, tutorial && !playback ? { targets: tutorial.targets, next: tutorial.target } : null);
   const note = el("ghost-note");
   note.hidden = !ghost || !!playback;
   if (ghost && !playback) {
@@ -536,8 +550,10 @@ function frame(now: number) {
       const mapped = setup ? setupInput(liveControls, skater, setup, steering, params, controllerProfile, assistance)
         : gameInput(liveControls, skater, scheme, steering, lowPose, params, controllerProfile);
       const coached = beginner ? coach.apply(mapped.input, skater, params, pendingTrick, SIM_DT) : mapped.input;
+      // The steadying hand (game/steady.ts), as the native bridge applies it.
+      const steadied = hand.apply(coached, skater, params);
       // Applied before the recorder, so a replay holds what the skater actually did.
-      const input = careerMode && !playback ? rustGate.apply(coached, skater) : coached;
+      const input = careerMode && !playback ? rustGate.apply(steadied, skater) : steadied;
       pendingTrick = false; cantilever = mapped.cantilever;
       pendingPush = false; pendingToe = false;
       const events: EdgeEvent[] = [];
@@ -843,7 +859,7 @@ function drawTutorial() {
   const stages = STAGES.map((g, i) => `<li data-state="${i < t.stage ? "done" : i === t.stage ? "current" : "next"}"${i === t.stage ? ' aria-current="step"' : ""}>${g.name}</li>`).join("");
   if (el("tutorial-stages").innerHTML !== stages) el("tutorial-stages").innerHTML = stages;
   (el("tutorial-meter") as HTMLProgressElement).value = t.fraction;
-  setText("tutorial-status", t.status);
+  setText("tutorial-status", t.falls >= 2 && hand.strength === 0 ? `${t.status} · Falling a lot? The steadying hand keeps your lean to what your speed can carry: turn it on in the guide's settings.` : t.status);
   setText("lesson-progress", `Step ${Math.min(t.index + 1, t.steps.length)} of ${t.steps.length}`);
   el("combo-label").textContent = "Tutorial"; el("combo").textContent = `${Math.min(t.index, t.steps.length)}/${t.steps.length}`;
   if (!skater.fallen) el("hint").textContent = t.toast > 0 ? `✓ ${t.message}` : now ? `${stage.name} · ${stage.line}` : "";
