@@ -80,6 +80,8 @@ def surface_material():
     """One colour, roughness, metalness and glow: everything in the hall but the ice."""
     m = new_material("M_Surface")
     m.set_editor_property("two_sided", True)
+    # The snow off the blades is drawn instanced (Source/IceRun/IceSpray): without the flag the game draws the default material.
+    m.set_editor_property("used_with_instanced_static_meshes", True)
     color = parameter(m, unreal.MaterialExpressionVectorParameter, "Color", unreal.LinearColor(.8, .8, .8, 1), -600, 0)
     rough = parameter(m, unreal.MaterialExpressionScalarParameter, "Roughness", .5, -600, 220)
     metal = parameter(m, unreal.MaterialExpressionScalarParameter, "Metallic", 0.0, -600, 320)

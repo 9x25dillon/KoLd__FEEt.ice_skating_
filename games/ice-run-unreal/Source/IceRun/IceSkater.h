@@ -5,6 +5,8 @@
 #include "IceFrame.h"
 #include "IceSkater.generated.h"
 
+class UIceSpray;
+
 class UPoseableMeshComponent;
 class UStaticMeshComponent;
 
@@ -18,7 +20,7 @@ class UStaticMeshComponent;
  * The working is in Godot's body frame (x right, y up, z back, metres) so it
  * reads against skater.gd line for line; IceSimSpace::FromBody is the only
  * door into Unreal's. The skirt's panels swing on skater.gd's springs in its
- * world frame (GodotWorld, below). Not yet ported: the face and eyes, snow spray.
+ * world frame (GodotWorld, below). The snow off the blades is IceSpray's. Not yet ported: the face and eyes.
  */
 UCLASS()
 class AIceSkater : public AActor
@@ -51,6 +53,17 @@ public:
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UStaticMeshComponent> StandIn;
+
+	/** Snow off each blade (skater.gd's sprays). */
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UIceSpray> Spray;
+
+public:
+	/** skater.gd effects_active: the snow flies only while a run is being skated, not under a menu. */
+	void SetEffects(bool bOn) { bEffects = bOn; }
+
+private:
+	bool bEffects = true;
 
 private:
 	void MeasureRig();

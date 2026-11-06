@@ -720,6 +720,10 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 		const float Scrape = FMath::Clamp(float(S.Blade[0].LatSlipAccel + S.Blade[1].LatSlipAccel), 0.f, 4.f) * .08f;
 		IceSound->Set(Speed, Level, Scrape, bLive);
 	}
+	if (Skater)
+	{
+		Skater->SetEffects(bPlaying && !bPaused);
+	}
 	// The music waits with the run while a menu is up.
 	const bool bHold = bPaused && RunLive();
 	if (Music && bHold != bMusicPaused)

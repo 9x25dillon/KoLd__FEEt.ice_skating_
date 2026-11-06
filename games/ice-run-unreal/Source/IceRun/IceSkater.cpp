@@ -1,6 +1,7 @@
 #include "IceSkater.h"
 #include "IceRun.h"
 #include "IceSimSpace.h"
+#include "IceSpray.h"
 #include "Components/PoseableMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
@@ -14,6 +15,7 @@ namespace
 {
 	// skater.gd's constants, unchanged.
 	constexpr double ComHeight = .95;
+	constexpr double BodyWeight = 540.0;
 	constexpr double PoseRate = 12.0;
 	constexpr double FallHit = .26;
 	constexpr double FallRollFrom = .16;
@@ -124,6 +126,8 @@ AIceSkater::AIceSkater()
 	{
 		StandIn->SetStaticMesh(Cylinder.Object);
 	}
+	Spray = CreateDefaultSubobject<UIceSpray>(TEXT("Spray"));
+	Spray->SetupAttachment(Root);
 	StandIn->SetRelativeLocation(FVector(0.0, 0.0, 85.0));
 	StandIn->SetRelativeScale3D(FVector(.32, .32, 1.7));
 	StandIn->SetVisibility(true);
@@ -291,6 +295,7 @@ void AIceSkater::ApplyFrame(const FIceFrame& Frame, bool bSnap)
 	FrameAge = 0.0;
 	if (bSnap || !bInitialized)
 	{
+		Spray->Clear();
 		bSkirtDirty = true;
 		Facing = FMath::Atan2(State.Heading.Y, State.Heading.X);
 		SetActorLocationAndRotation(IceSimSpace::Point(State.Pos.X, State.Pos.Y, FMath::Max(0.0, State.JumpZ)),
@@ -307,6 +312,7 @@ void AIceSkater::Tick(float DeltaSeconds)
 		return;
 	}
 	Pose(FMath::Min(DeltaSeconds, .1f));
+	Spray->Step(FMath::Min(DeltaSeconds, .1f));
 }
 
 FVector AIceSkater::BodyFromSim(double X, double Y) const
@@ -728,6 +734,13 @@ void AIceSkater::Pose(float Dt)
 			LooseUp = Up;
 		}
 		AimFoot(FName(TEXT("Foot") + Suffix), Ankle, LooseToe, LooseUp);
+		// skater.gd: snow from just under the ankle, thrown back and up, when this edge slips sideways
+		// at speed on the ice; the more the blade is loaded, the harder it throws.
+		const FTransform& Here = GetActorTransform();
+		Spray->Feed(I, Here.TransformPosition(IceSimSpace::FromBody(Ankle - FVector(0.0, .08, 0.0))),
+			Here.TransformVectorNoScale(IceSimSpace::DirFromBody(FVector(0.0, .4, 1.0))),
+			float(1.0 + 1.6 * FMath::Clamp(Blade.NormalLoad / BodyWeight, 0.0, 1.5)),
+			bEffects && bOnIce && Blade.LatSlipAccel > .3 && FMath::Abs(Blade.LongSpeed) > 1.0);
 
 		const FVector Shoulder = Neck + ShoulderTilt.RotateVector(RotY(FVector(Side * ShoulderRest.X, -ShoulderRest.Y, 0.0), UpperTurn));
 		double Spread = !bAir ? .43 : FMath::Clamp(S.JumpInertia / 6.0, .12, .44);

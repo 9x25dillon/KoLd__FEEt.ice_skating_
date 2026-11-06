@@ -89,6 +89,9 @@ with speed and when an edge slips sideways, quiet in the air and on a fall; the 
 which swells after a landing (more for a clean one); and a landing's thud. The pad rumbles on a
 landing, briefly for a clean one and harder for a fall. The broadcast plate says TAKE THE ICE
 where you are skating, then CLEAN LANDING or FIND YOUR EDGE with the rotations and the jump TES.
+Snow comes off a blade whose edge slips sideways at speed (a skid, a hard carve), thrown back and
+up, harder the more that blade is loaded, as `skater.gd`'s sprays do (`IceSpray`); it settles on
+the ice. A plain glide or the Explorer brake hardly slips, so it throws little.
 
 The career saves to `games/ice-run-unreal/Saved/IceRun/career-v1.json`, apart from the Godot
 game's save: the two builds do not share a career yet.
@@ -141,6 +144,7 @@ writes PNGs at those seconds of the run and quits. `-IceOpenMenu=<page>` stills 
 | `Source/IceRun/IceRunMenus.cpp` | The menu pages as data: the Season, briefing, music, training, style, result, Composer, wardrobe, atelier, lessons, settings |
 | `Source/IceRun/IceRunHUD.*` | Move, edges, TES, coach and cue lines, the lesson card, the balance meter, the broadcast plate, and the menu pages, in the engine's words |
 | `Source/IceRun/IceSound.*` | The blade, the crowd and a landing's thud, synthesized as `main.gd` does |
+| `Source/IceRun/IceSpray.*` | The snow off each blade, as `skater.gd`'s two particle sprays |
 | `Source/IceRun/IceSimSpace.h` | Sim metres (y left) to Unreal centimetres (Y right), the twin of `sim_space.gd` |
 | `tools/build_content.py` | Imports the Godot `.glb` skaters through Interchange; makes `M_Surface` and `M_Ice` |
 
@@ -149,6 +153,6 @@ Godot's body frame so it reads against `skater.gd`; the one conversion to Unreal
 frame is `IceSimSpace::FromBody`. A turn about an axis changes sense across that conversion,
 which is why the spine and head twists are negated there.
 
-Not yet here: the face and eyes, snow spray, the crowd in the stands, the broadcast's meters and
-rink map, Elite paddles, and a packaged build. The venue is plain next to the Godot Northlight
+Not yet here: the face and eyes, the crowd in the stands, the broadcast's meters and rink map,
+Elite paddles, and a packaged build. The venue is plain next to the Godot Northlight
 arena.
