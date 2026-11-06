@@ -23,9 +23,11 @@ test('the project names its module and the plugins it builds on', () => {
 test('every op the client sends is one the bridge answers', () => {
   const host = readFileSync(join(godot, 'bridge/host.mjs'), 'utf8');
   const answered = new Set([...host.matchAll(/case '([a-zA-Z]+)'/g)].map(m => m[1]));
-  const sent = new Set([...read('Source/IceRun/IceRunGameMode.cpp').matchAll(/Bridge\.Send\(TEXT\("([a-zA-Z]+)"\)/g)].map(m => m[1]));
+  // The session's own sends, and the menus' (SendOp).
+  const source = ['Source/IceRun/IceRunGameMode.cpp', 'Source/IceRun/IceRunMenus.cpp'].map(read).join('\n');
+  const sent = new Set([...source.matchAll(/(?:Bridge\.Send|SendOp)\(TEXT\("([a-zA-Z]+)"\)/g)].map(m => m[1]));
   sent.add('quit');
-  assert.ok(sent.size >= 5, [...sent].join());
+  for (const op of ['start', 'frame', 'configure', 'plan', 'timeline', 'train', 'drill', 'rest', 'armFocus', 'dress', 'design']) assert.ok(sent.has(op), `the client never sends '${op}'`);
   for (const op of sent) assert.ok(answered.has(op), `host.mjs has no '${op}'`);
 });
 
@@ -53,7 +55,35 @@ test("the C++ skater keeps skater.gd's constants", () => {
 const engine = process.env.UE_ROOT ?? join(homedir(), 'UnrealEngine/Linux_Unreal_Engine_5.8.4');
 const editorCmd = join(engine, 'Engine/Binaries/Linux/UnrealEditor-Cmd');
 const built = existsSync(join(root, 'Binaries/Linux/libUnrealEditor-IceRun.so')) && existsSync(join(godot, 'runtime/sim/solver.js'));
+
 test('the live engine skates the first career routine in Unreal', {skip: !existsSync(editorCmd) || !built ? 'needs UE_ROOT, a built module and the prepared runtime' : false, timeout: 600_000}, () => {
   const out = execFileSync(editorCmd, [join(root, 'IceRun.uproject'), '-game', '-nullrhi', '-unattended', '-nosplash', '-nosound', '-IceSmoke', '-UseFixedTimeStep', '-FPS=60', '-stdout'], {encoding: 'utf8', maxBuffer: 256 << 20});
   assert.match(out, /UNREAL_SMOKE_PASS/);
+});
+
+test('the menus walk a career round through the live engine: plan, music, skate, result and story, train, dress, compose, pairs', {skip: !existsSync(editorCmd) || !built ? 'needs UE_ROOT, a built module and the prepared runtime' : false, timeout: 600_000}, () => {
+  const out = execFileSync(editorCmd, [join(root, 'IceRun.uproject'), '-game', '-nullrhi', '-unattended', '-nosplash', '-nosound', '-IceMenuTest', '-UseFixedTimeStep', '-FPS=60', '-stdout', '-FullStdOutLogOutput'], {encoding: 'utf8', maxBuffer: 256 << 20});
+  assert.match(out, /UNREAL_MENUS_PASS/);
+});
+
+test('the landing the client senses carries every field it reads', async () => {
+  // SenseLanding (the thud, the crowd's swell, the rumble, CLEAN LANDING) reads the snapshot's state.landed.
+  const {IceEngine} = await import('../../ice-run-godot/bridge/engine.mjs');
+  const e = new IceEngine();
+  e.start({mode: 'free'});
+  const landed = e.snapshot().state.landed;
+  const cpp = read('Source/IceRun/IceRunGameMode.cpp');
+  const body = cpp.slice(cpp.indexOf('void AIceRunGameMode::SenseLanding'));
+  const fields = [...body.slice(0, body.indexOf('\n}\n')).matchAll(/\(\*Landed\)->TryGet\w+Field\(TEXT\("(\w+)"\)/g)].map(m => m[1]);
+  assert.deepEqual(fields.sort(), ['fall', 'stepOut', 'tick', 'turned']);
+  for (const field of fields) assert.ok(Object.hasOwn(landed, field), `state.landed has no '${field}'`);
+});
+
+test('the story and the coach reach the bridge catalog and snapshot the menus read', async () => {
+  const {IceEngine} = await import('../../ice-run-godot/bridge/engine.mjs');
+  const e = new IceEngine();
+  const story = e.catalog().story;
+  assert.equal(story.chapters.length, e.catalog().events.length);
+  for (const key of ['season', 'coach', 'cast', 'statTitles']) assert.ok(story[key], key);
+  assert.ok(Array.isArray(e.snapshot().career.advice));
 });

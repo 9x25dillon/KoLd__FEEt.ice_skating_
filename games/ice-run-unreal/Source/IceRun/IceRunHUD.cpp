@@ -3,6 +3,7 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
+#include "CanvasItem.h"
 
 namespace
 {
@@ -111,39 +112,156 @@ void AIceRunHUD::TutorialCard(const TSharedPtr<FJsonObject>& T, float U)
 
 void AIceRunHUD::PauseMenu(const AIceRunGameMode* Mode, float U)
 {
+	DrawPage(Mode, U);
+}
+
+void AIceRunHUD::DrawPage(const AIceRunGameMode* Mode, float U)
+{
 	UFont* Large = GEngine->GetLargeFont();
 	UFont* Medium = GEngine->GetMediumFont();
-	Panel(0.f, 0.f, Canvas->ClipX, Canvas->ClipY, FLinearColor(.01f, .02f, .04f, .62f));
-	const float X = Canvas->ClipX * .5f - 330.f * U;
-	float Y = Canvas->ClipY * .14f;
-	const FIceFrame& F = Mode->Frame();
-	FString Title = TEXT("Paused");
-	FString Sub = TEXT("A / Enter chooses  ·  ◀ ▶ changes  ·  B / Esc goes back to the ice");
-	const TSharedPtr<FJsonObject> Result = Obj(F.Raw, TEXT("result"));
-	if (F.bValid && F.bFinished && Result.IsValid())
-	{
-		Title = Str(Result, TEXT("title"));
-		Sub = Str(Result, TEXT("detail"));
-	}
-	Line(Title, X, Y, Ink, 1.6f * U, Large);
-	Paragraph(Sub, X, Y, 660.f * U, Soft, .95f * U, Medium);
+	const AIceRunGameMode::FMenuPage& Page = Mode->Page();
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	// The list on the left, the story and tables on the right; the skater turns in the gap.
+	const float LeftX = W * .035f, LeftW = W * .36f, RightX = W * .62f, RightW = W * .345f;
+	Panel(0.f, 0.f, LeftX + LeftW + 24.f * U, H, FLinearColor(.01f, .02f, .04f, .72f));
+	Panel(RightX - 24.f * U, 0.f, W - RightX + 24.f * U, H, FLinearColor(.01f, .02f, .04f, .55f));
+	float Y = H * .07f;
+	Line(Page.Title, LeftX, Y, Ink, 1.7f * U, Large);
+	Paragraph(Page.Subtitle, LeftX, Y, LeftW, Champagne, .95f * U, Medium);
 	Y += 14.f * U;
-	const TArray<AIceRunGameMode::FMenuItem>& Items = Mode->MenuItems();
-	for (int32 I = 0; I < Items.Num(); ++I)
+	// The list scrolls to keep the focus in view.
+	const float RowH = 31.f * U;
+	const float ListTop = Y, ListBottom = H * .74f;
+	const int32 Fits = FMath::Max(1, int32((ListBottom - ListTop) / RowH));
+	const int32 Focus = Mode->MenuIndex();
+	const int32 First = FMath::Clamp(Focus - Fits / 2, 0, FMath::Max(0, Page.Items.Num() - Fits));
+	for (int32 I = First; I < Page.Items.Num() && I < First + Fits; ++I)
 	{
-		const bool bAt = I == Mode->MenuIndex();
+		const AIceRunGameMode::FMenuItem& Item = Page.Items[I];
+		float RY = ListTop + (I - First) * RowH;
+		if (Item.bHeader)
+		{
+			float HY = RY + 8.f * U;
+			Line(Item.Label.ToUpper(), LeftX, HY, Champagne, .8f * U, Medium);
+			continue;
+		}
+		const bool bAt = I == Focus;
 		if (bAt)
 		{
-			Panel(X - 12.f * U, Y - 3.f * U, 680.f * U, 30.f * U, FLinearColor(.86f, .76f, .58f, .22f));
+			Panel(LeftX - 12.f * U, RY - 3.f * U, LeftW + 24.f * U, RowH - 2.f * U, FLinearColor(.86f, .76f, .58f, .22f));
 		}
-		Line(Items[I].Label, X, Y, bAt ? Ink : Soft, 1.05f * U, Medium);
-		Y += 4.f * U;
+		float X = LeftX;
+		if (Item.Chip.A > 0.f)
+		{
+			Panel(X, RY + 2.f * U, 18.f * U, 18.f * U, FLinearColor(Item.Chip.R, Item.Chip.G, Item.Chip.B, 1.f));
+			X += 26.f * U;
+		}
+		const FLinearColor Colour = !Item.bEnabled ? FLinearColor(.5f, .55f, .6f, 1.f) : bAt ? Ink : Soft;
+		float LY = RY;
+		Line(Item.Label, X, LY, Colour, 1.02f * U, Medium);
+		if (!Item.Value.IsEmpty())
+		{
+			float VW = 0.f, VH = 0.f;
+			Canvas->StrLen(Medium, Item.Value, VW, VH);
+			float VY = RY + 2.f * U;
+			Line(Item.Value, LeftX + LeftW - VW * .9f * U, VY, Item.bEnabled ? Champagne : FLinearColor(.5f, .55f, .6f, 1.f), .9f * U, Medium);
+		}
 	}
-	if (Items.IsValidIndex(Mode->MenuIndex()))
+	if (First > 0)
 	{
-		Y += 12.f * U;
-		Paragraph(Items[Mode->MenuIndex()].Detail, X, Y, 660.f * U, Champagne, .9f * U, Medium);
+		float AY = ListTop - 18.f * U;
+		Line(TEXT("▲"), LeftX + LeftW * .5f, AY, Soft, .8f * U, Medium);
 	}
+	if (First + Fits < Page.Items.Num())
+	{
+		float AY = ListTop + Fits * RowH;
+		Line(TEXT("▼"), LeftX + LeftW * .5f, AY, Soft, .8f * U, Medium);
+	}
+	// The focused line's words, under the list.
+	float DY = H * .77f;
+	if (Page.Items.IsValidIndex(Focus))
+	{
+		Paragraph(Page.Items[Focus].Detail, LeftX, DY, LeftW, Soft, .9f * U, Medium);
+	}
+	float KY = H - 34.f * U;
+	Line(TEXT("A / Enter chooses   ·   ◀ ▶ changes   ·   B / Esc back"), LeftX, KY, FLinearColor(.6f, .66f, .72f, 1.f), .8f * U, Medium);
+	// The right side: the story, then notes, then a table.
+	float SY = H * .07f;
+	if (!Page.Story.IsEmpty())
+	{
+		Paragraph(Page.Story, RightX, SY, RightW, Ink, .95f * U, Medium);
+		SY += 12.f * U;
+	}
+	for (const FString& Note : Page.Notes)
+	{
+		Paragraph(Note, RightX, SY, RightW, Champagne, .9f * U, Medium);
+		SY += 4.f * U;
+	}
+	if (Page.Strip.Bars > 0 && Page.Strip.Seconds > 0.0)
+	{
+		// Room above the band for the names that sit over it.
+		SY += 26.f * U;
+		Strip(Page.Strip, Mode->MenuIndex() - Page.Strip.FirstCueItem, RightX, SY, RightW, U);
+	}
+	if (!Page.RowsTitle.IsEmpty() && Page.Rows.Num() > 0)
+	{
+		SY += 14.f * U;
+		Line(Page.RowsTitle.ToUpper(), RightX, SY, Champagne, .8f * U, Medium);
+		for (const AIceRunGameMode::FMenuRow& Row : Page.Rows)
+		{
+			if (SY > H - 60.f * U)
+			{
+				break;
+			}
+			const FLinearColor C = Row.bYou ? Champagne : Soft;
+			float RY = SY;
+			Line(Row.Left, RightX, RY, C, .9f * U, Medium);
+			float MY = SY;
+			Line(Row.Middle, RightX + 34.f * U, MY, C, .9f * U, Medium);
+			if (!Row.Right.IsEmpty())
+			{
+				float RW = 0.f, RH = 0.f;
+				Canvas->StrLen(Medium, Row.Right, RW, RH);
+				float TY = SY;
+				Line(Row.Right, RightX + RightW - RW * .9f * U, TY, C, .9f * U, Medium);
+			}
+			SY = FMath::Max(RY, MY);
+		}
+	}
+}
+
+void AIceRunHUD::Strip(const AIceRunGameMode::FMenuStrip& S, int32 Focused, float X, float& Y, float W, float U)
+{
+	// main.gd timeline_strip: the program's seconds across, a tick per bar (taller each phrase), the half-time line, a block per element.
+	UFont* Medium = GEngine->GetMediumFont();
+	const float Top = Y, Band = 40.f * U;
+	auto XOf = [&](double T) { return X + float(FMath::Clamp(T / S.Seconds, 0.0, 1.0)) * W; };
+	Panel(X, Top, W, Band, FLinearColor(.04f, .08f, .12f, .9f));
+	const float Half = XOf(S.Seconds * .5);
+	Panel(Half - .5f * U, Top - 4.f * U, 1.f * U, Band + 8.f * U, FLinearColor(.86f, .76f, .58f, .5f));
+	for (int32 B = 0; B <= S.Bars; ++B)
+	{
+		const bool bPhrase = B % S.BarsPerPhrase == 0;
+		const float BX = XOf(S.Offset + B * S.BarSeconds);
+		const float From = bPhrase ? 0.f : Band * .6f;
+		Panel(BX, Top + From, (bPhrase ? 2.f : 1.f) * U, Band - From, FLinearColor(1.f, 1.f, 1.f, bPhrase ? .35f : .12f));
+	}
+	const FLinearColor Asked = S.bOk ? FLinearColor(.62f, .85f, .77f, 1.f) : FLinearColor(.94f, .54f, .48f, 1.f);
+	const float BarW = FMath::Max(4.f * U, XOf(S.BarSeconds) - X - 2.f * U);
+	for (int32 I = 0; I < S.Cues.Num(); ++I)
+	{
+		const AIceRunGameMode::FMenuStrip::FCue& C = S.Cues[I];
+		const float CX = XOf(C.At);
+		if (I == Focused)
+		{
+			Panel(CX - 2.f * U, Top + 2.f * U, BarW + 4.f * U, Band - 4.f * U, FLinearColor(1.f, 1.f, 1.f, .9f));
+		}
+		Panel(CX, Top + 4.f * U, BarW, Band - 8.f * U, C.bRequired ? Asked : Champagne);
+		// Names alternate above and below the band so neighbours two bars apart stay readable.
+		float TY = I % 2 == 0 ? Top + Band + 3.f * U : Top - 18.f * U;
+		Line(C.Title.Len() > 16 ? C.Title.Left(15) + TEXT("…") : C.Title, CX, TY, I == Focused ? Ink : Soft, .7f * U, Medium);
+	}
+	Y = Top + Band + 26.f * U;
 }
 
 void AIceRunHUD::Paragraph(const FString& Text, float X, float& Y, float Width, const FLinearColor& Color, float Scale, UFont* Font)
@@ -196,6 +314,12 @@ void AIceRunHUD::DrawHUD()
 		Paragraph(Mode->Notice(), Margin, Y, Canvas->ClipX - 2 * Margin, Warning, 1.1f * U, Medium);
 		return;
 	}
+	if (Mode->Paused())
+	{
+		// A menu page is the whole screen's words; the skating readouts wait underneath.
+		DrawPage(Mode, U);
+		return;
+	}
 	const FIceState& S = F.State;
 	const TSharedPtr<FJsonObject>& Raw = F.Raw;
 
@@ -223,7 +347,14 @@ void AIceRunHUD::DrawHUD()
 	{
 		Technical += FString::Printf(TEXT("   ·   PCS %.2f"), Num(Pcs, TEXT("total")));
 	}
+	const TSharedPtr<FJsonObject> Pairs = Obj(Raw, TEXT("pairs"));
+	if (Pairs.IsValid())
+	{
+		// main.gd: the pairs score and how much of it you skated in unison.
+		Technical = FString::Printf(TEXT("Pairs %d   ·   unison %.0f%%"), int32(Num(Pairs, TEXT("score"))), Num(Pairs, TEXT("sync")) * 100.0);
+	}
 	Line(Technical, Margin, Y, Champagne, 1.05f * U, Medium);
+	Meters(F, Margin, Y, U);
 	const TSharedPtr<FJsonObject> Landed = Obj(Raw, TEXT("jump"));
 	if (Landed.IsValid())
 	{
@@ -235,7 +366,9 @@ void AIceRunHUD::DrawHUD()
 	// Top right: what is being skated, on what, through which camera, and the clock.
 	{
 		const FString Setup = Mode->Setup().IsEmpty() ? FString(TEXT("Original schemes")) : Mode->Setup();
-		const double Seconds = Routine.IsValid() ? Num(Routine, TEXT("seconds")) : F.Elapsed;
+		bool bChallenge = false;
+		if (Pairs.IsValid()) Pairs->TryGetBoolField(TEXT("challenge"), bChallenge);
+		const double Seconds = Routine.IsValid() ? Num(Routine, TEXT("seconds")) : bChallenge ? Num(Pairs, TEXT("seconds")) : F.Elapsed;
 		const FString Right = FString::Printf(TEXT("%s   ·   %s   ·   %s camera   ·   %s"), *F.Mode, *Setup, *Mode->CameraName(), *Clock(Seconds));
 		float W = 0.f, H = 0.f;
 		Canvas->StrLen(Medium, Right, W, H);
@@ -244,7 +377,7 @@ void AIceRunHUD::DrawHUD()
 	}
 
 	// Bottom: the coach line for this mode, as main.gd update_hud chooses it.
-	FString Title, Tip, Progress;
+	FString Title, Tip, Progress, Cue;
 	const TSharedPtr<FJsonObject> Result = Obj(Raw, TEXT("result"));
 	if (F.bFinished && Result.IsValid())
 	{
@@ -267,12 +400,36 @@ void AIceRunHUD::DrawHUD()
 			Title = (*Sequence)[Index]->AsString();
 			Tip = Str(Routine, TEXT("how"));
 			Progress = FString::Printf(TEXT("%02d / %02d    ·    %s"), Index + 1, Count, *Str(Routine, TEXT("title")));
+			// On its music: when this element's bar comes round, and how the last one went (main.gd cue_line; shown, not scored).
+			const TArray<TSharedPtr<FJsonValue>>* Cues = nullptr;
+			if (Routine->TryGetArrayField(TEXT("cues"), Cues) && Cues->IsValidIndex(Index))
+			{
+				const TSharedPtr<FJsonObject> Next = (*Cues)[Index]->AsObject();
+				const double Elapsed = Num(Routine, TEXT("elapsed"));
+				const double Wait = Num(Next, TEXT("at")) - Elapsed;
+				Cue = Wait > .5 ? FString::Printf(TEXT("♪  Your bar in %d s"), FMath::CeilToInt32(Wait))
+					: Elapsed <= Num(Next, TEXT("late")) ? FString(TEXT("♪  Your bar is now")) : FString(TEXT("♪  Past your bar"));
+				const FString Last = Index > 0 ? Str((*Cues)[Index - 1]->AsObject(), TEXT("result")) : FString();
+				const TCHAR* Said = Last == TEXT("on") ? TEXT("on the music") : Last == TEXT("early") ? TEXT("early") : Last == TEXT("late") ? TEXT("late") : nullptr;
+				if (Said)
+				{
+					Cue += FString::Printf(TEXT("   ·   last: %s"), Said);
+				}
+			}
 		}
 		else
 		{
 			Title = TEXT("Program skated");
 			Tip = TEXT("Skate it out to the end of the music.");
 		}
+	}
+	else if (F.Mode == TEXT("pairs") && Pairs.IsValid())
+	{
+		// main.gd update_hud: the phrase, its hint, where you are in it, and what your partner says.
+		Title = Str(Pairs, TEXT("title"));
+		Tip = Str(Pairs, TEXT("hint"));
+		Progress = FString::Printf(TEXT("%s   ·   phrase %d / %d"), *Str(Pairs, TEXT("status")), FMath::Min(int32(Num(Pairs, TEXT("phrase"))) + 1, int32(Num(Pairs, TEXT("phrases")))), int32(Num(Pairs, TEXT("phrases"))));
+		Cue = Str(Pairs, TEXT("message"));
 	}
 	else if (F.Mode == TEXT("rookie"))
 	{
@@ -321,8 +478,26 @@ void AIceRunHUD::DrawHUD()
 		Line(Title, Margin, BY, Ink, 1.3f * U, Large);
 		Paragraph(Tip, Margin, BY, Width, Soft, 1.0f * U, Medium);
 		Line(Progress, Margin, BY, Champagne, .95f * U, Medium);
+		Line(Cue, Margin, BY, Ink, .95f * U, Medium);
 	}
 
+	// main.gd's broadcast plate: TAKE THE ICE, CLEAN LANDING, FIND YOUR EDGE, for three and a half seconds.
+	if (Mode->AnnouncementLeft() > 0.0 && !Mode->AnnouncementTitle().IsEmpty())
+	{
+		const float Fade = FMath::Clamp(float(Mode->AnnouncementLeft()) / .4f, 0.f, 1.f);
+		// Sized to its words: a title and a detail line, with a margin round them.
+		float TW = 0.f, TH = 0.f, DW = 0.f, DH = 0.f;
+		Canvas->StrLen(Large, Mode->AnnouncementTitle(), TW, TH);
+		Canvas->StrLen(Medium, Mode->AnnouncementDetail(), DW, DH);
+		const float PW = FMath::Max(360.f * U, FMath::Max(TW * 1.25f, DW * .85f) * U + 44.f * U);
+		const float PH = (TH * 1.25f + DH * .85f) * 1.15f * U + 24.f * U;
+		const float PX = (Canvas->ClipX - PW) * .5f, PY = 96.f * U;
+		Panel(PX, PY, PW, PH, FLinearColor(.035f, .065f, .10f, .9f * Fade));
+		Panel(PX, PY, PW, 2.f * U, FLinearColor(Champagne.R, Champagne.G, Champagne.B, Fade));
+		float AY = PY + 12.f * U;
+		Line(Mode->AnnouncementTitle(), PX + 22.f * U, AY, FLinearColor(Champagne.R, Champagne.G, Champagne.B, Fade), 1.25f * U, Large);
+		Line(Mode->AnnouncementDetail(), PX + 22.f * U, AY, FLinearColor(Ink.R, Ink.G, Ink.B, Fade), .85f * U, Medium);
+	}
 	float NY = Canvas->ClipY - Margin - 20.f * U;
 	if (!Mode->Notice().IsEmpty())
 	{
@@ -334,10 +509,153 @@ void AIceRunHUD::DrawHUD()
 	Canvas->StrLen(Medium, Keys, W, H);
 	Line(Keys, Canvas->ClipX - Margin - W * .85f * U, NY, FLinearColor(.6f, .66f, .72f, 1.f), .85f * U, Medium);
 	BalanceMeter(Obj(Raw, TEXT("balance")), Obj(Raw, TEXT("steady")), U);
-	if (Mode->Paused())
+	RinkMap(Mode, F, U);
+}
+
+void AIceRunHUD::Bar(float X, float Y, float W, float Fill, const FLinearColor& Color, float U)
+{
+	Panel(X, Y, W, 3.f * U, FLinearColor(.19f, .26f, .31f, .9f));
+	Panel(X, Y, W * FMath::Clamp(Fill, 0.f, 1.f), 3.f * U, Color);
+}
+
+void AIceRunHUD::Stroke(const FVector2D& A, const FVector2D& B, const FLinearColor& Color, float Thickness)
+{
+	FCanvasLineItem Item(A, B);
+	Item.SetColor(Color);
+	// Under a pixel and a half, a hairline: a thin quad can fall between pixel rows and vanish.
+	Item.LineThickness = Thickness < 1.5f ? 0.f : Thickness;
+	Canvas->DrawItem(Item);
+}
+
+void AIceRunHUD::Meters(const FIceFrame& F, float X, float& Y, float U)
+{
+	// main.gd broadcast: the presentation reads the solver; none of these meters alters skating.
+	UFont* Medium = GEngine->GetMediumFont();
+	const FLinearColor Muted(.62f, .71f, .76f, 1.f);
+	const TSharedPtr<FJsonObject> S = Obj(F.Raw, TEXT("state"));
+	if (!S.IsValid())
 	{
-		PauseMenu(Mode, U);
+		return;
 	}
+	Y += 6.f * U;
+	const float Label = 54.f * U, Long = 110.f * U, Gap = 30.f * U;
+	auto Row = [&](const TCHAR* LeftName, float LeftFill, const FLinearColor& LeftColor, const FString& RightName, float RightFill, const FLinearColor& RightColor)
+	{
+		float LY = Y - 7.f * U;
+		Line(LeftName, X, LY, Muted, .78f * U, Medium);
+		Bar(X + Label, Y, Long, LeftFill, LeftColor, U);
+		if (!RightName.IsEmpty())
+		{
+			float RY = Y - 7.f * U;
+			const float RX = X + Label + Long + Gap;
+			Line(RightName, RX, RY, Muted, .78f * U, Medium);
+			Bar(RX + Label, Y, Long, RightFill, RightColor, U);
+		}
+		Y += 18.f * U;
+	};
+	// Wind and legs: what the program has left in her (1 is fresh).
+	Row(TEXT("WIND"), float(Num(S, TEXT("wind"), 1.0)), Ink, TEXT("LEGS"), float(Num(S, TEXT("legs"), 1.0)), Champagne);
+	// Each blade's actual share of the support load.
+	Row(TEXT("LEFT"), float(F.State.Blade[0].Weight), Champagne, TEXT("RIGHT"), float(F.State.Blade[1].Weight), Champagne);
+	Row(TEXT("KNEE"), float(F.State.Knee), Ink, FString(), 0.f, Ink);
+	// The shoulders against the hips (the sim's own twist), left or right of centre by which way they
+	// are wound; dim while the feet pivot, when the wind is going nowhere.
+	double Twist = 0.0;
+	if (S->TryGetNumberField(TEXT("twist"), Twist))
+	{
+		const bool bHolding = FMath::Abs(Num(S, TEXT("yawDev"))) < 1.5;
+		const float Wound = FMath::Clamp(float(Twist / .8), -1.f, 1.f);
+		const FLinearColor C = bHolding ? Champagne : Muted;
+		float LY = Y - 7.f * U;
+		Line(TEXT("COIL"), X, LY, C, .78f * U, Medium);
+		const float Mid = X + Label + Long;
+		Panel(X + Label, Y, Long * 2.f, 3.f * U, FLinearColor(.19f, .26f, .31f, .9f));
+		Panel(FMath::Min(Mid, Mid + Long * Wound), Y, Long * FMath::Abs(Wound), 3.f * U, C);
+		Panel(Mid - 1.f, Y - 2.f * U, 2.f, 7.f * U, Muted);
+		Y += 18.f * U;
+	}
+}
+
+void AIceRunHUD::RinkMap(const AIceRunGameMode* Mode, const FIceFrame& F, float U)
+{
+	const TSharedPtr<FJsonObject> R = Mode->RinkShape();
+	if (!R.IsValid())
+	{
+		return;
+	}
+	UFont* Medium = GEngine->GetMediumFont();
+	const double MinX = Num(R, TEXT("minX")), MaxX = Num(R, TEXT("maxX")), MinY = Num(R, TEXT("minY")), MaxY = Num(R, TEXT("maxY"));
+	const double Corner = Num(R, TEXT("corner"));
+	// A new run starts the line again: the tick goes back.
+	const int32 Tick = F.State.Tick;
+	if (Tick < LineTick)
+	{
+		LinePath.Reset();
+		LineTick = -1;
+	}
+	if (LineTick < 0 || Tick >= LineTick + 8)
+	{
+		LinePath.Add(F.State.Pos);
+		LineTick = Tick;
+		if (LinePath.Num() > 900)
+		{
+			LinePath.RemoveAt(0);
+		}
+	}
+	// The plate, over the keys line at the bottom right.
+	const float Side = 170.f * U, PW = Side + 32.f * U, PH = Side + 48.f * U;
+	const float PX = Canvas->ClipX - 36.f * U - PW, PY = Canvas->ClipY - 36.f * U - 40.f * U - PH;
+	Panel(PX, PY, PW, PH, FLinearColor(.035f, .065f, .10f, .82f));
+	Panel(PX, PY, PW, 2.f * U, FLinearColor(.4f, .6f, .7f, .35f));
+	float TY = PY + 8.f * U;
+	Line(TEXT("YOUR LINE"), PX + 16.f * U, TY, Champagne, .7f * U, Medium);
+	// The rink from above, the same way round as the arena: sim x to the right, sim y up the screen.
+	const double Scale = Side / FMath::Max(MaxX - MinX, MaxY - MinY);
+	const FVector2D Centre(PX + PW * .5f, PY + 34.f * U + Side * .5f);
+	const FVector2D Middle((MinX + MaxX) * .5, (MinY + MaxY) * .5);
+	auto At = [&](const FVector2D& P) { return Centre + FVector2D(P.X - Middle.X, -(P.Y - Middle.Y)) * Scale; };
+	TArray<FVector2D> Outline;
+	const FVector2D Centres[4] = {{MaxX - Corner, MaxY - Corner}, {MinX + Corner, MaxY - Corner}, {MinX + Corner, MinY + Corner}, {MaxX - Corner, MinY + Corner}};
+	for (int32 C = 0; C < 4; ++C)
+	{
+		for (int32 J = 0; J <= 12; ++J)
+		{
+			const double A = C * UE_DOUBLE_PI * .5 + J * UE_DOUBLE_PI * .5 / 12.0;
+			Outline.Add(At(Centres[C] + FVector2D(FMath::Cos(A), FMath::Sin(A)) * Corner));
+		}
+	}
+	for (int32 I = 0; I < Outline.Num(); ++I)
+	{
+		Stroke(Outline[I], Outline[(I + 1) % Outline.Num()], FLinearColor(.39f, .49f, .57f, 1.f), 1.f * U);
+	}
+	for (int32 I = 1; I < LinePath.Num(); ++I)
+	{
+		Stroke(At(LinePath[I - 1]), At(LinePath[I]), FLinearColor(.6f, .77f, .83f, .55f), 1.f * U);
+	}
+	// A lesson's targets: the next one marked as the ice marks it, the rest dim.
+	const TSharedPtr<FJsonObject> Tutorial = Obj(F.Raw, TEXT("tutorial"));
+	const TSharedPtr<FJsonObject> Next = Obj(Tutorial, TEXT("target"));
+	const TArray<TSharedPtr<FJsonValue>>* Targets = nullptr;
+	if (Tutorial.IsValid() && Tutorial->TryGetArrayField(TEXT("targets"), Targets))
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Targets)
+		{
+			const TSharedPtr<FJsonObject> T = V->AsObject();
+			const FVector2D P = At(FVector2D(Num(T, TEXT("x")), Num(T, TEXT("y"))));
+			const bool bNext = Next.IsValid() && Num(Next, TEXT("x")) == Num(T, TEXT("x")) && Num(Next, TEXT("y")) == Num(T, TEXT("y"));
+			const float D = (bNext ? 5.f : 3.f) * U;
+			const FLinearColor C = bNext ? Champagne : FLinearColor(.6f, .66f, .72f, .6f);
+			Stroke(P + FVector2D(0, -D), P + FVector2D(D, 0), C, 1.5f * U);
+			Stroke(P + FVector2D(D, 0), P + FVector2D(0, D), C, 1.5f * U);
+			Stroke(P + FVector2D(0, D), P + FVector2D(-D, 0), C, 1.5f * U);
+			Stroke(P + FVector2D(-D, 0), P + FVector2D(0, -D), C, 1.5f * U);
+		}
+	}
+	// Where she is, and which way she faces.
+	const FVector2D Here = At(F.State.Pos);
+	const FVector2D Facing = FVector2D(F.State.Heading.X, -F.State.Heading.Y).GetSafeNormal();
+	Panel(Here.X - 3.f * U, Here.Y - 3.f * U, 6.f * U, 6.f * U, Champagne);
+	Stroke(Here, Here + Facing * 9.f * U, Ink, 1.5f * U);
 }
 
 void AIceRunHUD::BalanceMeter(const TSharedPtr<FJsonObject>& B, const TSharedPtr<FJsonObject>& Steady, float U)

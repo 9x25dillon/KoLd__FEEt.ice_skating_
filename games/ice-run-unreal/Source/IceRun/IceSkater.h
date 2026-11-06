@@ -5,6 +5,9 @@
 #include "IceFrame.h"
 #include "IceSkater.generated.h"
 
+class UIceSpray;
+class UMaterialInstanceDynamic;
+
 class UPoseableMeshComponent;
 class UStaticMeshComponent;
 
@@ -18,7 +21,7 @@ class UStaticMeshComponent;
  * The working is in Godot's body frame (x right, y up, z back, metres) so it
  * reads against skater.gd line for line; IceSimSpace::FromBody is the only
  * door into Unreal's. The skirt's panels swing on skater.gd's springs in its
- * world frame (GodotWorld, below). Not yet ported: the face and eyes, snow spray.
+ * world frame (GodotWorld, below). The snow off the blades is IceSpray's. Not yet ported: the face and eyes.
  */
 UCLASS()
 class AIceSkater : public AActor
@@ -33,9 +36,19 @@ public:
 	void ApplyFrame(const FIceFrame& Frame, bool bSnap);
 	/** Loads a skeletal mesh by object path. False, with a stand-in shown, when it is missing. */
 	bool LoadModel(const FString& ObjectPath);
+	/**
+	 * Wears a costume: game/appearance.ts's skin colours on skater.gd's slots (bodice, skirt, sleeve,
+	 * trim, hair; skin and tights tinted only for an atelier design, so a preset keeps its paint).
+	 * Returns how many slots took it; a model without those slots keeps its own look.
+	 */
+	int32 ApplyCostume(const TSharedPtr<FJsonObject>& Skin);
 	/** The blade a spin's finish has lifted off the ice, or -1 (skater.gd lifted_blade). */
 	int32 LiftedBlade() const;
 	bool HasModel() const { return bHasModel; }
+	/** Slots wearing a material that is neither the model's own nor made from it: a model change that kept another model's. */
+	int32 ForeignMaterials() const;
+	/** Whether this model's face moves: eyes on M_Eye, lids on the Blink morph (the athlete's). */
+	bool FaceMoves() const { return EyeMaterial != nullptr && BlinkWeight >= 0; }
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USceneComponent> Root;
@@ -45,6 +58,20 @@ public:
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UStaticMeshComponent> StandIn;
+
+	/** Snow off each blade (skater.gd's sprays). */
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UIceSpray> Spray;
+
+public:
+	/** skater.gd effects_active: the snow flies only while a run is being skated, not under a menu. */
+	void SetEffects(bool bOn) { bEffects = bOn; }
+	/** skater.gd lift_height: a pairs partner carried this high, metres, over her own jump height. */
+	void SetLift(double Height) { LiftHeight = FMath::Max(0.0, Height); }
+
+private:
+	bool bEffects = true;
+	double LiftHeight = 0.0;
 
 private:
 	void MeasureRig();
@@ -98,6 +125,25 @@ private:
 	double HeadTurn = 0.0;
 	double HeadDown = 0.0;
 	double Backing = 0.0;
+
+	// skater.gd's face. The eyes reach a new target first and the head catches up, so how far they
+	// lead comes from the head's own lag; fixations and blink timing are presentation, not sim.
+	void SetUpFace();
+	void UpdateFace(float Dt, double Looking, double EyesDown, bool bAir);
+	void StartBlink();
+	double BlinkAmount() const;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> EyeMaterial;
+	int32 BlinkWeight = -1;
+	FRandomStream FaceRandom;
+	/** Radians: x toward a positive head turn, y up. */
+	FVector2D EyeGaze = FVector2D::ZeroVector;
+	FVector2D EyeFixation = FVector2D::ZeroVector;
+	double FixationLeft = 0.0;
+	double BlinkWait = 2.0;
+	double BlinkAge = -1.0;
+	double SinceBlink = 1.5;
+	bool bFaceWasAirborne = false;
 	double ArmEnergy = 0.0;
 	double SwayClock = 0.0;
 	double ArmLag = 0.0;
