@@ -8,6 +8,7 @@ on:
     paths:
       - "tools/ice-lab/**"
       - "games/ice-run-godot/**"
+      - "games/ice-run-unreal/**"
       - "data/validation/**"
       - "docs/fidelity-gate.md"
       - ".github/workflows/ice-lab-checks.yml"
@@ -15,6 +16,7 @@ on:
     paths:
       - "tools/ice-lab/**"
       - "games/ice-run-godot/**"
+      - "games/ice-run-unreal/**"
       - "data/validation/**"
       - "docs/fidelity-gate.md"
       - ".github/workflows/ice-lab-checks.yml"
@@ -45,6 +47,10 @@ jobs:
         run: |
           node games/ice-run-godot/tools/prepare.mjs --engine-only
           node --test games/ice-run-godot/tests/*.test.mjs
+      # No Unreal on the runner: the contract and port checks run; the live smoke skips itself.
+      - name: Verify the Unreal client's bridge contract
+        working-directory: .
+        run: node --test games/ice-run-unreal/tests/*.test.mjs
       # The fidelity gate (docs/fidelity-gate.md): exit 1 on any failing sourced
       # case. The human report goes to the log; the JSON is kept as an artifact;
       # the Markdown report is regenerated over the committed one.

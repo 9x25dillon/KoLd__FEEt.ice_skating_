@@ -6,6 +6,7 @@
   "scripts": {
     "start": "bash games/ice-run-godot/run.sh",
     "start:browser": "node play.mjs",
+    "start:unreal": "bash games/ice-run-unreal/run.sh",
     "build:native": "node games/ice-run-godot/tools/export.mjs",
     "build": "node tools/ice-lab/app/build.mjs",
     "test": "npm --prefix tools/ice-lab test"
