@@ -230,6 +230,7 @@ void AIceRunGameMode::BuildPage(const FString& Id, FMenuPage& P)
 	else if (Id == TEXT("settings")) BuildSettings(P);
 	else if (Id == TEXT("result")) BuildResult(P);
 	else if (Id == TEXT("music")) BuildMusic(P);
+	else if (Id == TEXT("controller")) BuildController(P);
 	else BuildHome(P);
 	if (!PageNotice.IsEmpty())
 	{
@@ -334,6 +335,11 @@ void AIceRunGameMode::LoadPreferences()
 	if (P->TryGetNumberField(TEXT("track"), V)) TrackIndex = FMath::Max(0, int32(V));
 	P->TryGetBoolField(TEXT("music"), bMusicOn);
 	P->TryGetBoolField(TEXT("rumble"), bRumbleOn);
+	const TSharedPtr<FJsonObject>* Profile = nullptr;
+	if (P->TryGetObjectField(TEXT("controllerProfile"), Profile))
+	{
+		ControllerProfile = *Profile;
+	}
 	double Paddles = 0.0;
 	P->TryGetNumberField(TEXT("paddles"), Paddles);
 	PaddleLayout = FMath::Clamp(int32(Paddles), 0, AIceRunPlayerController::PaddleLayer);
@@ -360,6 +366,10 @@ void AIceRunGameMode::SavePreferences() const
 	P->SetNumberField(TEXT("track"), TrackIndex);
 	P->SetBoolField(TEXT("music"), bMusicOn);
 	P->SetBoolField(TEXT("rumble"), bRumbleOn);
+	if (ControllerProfile.IsValid())
+	{
+		P->SetObjectField(TEXT("controllerProfile"), ControllerProfile);
+	}
 	P->SetNumberField(TEXT("paddles"), PaddleLayout);
 	TArray<TSharedPtr<FJsonValue>> Ids;
 	for (const FString& Id : Sequence)
@@ -935,6 +945,7 @@ void AIceRunGameMode::BuildSettings(FMenuPage& P)
 			Pad + TEXT(" Presets and the game layer need the Elite on its default profile, profile LEDs off: a stored profile sends the paddles as ordinary buttons, which Controller's own profile uses as they are."),
 			[Paddle] { Paddle(1); }, [Paddle](int32 By) { Paddle(By); }));
 	}
+	P.Items.Add(Line(TEXT("Controller tuning →"), TEXT(""), TEXT("Stick deadzone and curve, lean and trigger sensitivity, where the feet live, and the bindings."), [this] { PushPage(TEXT("controller")); }));
 	P.Items.Add(Line(FString::Printf(TEXT("Camera   ◀  %s  ▶"), *CameraName()), TEXT(""), TEXT("View / V changes it while skating, except in the air."),
 		[this] { if (Latest.bValid) ShotCamera->Cycle(Latest.State); RebuildPage(); },
 		[this](int32) { if (Latest.bValid) ShotCamera->Cycle(Latest.State); RebuildPage(); }));
@@ -1118,5 +1129,97 @@ void AIceRunGameMode::BuildMusic(FMenuPage& P)
 		C->TryGetBoolField(TEXT("required"), bRequired);
 		const int32 Clock = FMath::FloorToInt32(Num(C, TEXT("at")));
 		P.Rows.Add({FString::Printf(TEXT("%02d"), int32(Num(C, TEXT("bar"))) + 1), Str(C, TEXT("title")), FString::Printf(TEXT("%d:%02d"), Clock / 60, Clock % 60), !bRequired});
+	}
+}
+
+void AIceRunGameMode::SendControllerProfile(const TSharedPtr<FJsonObject>& Profile)
+{
+	if (!Profile.IsValid())
+	{
+		return;
+	}
+	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetObjectField(TEXT("profile"), Profile);
+	SendOp(TEXT("controller"), Payload);
+}
+
+void AIceRunGameMode::BuildController(FMenuPage& P)
+{
+	P.Title = TEXT("Controller tuning");
+	P.Subtitle = TEXT("Sensitivity applies to all three setups. Move shortcuts apply to Full Repertoire; Simulation and Explorer use manual turn gestures.");
+	P.Story = TEXT("Left stick leans; RT loads/releases a jump; LT brakes. LB/RB retain a foot; both share weight. Right stick opens the arms and selects camel in a spin. RT selects sit. Turns need speed and an edge.");
+	const TSharedPtr<FJsonObject> Pad = Obj(Catalog, TEXT("controller"));
+	// The profile the engine last returned (a paused menu gets no new snapshot), else the snapshot's, else the default.
+	TSharedPtr<FJsonObject> Now = ControllerProfile.IsValid() ? ControllerProfile : Obj(Latest.Raw, TEXT("controllerProfile"));
+	if (!Now.IsValid()) Now = Obj(Pad, TEXT("profile"));
+	if (!Now.IsValid())
+	{
+		P.Notes.Add(TEXT("Waiting for the skating engine."));
+		return;
+	}
+	// Every change is a copy of the profile with one value moved, sent to the engine at once.
+	auto Copy = [Now]
+	{
+		TSharedPtr<FJsonObject> Out;
+		FString Text;
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Text);
+		FJsonSerializer::Serialize(Now.ToSharedRef(), Writer);
+		FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Out);
+		return Out;
+	};
+	for (const TSharedPtr<FJsonValue>& V : Arr(Pad, TEXT("tuning")))
+	{
+		const TSharedPtr<FJsonObject> T = V->AsObject();
+		const FString Key = Str(T, TEXT("key"));
+		const double Min = Num(T, TEXT("min")), Max = Num(T, TEXT("max")), Step = FMath::Max(.001, Num(T, TEXT("step"), .01));
+		const double Value = Num(Now, *Key);
+		P.Items.Add(Line(FString::Printf(TEXT("%s   ◀  %.2f  ▶"), *Str(T, TEXT("label")), Value), FString::Printf(TEXT("%.2f to %.2f"), Min, Max), TEXT("◀ ▶ by one step; the engine takes it at once."),
+			nullptr,
+			[this, Copy, Key, Min, Max, Step, Value](int32 By)
+			{
+				TSharedPtr<FJsonObject> Next = Copy();
+				Next->SetNumberField(Key, FMath::Clamp(FMath::RoundToDouble((Value + By * Step) / Step) * Step, Min, Max));
+				SendControllerProfile(Next);
+			}));
+	}
+	// main.gd: where the feet live in Simulation, Experimental and Dig Gate.
+	static const TCHAR* const Feet[] = {TEXT("dpad"), TEXT("stickY"), TEXT("modifier")};
+	static const TCHAR* const FeetNames[] = {TEXT("D-pad"), TEXT("Sticks up and down"), TEXT("Modifier + left stick")};
+	FString FeetNow = Str(Now, TEXT("feet"));
+	int32 FeetAt = 0;
+	for (int32 I = 0; I < 3; ++I) if (FeetNow == Feet[I]) FeetAt = I;
+	auto MoveFeet = [this, Copy, FeetAt](int32 By)
+	{
+		TSharedPtr<FJsonObject> Next = Copy();
+		Next->SetStringField(TEXT("feet"), Feet[Wrap(FeetAt + By, 3)]);
+		SendControllerProfile(Next);
+	};
+	P.Items.Add(Line(FString::Printf(TEXT("Feet layout   ◀  %s  ▶"), FeetNames[FeetAt]), TEXT(""),
+		TEXT("Where the feet live in Simulation, Experimental and Dig Gate. Sticks up and down leaves the paddles nothing to turn. The lessons' words follow this."),
+		[MoveFeet] { MoveFeet(1); }, [MoveFeet](int32 By) { MoveFeet(By); }));
+	P.Items.Add(Line(TEXT("Restore controller defaults"), TEXT(""), TEXT("The engine's own profile: game/controller.ts."),
+		[this, Pad] { SendControllerProfile(Obj(Pad, TEXT("profile"))); }));
+	P.Items.Add(Line(TEXT("Use Full repertoire with it"), TEXT(""), TEXT("Full repertoire is the setup the move shortcuts below belong to. Starts a new run on it."), [this]
+	{
+		SetupId = TEXT("repertoire");
+		SavePreferences();
+		Configure();
+		StartRun();
+		RebuildPage();
+	}));
+	// The bindings, as main.gd lists them: the modifier first where an action needs it.
+	const TArray<TSharedPtr<FJsonValue>>& Buttons = Arr(Pad, TEXT("buttons"));
+	auto ButtonName = [&Buttons](int32 I) { return Buttons.IsValidIndex(I) ? Buttons[I]->AsString() : FString::FromInt(I); };
+	const TSharedPtr<FJsonObject> Bindings = Obj(Now, TEXT("bindings"));
+	P.RowsTitle = TEXT("Full repertoire's move shortcuts");
+	for (const TSharedPtr<FJsonValue>& V : Arr(Pad, TEXT("actions")))
+	{
+		const TSharedPtr<FJsonObject> A = V->AsObject();
+		const TSharedPtr<FJsonObject> B = Obj(Bindings, *Str(A, TEXT("id")));
+		if (!B.IsValid()) continue;
+		bool bModified = false;
+		B->TryGetBoolField(TEXT("modified"), bModified);
+		const FString Press = (bModified ? ButtonName(int32(Num(Now, TEXT("modifier")))) + TEXT(" + ") : FString()) + ButtonName(int32(Num(B, TEXT("button"))));
+		P.Rows.Add({FString(), Str(A, TEXT("name")), Press, false});
 	}
 }

@@ -486,6 +486,11 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 				TimelineOp(Step);
 			}
 		}
+		if (ControllerProfile.IsValid())
+		{
+			// main.gd: the profile kept from last time, before anything is skated.
+			SendControllerProfile(ControllerProfile);
+		}
 		Configure();
 		StartRun();
 		if (!bPrefsLoaded)
@@ -569,6 +574,20 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		CloseMenu();
 		StartMusic();
 		Announce(TEXT("THE REPLAY"), RunPlace());
+	}
+	else if (Reply.Op == TEXT("controller"))
+	{
+		// The profile as the engine took it (game/controller.ts parses and bounds it).
+		const TSharedPtr<FJsonObject>* Profile = nullptr;
+		if (Reply.Data->TryGetObjectField(TEXT("profile"), Profile))
+		{
+			ControllerProfile = *Profile;
+			SavePreferences();
+		}
+		if (bPaused)
+		{
+			RebuildPage();
+		}
 	}
 	else if (Reply.Op == TEXT("dress"))
 	{
@@ -950,7 +969,7 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 	MenuTestClock += Dt;
 	auto Pass = [this]
 	{
-		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, the program laid on its music, a career run to its result and story, training, wardrobe (skaters wear their own materials), atelier and Composer, pairs (a partner, a hand offered), through the live bridge"));
+		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, the program laid on its music, a career run to its result and story, training, wardrobe (skaters wear their own materials), atelier and Composer, controller tuning, pairs (a partner, a hand offered), through the live bridge"));
 		FPlatformMisc::RequestExitWithStatus(false, 0);
 		MenuTestStage = 99;
 	};
@@ -1104,6 +1123,34 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 		const int32 Before = Sequence.Num();
 		AcceptItem(TEXT("+ Add"));
 		if (Sequence.Num() != Before + 1) { Stop(TEXT("the Composer did not add a phrase")); break; }
+		PopPage();
+		MenuTestStage = AcceptItem(TEXT("Settings")) ? 16 : (Stop(TEXT("no Settings on the title")), 99);
+		break;
+	}
+	case 16:
+		if (MenuPage.Id != TEXT("settings")) { Stop(TEXT("Settings did not open")); break; }
+		MenuTestStage = AcceptItem(TEXT("Controller tuning")) ? 17 : (Stop(TEXT("no Controller tuning in Settings")), 99);
+		break;
+	case 17:
+	{
+		// A stick deadzone a step wider and the feet on the sticks: each through the bridge's controller op.
+		const TSharedPtr<FJsonObject>* Profile = nullptr;
+		if (MenuPage.Id != TEXT("controller") || !Latest.Raw->TryGetObjectField(TEXT("controllerProfile"), Profile)) { Stop(TEXT("the controller page has no profile")); break; }
+		MenuTestValue = (*Profile)->GetNumberField(TEXT("deadzone"));
+		AdjustItem(TEXT("Stick deadzone"), 1);
+		MenuTestStage = 18;
+		break;
+	}
+	case 18:
+		if (!ControllerProfile.IsValid() || FMath::Abs(ControllerProfile->GetNumberField(TEXT("deadzone")) - (MenuTestValue + .01)) > 1e-6) { Stop(TEXT("the deadzone did not move a step")); break; }
+		AdjustItem(TEXT("Feet layout"), 1);
+		MenuTestStage = 19;
+		break;
+	case 19:
+	{
+		FString Feet;
+		if (!ControllerProfile.IsValid() || !ControllerProfile->TryGetStringField(TEXT("feet"), Feet) || Feet != TEXT("stickY")) { Stop(TEXT("the feet did not move to the sticks")); break; }
+		PopPage();
 		PopPage();
 		MenuTestStage = AcceptItem(TEXT("Pairs")) ? 14 : (Stop(TEXT("no Pairs on the title")), 99);
 		MenuTestValue = MenuTestClock;

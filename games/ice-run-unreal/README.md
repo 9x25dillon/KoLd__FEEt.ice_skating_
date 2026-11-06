@@ -87,6 +87,11 @@ its ops, so the career, the plans and the wardrobe live where they always have (
   crystals), previewed on the skater and worn when kept.
 - **Settings**: setup, steadying hand, Explorer assistance, skater level, music track and on or
   off, controller vibration, Elite paddles, camera, display. Kept in `Saved/IceRun/preferences.json`.
+- **Controller tuning** (Settings →): `game/controller.ts`'s profile through the bridge's
+  `controller` op: stick deadzone and response curve, lean and keyboard-lean sensitivity, trigger
+  deadzone, and the feet layout (D-pad, sticks up and down, or modifier + left stick: where the
+  feet live in Simulation, Experimental and Dig Gate), with Full repertoire's move shortcuts listed.
+  Each change goes to the engine at once and is kept with the preferences.
 
 **Elite paddles** (a wired Xbox Elite Series 2): Unreal's Linux input drops the paddles, so the
 client reads them from the kernel itself (`IcePaddles`: the pad found through sysfs, its event node
@@ -144,8 +149,8 @@ skates the 75-second program in a few seconds.
 The menus have their own walk, a player's way through them against the live bridge: the
 Season, a plan changed and put back, the first event laid on its music and skated to its result
 and story, a stat trained, a costume changed, the skater changed and back (each wearing only its
-own materials), a design kept and worn, a Composer phrase added, and pairs started with a hand
-offered to the partner.
+own materials), a design kept and worn, a Composer phrase added, the controller's deadzone and
+feet layout changed through the bridge, and pairs started with a hand offered to the partner.
 
 ```sh
 UnrealEditor-Cmd games/ice-run-unreal/IceRun.uproject -game -nullrhi -unattended -IceMenuTest -UseFixedTimeStep -FPS=60

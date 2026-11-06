@@ -150,6 +150,8 @@ private:
 	void BuildResult(FMenuPage& P);
 	/** A career program laid on its music (game/composer.ts through the bridge's timeline op). */
 	void BuildMusic(FMenuPage& P);
+	/** main.gd's controller page: tuning, the feet layout, the bindings, defaults. */
+	void BuildController(FMenuPage& P);
 	void TimelineOp(const TSharedRef<FJsonObject>& Options);
 	/** A few seconds of a track from a point in it, to hear where a bar falls. */
 	void PreviewMusic(int32 Track, double At);
@@ -245,6 +247,14 @@ private:
 	bool bRumbleOn = true;
 	/** main.gd paddle_layout, kept here for the preferences and handed to the controller. */
 	int32 PaddleLayout = 0;
+	/**
+	 * The controller profile (game/controller.ts: stick deadzone and curve, lean and trigger
+	 * sensitivity, the feet layout, the bindings): the bridge's, as its `controller` op last
+	 * returned it, kept in the preferences and sent once the engine is up.
+	 */
+	TSharedPtr<FJsonObject> ControllerProfile;
+	/** Sends a changed profile; the bridge's reply becomes ControllerProfile and is saved. */
+	void SendControllerProfile(const TSharedPtr<FJsonObject>& Profile);
 	/** An atelier slot just kept: worn once the wardrobe comes back with it. */
 	int32 PendingWearSlot = -1;
 	/** The title screen comes up once, over the first run. */
