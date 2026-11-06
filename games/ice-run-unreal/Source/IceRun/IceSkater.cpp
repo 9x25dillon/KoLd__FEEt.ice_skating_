@@ -10,12 +10,25 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Dom/JsonObject.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Animation/MorphTarget.h"
 
 namespace
 {
 	// skater.gd's constants, unchanged.
 	constexpr double ComHeight = .95;
 	constexpr double BodyWeight = 540.0;
+	// The face (skater.gd): the eye's radius and the iris's scale on its dome, from build_athlete.py.
+	constexpr double EyeDome = .0156;
+	constexpr double IrisUvPerM = .42 / .0062;
+	constexpr double EyeTurnMax = .3;
+	constexpr double EyeDropMax = .2;
+	constexpr double EyeSpeed = 8.0;
+	constexpr double EyeDropPerHead = .33;
+	constexpr double SaccadeBlink = .2;
+	constexpr double BlinkClose = .07;
+	constexpr double BlinkHold = .03;
+	constexpr double BlinkOpen = .16;
+	constexpr double BlinkRest = 1.5;
 	constexpr double PoseRate = 12.0;
 	constexpr double FallHit = .26;
 	constexpr double FallRollFrom = .16;
@@ -154,10 +167,14 @@ bool AIceSkater::LoadModel(const FString& ObjectPath)
 		StandIn->SetVisibility(true);
 		return false;
 	}
+	// A mesh change keeps the component's materials by slot index, and the models order their slots
+	// differently: what the last model wore would land on this one's other parts.
+	Body->EmptyOverrideMaterials();
 	Body->SetSkinnedAssetAndUpdate(Mesh);
 	bHasModel = true;
 	StandIn->SetVisibility(false);
 	MeasureRig();
+	SetUpFace();
 	return true;
 }
 
@@ -622,6 +639,7 @@ void AIceSkater::Pose(float Dt)
 	}
 	HeadTurn = FMath::Lerp(HeadTurn, Looking, Ease(5.0, Dt));
 	HeadDown = FMath::Lerp(HeadDown, EyesDown, Ease(4.0, Dt));
+	UpdateFace(Dt, Looking, EyesDown, bAir);
 	AimBone(TEXT("Spine"), Spine, Neck, UpperTurn);
 	AimBone(TEXT("Head"), Neck, Head + FVector(0.0, .17, 0.0) + RotY(FVector(0.0, 0.0, -GazeDown * HeadDown), HeadTurn + UpperTurn), HeadTurn);
 	const FQuat TrunkTilt = FQuat::FindBetweenNormals(Up, BodyAxis);
@@ -993,4 +1011,143 @@ void AIceSkater::SwingSkirt(float Dt, const FVector& Hip, const FVector& Spine, 
 	{
 		AimBone(SkirtBones[I], GodotLocal(Pivots[I]), GodotLocal(SkirtTips[I]));
 	}
+}
+
+void AIceSkater::SetUpFace()
+{
+	EyeMaterial = nullptr;
+	BlinkWeight = -1;
+	Body->ActiveMorphTargets.Empty();
+	Body->MorphTargetWeights.Reset();
+	USkeletalMesh* Mesh = Cast<USkeletalMesh>(Body->GetSkinnedAsset());
+	if (!Mesh)
+	{
+		return;
+	}
+	// The lids: build_athlete.py's Blink shape, driven on the poseable mesh as an animation would.
+	if (UMorphTarget* Blink = Mesh->FindMorphTarget(TEXT("Blink")))
+	{
+		Body->MorphTargetWeights.SetNumZeroed(Mesh->GetMorphTargets().Num());
+		BlinkWeight = Mesh->GetMorphTargets().IndexOfByKey(Blink);
+		Body->ActiveMorphTargets.Add(Blink, BlinkWeight);
+	}
+	// The eyes: the model's own iris image on M_Eye, which slides it as she looks (eye.gdshader). Only
+	// an image the model carries itself: an instance without one reports its parent's default.
+	UMaterialInterface* EyeBase = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Generated/Materials/M_Eye.M_Eye"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	const TArray<FSkeletalMaterial>& Own = Mesh->GetMaterials();
+	for (int32 I = 0; EyeBase && I < Own.Num(); ++I)
+	{
+		UTexture* Iris = nullptr;
+		if (Own[I].MaterialSlotName == TEXT("Eyes") && Own[I].MaterialInterface
+			&& Own[I].MaterialInterface->GetTextureParameterValue(FMaterialParameterInfo(TEXT("BaseColorTexture")), Iris, true) && Iris)
+		{
+			EyeMaterial = UMaterialInstanceDynamic::Create(EyeBase, this);
+			EyeMaterial->SetTextureParameterValue(TEXT("Iris"), Iris);
+			Body->SetMaterial(I, EyeMaterial);
+		}
+	}
+	EyeGaze = EyeFixation = FVector2D::ZeroVector;
+	FixationLeft = 0.0;
+	BlinkAge = -1.0;
+	SinceBlink = BlinkRest;
+	UE_LOG(LogIceRun, Log, TEXT("Face: eyes %s, lids %s."), EyeMaterial ? TEXT("move") : TEXT("still"), BlinkWeight >= 0 ? TEXT("blink") : TEXT("still"));
+}
+
+void AIceSkater::StartBlink()
+{
+	if (BlinkAge < 0.0 && SinceBlink >= BlinkRest)
+	{
+		BlinkAge = 0.0;
+		SinceBlink = 0.0;
+		BlinkWait = FaceRandom.FRandRange(2.2, 6.0);
+	}
+}
+
+double AIceSkater::BlinkAmount() const
+{
+	if (BlinkAge < 0.0) return 0.0;
+	if (BlinkAge < BlinkClose) return FMath::SmoothStep(0.0, BlinkClose, BlinkAge);
+	if (BlinkAge < BlinkClose + BlinkHold) return 1.0;
+	return 1.0 - FMath::SmoothStep(BlinkClose + BlinkHold, BlinkClose + BlinkHold + BlinkOpen, BlinkAge);
+}
+
+void AIceSkater::UpdateFace(float Dt, double Looking, double EyesDown, bool bAir)
+{
+	if (!EyeMaterial && BlinkWeight < 0)
+	{
+		return;
+	}
+	FixationLeft -= Dt;
+	if (FixationLeft <= 0.0)
+	{
+		EyeFixation = FVector2D(FaceRandom.FRandRange(-.07, .07), FaceRandom.FRandRange(-.035, .035));
+		FixationLeft = FaceRandom.FRandRange(.7, 2.6);
+	}
+	const FVector2D Lead(Looking - HeadTurn, (HeadDown - EyesDown) * EyeDropPerHead);
+	FVector2D Aim = Lead + EyeFixation;
+	Aim = FVector2D(FMath::Clamp(Aim.X, -EyeTurnMax, EyeTurnMax), FMath::Clamp(Aim.Y, -EyeDropMax, EyeDropMax));
+	// Large gaze shifts tend to bring a blink with them.
+	if (FVector2D::Distance(EyeGaze, Aim) > SaccadeBlink)
+	{
+		StartBlink();
+	}
+	const FVector2D Toward = Aim - EyeGaze;
+	const double Step = EyeSpeed * Dt;
+	EyeGaze = Toward.Size() <= Step ? Aim : EyeGaze + Toward.GetSafeNormal() * Step;
+	// Touching down after a jump brings a reflex blink; otherwise they come every few seconds.
+	if (bFaceWasAirborne && !bAir)
+	{
+		StartBlink();
+	}
+	bFaceWasAirborne = bAir;
+	SinceBlink += Dt;
+	BlinkWait -= Dt;
+	if (BlinkWait <= 0.0)
+	{
+		StartBlink();
+	}
+	if (BlinkAge >= 0.0)
+	{
+		BlinkAge += Dt;
+		if (BlinkAge > BlinkClose + BlinkHold + BlinkOpen)
+		{
+			BlinkAge = -1.0;
+		}
+	}
+	// The upper lid follows the eye down, resting lower the further down she looks.
+	const double LidRest = FMath::Clamp(.05 - EyeGaze.Y * .9 + HeadDown * .15, 0.0, .4);
+	if (EyeMaterial)
+	{
+		const FVector2D Slide = FVector2D(-FMath::Sin(EyeGaze.X), FMath::Sin(EyeGaze.Y)) * EyeDome * IrisUvPerM;
+		EyeMaterial->SetVectorParameterValue(TEXT("Gaze"), FLinearColor(Slide.X, Slide.Y, 0.f, 0.f));
+	}
+	if (Body->MorphTargetWeights.IsValidIndex(BlinkWeight))
+	{
+		Body->MorphTargetWeights[BlinkWeight] = float(FMath::Max(LidRest, BlinkAmount()));
+	}
+}
+
+int32 AIceSkater::ForeignMaterials() const
+{
+	const USkeletalMesh* Mesh = Cast<USkeletalMesh>(Body->GetSkinnedAsset());
+	if (!Mesh)
+	{
+		return 0;
+	}
+	int32 Count = 0;
+	const TArray<FSkeletalMaterial>& Own = Mesh->GetMaterials();
+	for (int32 I = 0; I < Own.Num(); ++I)
+	{
+		const UMaterialInterface* Worn = Body->GetMaterial(I);
+		if (const UMaterialInstanceDynamic* Made = Cast<UMaterialInstanceDynamic>(Worn))
+		{
+			if (Made == EyeMaterial)
+			{
+				continue;
+			}
+			Worn = Made->Parent;
+		}
+		Count += Worn != Own[I].MaterialInterface ? 1 : 0;
+	}
+	return Count;
 }

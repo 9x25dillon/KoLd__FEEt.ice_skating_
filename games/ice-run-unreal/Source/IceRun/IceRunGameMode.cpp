@@ -902,7 +902,7 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 	MenuTestClock += Dt;
 	auto Pass = [this]
 	{
-		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, the program laid on its music, a career run to its result and story, training, wardrobe, atelier and Composer, through the live bridge"));
+		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, the program laid on its music, a career run to its result and story, training, wardrobe (skaters wear their own materials), atelier and Composer, through the live bridge"));
 		FPlatformMisc::RequestExitWithStatus(false, 0);
 		MenuTestStage = 99;
 	};
@@ -1019,6 +1019,12 @@ void AIceRunGameMode::MenuTestStep(float Dt)
 		const int32 Before = CostumeIndex;
 		AdjustItem(TEXT("Costume"), 1);
 		if (CostumeIndex == Before) { Stop(TEXT("the costume did not change")); break; }
+		// Another skater and back: each wears its own model's materials, and the athlete's face moves again.
+		AdjustItem(TEXT("Skater"), 1);
+		if (Skater->ForeignMaterials() > 0) { Stop(TEXT("the next skater wears the last one's materials")); break; }
+		AdjustItem(TEXT("Skater"), -1);
+		if (Skater->ForeignMaterials() > 0) { Stop(TEXT("back on the athlete, a slot wears another model's material")); break; }
+		if (!Skater->FaceMoves()) { Stop(TEXT("the athlete's face does not move")); break; }
 		MenuTestStage = AcceptItem(TEXT("Slot 1")) ? 10 : (Stop(TEXT("no atelier slot")), 99);
 		break;
 	}

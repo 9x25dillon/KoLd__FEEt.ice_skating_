@@ -94,6 +94,11 @@ her), each blade's share of the load, the knee, and the coil where the setup win
 against the hips. At the bottom right, YOUR LINE: the rink from above, the line skated since the
 run began, where she is and which way she faces, and in a lesson the next target to reach.
 
+The athlete's face is `skater.gd`'s: her eyes lead her head to where she is going, settling on
+small fixations of their own; she blinks every few seconds, with a large glance, and as she lands,
+and her lids follow her gaze down (`M_Eye` slides the model's own iris; the Blink morph moves the
+lids, so the content build gives the skaters' materials a morph-ready parent, `M_GltfMorph`).
+
 The stands hold arena.gd's audience: about three thousand seated spectators (the Godot arena's
 own model, instanced), each with a coat, a skin tone and their own timing. Their heads follow the
 skater; after a landing the hall rises (most of them for a clean one, a few for one that is not),
@@ -164,5 +169,5 @@ Godot's body frame so it reads against `skater.gd`; the one conversion to Unreal
 frame is `IceSimSpace::FromBody`. A turn about an axis changes sense across that conversion,
 which is why the spine and head twists are negated there.
 
-Not yet here: the face and eyes, Elite paddles, and a packaged build. The venue is plain next to the Godot Northlight
+Not yet here: Elite paddles, and a packaged build. The venue is plain next to the Godot Northlight
 arena.

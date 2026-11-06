@@ -59,6 +59,55 @@ def import_skater(glb, folder, kind="SkeletalMesh"):
     return meshes[0] if meshes else None
 
 
+GLTF_DEFAULT = "/InterchangeAssets/gltf/M_Default.M_Default"
+
+
+def morph_parent():
+    """A project copy of Interchange's glTF material that allows morph targets. The athlete's Blink
+    moves her lids, and the engine draws a section a morph moves (her skin, her lashes) only with a
+    material that allows it, or it draws the default. The engine's own asset is left as it is."""
+    path = MATERIALS + "/M_GltfMorph"
+    material = assets.load_asset(path) if assets.does_asset_exist(path) else assets.duplicate_asset(GLTF_DEFAULT.split(".")[0], path)
+    material.set_editor_property("used_with_skeletal_mesh", True)
+    material.set_editor_property("used_with_morph_targets", True)
+    assets.save_loaded_asset(material, False)
+    return material
+
+
+MORPH_COPIES = {}
+
+
+def morph_copy(middle, parent):
+    """Interchange's in-between instance (its blend mode and sidedness, e.g. MI_Default_Blend_DS),
+    copied into the project and set on the morph-ready parent."""
+    key = middle.get_path_name()
+    if key not in MORPH_COPIES:
+        path = MATERIALS + "/" + key.split("/")[-1].split(".")[0] + "_Morph"
+        copy = assets.load_asset(path) if assets.does_asset_exist(path) else assets.duplicate_asset(key.split(".")[0], path)
+        mel.set_material_instance_parent(copy, parent)
+        # Reparenting does not mark the package dirty: saved regardless.
+        assets.save_loaded_asset(copy, False)
+        MORPH_COPIES[key] = copy
+    return MORPH_COPIES[key]
+
+
+def allow_morphs(folder, parent):
+    """Every material instance Interchange made in this skater's folder, onto the morph-ready chain."""
+    moved = 0
+    for path in assets.list_assets(GENERATED + "/" + folder, recursive=True, include_folder=False):
+        if assets.find_asset_data(path).asset_class_path.asset_name != "MaterialInstanceConstant":
+            continue
+        instance = assets.load_asset(path)
+        middle = instance.get_editor_property("parent")
+        if not middle or not middle.get_path_name().startswith("/InterchangeAssets/"):
+            continue
+        target = parent if middle.get_path_name() == GLTF_DEFAULT else morph_copy(middle, parent)
+        mel.set_material_instance_parent(instance, target)
+        assets.save_loaded_asset(instance, False)
+        moved += 1
+    log("%s: %d materials allow morph targets" % (folder, moved))
+
+
 def parameter(material, kind, name, default, x, y):
     node = mel.create_material_expression(material, kind, x, y)
     node.set_editor_property("parameter_name", name)
@@ -214,6 +263,53 @@ def crowd_material():
     return m
 
 
+# games/ice-run-godot/shaders/eye.gdshader: the eye's image is one iris filling the frame, sclera at
+# its edge. The gaze slides it across the dome; past the image the eye carries on in the sclera's
+# colour. The CC0 image labelled brown is red-orange: its detail stays, its hue becomes iris_hue.
+EYE_AT = "return clamp(UV + Gaze.xy, .01, .99);"
+EYE_COLOUR = """
+float r = length(UV + Gaze.xy - .5);
+float overIris = 1. - smoothstep(.42 - .02, .42 + .02, r);
+float3 white = lerp(C * 1.3, float3(.5, .49, .47), smoothstep(.44, .49, r));
+return lerp(white, dot(C, float3(.3, .59, .11)) * float3(2.6, 1.45, .8), overIris);
+"""
+EYE_GLOSS = """
+float r = length(UV + Gaze.xy - .5);
+float overIris = 1. - smoothstep(.42 - .02, .42 + .02, r);
+return float2(lerp(.42, .12, overIris), lerp(.3, .4, overIris));
+"""
+
+
+def eye_material():
+    """The athlete's eyes (Source/IceRun/IceSkater's face): the game sets Iris (the model's own image) and Gaze."""
+    m = new_material("M_Eye")
+    m.set_editor_property("used_with_skeletal_mesh", True)
+    m.set_editor_property("used_with_morph_targets", True)
+    uv = mel.create_material_expression(m, unreal.MaterialExpressionTextureCoordinate, -1200, 0)
+    gaze = parameter(m, unreal.MaterialExpressionVectorParameter, "Gaze", unreal.LinearColor(0, 0, 0, 0), -1200, 150)
+    at = custom_node(m, "EyeAt", EYE_AT, [("UV", uv), ("Gaze", gaze)], -900, 0)
+    at.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT2)
+    iris = mel.create_material_expression(m, unreal.MaterialExpressionTextureSampleParameter2D, -600, 0)
+    iris.set_editor_property("parameter_name", "Iris")
+    iris.set_editor_property("texture", unreal.load_asset("/Engine/EngineResources/DefaultTexture"))
+    mel.connect_material_expressions(at, "", iris, "UVs")
+    colour = custom_node(m, "EyeColour", EYE_COLOUR, [("UV", uv), ("Gaze", gaze), ("C", iris)], -300, 0)
+    mel.connect_material_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    gloss = custom_node(m, "EyeGloss", EYE_GLOSS, [("UV", uv), ("Gaze", gaze)], -300, 300)
+    gloss.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT2)
+    rough = mel.create_material_expression(m, unreal.MaterialExpressionComponentMask, 0, 250)
+    rough.set_editor_property("r", True)
+    mel.connect_material_expressions(gloss, "", rough, "")
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    spec = mel.create_material_expression(m, unreal.MaterialExpressionComponentMask, 0, 350)
+    spec.set_editor_property("g", True)
+    mel.connect_material_expressions(gloss, "", spec, "")
+    mel.connect_material_property(spec, "", unreal.MaterialProperty.MP_SPECULAR)
+    mel.recompile_material(m)
+    assets.save_loaded_asset(m)
+    return m
+
+
 def ice_material():
     """Ice: water's reflectance (F0 about 0.018, Specular 0.23) under a polished, lightly
     groomed surface: broad resurfacing patches and a fine grain vary its roughness and tone."""
@@ -309,6 +405,7 @@ def main():
     surface_material()
     ice_material()
     crowd_material()
+    eye_material()
     # The audience: one seated spectator (the Godot arena's), instanced by Source/IceRun/IceRink.
     spectator = import_skater("spectator.glb", "Spectator", "StaticMesh")
     if spectator:
@@ -325,10 +422,12 @@ def main():
     with open(os.path.join(PROJECT, "Content", "Generated", "music.json"), "w") as out:
         json.dump(music, out, indent=2)
     manifest = {}
+    morphs = morph_parent()
     for glb, folder in SKATERS:
         mesh = import_skater(glb, folder)
         if mesh:
             manifest[folder] = mesh
+            allow_morphs(folder, morphs)
     path = os.path.join(PROJECT, "Content", "Generated", "skaters.json")
     with open(path, "w") as out:
         json.dump(manifest, out, indent=2)

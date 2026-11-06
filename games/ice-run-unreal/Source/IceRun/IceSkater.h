@@ -6,6 +6,7 @@
 #include "IceSkater.generated.h"
 
 class UIceSpray;
+class UMaterialInstanceDynamic;
 
 class UPoseableMeshComponent;
 class UStaticMeshComponent;
@@ -44,6 +45,10 @@ public:
 	/** The blade a spin's finish has lifted off the ice, or -1 (skater.gd lifted_blade). */
 	int32 LiftedBlade() const;
 	bool HasModel() const { return bHasModel; }
+	/** Slots wearing a material that is neither the model's own nor made from it: a model change that kept another model's. */
+	int32 ForeignMaterials() const;
+	/** Whether this model's face moves: eyes on M_Eye, lids on the Blink morph (the athlete's). */
+	bool FaceMoves() const { return EyeMaterial != nullptr && BlinkWeight >= 0; }
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USceneComponent> Root;
@@ -117,6 +122,25 @@ private:
 	double HeadTurn = 0.0;
 	double HeadDown = 0.0;
 	double Backing = 0.0;
+
+	// skater.gd's face. The eyes reach a new target first and the head catches up, so how far they
+	// lead comes from the head's own lag; fixations and blink timing are presentation, not sim.
+	void SetUpFace();
+	void UpdateFace(float Dt, double Looking, double EyesDown, bool bAir);
+	void StartBlink();
+	double BlinkAmount() const;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> EyeMaterial;
+	int32 BlinkWeight = -1;
+	FRandomStream FaceRandom;
+	/** Radians: x toward a positive head turn, y up. */
+	FVector2D EyeGaze = FVector2D::ZeroVector;
+	FVector2D EyeFixation = FVector2D::ZeroVector;
+	double FixationLeft = 0.0;
+	double BlinkWait = 2.0;
+	double BlinkAge = -1.0;
+	double SinceBlink = 1.5;
+	bool bFaceWasAirborne = false;
 	double ArmEnergy = 0.0;
 	double SwayClock = 0.0;
 	double ArmLag = 0.0;
