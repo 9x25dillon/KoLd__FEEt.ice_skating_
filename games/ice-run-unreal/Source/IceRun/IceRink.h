@@ -52,6 +52,13 @@ public:
 	void CrowdReact(double Amount);
 	/** Each frame: where the skater is, for the audience's heads, and how roused the hall still is. */
 	void UpdateCrowd(const FVector& SkaterAt, float Dt);
+	/**
+	 * After a program the hall loved: bouquets and plush toys thrown from the stands onto the ice
+	 * around her, flying under gravity and lying where they land until the next run.
+	 */
+	void ThrowTributes(int32 Count, const FVector& Around);
+	void StepTributes(float Dt);
+	void ClearTributes();
 
 	/** The roof and its fixtures: the high Rink camera looks down through them (main.gd's roof cutaway). */
 	const TArray<TWeakObjectPtr<UPrimitiveComponent>>& Roof() const { return RoofParts; }
@@ -97,11 +104,33 @@ private:
 
 	/** arena.gd's audience, seated on the four banks (Content/Generated/crowd.json's spectator and M_Crowd). */
 	void SeatCrowd(const FVector& Middle);
+	/**
+	 * The officials and the kiss and cry: nine judges at a long table behind the boards mid-side (the
+	 * crowd's own model, so their heads follow her too), and the booth where the scores are heard.
+	 */
+	void Officials(const FVector& Middle);
+	/** A word or two in the hall, facing the ice. */
+	void Sign(const FString& Text, const FVector& At, double YawDegrees, float Size, const FColor& Colour);
 	UPROPERTY()
 	TObjectPtr<class UInstancedStaticMeshComponent> Crowd;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> CrowdMaterial;
 	double CrowdMood = 0.0;
+
+	/** Tributes: red, pink and white bouquets and plush bears, each its own instanced mesh. */
+	UPROPERTY()
+	TArray<TObjectPtr<class UInstancedStaticMeshComponent>> TributeKinds;
+	struct FTribute
+	{
+		int32 Kind = 0;
+		FVector At = FVector::ZeroVector;
+		FVector Velocity = FVector::ZeroVector;
+		FRotator Turn = FRotator::ZeroRotator;
+		FRotator Spin = FRotator::ZeroRotator;
+		bool bDown = false;
+	};
+	TArray<FTribute> Tributes;
+	FRandomStream TributeRandom;
 
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> RoofParts;
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> CourseParts;

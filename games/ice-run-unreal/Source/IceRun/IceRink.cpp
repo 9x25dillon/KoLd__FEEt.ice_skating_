@@ -17,6 +17,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "TimerManager.h"
+#include "Components/TextRenderComponent.h"
 
 namespace
 {
@@ -218,6 +219,7 @@ void AIceRink::Build(double MinX, double MaxX, double MinY, double MaxY, double 
 		}
 	}
 	SeatCrowd(Middle);
+	Officials(Middle);
 	Lights();
 	UE_LOG(LogIceRun, Log, TEXT("Rink built: %d outline points, sheet %.0f x %.0f m, corner %.0f m."), Outline.Num(), MaxX - MinX, MaxY - MinY, Corner);
 }
@@ -728,4 +730,141 @@ void AIceRink::FlushGrooves()
 {
 	Grooves->CreateMeshSection_LinearColor(GrooveSection, GrooveVertices, GrooveTriangles, GrooveNormals, {}, {}, {}, false);
 	Grooves->SetMaterial(GrooveSection, GrooveMaterial);
+}
+
+void AIceRink::ThrowTributes(int32 Count, const FVector& Around)
+{
+	if (TributeKinds.Num() == 0)
+	{
+		// Three bouquets (a cone of blooms) and a plush bear (a sphere), in the hall's own surface material.
+		UStaticMesh* Cone = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cone.Cone"));
+		UStaticMesh* Ball = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+		const TCHAR* const Colours[] = {TEXT("b0122b"), TEXT("e57aa4"), TEXT("f2efe6"), TEXT("8a5a3c")};
+		for (int32 K = 0; K < 4; ++K)
+		{
+			UInstancedStaticMeshComponent* Kind = NewObject<UInstancedStaticMeshComponent>(this);
+			Kind->SetStaticMesh(K < 3 ? Cone : Ball);
+			Kind->SetupAttachment(RootComponent);
+			Kind->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Kind->SetMaterial(0, Surface(Hex(Colours[K]), .7f));
+			Kind->RegisterComponent();
+			TributeKinds.Add(Kind);
+		}
+		TributeRandom.Initialize(0xF10E);
+	}
+	const FVector Middle = IceSimSpace::Point(0.0, IceSimSpace::RinkCentreY);
+	for (int32 I = 0; I < Count; ++I)
+	{
+		FTribute T;
+		T.Kind = TributeRandom.RandHelper(4);
+		// From somewhere in the stands: a bank, a row, a seat.
+		const int32 Side = TributeRandom.RandHelper(4);
+		const int32 Row = 2 + TributeRandom.RandHelper(7);
+		const FRotator Bank(0, Side * 90.0, 0);
+		const FVector From = Middle + Bank.RotateVector(FVector(3150 + Row * 135, TributeRandom.FRandRange(-3000.f, 3000.f), 50 + Row * 72 + 120));
+		// To the ice around her, a few metres out, inside the boards.
+		const float Angle = TributeRandom.FRandRange(0.f, 2.f * UE_PI);
+		const float Out = TributeRandom.FRandRange(250.f, 900.f);
+		FVector To = Around + FVector(FMath::Cos(Angle) * Out, FMath::Sin(Angle) * Out, 0.0);
+		To.X = FMath::Clamp(To.X, Middle.X - 2500.0, Middle.X + 2500.0);
+		To.Y = FMath::Clamp(To.Y, Middle.Y - 2500.0, Middle.Y + 2500.0);
+		To.Z = 6.0;
+		// A thrown arc that lands there: the flight's time, then the launch that makes it.
+		const float Flight = TributeRandom.FRandRange(1.0f, 1.7f);
+		T.At = From;
+		T.Velocity = (To - From) / Flight + FVector(0.0, 0.0, 0.5 * 980.0 * Flight);
+		T.Turn = FRotator(TributeRandom.FRandRange(-180.f, 180.f), TributeRandom.FRandRange(-180.f, 180.f), 0.f);
+		T.Spin = FRotator(TributeRandom.FRandRange(-400.f, 400.f), TributeRandom.FRandRange(-300.f, 300.f), TributeRandom.FRandRange(-300.f, 300.f));
+		Tributes.Add(T);
+		const FVector Scale = T.Kind < 3 ? FVector(.10, .10, .28) : FVector(.16);
+		TributeKinds[T.Kind]->AddInstance(FTransform(T.Turn, T.At, Scale), true);
+	}
+}
+
+void AIceRink::StepTributes(float Dt)
+{
+	if (Tributes.Num() == 0)
+	{
+		return;
+	}
+	TArray<int32> Next;
+	Next.SetNumZeroed(TributeKinds.Num());
+	TArray<TArray<FTransform>> Placed;
+	Placed.SetNum(TributeKinds.Num());
+	for (FTribute& T : Tributes)
+	{
+		if (!T.bDown)
+		{
+			T.Velocity.Z -= 980.0 * Dt;
+			T.At += T.Velocity * Dt;
+			T.Turn += T.Spin * Dt;
+			if (T.At.Z <= 6.0 && T.Velocity.Z < 0.0)
+			{
+				// Down on the ice, lying on its side where it fell.
+				T.At.Z = 6.0;
+				T.bDown = true;
+				T.Turn = FRotator(T.Kind < 3 ? 90.0 : 0.0, T.Turn.Yaw, 0.0);
+			}
+		}
+		const FVector Scale = T.Kind < 3 ? FVector(.10, .10, .28) : FVector(.16);
+		Placed[T.Kind].Add(FTransform(T.Turn, T.At, Scale));
+	}
+	for (int32 K = 0; K < TributeKinds.Num(); ++K)
+	{
+		if (Placed[K].Num() > 0)
+		{
+			TributeKinds[K]->BatchUpdateInstancesTransforms(0, Placed[K], true, true, true);
+		}
+	}
+}
+
+void AIceRink::ClearTributes()
+{
+	Tributes.Reset();
+	for (UInstancedStaticMeshComponent* Kind : TributeKinds)
+	{
+		Kind->ClearInstances();
+	}
+}
+
+void AIceRink::Sign(const FString& Text, const FVector& At, double YawDegrees, float Size, const FColor& Colour)
+{
+	UTextRenderComponent* Words = NewObject<UTextRenderComponent>(this);
+	Words->SetupAttachment(RootComponent);
+	Words->SetText(FText::FromString(Text));
+	Words->SetHorizontalAlignment(EHTA_Center);
+	Words->SetVerticalAlignment(EVRTA_TextCenter);
+	Words->SetWorldSize(Size);
+	Words->SetTextRenderColor(Colour);
+	Words->SetWorldLocationAndRotation(At, FRotator(0, YawDegrees, 0));
+	Words->RegisterComponent();
+}
+
+void AIceRink::Officials(const FVector& Middle)
+{
+	// AUTHORED set dressing: positions in the gap between the boards (28 m) and the first row (31.5 m).
+	UMaterialInstanceDynamic* Table = Surface(Hex(TEXT("1d2b3a")), .5f);
+	UMaterialInstanceDynamic* Cloth = Surface(Hex(TEXT("d9bc84")), .8f);
+	UMaterialInstanceDynamic* Backdrop = Surface(Hex(TEXT("23405e")), .6f);
+	UMaterialInstanceDynamic* Bench = Surface(Hex(TEXT("b8c7d4")), .5f);
+	// The judges' panel, mid-side on the +X bank, facing the ice.
+	Box(FVector(80, 1000, 76), Middle + FVector(2930, 0, 38), 0, Table);
+	Box(FVector(4, 1000, 22), Middle + FVector(2888, 0, 62), 0, Cloth, false);
+	Sign(TEXT("JUDGES' PANEL"), Middle + FVector(2884, 0, 40), 180.0, 22.f, FColor(225, 205, 160));
+	if (Crowd)
+	{
+		// Nine judges in dark suits, the referee in the middle; the crowd's shader turns their heads to her.
+		for (int32 J = 0; J < 9; ++J)
+		{
+			const int32 I = Crowd->AddInstance(FTransform(FRotator(0, 90.0, 0), Middle + FVector(3005, (J - 4) * 105.0, 0), FVector(1.0)), true);
+			const float Suit = J == 4 ? .05f : .09f;
+			Crowd->SetCustomData(I, TArray<float>{Suit, Suit, Suit + .03f, .55f, .42f, .34f, (J + 1) * .097f}, true);
+		}
+	}
+	// The kiss and cry, on the +Y bank toward a corner: a bench, a backdrop, its name.
+	Box(FVector(220, 60, 45), Middle + FVector(-1200, 2960, 22.5), 0, Bench);
+	Box(FVector(560, 20, 260), Middle + FVector(-1200, 3080, 130), 0, Backdrop);
+	Sign(TEXT("KISS & CRY"), Middle + FVector(-1200, 3068, 200), -90.0, 46.f, FColor(240, 228, 200));
+	// The event's name over the far boards' rail, for the broadcast.
+	Sign(TEXT("EDGEWORK  ·  ICE RUN"), Middle + FVector(0, -2895, 70), 90.0, 34.f, FColor(200, 220, 235));
 }

@@ -140,3 +140,39 @@ Nothing was deleted. No physics, params or replay format changed (still /39).
 - A career program or a Composer program ends in the style's bow.
 - Wardrobe → Style of movement, and Wardrobe → Movement gallery, which plays every one of these on
   demand.
+
+### 2026-11-06 — the program's end, and the hall
+
+10. **The crowd rises by how good the landing was**, from the landing's own tier (flowing 1.0,
+    clean 0.75, tight 0.45, step-out and two-foot 0.25, under-rotated 0.2, fall 0.1; a combination's
+    finale 1.0). Before: 1.0 for any clean landing and 0.12 otherwise (main.gd's rule), which stays
+    the fallback when the bridge sends no tier.
+11. **A career or Composer program now ends in its bow, then the scores** (the kiss and cry): the
+    result page opens 9 s after the end instead of 2.5 s; from 3 s the HUD reveals the technical
+    score, the program components, the deductions, the total and her place, a line at a time, the
+    hall rises by the place and bouquets and plush toys come down from the stands onto the ice
+    (AUTHORED counts: 60 for first, 40 second, 26 third, 8 off the podium, 18 for a Composer
+    program). Other runs keep main.gd's 2.5 s.
+12. **The stills clock** (Unreal `ShotStep`) used to stop whenever no run was playing and no still
+    had been taken yet, so a still asked for after a run's end never came and the process never
+    quit (found when stilling the bow). It now runs on once started. `-IceScript` drives an
+    ordinary run with the smoke test's pad script, for stills of a program skated to its end.
+13. **Through the bow and the scores the camera takes the menu's slow orbit** (`Showcase`), so she
+    is framed close as a broadcast would; before this, a program's end stayed on whatever camera
+    the run used. The reveal holds to 9 s so the total and the place stay up about three seconds.
+14. **Air positions by style** (Contemporary a Tano, Showman a Rippon, Classical and Athletic the
+    tuck) once a jump has turned past three-quarters of a revolution in the air: a double or more
+    in progress, decided by the sim's own rotation. Overhead arms are as close to the spin axis as
+    the tuck, so nothing the physics does about inertia is contradicted. The Unreal pose lets this
+    one plan through the flight's gate, and lets go of it as she comes down for the ice.
+15. **The instant replay.** A program's result names its best-scoring element (`result.highlight`);
+    "Watch the highlight" replays the run from its own inputs (the same states), seeks to 1.25 s
+    before that element's tick (bridge op `seek`, which carries a replay on without a frame for each
+    step), plays it at 0.3x without the music, then returns to the program's own result page. A test
+    holds the seek to its tick. Not yet watched live: no scripted pad lands a jump on the ice here.
+16. **The judges' marks and the components.** The element call shows the panel's nine GOE marks as
+    tiles under it; the kiss and cry's reveal breaks the program components into composition,
+    presentation and skating skills (`protocol.components`, sim/pcs.ts's own scores).
+17. **Officials in the hall:** a judges' panel of nine (the crowd's own model and shader, so they
+    watch her too) at a table behind the boards mid-side, a kiss and cry booth, and the event's
+    name over the far boards. Set dressing only; the boards and the ice are unchanged.

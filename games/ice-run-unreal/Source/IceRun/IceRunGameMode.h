@@ -101,7 +101,8 @@ public:
 	const FMenuPage& Page() const { return MenuPage; }
 	int32 MenuIndex() const { return MenuAt; }
 	/** The camera turns slowly round the skater while a menu is up (main.gd's showcase). */
-	bool Showcase() const { return bPaused && !bShotsWithoutMenu; }
+	/** Also through a program's bow and its scores: the slow orbit frames her, as a broadcast's close-up would. */
+	bool Showcase() const { return (bPaused || (FinishedFor >= 0.0 && RevealsScores())) && !bShotsWithoutMenu; }
 
 	const FIceFrame& Frame() const { return Latest; }
 	/** The catalog's rink (minX, maxX, minY, maxY, corner, in sim metres), for the HUD's map. */
@@ -112,8 +113,16 @@ public:
 	}
 	/** The broadcast's announcement (main.gd broadcast.announce): a title, its detail, and the seconds it has left. */
 	const FString& AnnouncementTitle() const { return AnnounceTitle; }
+	/** The judges' GOE marks for the element just called, shown under it (empty otherwise). */
+	const TArray<double>& AnnouncementPanel() const { return AnnouncePanel; }
 	/** The animation just begun (game/choreo.ts's plan label: a landing's exit, a fall, a rise, the bow), and its seconds left. */
 	const FString& Caption() const { return CaptionText; }
+	/** Seconds since the scores began to be revealed after a program, or -1 (HUD). */
+	double RevealTime() const { return FinishedFor >= RevealStart && RevealsScores() ? FinishedFor - RevealStart : -1.0; }
+	/** A finished career or Composer program: the bow, then the scores revealed. */
+	bool RevealsScores() const;
+	static constexpr double RevealStart = 3.0;
+	static constexpr double RevealEnd = 9.0;
 	double CaptionLeft() const { return CaptionTime; }
 	const FString& AnnouncementDetail() const { return AnnounceDetail; }
 	double AnnouncementLeft() const { return AnnounceLeft; }
@@ -258,6 +267,25 @@ private:
 	void PreviewChoreo(const TSharedRef<FJsonObject>& Options);
 	FString CaptionText;
 	double CaptionTime = 0.0;
+	TArray<double> AnnouncePanel;
+	/** The scores' moment: the hall rises by the place, and tributes come down from the stands. */
+	void OnReveal();
+	/** The instant replay: the program's best element again, in slow motion, from its own inputs. */
+	void StartHighlight();
+	void EndHighlight();
+	bool bHighlight = false;
+	int32 HighlightTick = -1;
+	FString HighlightTitle;
+	/** The program's own result, to come back to when the highlight ends. */
+	FIceFrame HighlightReturn;
+public:
+	/** "INSTANT REPLAY" while the highlight plays, else empty (HUD). */
+	FString HighlightLabel() const { return bHighlight ? HighlightTitle : FString(); }
+	/** AUTHORED: the instant replay's speed, its run-up before the element, and how long it stays after. */
+	static constexpr double HighlightSpeed = .3;
+	static constexpr int32 HighlightLead = 150;
+	static constexpr int32 HighlightTail = 230;
+private:
 	int32 CaptionPlan = 0;
 	/**
 	 * The controller profile (game/controller.ts: stick deadzone and curve, lean and trigger
@@ -280,6 +308,7 @@ private:
 	TArray<double> ShotTimes;
 	FString ShotDir;
 	double ShotClock = 0.0;
+	bool bShotClockStarted = false;
 	int32 ShotsTaken = 0;
 	int32 StartCamera = 0;
 
@@ -297,6 +326,8 @@ private:
 	bool bPrefsLoaded = false;
 
 	bool bAuto = false;
+	/** -IceScript: the smoke test's pad script drives an ordinary run (stills of a program's end). */
+	bool bScripted = false;
 	bool bSmoke = false;
 	double SmokeSeconds = 0.0;
 	int32 SmokeStage = 0;

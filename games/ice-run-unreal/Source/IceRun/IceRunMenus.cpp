@@ -1026,6 +1026,15 @@ void AIceRunGameMode::BuildResult(FMenuPage& P)
 		P.Items.Add(Line(TEXT("More lessons →"), TEXT(""), TEXT("Another course, or the tutorial again."), [this] { OpenMenu(TEXT("lessons")); }));
 	}
 	P.Items.Add(Line(TEXT("Skate it again"), TEXT(""), TEXT("From the first push."), [this] { StartRun(); CloseMenu(); }));
+	{
+		// The instant replay: the program's best element again, in slow motion.
+		const TSharedPtr<FJsonObject> Best = Obj(Obj(Latest.Raw, TEXT("result")), TEXT("highlight"));
+		if (Best.IsValid() && !Str(Best, TEXT("label")).IsEmpty())
+		{
+			P.Items.Add(Line(TEXT("Watch the highlight"), FString::Printf(TEXT("%s   %s"), *Str(Best, TEXT("name")), *Str(Best, TEXT("label"))),
+				TEXT("The program's best element again, from its own inputs, in slow motion: the same states, so the same landing."), [this] { StartHighlight(); }));
+		}
+	}
 	P.Items.Add(Line(TEXT("Watch the replay"), TEXT(""), TEXT("The run again, played back from its own inputs through the same solver."), [this]
 	{
 		SendOp(TEXT("export"), MakeShared<FJsonObject>());
@@ -1287,6 +1296,21 @@ void AIceRunGameMode::BuildGallery(FMenuPage& P)
 	}
 	static const TCHAR* const Jumps[] = {TEXT("Toe loop"), TEXT("Salchow"), TEXT("Loop"), TEXT("Flip"), TEXT("Lutz"), TEXT("Axel")};
 	static const TCHAR* const Exits[] = {TEXT("the classic check"), TEXT("the sweep"), TEXT("the crossed release"), TEXT("the lifted line"), TEXT("the counter check"), TEXT("the forward carry")};
+	P.Items.Add(Header(TEXT("Held lines · spins and spirals")));
+	struct FLine { const TCHAR* Move; const TCHAR* Title; const TCHAR* Why; };
+	static const FLine Lines[] = {
+		{TEXT("spin"), TEXT("Upright spin"), TEXT("The style's open arms; on the ice they draw in as the spin speeds up, by the sim's own inertia.")},
+		{TEXT("camel"), TEXT("Camel spin"), TEXT("The arms' line in a camel (the body's position is the spin's own).")},
+		{TEXT("sit"), TEXT("Sit spin"), TEXT("The arms' line in a sit spin.")},
+		{TEXT("spiral"), TEXT("Spiral"), TEXT("The arms' line and the free leg high behind.")},
+		{TEXT("ina"), TEXT("Ina Bauer"), TEXT("Arms high and the back arched.")},
+		{TEXT("air"), TEXT("In the air"), TEXT("On a double or more: the tuck, a Tano (one arm overhead) or a Rippon (both), by style. Overhead is as close to the axis as the tuck, so the spin is the same.")},
+	};
+	for (const FLine& L : Lines)
+	{
+		const FString Move = L.Move;
+		P.Items.Add(Line(L.Title, StyleTitle, L.Why, Play([Move](FJsonObject& O) { O.SetStringField(TEXT("what"), TEXT("line")); O.SetStringField(TEXT("move"), Move); })));
+	}
 	P.Items.Add(Header(TEXT("Each jump's own exit · a clean triple")));
 	for (int32 J = 0; J < 6; ++J)
 	{

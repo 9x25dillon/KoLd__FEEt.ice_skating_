@@ -36,6 +36,8 @@ private:
 	/** main.gd broadcast's YOUR LINE: the rink from above, the line skated since the run began, where she is and which way she faces; and a lesson's next target. */
 	void RinkMap(const class AIceRunGameMode* Mode, const FIceFrame& F, float U);
 	void Bar(float X, float Y, float W, float Fill, const FLinearColor& Color, float U);
+	/** The kiss and cry's scores, revealed a line at a time after the bow. */
+	void ScoresReveal(const class AIceRunGameMode* Mode, const FIceFrame& F, float U);
 	void Stroke(const FVector2D& A, const FVector2D& B, const FLinearColor& Color, float Thickness);
 	/** True while laying a card out to measure it: Line and Paragraph only advance. */
 	bool bMeasuring = false;

@@ -307,6 +307,7 @@ void AIceSkater::ApplyFrame(const FIceFrame& Frame, bool bSnap)
 {
 	State = Frame.State;
 	bPreviewFall = false;
+	bPreviewing = false;
 	// game/choreo.ts: the bridge's plans; one it has dropped fades out from where it is.
 	if (bSnap)
 	{
@@ -673,6 +674,16 @@ void AIceSkater::Pose(float Dt)
 			Head = Hip + Bend.RotateVector(Head - Hip);
 		}
 	}
+	// Breath: the chest and shoulders rise and fall, quicker and deeper as the sim's wind and legs run
+	// out (late in a program you can see it). Presentation of the stamina the solver keeps.
+	if (!S.bFallen && !bAir)
+	{
+		const double Spent = 1.0 - FMath::Clamp(FMath::Min(S.Wind, S.Legs), 0.0, 1.0);
+		BreathClock = FMath::Fmod(BreathClock + Dt * (1.6 + 3.4 * Spent), UE_DOUBLE_TWO_PI);
+		const double Lift = FMath::Sin(BreathClock) * (.006 + .03 * Spent);
+		Neck += FVector(0.0, Lift, Lift * .3);
+		Head += FVector(0.0, Lift, Lift * .3);
+	}
 	// The trunk's bones keep their lengths through every authored shape.
 	Spine = Hip + (Spine - Hip).GetSafeNormal() * HipsLength;
 	Neck = Spine + (Neck - Spine).GetSafeNormal() * SpineLength;
@@ -969,7 +980,9 @@ void AIceSkater::Pose(float Dt)
 			double WB = BaseW;
 			if (BasePlan.Kind == TEXT("phrase")) WB *= 1.0 - .6 * Catching;
 			if (BasePlan.Kind == TEXT("spin") && bUprightSpin) WB *= ArmOpen[I];
-			ArmTo(BasePlan, BaseKey, bFlying ? 0.0 : WB);
+			// An air position (a Tano, a Rippon) is the one plan the flight takes; it lets go for the ice.
+			const bool bAirPlan = BasePlan.Kind == TEXT("air");
+			ArmTo(BasePlan, BaseKey, bAirPlan ? (bFlying || bPreviewing ? WB : 0.0) : (bFlying ? 0.0 : WB));
 			ArmTo(TopPlan, TopKey, bFlying ? 0.0 : TopW);
 		}
 		// A save is quick at any tier; only free carriage takes its time.
@@ -1307,7 +1320,8 @@ void AIceSkater::PlayPreview(const FIcePlan& Plan)
 	}
 	FIcePlan Shown = Plan;
 	Shown.Id = -1;
-	const bool bBase = Plan.Kind == TEXT("phrase") || Plan.Kind == TEXT("spin") || Plan.Kind == TEXT("spiral");
+	bPreviewing = true;
+	const bool bBase = Plan.Kind == TEXT("phrase") || Plan.Kind == TEXT("spin") || Plan.Kind == TEXT("spiral") || Plan.Kind == TEXT("air");
 	(bBase ? BasePlan : TopPlan) = Shown;
 	(bBase ? BaseAt : TopAt) = 0.0;
 	if (!bBase && BasePlan.bValid)

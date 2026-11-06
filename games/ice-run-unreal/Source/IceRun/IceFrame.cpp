@@ -67,6 +67,8 @@ FIceFrame FIceFrame::Parse(const TSharedPtr<FJsonObject>& Snapshot)
 	State.FreeSwing = Number(S, TEXT("freeSwing"));
 	State.ArmsL = Number(S, TEXT("armsL"));
 	State.SupportFoot = int32(Number(S, TEXT("supportFoot")));
+	State.Wind = Number(S, TEXT("wind"), 1.0);
+	State.Legs = Number(S, TEXT("legs"), 1.0);
 	State.Move = int32(Number(S, TEXT("move")));
 	State.Tick = int32(Number(S, TEXT("tick")));
 	State.bFallen = Flag(S, TEXT("fallen"));

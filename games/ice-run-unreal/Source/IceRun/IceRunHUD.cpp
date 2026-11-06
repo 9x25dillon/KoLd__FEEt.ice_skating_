@@ -490,6 +490,22 @@ void AIceRunHUD::DrawHUD()
 		float CY = Canvas->ClipY - 104.f * U;
 		Line(Mode->Caption(), (Canvas->ClipX - CW * .85f * U) * .5f, CY, FLinearColor(Champagne.R, Champagne.G, Champagne.B, Fade), .85f * U, Medium);
 	}
+	// The instant replay's mark, top centre, while it plays.
+	if (!Mode->HighlightLabel().IsEmpty())
+	{
+		const FString Mark = TEXT("REPLAY   ·   ") + Mode->HighlightLabel();
+		float MW = 0.f, MH = 0.f;
+		Canvas->StrLen(Medium, Mark, MW, MH);
+		const float MX = (Canvas->ClipX - MW * .95f * U) * .5f;
+		Panel(MX - 14.f * U, 58.f * U, MW * .95f * U + 28.f * U, 30.f * U, FLinearColor(.5f, .08f, .06f, .78f));
+		float MY = 62.f * U;
+		Line(Mark, MX, MY, Ink, .95f * U, Medium);
+	}
+	// The kiss and cry: after the bow, the program's scores revealed a line at a time.
+	if (Mode->RevealTime() >= 0.0)
+	{
+		ScoresReveal(Mode, F, U);
+	}
 	// main.gd's broadcast plate: TAKE THE ICE, CLEAN LANDING, FIND YOUR EDGE, for three and a half seconds.
 	if (Mode->AnnouncementLeft() > 0.0 && !Mode->AnnouncementTitle().IsEmpty())
 	{
@@ -506,6 +522,17 @@ void AIceRunHUD::DrawHUD()
 		float AY = PY + 12.f * U;
 		Line(Mode->AnnouncementTitle(), PX + 22.f * U, AY, FLinearColor(Champagne.R, Champagne.G, Champagne.B, Fade), 1.25f * U, Large);
 		Line(Mode->AnnouncementDetail(), PX + 22.f * U, AY, FLinearColor(Ink.R, Ink.G, Ink.B, Fade), .85f * U, Medium);
+		// The judges' marks: a tile each, green above zero, red below, brighter the further.
+		const TArray<double>& Marks = Mode->AnnouncementPanel();
+		for (int32 J = 0; J < Marks.Num(); ++J)
+		{
+			const double G = FMath::Clamp(Marks[J] / 5.0, -1.0, 1.0);
+			const FLinearColor C = G >= 0.0 ? FLinearColor(.25f, .55f + .4f * float(G), .38f, Fade) : FLinearColor(.6f + .35f * float(-G), .22f, .2f, Fade);
+			const float TX = PX + 22.f * U + J * 30.f * U, TY = PY + PH + 6.f * U;
+			Panel(TX, TY, 26.f * U, 20.f * U, C);
+			float NY = TY + 2.f * U;
+			Line(FString::Printf(TEXT("%+.0f"), Marks[J]), TX + 4.f * U, NY, FLinearColor(1.f, 1.f, 1.f, Fade), .65f * U, Medium);
+		}
 	}
 	float NY = Canvas->ClipY - Margin - 20.f * U;
 	if (!Mode->Notice().IsEmpty())
@@ -519,6 +546,75 @@ void AIceRunHUD::DrawHUD()
 	Line(Keys, Canvas->ClipX - Margin - W * .85f * U, NY, FLinearColor(.6f, .66f, .72f, 1.f), .85f * U, Medium);
 	BalanceMeter(Obj(Raw, TEXT("balance")), Obj(Raw, TEXT("steady")), U);
 	RinkMap(Mode, F, U);
+}
+
+void AIceRunHUD::ScoresReveal(const AIceRunGameMode* Mode, const FIceFrame& F, float U)
+{
+	UFont* Large = GEngine->GetLargeFont();
+	UFont* Medium = GEngine->GetMediumFont();
+	const TSharedPtr<FJsonObject> Result = Obj(F.Raw, TEXT("result"));
+	const TSharedPtr<FJsonObject> Protocol = Obj(Result, TEXT("protocol"));
+	if (!Protocol.IsValid())
+	{
+		return;
+	}
+	const double T = Mode->RevealTime();
+	const float Fade = FMath::Clamp(float(T) / .4f, 0.f, 1.f) * FMath::Clamp(float(AIceRunGameMode::RevealEnd - AIceRunGameMode::RevealStart - T) / .4f, 0.f, 1.f);
+	// On the right third, as a broadcast's lower third would sit, clear of her in the middle.
+	const float PW = 480.f * U, PH = 310.f * U;
+	const float PX = Canvas->ClipX - PW - 40.f * U, PY = Canvas->ClipY * .16f;
+	Panel(PX, PY, PW, PH, FLinearColor(.035f, .065f, .10f, .88f * Fade));
+	Panel(PX, PY, PW, 2.f * U, FLinearColor(Champagne.R, Champagne.G, Champagne.B, Fade));
+	auto Tone = [Fade](const FLinearColor& C, float Shown) { return FLinearColor(C.R, C.G, C.B, Fade * FMath::Clamp(Shown, 0.f, 1.f)); };
+	float Y = PY + 14.f * U;
+	Line(TEXT("THE SCORES"), PX + 24.f * U, Y, Tone(Champagne, 1.f), .9f * U, Medium);
+	Y += 6.f * U;
+	// AUTHORED: each line a beat after the last, as a broadcast reveals them.
+	struct FRow { const TCHAR* Name; double Value; double At; bool bBig; };
+	double Pcs = 0.0;
+	const bool bPcs = Protocol->TryGetNumberField(TEXT("pcs"), Pcs);
+	const TSharedPtr<FJsonObject> Components = Obj(Protocol, TEXT("components"));
+	const FRow Rows[] = {
+		{TEXT("Technical elements"), Num(Protocol, TEXT("tes")), .4, false},
+		{TEXT("Program components"), Pcs, 1.1, false},
+		{TEXT("    Composition"), Num(Components, TEXT("composition")), 1.3, false},
+		{TEXT("    Presentation"), Num(Components, TEXT("presentation")), 1.45, false},
+		{TEXT("    Skating skills"), Num(Components, TEXT("skatingSkills")), 1.6, false},
+		{TEXT("Deductions"), -FMath::Abs(Num(Protocol, TEXT("deductions"))), 1.8, false},
+		{TEXT("TOTAL"), Num(Protocol, TEXT("total")), 2.6, true},
+	};
+	for (const FRow& R : Rows)
+	{
+		if ((!bPcs && R.At == 1.1) || (!Components.IsValid() && R.At > 1.1 && R.At < 1.8))
+		{
+			continue;
+		}
+		const float Shown = float((T - R.At) / .3);
+		const FString Value = FString::Printf(TEXT("%.2f"), R.Value);
+		float VW = 0.f, VH = 0.f;
+		Canvas->StrLen(R.bBig ? Large : Medium, Value, VW, VH);
+		const float Scale = R.bBig ? 1.25f * U : 1.f * U;
+		float LY = Y, RY = Y;
+		Line(R.Name, PX + 24.f * U, LY, Tone(R.bBig ? Champagne : Soft, Shown), Scale, R.bBig ? Large : Medium);
+		Line(Value, PX + PW - 24.f * U - VW * Scale, RY, Tone(R.bBig ? Champagne : Ink, Shown), Scale, R.bBig ? Large : Medium);
+		Y = FMath::Max(LY, RY) + 4.f * U;
+	}
+	// Her place in the field, last.
+	const TArray<TSharedPtr<FJsonValue>>* Standings = nullptr;
+	if (Result->TryGetArrayField(TEXT("standings"), Standings) && Standings->Num() > 0)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Standings)
+		{
+			bool bYou = false;
+			if (V->AsObject()->TryGetBoolField(TEXT("you"), bYou) && bYou)
+			{
+				const int32 Place = int32(Num(V->AsObject(), TEXT("place")));
+				const TCHAR* Suffix = Place == 1 ? TEXT("st") : Place == 2 ? TEXT("nd") : Place == 3 ? TEXT("rd") : TEXT("th");
+				Y += 6.f * U;
+				Line(FString::Printf(TEXT("Currently %d%s of %d"), Place, Suffix, Standings->Num()), PX + 24.f * U, Y, Tone(Champagne, float((T - 3.2) / .3)), 1.05f * U, Medium);
+			}
+		}
+	}
 }
 
 void AIceRunHUD::Bar(float X, float Y, float W, float Fill, const FLinearColor& Color, float U)

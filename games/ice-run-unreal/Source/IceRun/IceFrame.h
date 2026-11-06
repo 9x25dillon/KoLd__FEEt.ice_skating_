@@ -46,6 +46,9 @@ struct FIceState
 	double FreeSwing = 0.0;
 	double ArmsL = 0.0;
 	int32 SupportFoot = 0;
+	/** The sim's stamina, 1 fresh .. 0 spent: breath and legs (staminaMode). */
+	double Wind = 1.0;
+	double Legs = 1.0;
 	int32 Move = IceMove::None;
 	int32 Tick = 0;
 	bool bFallen = false;

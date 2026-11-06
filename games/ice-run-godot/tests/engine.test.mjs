@@ -458,6 +458,7 @@ test('the choreographer dances on the snapshot: a landing names its exit and the
  assert.equal(s.element.tier,'flow');
  assert.equal(s.element.name,'Triple Lutz');
  assert.ok(Number.isFinite(s.element.goe),'the panel graded it');
+ assert.ok(s.element.panel.length>=5&&s.element.panel.every(Number.isFinite),"every judge's mark is there");
  // The menu's preview: a fall onto the hip, no run needed.
  const fall=e.previewChoreo({what:'fall',variant:'boards'}).plan;
  assert.equal(fall.kind,'fall');assert.equal(fall.rel,'fall');assert.ok(fall.keys.length>=2&&fall.dur>1);
@@ -474,4 +475,27 @@ test('a replay dances as its run did: the same plans at the same ticks',()=>{
  const again=[];
  for(let i=0;i<120;i++){const f=e.advance({},6,false);again.push(JSON.stringify([f.choreo.base?.label??null,f.choreo.top?.label??null]));}
  assert.deepEqual(again,live);
+});
+
+test('the instant replay: a program names its highlight, and a replay seeks to its tick',()=>{
+ const e=new IceEngine();
+ e.start({mode:'free'});
+ // A clean triple Lutz and a double toe loop: the Lutz scores more, so it is the highlight.
+ for(const [kind,revolutions] of [[4,3],[0,2]]){
+  for(let i=0;i<30;i++)e.tick({...NEUTRAL_INPUT});
+  e.state.landed={...e.state.landed,tick:e.state.tick+1,kind,revolutions,turned:revolutions,landingQuality:.9,takeoffQuality:.8,height:.3,airTime:.5};
+  e.tick({...NEUTRAL_INPUT});
+ }
+ assert.equal(e.bestElement.label,'3Lz');
+ // Seeking runs a replay forward to a tick without a frame for each step. (A run of its own:
+ // the landings above were written into the state, which a replay rightly cannot reproduce.)
+ const r=new IceEngine();
+ r.start({mode:'free'});
+ for(let i=0;i<40;i++)r.advance({kx:i%20<10?-.3:.3},6,false);
+ const at=r.snapshot().state.tick;
+ r.replay(r.exportReplay());
+ const s=r.seek(120);
+ assert.equal(s.state.tick,120);
+ assert.ok(at>120);
+ assert.throws(()=>new IceEngine().seek(10),/Start a replay first/);
 });

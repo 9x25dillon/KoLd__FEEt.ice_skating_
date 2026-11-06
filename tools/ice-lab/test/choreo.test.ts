@@ -285,3 +285,24 @@ test("every plan is finite, and every hand within an arm's reach of its shoulder
     for (const phrase of st.phrases) for (const fatigue of [0, 1]) check(phraseKeys(phrase, 0.6, st, fatigue), `${st.id} phrase`);
   }
 });
+
+test("in the air, a double or more wears the style's air position: a Rippon, a Tano, or the physics' own tuck", () => {
+  for (const [id, want] of [["showman", "Rippon"], ["contemporary", "Tano"], ["classical", null], ["athletic", null]] as const) {
+    const c = new Choreographer(id);
+    const s = gliding();
+    s.jump.phase = JUMP_PHASE.Air;
+    s.jump.rotation = Math.PI;
+    c.sample(s, ctx({ time: 1 }));
+    assert.notEqual(c.view(1).base?.kind, "air", `${id}: not before three-quarters of a turn`);
+    s.jump.rotation = 2 * Math.PI;
+    c.sample(s, ctx({ time: 1.2 }));
+    const base = c.view(1.2).base;
+    if (want) assert.match(base!.label, new RegExp(want), id);
+    else assert.equal(base, null, `${id} keeps the tuck`);
+    // Overhead stays near the axis: the hand within a hand's breadth of the shoulder's line.
+    if (want) for (const arm of [base!.keys[0].armA!, base!.keys[0].armB!]) assert.ok(Math.abs(arm.h[0]) < 0.15 && Math.abs(arm.h[2]) < 0.2);
+    s.jump.phase = JUMP_PHASE.None;
+    c.sample(s, ctx({ time: 1.6 }));
+    if (want) assert.ok(c.view(1.6).base!.dur - c.view(1.6).base!.at <= 0.11, `${id}: let go at the landing`);
+  }
+});

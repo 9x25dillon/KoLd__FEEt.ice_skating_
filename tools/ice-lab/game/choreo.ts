@@ -66,7 +66,7 @@ export interface Key {
   fall?: FallFrame;
 }
 
-export type PlanKind = "phrase" | "spin" | "spiral" | "landing" | "rebound" | "fall" | "rise" | "bow";
+export type PlanKind = "phrase" | "spin" | "spiral" | "air" | "landing" | "rebound" | "fall" | "rise" | "bow";
 /**
  * Which side is A. "support": the skating foot's side (a landing: the support arm goes to the side,
  * the free arm leads); "fall": the side she is falling to; "left" / "right": as named.
@@ -144,6 +144,9 @@ export const POSITIONS = {
   flail: arm(v(0.26, 0.10, 0.02), v(0.40, 0.30, 0.10), 0),
   /** The révérence's sweep, out and down. */
   bowSweep: arm(v(0.26, -0.10, -0.06), v(0.44, -0.26, -0.10), 0.9),
+  /** In the air: the tuck across the chest (the physics' own), and an arm straight overhead (a Tano; both, a Rippon). Both close to the axis. */
+  tuck: arm(v(0.13, -0.18, -0.10), v(-0.11, -0.12, -0.19), 0.2),
+  overhead: arm(v(0.07, 0.24, -0.02), v(-0.03, 0.47, -0.04), 0.6),
 } satisfies Record<string, ArmShape>;
 export type PositionId = keyof typeof POSITIONS;
 const P = POSITIONS;
@@ -177,7 +180,7 @@ export const LEGS = {
 export type StyleId = "classical" | "contemporary" | "athletic" | "showman";
 
 /** One step of a phrase: side A's arm, side B's arm, how many beats it is held, and the trunk and head. */
-interface Step { a: PositionId; b: PositionId; beats: number; trunk?: Partial<Trunk> }
+interface Step { a: PositionId; b: PositionId; beats: number; trunk?: Partial<Trunk>; leg?: V3 }
 
 export interface Style {
   id: StyleId;
@@ -195,6 +198,12 @@ export interface Style {
   camel: [PositionId, PositionId];
   sit: [PositionId, PositionId];
   spiral: [PositionId, PositionId];
+  /**
+   * The arms in the air once a jump has turned past three-quarters of a revolution (a double or
+   * more in progress): the tuck (the physics' own, no plan), a Tano (one arm overhead) or a Rippon
+   * (both). Overhead is as close to the axis as the tuck, so it does not contradict the sim's inertia.
+   */
+  air: "tuck" | "tano" | "rippon";
 }
 
 /** AUTHORED (L3). */
@@ -206,19 +215,19 @@ export const STYLES: readonly Style[] = [
     phrases: [
       [{ a: "brasBas", b: "brasBas", beats: 2 }, { a: "first", b: "first", beats: 2 }, { a: "second", b: "second", beats: 2 }, { a: "allonge", b: "allonge", beats: 1 }, { a: "demiSeconde", b: "demiSeconde", beats: 1 }],
       [{ a: "second", b: "second", beats: 2 }, { a: "fifthHigh", b: "second", beats: 2, trunk: { turn: 0.25, chin: 0.1 } }, { a: "fifthHigh", b: "fifthHigh", beats: 2, trunk: { chin: 0.15 } }, { a: "allonge", b: "allonge", beats: 2 }],
-      [{ a: "first", b: "first", beats: 1 }, { a: "arabesqueFront", b: "arabesqueBack", beats: 3, trunk: { turn: 0.2 } }, { a: "allonge", b: "allonge", beats: 2 }, { a: "demiSeconde", b: "demiSeconde", beats: 2 }],
+      [{ a: "first", b: "first", beats: 1 }, { a: "arabesqueFront", b: "arabesqueBack", beats: 3, trunk: { turn: 0.2 }, leg: LEGS.arabesque }, { a: "allonge", b: "allonge", beats: 2, leg: LEGS.extended }, { a: "demiSeconde", b: "demiSeconde", beats: 2 }],
     ],
-    spin: ["second", "second"], camel: ["allonge", "allonge"], sit: ["first", "first"], spiral: ["arabesqueFront", "arabesqueBack"],
+    spin: ["second", "second"], camel: ["allonge", "allonge"], sit: ["first", "first"], spiral: ["arabesqueFront", "arabesqueBack"], air: "tuck",
   },
   {
     id: "contemporary", title: "Contemporary",
     blurb: "Asymmetric and flowing: one arm reaching while the other sweeps, the head following the hand.",
     phraseWeight: 1, chin: 0.06, wrist: 0.2,
     phrases: [
-      [{ a: "reachUp", b: "sweepLow", beats: 2, trunk: { roll: 0.12, turn: 0.3, chin: 0.15 } }, { a: "sweepLow", b: "reachUp", beats: 2, trunk: { roll: -0.12, turn: -0.3, chin: 0.15 } }, { a: "heart", b: "second", beats: 2, trunk: { turn: -0.15 } }, { a: "allonge", b: "allonge", beats: 2 }],
+      [{ a: "reachUp", b: "sweepLow", beats: 2, trunk: { roll: 0.12, turn: 0.3, chin: 0.15 }, leg: LEGS.extended }, { a: "sweepLow", b: "reachUp", beats: 2, trunk: { roll: -0.12, turn: -0.3, chin: 0.15 } }, { a: "heart", b: "second", beats: 2, trunk: { turn: -0.15 } }, { a: "allonge", b: "allonge", beats: 2 }],
       [{ a: "first", b: "heart", beats: 1 }, { a: "reachUp", b: "second", beats: 2, trunk: { roll: 0.1, turn: 0.25 } }, { a: "sweepLow", b: "sweepLow", beats: 2, trunk: { pitch: 0.08 } }, { a: "demiSeconde", b: "reachUp", beats: 2, trunk: { turn: -0.25, chin: 0.12 } }],
     ],
-    spin: ["fifthHigh", "second"], camel: ["arabesqueFront", "arabesqueBack"], sit: ["heart", "first"], spiral: ["reachUp", "arabesqueBack"],
+    spin: ["fifthHigh", "second"], camel: ["arabesqueFront", "arabesqueBack"], sit: ["heart", "first"], spiral: ["reachUp", "arabesqueBack"], air: "tano",
   },
   {
     id: "athletic", title: "Athletic",
@@ -228,7 +237,7 @@ export const STYLES: readonly Style[] = [
       [{ a: "demiSeconde", b: "demiSeconde", beats: 4 }, { a: "second", b: "second", beats: 4 }],
       [{ a: "second", b: "demiSeconde", beats: 4 }, { a: "demiSeconde", b: "second", beats: 4 }],
     ],
-    spin: ["demiSeconde", "demiSeconde"], camel: ["second", "second"], sit: ["first", "first"], spiral: ["allonge", "allonge"],
+    spin: ["demiSeconde", "demiSeconde"], camel: ["second", "second"], sit: ["first", "first"], spiral: ["allonge", "allonge"], air: "tuck",
   },
   {
     id: "showman", title: "Showman",
@@ -238,7 +247,7 @@ export const STYLES: readonly Style[] = [
       [{ a: "second", b: "second", beats: 2 }, { a: "present", b: "second", beats: 2, trunk: { turn: 0.4, chin: 0.15 } }, { a: "victory", b: "victory", beats: 2, trunk: { chin: 0.2 } }, { a: "allonge", b: "allonge", beats: 2 }],
       [{ a: "wave", b: "demiSeconde", beats: 2, trunk: { turn: 0.45 } }, { a: "present", b: "present", beats: 2, trunk: { chin: 0.12 } }, { a: "second", b: "second", beats: 2 }],
     ],
-    spin: ["victory", "victory"], camel: ["allonge", "allonge"], sit: ["present", "first"], spiral: ["present", "arabesqueBack"],
+    spin: ["victory", "victory"], camel: ["allonge", "allonge"], sit: ["present", "first"], spiral: ["present", "arabesqueBack"], air: "rippon",
   },
 ];
 
@@ -583,18 +592,22 @@ export function bowKeys(style: Style): Key[] {
 /** A port de bras phrase on the beat: each position held for its beats, the move between taking at most 0.9 s. */
 export function phraseKeys(steps: Step[], beat: number, style: Style, fatigue: number): Key[] {
   const keys: Key[] = [];
+  // A phrase that lifts the free leg carries it on every key (trailing where a step does not lift it),
+  // so the leg moves between steps rather than snapping.
+  const legged = steps.some(s => s.leg);
+  const legOf = (s: Step) => legged ? { leg: scaleLeg(s.leg ?? LEGS.trail, 1, fatigue), point: s.leg ? 1 : 0.4 } : {};
   let t = 0;
   let prev: Step | null = null;
   for (const step of steps) {
     const hold = step.beats * beat;
     const move = Math.min(0.9, hold * 0.45) * (1 + 0.5 * fatigue);
     const trunk = { ...still(), chin: style.chin, ...step.trunk };
-    if (prev) keys.push({ t, armA: shape(prev.a, style, fatigue), armB: shape(prev.b, style, fatigue), trunk: { ...still(), chin: style.chin, ...prev.trunk } });
-    keys.push({ t: t + (prev ? move : 0), armA: shape(step.a, style, fatigue), armB: shape(step.b, style, fatigue), trunk });
+    if (prev) keys.push({ t, armA: shape(prev.a, style, fatigue), armB: shape(prev.b, style, fatigue), trunk: { ...still(), chin: style.chin, ...prev.trunk }, ...legOf(prev) });
+    keys.push({ t: t + (prev ? move : 0), armA: shape(step.a, style, fatigue), armB: shape(step.b, style, fatigue), trunk, ...legOf(step) });
     t += hold;
     prev = step;
   }
-  if (prev) keys.push({ t, armA: shape(prev.a, style, fatigue), armB: shape(prev.b, style, fatigue), trunk: { ...still(), chin: style.chin, ...prev.trunk } });
+  if (prev) keys.push({ t, armA: shape(prev.a, style, fatigue), armB: shape(prev.b, style, fatigue), trunk: { ...still(), chin: style.chin, ...prev.trunk }, ...legOf(prev) });
   return keys;
 }
 
@@ -673,6 +686,8 @@ export interface ChoreoContext {
   fallError?: number;
 }
 
+/** Radians a jump has turned in the air before the style's air position shows: three-quarters of a revolution. AUTHORED. */
+export const AIR_POSITION_TURN = 1.5 * Math.PI;
 /** A combination's next takeoff within this long of a landing turns the landing into a rebound. AUTHORED. */
 export const REBOUND_WINDOW = 0.5;
 /** Seconds of being free to dance before a phrase begins. AUTHORED. */
@@ -723,6 +738,13 @@ export class Choreographer {
     if (air || s.move === MOVE.Spin) this.lastYaw = s.yawRate;
     // The physics owns the arms in the air: whatever the top plan was, it lets go.
     if (air && !this.wasAir) this.cut("top", now, 0.1);
+    // Past three-quarters of a turn in the air, the style's air position, if it has one.
+    if (air && this.style.air !== "tuck" && Math.abs(s.jump.rotation) >= AIR_POSITION_TURN && this.base?.kind !== "air") {
+      const pair: [PositionId, PositionId] = this.style.air === "rippon" ? ["overhead", "overhead"] : ["overhead", "tuck"];
+      const hold: Key = { t: 0, armA: shape(pair[0], this.style, 0), armB: shape(pair[1], this.style, 0), trunk: { ...still(), chin: 0.1 } };
+      this.base = this.plan("air", this.style.air === "rippon" ? "A Rippon: both arms overhead" : "A Tano: one arm overhead", "support", now, 0.12, 0.12, 1, [hold, { ...hold, t: 1 }], 3600);
+    }
+    if (!air && this.base?.kind === "air") this.cut("base", now, 0.1);
     // A takeoff loading soon after a landing: the landing becomes a combination's rebound.
     if (s.jump.phase === JUMP_PHASE.Load && this.top?.kind === "landing" && this.lastLanding && now - this.lastLanding.start < REBOUND_WINDOW) {
       this.top = this.plan("rebound", "Combination: gathering for the next jump", "support", now, 0.06, 0.12, 1, [

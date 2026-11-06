@@ -86,6 +86,9 @@ private:
 	double BaseAt = 0.0;
 	double TopAt = 0.0;
 	bool bPreviewFall = false;
+	double BreathClock = 0.0;
+	/** A menu's preview is playing: shown whatever the state's gates (an air position, standing). */
+	bool bPreviewing = false;
 	/** Which arm is a plan's side A: 0 left, 1 right. */
 	int32 SideA(const FIcePlan& Plan) const;
 

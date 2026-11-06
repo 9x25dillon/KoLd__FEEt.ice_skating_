@@ -36,6 +36,9 @@ import {resolveRinkCollision,RINK} from '../runtime/game/rink.js';
 import {PairsSession,PAIRS_PHRASES} from '../runtime/game/pairs.js';
 import {Choreographer,physiqueOf,isStyle,STYLES,landingTier,TIER_TITLES,jumpName,styleOf,phraseKeys,landingPlanKeys,fallKeys,FALL_TITLES,riseKeys,RISE_TITLES,bowKeys} from '../runtime/game/choreo.js';
 import {noResult} from '../runtime/sim/jump.js';
+import {POSITIONS} from '../runtime/game/choreo.js';
+/** A position as a style carries it, for a preview's held line (game/choreo.ts's own shaping, at rest). */
+const STYLE_SHAPE=(id,style)=>{const p=POSITIONS[id]??POSITIONS.second;return {e:[...p.e],h:[...p.h],w:Math.max(0,Math.min(1,p.w+style.wrist*.3))};};
 import {readFileSync} from 'node:fs';
 
 const tables=loadTables(readFileSync(new URL('../runtime/data/scale-of-values.csv',import.meta.url),'utf8'),readFileSync(new URL('../runtime/data/calls-and-deductions.csv',import.meta.url),'utf8'));
@@ -102,7 +105,7 @@ export class IceEngine {
   this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
   // A new run dances from nothing, in the chosen style, with this body (the career's own, worn).
   this.choreo.reset();this.choreo.setStyle(this.style);this.choreo.setPhysique(physiqueOf(mode==='career'?this.career.bodyProfile:SAMPLE_PROFILES[this.profile]));
-  this.lastElement=null;this.comboLinked='';
+  this.lastElement=null;this.bestElement=null;this.comboLinked='';
   // The live free-skate readout game/main.ts already has (frame.technical above is its jump half) —
   // sample every tick a spin is live, score the moment it ends. -1 means no spin has finished yet;
   // scoreSpinLevel's own 0 is a real result, "level B", so it cannot double as that sentinel.
@@ -203,7 +206,9 @@ export class IceEngine {
    this.scoredTick=this.state.landed.tick;const landed=this.state.landed,scored=scoreJump(tables,landed);this.technical+=scored?.score??0;
    // The element call the broadcast shows: the protocol's label and the panel's GOE, beside the landing's own tier.
    const tier=landingTier(landed);
-   this.lastElement={tick:landed.tick,label:scored?.label??'',name:jumpName(landed),goe:scored?.goe??null,score:scored?.score??0,base:scored?.baseValue??0,tier,tierTitle:TIER_TITLES[tier],landingQuality:landed.landingQuality,takeoffQuality:landed.takeoffQuality};
+   this.lastElement={tick:landed.tick,label:scored?.label??'',name:jumpName(landed),goe:scored?.goe??null,panel:scored?.panel??[],score:scored?.score??0,base:scored?.baseValue??0,tier,tierTitle:TIER_TITLES[tier],landingQuality:landed.landingQuality,takeoffQuality:landed.takeoffQuality};
+   // The run's highlight: its best-scoring element, for the instant replay.
+   if(scored&&(!this.bestElement||scored.score>this.bestElement.score))this.bestElement={...this.lastElement};
   }
   if(this.state.spin.changeCompletedTick>=0&&this.state.spin.changeCompletedTick!==this.lastChangeCompletedTick){
    this.lastChangeCompletedTick=this.state.spin.changeCompletedTick;this.footChangeFlash=1.2;
@@ -220,13 +225,15 @@ export class IceEngine {
    const r=this.routine,xp=this.mode==='career'?this.career.award(r):0;
    // Forward the existing sheet and totals; Godot formats them without parsing
    // prose or recalculating scores. Null PCS remains distinguishable from zero.
-   const protocol=r.sheet?{lines:r.sheet.lines,tes:r.technicalScore,pcs:r.pcsScore?.total??null,deductions:r.deductions,total:r.segmentScore}:null;
+   const protocol=r.sheet?{lines:r.sheet.lines,tes:r.technicalScore,pcs:r.pcsScore?.total??null,deductions:r.deductions,total:r.segmentScore,
+    // The components' own scores, for the kiss and cry's breakdown (sim/pcs.ts).
+    components:r.pcsScore?{composition:r.pcsScore.composition,presentation:r.pcsScore.presentation,skatingSkills:r.pcsScore.skatingSkills}:null}:null;
    const stopped=r.complete?null:{element:ELEMENTS[r.current].title,how:elementHow(r.current,howContext(this.setup,this.controllerProfile))};
    // game/story.ts: the chapter's ending for a career run, and the season's after the championship.
    const story=this.mode==='career'?outcome(this.event,r.medal,r.complete):'';
    const last=this.mode==='career'&&r.complete&&this.event===CAREER_EVENTS.length-1;
    const place=last?seasonTable(this.career.best).find(x=>x.you)?.place??0:0;
-   this.finished=true;this.result={story,finale:last?finale(place):'',title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls${r.cues?` · ${r.cueResults.filter(x=>x==='on').length}/${r.cues.length} on the music`:''}`,protocol,xp,complete:r.complete,stopped,body:this.bodyNote(),standings:this.mode==='career'&&r.complete?standings(this.event,r.segmentScore):null};
+   this.finished=true;this.result={highlight:this.bestElement,story,finale:last?finale(place):'',title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls${r.cues?` · ${r.cueResults.filter(x=>x==='on').length}/${r.cues.length} on the music`:''}`,protocol,xp,complete:r.complete,stopped,body:this.bodyNote(),standings:this.mode==='career'&&r.complete?standings(this.event,r.segmentScore):null};
   } else if(this.drill?.done&&!this.finished){const gained=this.career.recordDrill(this.drill.focus,this.drill.score);this.finished=true;this.result={title:`${ARM_FOCUS[this.drill.focus].title} drill: ${this.drill.score} / 100`,body:this.bodyNote(),detail:gained>0?`A new best, up ${gained}. Your arms give up less for ${ARM_FOCUS[this.drill.focus].title} now.`:`Your best stays ${this.career.armBest[this.drill.focus]}.`,complete:true};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
   this.dance();
@@ -248,6 +255,14 @@ export class IceEngine {
   else if(what==='fall'){const v=Object.hasOwn(FALL_TITLES,o.variant)?o.variant:'washout';keys=fallKeys(v,ph);kind='fall';rel='fall';label=FALL_TITLES[v];dur=keys.at(-1).t+1.8;}
   else if(what==='rise'){const v=Object.hasOwn(RISE_TITLES,o.variant)?o.variant:'kneel';keys=riseKeys(v);kind='rise';rel='fall';label=RISE_TITLES[v];}
   else if(what==='bow'){keys=bowKeys(style);kind='bow';rel='left';label=`The bow · ${style.title}`;}
+  else if(what==='line'){
+   // A move's held line in this style: an upright spin's open arms, a camel's, a sit spin's, a spiral's, an Ina Bauer's arch.
+   const move=String(o.move??'spin'),pair={spin:style.spin,camel:style.camel,sit:style.sit,spiral:style.spiral,ina:['victory','victory'],air:style.air==='rippon'?['overhead','overhead']:style.air==='tano'?['overhead','tuck']:['tuck','tuck']}[move]??style.spin;
+   const ina=move==='ina',spiral=move==='spiral'||ina;
+   const hold={t:0,armA:STYLE_SHAPE(pair[0],style),armB:STYLE_SHAPE(pair[1],style),trunk:{pitch:ina?-.25:0,roll:0,twist:0,chin:ina?.3:style.chin,turn:0},...(spiral?{leg:[.12,.66,.72],point:1}:{})};
+   keys=[hold,{...hold,t:2.6}];kind=move==='air'?'air':spiral?'spiral':'spin';rel='support';
+   label=move==='air'?`${style.title} in the air: ${{tuck:'the tuck',tano:'a Tano, one arm overhead',rippon:'a Rippon, both arms overhead'}[style.air]}`:`${style.title} ${{spin:'upright spin',camel:'camel spin',sit:'sit spin',spiral:'spiral',ina:'Ina Bauer'}[move]??'spin'} line`;
+  }
   else throw Error('Unknown preview');
   if(!dur)dur=keys.at(-1).t+.4;
   return {plan:{id:-1,kind,label,rel,at:0,dur,blendIn:.25,blendOut:.4,weight:1,keys}};
@@ -263,6 +278,16 @@ export class IceEngine {
   const skipped=l.skipped.map(id=>l.steps.find(x=>x.id===id)?.title).filter(Boolean);
   this.finished=true;
   this.result={title,detail:`${l.steps.length-skipped.length}/${l.steps.length} steps${l.falls?` · ${l.falls} fall${l.falls>1?'s':''} you got up from`:' · without a fall'}${skipped.length?` · skipped: ${skipped.join(', ')}`:''}`,xp:this.lessonXp,lesson:true,complete:true};
+ }
+ /**
+  * The instant replay's cue: a replay (replay() first) carried on, without a snapshot for every
+  * frame, to `tick`. The same states as the run, so its element lands at its own tick again.
+  */
+ seek(tick){
+  if(!this.player)throw Error('Start a replay first');
+  if(!Number.isInteger(tick)||tick<0)throw Error('Invalid tick');
+  while(!this.finished&&this.state.tick<tick)this.advance({},Math.min(12,tick-this.state.tick));
+  return this.snapshot();
  }
  /** The player moves past a step. It pays nothing. */
  skipStep(){if(!this.lesson||this.finished)throw Error('No lesson is running');this.lesson.skip();if(this.lesson.done)this.finishLesson();return this.snapshot();}

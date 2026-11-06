@@ -78,7 +78,42 @@ void AIceShotCamera::Follow(const FIceState& S, const FVector& SkaterLocation, f
 		const double A = .38 + FMath::Sin(ShowClock * .09) * .22;
 		const FVector Front = IceSimSpace::Direction(S.Heading.X, S.Heading.Y).GetSafeNormal();
 		const FVector Around = Front.RotateAngleAxis(-FMath::RadiansToDegrees(A), FVector::UpVector);
-		const FVector Desired = SkaterLocation + Around * 5.8 * M + FVector(0, 0, 1.2 * M);
+		FVector Desired = SkaterLocation + Around * 5.8 * M + FVector(0, 0, 1.2 * M);
+		// On the ice side of the boards. In front of her, the orbit can sit in the stands when she
+		// stops facing a wall or in a corner (found on a program's end), and pulling it back inside
+		// can put it on top of her; so then it orbits from the rink's middle side of her instead.
+		if (const TSharedPtr<FJsonObject> R = Game->RinkShape())
+		{
+			const double MinX = R->GetNumberField(TEXT("minX")), MaxX = R->GetNumberField(TEXT("maxX"));
+			const double MinY = R->GetNumberField(TEXT("minY")), MaxY = R->GetNumberField(TEXT("maxY"));
+			const FVector Mid = IceSimSpace::Point((MinX + MaxX) * .5, (MinY + MaxY) * .5);
+			const double Margin = 1.5 * M;
+			const double HalfX = (MaxX - MinX) * .5 * M - Margin, HalfY = (MaxY - MinY) * .5 * M - Margin;
+			const double Corner = FMath::Max(0.0, R->GetNumberField(TEXT("corner")) * M - Margin);
+			// Pulls a point into the rink's rounded rectangle; says whether it was already inside.
+			auto KeepInside = [&](FVector& Point)
+			{
+				FVector2D P(Point.X - Mid.X, Point.Y - Mid.Y);
+				const FVector2D Was = P;
+				P.X = FMath::Clamp(P.X, -HalfX, HalfX);
+				P.Y = FMath::Clamp(P.Y, -HalfY, HalfY);
+				const FVector2D C(FMath::Sign(P.X) * (HalfX - Corner), FMath::Sign(P.Y) * (HalfY - Corner));
+				if (FMath::Abs(P.X) > HalfX - Corner && FMath::Abs(P.Y) > HalfY - Corner && (P - C).Size() > Corner)
+				{
+					P = C + (P - C).GetSafeNormal() * Corner;
+				}
+				Point.X = Mid.X + P.X;
+				Point.Y = Mid.Y + P.Y;
+				return P.Equals(Was, 1.0);
+			};
+			if (!KeepInside(Desired))
+			{
+				const FVector Inward = (Mid - SkaterLocation).GetSafeNormal2D();
+				const FVector Toward = (Inward.IsNearlyZero() ? Front : Inward).RotateAngleAxis(FMath::RadiansToDegrees(A - .38), FVector::UpVector);
+				Desired = SkaterLocation + Toward * 5.8 * M + FVector(0, 0, 1.2 * M);
+				KeepInside(Desired);
+			}
+		}
 		const FVector Look = SkaterLocation + FVector(0, 0, .88 * M);
 		const FVector At = bPlaced ? FMath::Lerp(GetActorLocation(), Desired, Ease(3.0, Dt)) : Desired;
 		bPlaced = true;

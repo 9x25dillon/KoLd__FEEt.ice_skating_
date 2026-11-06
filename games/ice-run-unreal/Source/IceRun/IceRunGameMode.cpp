@@ -70,6 +70,8 @@ void AIceRunGameMode::StartPlay()
 	FParse::Value(Line, TEXT("IceMode="), RunMode);
 	// game/choreo.ts's style of movement, for stills and tests (the menus keep the player's).
 	FParse::Value(Line, TEXT("IceStyle="), StyleId);
+	// The smoke test's scripted pad in an ordinary run: for stills of a program skated to its end.
+	bScripted = FParse::Param(Line, TEXT("IceScript"));
 	FParse::Value(Line, TEXT("IceEvent="), EventIndex);
 	FParse::Value(Line, TEXT("IceCourse="), Course);
 	FParse::Value(Line, TEXT("IceSteady="), SteadyChoice);
@@ -517,6 +519,7 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 	else if (Reply.Op == TEXT("start"))
 	{
 		Rink->ClearTraces();
+		Rink->ClearTributes();
 		Rink->SetCourse(RunMode, Catalog);
 		Present(FIceFrame::Parse(Reply.Data), true);
 		bPlaying = true;
@@ -578,6 +581,23 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		FString Path;
 		Reply.Data->TryGetStringField(TEXT("path"), Path);
 		NoticeText = FString::Printf(TEXT("Replay saved: %s"), *Path);
+	}
+	else if (Reply.Op == TEXT("replay") && bHighlight)
+	{
+		// The highlight's replay is loaded; the seek that follows carries it to the element.
+		Rink->ClearTraces();
+		Present(FIceFrame::Parse(Reply.Data), true);
+	}
+	else if (Reply.Op == TEXT("seek"))
+	{
+		// The instant replay: from just before the element, in slow motion, without the music.
+		Present(FIceFrame::Parse(Reply.Data), true);
+		bPlaying = true;
+		FinishedFor = -1.0;
+		LastLandingTick = Latest.State.Tick;
+		CloseMenu();
+		if (Music) Music->Stop();
+		Announce(TEXT("INSTANT REPLAY"), HighlightTitle);
 	}
 	else if (Reply.Op == TEXT("replay"))
 	{
@@ -821,6 +841,7 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 	{
 		Skater->SetEffects(bPlaying && !bPaused);
 		Rink->UpdateCrowd(Skater->GetActorLocation(), DeltaSeconds);
+		Rink->StepTributes(DeltaSeconds);
 	}
 	// The music waits with the run while a menu is up.
 	const bool bHold = bPaused && RunLive();
@@ -829,11 +850,19 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 		bMusicPaused = bHold;
 		Music->SetPaused(bHold);
 	}
-	if (Latest.bValid && Latest.bFinished && !bPaused && !bSmoke && ShotTimes.Num() == 0)
+	if (Latest.bValid && Latest.bFinished && !bPaused && !bSmoke)
 	{
-		// The result stays on the ice a moment, then the menu offers what is next.
+		// The result stays on the ice a moment, then the menu offers what is next. A career or
+		// Composer program first plays out its bow, then reveals its scores (the HUD), the hall
+		// rising and tributes coming down; other runs keep main.gd's 2.5 s.
+		const double Was = FinishedFor;
 		FinishedFor = FinishedFor < 0.0 ? 0.0 : FinishedFor + DeltaSeconds;
-		if (FinishedFor > 2.5)
+		const bool bReveal = RevealsScores();
+		if (bReveal && Was < RevealStart && FinishedFor >= RevealStart)
+		{
+			OnReveal();
+		}
+		if (FinishedFor > (bReveal ? RevealEnd : 2.5) && ShotTimes.Num() == 0)
 		{
 			OpenMenu(TEXT("result"));
 		}
@@ -845,7 +874,12 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 	else
 	{
 		// main.gd _physics_process: 120 Hz owed, at most 12 at once, one request in flight.
-		TickDebt = FMath::Min(12.0, TickDebt + DeltaSeconds * 120.0);
+		// The instant replay runs slow; everything else at the sim's own 120 Hz.
+		TickDebt = FMath::Min(12.0, TickDebt + DeltaSeconds * 120.0 * (bHighlight ? HighlightSpeed : 1.0));
+		if (bHighlight && Latest.bValid && (Latest.State.Tick >= HighlightTick + HighlightTail || Latest.bFinished))
+		{
+			EndHighlight();
+		}
 		const int32 Ticks = FMath::Min(12, FMath::FloorToInt32(TickDebt));
 		AIceRunPlayerController* PC = Player();
 		if (!Bridge.Busy() && Ticks >= 1 && PC)
@@ -853,7 +887,7 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 			TickDebt -= Ticks;
 			TSharedRef<FJsonObject> Controls = PC->Controls(DeltaSeconds, Scheme);
 			bool bLow = Scheme != 3 && PC->LowHeld();
-			if ((bSmoke || bMenuTest) && Latest.bValid)
+			if ((bSmoke || bMenuTest || bScripted) && Latest.bValid)
 			{
 				// main.gd's boot test: carve for the edge element, crouch for the pose.
 				double Index = 0;
@@ -903,9 +937,14 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 void AIceRunGameMode::ShotStep(float Dt)
 {
 	// Stills on a clock that starts with the run, for looking at a build without a person at it.
-	if (!bPlaying && !bPaused && ShotsTaken == 0)
+	// Once started it runs on, so a still can be taken after the run has ended (a program's bow).
+	if (!bShotClockStarted)
 	{
-		return;
+		if (!bPlaying && !bPaused)
+		{
+			return;
+		}
+		bShotClockStarted = true;
 	}
 	ShotClock += Dt;
 	if (ShotsTaken < ShotTimes.Num() && ShotClock >= ShotTimes[ShotsTaken])
@@ -1266,6 +1305,7 @@ void AIceRunGameMode::StartMusic()
 
 void AIceRunGameMode::Announce(const FString& Title, const FString& Detail)
 {
+	AnnouncePanel.Reset();
 	// main.gd broadcast.announce: three and a half seconds on the broadcast plate.
 	AnnounceTitle = Title;
 	AnnounceDetail = Detail;
@@ -1317,8 +1357,21 @@ void AIceRunGameMode::SenseLanding()
 	{
 		IceSound->Land(bClean);
 	}
-	// main.gd: the hall rises for a clean landing, barely for one that is not.
-	Rink->CrowdReact(bClean ? 1.0 : .12);
+	// The hall rises by how good it was (the landing's own tier, game/choreo.ts), most for a
+	// combination's finale; main.gd's rule (1 clean, .12 not) where the bridge sent no tier.
+	double Roused = bClean ? 1.0 : .12;
+	{
+		const TSharedPtr<FJsonObject>* Called = nullptr;
+		FString Tier;
+		double CalledTick = -1.0;
+		if (Latest.Raw->TryGetObjectField(TEXT("element"), Called) && (*Called)->TryGetNumberField(TEXT("tick"), CalledTick) && int32(CalledTick) == LastLandingTick && (*Called)->TryGetStringField(TEXT("tier"), Tier))
+		{
+			static const TMap<FString, double> ByTier = {{TEXT("flow"), 1.0}, {TEXT("solid"), .75}, {TEXT("tight"), .45}, {TEXT("stepout"), .25}, {TEXT("twofoot"), .25}, {TEXT("under"), .2}, {TEXT("fall"), .1}};
+			if (const double* Found = ByTier.Find(Tier)) Roused = *Found;
+			if (!Latest.Combo.IsEmpty() && Tier != TEXT("fall")) Roused = 1.0;
+		}
+	}
+	Rink->CrowdReact(Roused);
 	FString Title = bClean ? TEXT("CLEAN LANDING") : TEXT("FIND YOUR EDGE");
 	FString Detail = FString::Printf(TEXT("%.2f rotations   /   Jump TES %.2f"), Turned, Latest.Technical);
 	const TSharedPtr<FJsonObject>* Element = nullptr;
@@ -1344,6 +1397,15 @@ void AIceRunGameMode::SenseLanding()
 		}
 	}
 	Announce(Title, Detail);
+	if (Element && int32(ElementTick) == LastLandingTick)
+	{
+		// The panel's own marks, one per judge, shown under the call.
+		const TArray<TSharedPtr<FJsonValue>>* Marks = nullptr;
+		if ((*Element)->TryGetArrayField(TEXT("panel"), Marks))
+		{
+			for (const TSharedPtr<FJsonValue>& V : *Marks) AnnouncePanel.Add(V->AsNumber());
+		}
+	}
 	AIceRunPlayerController* PC = Player();
 	if (bRumbleOn && PC)
 	{
@@ -1352,6 +1414,78 @@ void AIceRunGameMode::SenseLanding()
 		PC->PlayDynamicForceFeedback(bClean ? .30f : .7f, For, true, false, true, false);
 		PC->PlayDynamicForceFeedback(bClean ? .18f : .48f, For, false, true, false, true);
 	}
+}
+
+void AIceRunGameMode::StartHighlight()
+{
+	const TSharedPtr<FJsonObject>* Result = nullptr;
+	const TSharedPtr<FJsonObject>* Best = nullptr;
+	if (!Latest.Raw->TryGetObjectField(TEXT("result"), Result) || !(*Result)->TryGetObjectField(TEXT("highlight"), Best))
+	{
+		return;
+	}
+	double Tick = -1.0;
+	FString Name, Label;
+	(*Best)->TryGetNumberField(TEXT("tick"), Tick);
+	(*Best)->TryGetStringField(TEXT("name"), Name);
+	(*Best)->TryGetStringField(TEXT("label"), Label);
+	if (Tick < 0.0)
+	{
+		return;
+	}
+	HighlightTick = int32(Tick);
+	HighlightTitle = FString::Printf(TEXT("%s   %s   ·   slow motion"), *Name.ToUpper(), *Label);
+	HighlightReturn = Latest;
+	bHighlight = true;
+	// The run again from its own inputs (the same states), carried on to just before the element.
+	SendOp(TEXT("export"), MakeShared<FJsonObject>());
+	SendOp(TEXT("replay"), MakeShared<FJsonObject>());
+	TSharedRef<FJsonObject> Seek = MakeShared<FJsonObject>();
+	Seek->SetNumberField(TEXT("tick"), FMath::Max(0, HighlightTick - HighlightLead));
+	SendOp(TEXT("seek"), Seek);
+	UE_LOG(LogIceRun, Log, TEXT("Instant replay: %s at tick %d."), *HighlightTitle, HighlightTick);
+}
+
+void AIceRunGameMode::EndHighlight()
+{
+	bHighlight = false;
+	bPlaying = false;
+	TickDebt = 0.0;
+	// Back to the program's own result: the bridge has the replay now, but the page is the program's.
+	Latest = HighlightReturn;
+	OpenMenu(TEXT("result"));
+	UE_LOG(LogIceRun, Log, TEXT("Instant replay: done."));
+}
+
+bool AIceRunGameMode::RevealsScores() const
+{
+	const TSharedPtr<FJsonObject>* Result = nullptr;
+	const TSharedPtr<FJsonObject>* Protocol = nullptr;
+	return Latest.bValid && Latest.bFinished && Latest.Raw->TryGetObjectField(TEXT("result"), Result)
+		&& (*Result)->TryGetObjectField(TEXT("protocol"), Protocol) && (RunMode == TEXT("career") || RunMode == TEXT("composer"));
+}
+
+void AIceRunGameMode::OnReveal()
+{
+	// Her place in the event's field (the result's standings), where there is one.
+	int32 Place = 0;
+	const TSharedPtr<FJsonObject>* Result = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Standings = nullptr;
+	if (Latest.Raw->TryGetObjectField(TEXT("result"), Result) && (*Result)->TryGetArrayField(TEXT("standings"), Standings))
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Standings)
+		{
+			bool bYou = false;
+			if (V->AsObject()->TryGetBoolField(TEXT("you"), bYou) && bYou)
+			{
+				Place = int32(V->AsObject()->GetNumberField(TEXT("place")));
+			}
+		}
+	}
+	// AUTHORED: the hall's roar and the tributes, by the place; a Composer program, warmly.
+	Rink->CrowdReact(Place == 1 ? 1.0 : Place == 2 ? .85 : Place == 3 ? .7 : Place > 0 ? .35 : .6);
+	Rink->ThrowTributes(Place == 1 ? 60 : Place == 2 ? 40 : Place == 3 ? 26 : Place > 0 ? 8 : 18, Skater->GetActorLocation());
+	UE_LOG(LogIceRun, Log, TEXT("The scores: place %d, tributes thrown."), Place);
 }
 
 USoundBase* AIceRunGameMode::TrackSound(int32 Track) const
