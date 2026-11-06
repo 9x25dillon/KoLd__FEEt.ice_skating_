@@ -25,6 +25,7 @@ private:
 	/** A lesson's card (game/tutorial.ts via the bridge): the step, its words on this pad, its hold. */
 	void TutorialCard(const TSharedPtr<FJsonObject>& Tutorial, float U);
 	void PauseMenu(const class AIceRunGameMode* Mode, float U);
+	void DrawPage(const class AIceRunGameMode* Mode, float U);
 	/** The balance meter: the lean now against what this speed's edge can hold, the hand's limit, where she falls. */
 	void BalanceMeter(const TSharedPtr<FJsonObject>& Balance, const TSharedPtr<FJsonObject>& Steady, float U);
 	/** True while laying a card out to measure it: Line and Paragraph only advance. */

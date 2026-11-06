@@ -147,9 +147,12 @@ export function coachAdvice(c: CareerView): string[] {
   if (out.length < 2) {
     const weakest = [...STAT_NAMES].sort((a, b) => c.stats[a] - c.stats[b])[0];
     const cost = c.costs[weakest];
-    if (c.weeks >= 1 && c.xp >= cost) out.push(`"${STAT_TITLES[weakest]} is your weakest, at ${c.stats[weakest]}. Spend a week on it: ${cost} XP."`);
-    else if (c.xp < cost) out.push(`"${STAT_TITLES[weakest]} is your weakest. A better medal pays the ${cost} XP to train it."`);
-    else out.push(`"No weeks left to train. Skate for a better medal: each tier buys two."`);
+    // Level stats have no weakest: say so rather than pick one by list order.
+    const level = STAT_NAMES.every(n => c.stats[n] === c.stats[weakest]);
+    const what = level ? `Your stats are level, at ${c.stats[weakest]}.` : `${STAT_TITLES[weakest]} is your weakest, at ${c.stats[weakest]}.`;
+    if (c.weeks < 1) out.push(`"No weeks left to train. Skate for a better medal: each tier buys two."`);
+    else if (c.xp >= cost) out.push(level ? `"${what} Raise the one your next program leans on: a week and ${cost} XP."` : `"${what} Spend a week on it: ${cost} XP."`);
+    else out.push(`"${what} A better medal pays the ${cost} XP to train ${level ? "one" : "it"}."`);
   }
   return out.slice(0, 2);
 }

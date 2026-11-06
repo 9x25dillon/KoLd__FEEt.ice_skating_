@@ -43,4 +43,5 @@ private:
 	FVector FollowDirection = FVector(1.0, 0.0, 0.0);
 	FShot Shot;
 	double Fov = 46.0;
+	double ShowClock = 0.0;
 };

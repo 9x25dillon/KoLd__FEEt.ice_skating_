@@ -33,6 +33,12 @@ public:
 	void ApplyFrame(const FIceFrame& Frame, bool bSnap);
 	/** Loads a skeletal mesh by object path. False, with a stand-in shown, when it is missing. */
 	bool LoadModel(const FString& ObjectPath);
+	/**
+	 * Wears a costume: game/appearance.ts's skin colours on skater.gd's slots (bodice, skirt, sleeve,
+	 * trim, hair; skin and tights tinted only for an atelier design, so a preset keeps its paint).
+	 * Returns how many slots took it; a model without those slots keeps its own look.
+	 */
+	int32 ApplyCostume(const TSharedPtr<FJsonObject>& Skin);
 	/** The blade a spin's finish has lifted off the ice, or -1 (skater.gd lifted_blade). */
 	int32 LiftedBlade() const;
 	bool HasModel() const { return bHasModel; }

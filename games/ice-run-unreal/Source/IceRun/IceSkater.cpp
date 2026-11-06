@@ -6,6 +6,8 @@
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "ReferenceSkeleton.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Dom/JsonObject.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -153,6 +155,67 @@ bool AIceSkater::LoadModel(const FString& ObjectPath)
 	StandIn->SetVisibility(false);
 	MeasureRig();
 	return true;
+}
+
+int32 AIceSkater::ApplyCostume(const TSharedPtr<FJsonObject>& Skin)
+{
+	if (!Skin.IsValid() || !bHasModel)
+	{
+		return 0;
+	}
+	// skater.gd SKIN_SLOTS, by the material names the .glb carries (Interchange keeps them, '_' for ' ').
+	static const TMap<FString, FString> Slots = {
+		{TEXT("midnight plum satin"), TEXT("bodice")}, {TEXT("flowing skirt satin"), TEXT("skirt")}, {TEXT("illusion sleeve"), TEXT("sleeve")},
+		{TEXT("champagne crystals"), TEXT("trim")}, {TEXT("espresso hair"), TEXT("hair")}, {TEXT("warm porcelain"), TEXT("skin")}, {TEXT("skin-tone tights"), TEXT("tights")}};
+	auto Colour = [&Skin](const TCHAR* Key, const TCHAR* Fallback)
+	{
+		FString Hex;
+		if (!Skin->TryGetStringField(Key, Hex))
+		{
+			Hex = Fallback;
+		}
+		return FLinearColor::FromSRGBColor(FColor::FromHex(Hex));
+	};
+	bool bCustom = false;
+	Skin->TryGetBoolField(TEXT("custom"), bCustom);
+	int32 Worn = 0;
+	const TArray<FName> Names = Body->GetMaterialSlotNames();
+	for (int32 I = 0; I < Names.Num(); ++I)
+	{
+		const FString* Slot = Slots.Find(Names[I].ToString().Replace(TEXT("_"), TEXT(" ")).ToLower());
+		if (!Slot)
+		{
+			continue;
+		}
+		UMaterialInstanceDynamic* M = Body->CreateDynamicMaterialInstance(I);
+		if (!M)
+		{
+			continue;
+		}
+		FLinearColor Factor = FLinearColor::White;
+		if (*Slot == TEXT("hair"))
+		{
+			// The paint fades to orange at the tips; the costume's colour settles it (skater.gd).
+			Factor = FMath::Lerp(Colour(TEXT("hair"), TEXT("4a3528")), FLinearColor::White, .42f);
+		}
+		else if (*Slot == TEXT("skin") || *Slot == TEXT("tights"))
+		{
+			// A design tints the paint by its swatch against the paint's own tone, so the detail stays.
+			if (bCustom)
+			{
+				const FLinearColor Wanted = Colour(**Slot, TEXT("d4a68b"));
+				const FLinearColor Own = FLinearColor::FromSRGBColor(FColor::FromHex(*Slot == TEXT("skin") ? TEXT("e7bfa6") : TEXT("d9b39b")));
+				Factor = FLinearColor(FMath::Min(Wanted.R / Own.R, 1.4f), FMath::Min(Wanted.G / Own.G, 1.4f), FMath::Min(Wanted.B / Own.B, 1.4f));
+			}
+		}
+		else
+		{
+			Factor = Colour(**Slot, TEXT("ffffff"));
+		}
+		M->SetVectorParameterValue(TEXT("BaseColorFactor"), Factor);
+		++Worn;
+	}
+	return Worn;
 }
 
 void AIceSkater::MeasureRig()

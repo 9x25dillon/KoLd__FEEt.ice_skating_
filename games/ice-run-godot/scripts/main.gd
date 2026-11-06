@@ -427,6 +427,15 @@ func show_page(page: String) -> void:
 			menu.add_child(paragraph("Connecting to Ice Lab…"))
 		else:
 			menu.add_child(label("%d XP   ·   %d training weeks   ·   overall %.1f" % [int(frame.career.xp),int(frame.career.weeks),float(frame.career.overall)],16,Color("d5bd96")))
+			# game/story.ts: the season's opening until a medal is won, then the coach's word on what is next.
+			var story: Dictionary = catalog.get("story",{})
+			var won := false
+			for m in frame.career.medals:
+				won = won or int(m) > 0
+			if not won and story.has("season"):
+				menu.add_child(paragraph(str(story.season.opening),14))
+			for line in frame.career.get("advice",[]):
+				menu.add_child(paragraph("%s: %s" % [str(story.get("coach",{}).get("name","Your coach")),str(line)],13))
 			menu.add_child(button("Learn your controls   /   each new step +%d XP" % int(catalog.lessonXp),func():show_page("learn")))
 			for i in catalog.events.size():
 				var event: Dictionary = catalog.events[i]
@@ -481,6 +490,9 @@ func show_page(page: String) -> void:
 	elif page == "event":
 		var event: Dictionary = catalog.events[focus_event]
 		clear_menu(str(event.title),"%s · %ds. Your program must hold everything this event asks for, in any order, and up to %d more of your own. More to skate is more to score, and more to fall on." % [str(event.venue),int(event.seconds),int(catalog.planExtra)])
+		var chapters: Array = catalog.get("story",{}).get("chapters",[])
+		if focus_event < chapters.size():
+			menu.add_child(paragraph(str(chapters[focus_event].before),14))
 		var saved_plan = frame.career.plans[focus_event]
 		var plan: Array = (event.routine if saved_plan == null else saved_plan).duplicate()
 		var required: Array = event.routine.duplicate()
@@ -714,6 +726,11 @@ func show_page(page: String) -> void:
 		menu.add_child(button("← Settings",func():show_page("settings")))
 	elif page == "result":
 		clear_menu(str(frame.result.title),str(frame.result.detail))
+		# game/story.ts: the chapter's ending for a career run, and the season's after the championship.
+		if not str(frame.result.get("story","")).is_empty():
+			menu.add_child(paragraph(str(frame.result.story),16))
+		if not str(frame.result.get("finale","")).is_empty():
+			menu.add_child(paragraph(str(frame.result.finale),16))
 		if frame.result.get("protocol") != null:
 			show_protocol(frame.result.protocol)
 		if frame.result.has("xp"):

@@ -17,6 +17,8 @@
 #include "Serialization/JsonSerializer.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "UnrealClient.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 
 namespace
 {
@@ -57,6 +59,11 @@ void AIceRunGameMode::StartPlay()
 	Super::StartPlay();
 	const TCHAR* Line = FCommandLine::Get();
 	bSmoke = FParse::Param(Line, TEXT("IceSmoke"));
+	bMenuTest = FParse::Param(Line, TEXT("IceMenuTest"));
+	if (!bSmoke && !bMenuTest && FCString::Strifind(Line, TEXT("-IceShots=")) == nullptr)
+	{
+		LoadPreferences();
+	}
 	bAuto = FParse::Param(Line, TEXT("IceAuto"));
 	FParse::Value(Line, TEXT("IceSetup="), SetupId);
 	FParse::Value(Line, TEXT("IceMode="), RunMode);
@@ -112,18 +119,33 @@ void AIceRunGameMode::StartPlay()
 		RunMode = TEXT("career");
 		EventIndex = 0;
 	}
+	if (bMenuTest)
+	{
+		// The same pad script skates the career event the menus start.
+		SetupId.Reset();
+	}
 
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	Rink = GetWorld()->SpawnActor<AIceRink>(Params);
 	Skater = GetWorld()->SpawnActor<AIceSkater>(Params);
 	ShotCamera = GetWorld()->SpawnActor<AIceShotCamera>(Params);
+	Music = NewObject<UAudioComponent>(this);
+	Music->bAutoActivate = false;
+	Music->RegisterComponent();
 	ShotCamera->Watch(Skater);
 	for (int32 I = 0; I < StartCamera % 4; ++I)
 	{
 		ShotCamera->Cycle(FIceState());
 	}
-	Skater->LoadModel(ModelPath);
+	if (FCString::Strifind(Line, TEXT("-IceSkater=")) || FCString::Strifind(Line, TEXT("-IceModel=")) || !FPaths::FileExists(PreferencesPath()))
+	{
+		Skater->LoadModel(ModelPath);
+	}
+	else
+	{
+		LoadSkaterModel();
+	}
 
 	const FString Project = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	FString Host = FPlatformMisc::GetEnvironmentVariable(TEXT("ICE_RUN_HOST"));
@@ -148,9 +170,9 @@ void AIceRunGameMode::StartPlay()
 		Node = TEXT("node");
 	}
 	FString SaveDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("IceRun")));
-	if (bSmoke)
+	if (bSmoke || bMenuTest)
 	{
-		// Smoke runs never touch the player's career.
+		// Test runs never touch the player's career.
 		SaveDir = FPaths::Combine(SaveDir, TEXT("test-runs"), FString::FromInt(FPlatformProcess::GetCurrentProcessId()));
 	}
 	FString Error;
@@ -207,6 +229,8 @@ void AIceRunGameMode::Configure()
 		Options->SetStringField(TEXT("setup"), SetupId);
 	}
 	Options->SetNumberField(TEXT("assistance"), Assistance);
+	Options->SetNumberField(TEXT("profile"), ProfileIndex);
+	Options->SetNumberField(TEXT("track"), TrackIndex);
 	Options->SetNumberField(TEXT("scheme"), Scheme);
 	Options->SetBoolField(TEXT("beginner"), bBeginner);
 	Options->SetBoolField(TEXT("cruise"), bCruise);
@@ -231,6 +255,12 @@ void AIceRunGameMode::StartRun()
 	if (RunMode == TEXT("lesson"))
 	{
 		Options->SetStringField(TEXT("course"), Course);
+	}
+	if (RunMode == TEXT("composer"))
+	{
+		TArray<TSharedPtr<FJsonValue>> Ids;
+		for (const FString& Id : Sequence) Ids.Add(MakeShared<FJsonValueString>(Id));
+		Options->SetArrayField(TEXT("sequence"), Ids);
 	}
 	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetObjectField(TEXT("options"), Options);
@@ -296,142 +326,6 @@ void AIceRunGameMode::ChangeSetup(int32 By)
 	NoticeText = FString::Printf(TEXT("Setup: %s"), *SetupName(SetupId));
 	Configure();
 	StartRun();
-}
-
-void AIceRunGameMode::OpenMenu()
-{
-	bPaused = true;
-	TickDebt = 0.0;
-	BuildMenu();
-	MenuAt = 0;
-}
-
-void AIceRunGameMode::CloseMenu()
-{
-	bPaused = false;
-	TickDebt = 0.0;
-	if (AIceRunPlayerController* PC = Player())
-	{
-		PC->ClearPending();
-	}
-}
-
-void AIceRunGameMode::BuildMenu()
-{
-	Menu.Reset();
-	const bool bRunning = Latest.bValid && !Latest.bFinished;
-	if (bRunning)
-	{
-		Menu.Add({TEXT("Continue skating"), FString(), [this] { CloseMenu(); }, nullptr});
-	}
-	else
-	{
-		Menu.Add({TEXT("Skate it again"), FString(), [this] { StartRun(); CloseMenu(); }, nullptr});
-	}
-	const TSharedPtr<FJsonObject>* Tutorial = nullptr;
-	if (bRunning && Latest.Raw.IsValid() && Latest.Raw->TryGetObjectField(TEXT("tutorial"), Tutorial))
-	{
-		Menu.Add({TEXT("Skip this step"), TEXT("Earns no XP; the next step starts at once."), [this] { Bridge.Send(TEXT("skipStep")); CloseMenu(); }, nullptr});
-	}
-	double TrustSteps = 0;
-	if (Catalog.IsValid())
-	{
-		Catalog->TryGetNumberField(TEXT("trustSteps"), TrustSteps);
-	}
-	Menu.Add({FString::Printf(TEXT("Trust the ice   ·   tutorial, %d steps"), int32(TrustSteps)),
-		TEXT("Skating itself, in your setup's words: stand still on something that moves, then edges, getting where you mean to go, stops, and only then the air."),
-		[this] { StartLesson(TEXT("trust"), FString()); }, nullptr});
-	const TArray<TSharedPtr<FJsonValue>>* Courses = nullptr;
-	if (Catalog.IsValid() && Catalog->TryGetArrayField(TEXT("courses"), Courses))
-	{
-		for (const TSharedPtr<FJsonValue>& V : *Courses)
-		{
-			const TSharedPtr<FJsonObject> C = V->AsObject();
-			const FString Id = C->GetStringField(TEXT("id"));
-			if (Id == TEXT("paddles"))
-			{
-				continue;
-			}
-			TArray<FString> Fits;
-			C->TryGetStringArrayField(TEXT("setups"), Fits);
-			const bool bMine = Fits.Contains(SetupId);
-			const FString Needed = bMine || Fits.Num() == 0 ? FString() : Fits[0];
-			FString Detail = C->GetStringField(TEXT("blurb"));
-			if (!Needed.IsEmpty())
-			{
-				Detail += FString::Printf(TEXT(" Starts on %s."), *SetupName(Needed));
-			}
-			Menu.Add({FString::Printf(TEXT("%s%s   ·   lesson"), bMine ? TEXT("● ") : TEXT(""), *C->GetStringField(TEXT("title"))), Detail,
-				[this, Id, Needed] { StartLesson(Id, Needed); }, nullptr});
-		}
-	}
-	Menu.Add({TEXT("Free skate"), TEXT("Quiet ice: skate as you like; the practice list follows along."), [this] { StartMode(TEXT("free")); }, nullptr});
-	int32 Unlocked = 0;
-	FString EventTitle = TEXT("First ice");
-	const TSharedPtr<FJsonObject>* Career = nullptr;
-	if (Latest.Raw.IsValid() && Latest.Raw->TryGetObjectField(TEXT("career"), Career))
-	{
-		Unlocked = int32((*Career)->GetNumberField(TEXT("unlocked")));
-	}
-	const TArray<TSharedPtr<FJsonValue>>* Events = nullptr;
-	if (Catalog.IsValid() && Catalog->TryGetArrayField(TEXT("events"), Events) && Events->IsValidIndex(Unlocked))
-	{
-		EventTitle = (*Events)[Unlocked]->AsObject()->GetStringField(TEXT("title"));
-	}
-	Menu.Add({FString::Printf(TEXT("Career   ·   %s"), *EventTitle), TEXT("The next event of your season."), [this, Unlocked] { StartMode(TEXT("career"), Unlocked); }, nullptr});
-	Menu.Add({TEXT("Rookie gates"), TEXT("Follow the curved lane through eight gates; jump the two foam bars."), [this] { StartMode(TEXT("rookie")); }, nullptr});
-	Menu.Add({TEXT("Light course   ·   90 s"), TEXT("Carve from light to light against the clock."), [this] { StartMode(TEXT("timed")); }, nullptr});
-	FString SetupDetail;
-	const TArray<TSharedPtr<FJsonValue>>* SetupList = nullptr;
-	if (Catalog.IsValid() && Catalog->TryGetArrayField(TEXT("setups"), SetupList))
-	{
-		for (const TSharedPtr<FJsonValue>& V : *SetupList)
-		{
-			if (V->AsObject()->GetStringField(TEXT("id")) == SetupId)
-			{
-				SetupDetail = V->AsObject()->GetStringField(TEXT("description"));
-			}
-		}
-	}
-	if (SetupId.IsEmpty())
-	{
-		SetupDetail = TEXT("The original schemes with the coach: Cruise pushes for you, and a landing assist checks your rotation.");
-	}
-	Menu.Add({FString::Printf(TEXT("Setup   ◀  %s  ▶"), *SetupName(SetupId)), SetupDetail,
-		[this] { ChangeSetup(1); BuildMenu(); },
-		[this](int32 By) { ChangeSetup(By); BuildMenu(); }});
-	{
-		// game/steady.ts: off by default where the setup promises minimal assistance, light elsewhere.
-		FString Level, Name;
-		const TSharedPtr<FJsonObject>* Steady = nullptr;
-		if (Latest.Raw.IsValid() && Latest.Raw->TryGetObjectField(TEXT("steady"), Steady))
-		{
-			(*Steady)->TryGetStringField(TEXT("name"), Name);
-		}
-		Level = SteadyChoice.IsEmpty() ? FString::Printf(TEXT("%s (setup default)"), *Name) : Name;
-		auto Step = [this](int32 By)
-		{
-			static const TCHAR* const Choices[] = {TEXT(""), TEXT("off"), TEXT("light"), TEXT("firm")};
-			int32 At = 0;
-			while (At < 4 && SteadyChoice != Choices[At]) ++At;
-			SteadyChoice = Choices[((At + By) % 4 + 4) % 4];
-			Configure();
-		};
-		Menu.Add({FString::Printf(TEXT("Steadying hand   ◀  %s  ▶"), *Level),
-			TEXT("A hand on your stick, never the physics: it keeps the lean you ask for to what your speed can carry. Off where a setup promises minimal assistance; Light elsewhere; Firm holds you to the safe lean."),
-			[this, Step] { Step(1); BuildMenu(); },
-			[this, Step](int32 By) { Step(By); BuildMenu(); }});
-	}
-	Menu.Add({FString::Printf(TEXT("Camera   ◀  %s  ▶"), *CameraName()), TEXT("View / V changes it while skating, except in the air."),
-		[this] { if (Latest.bValid) ShotCamera->Cycle(Latest.State); BuildMenu(); },
-		[this](int32) { if (Latest.bValid) ShotCamera->Cycle(Latest.State); BuildMenu(); }});
-	Menu.Add({TEXT("Quit"), TEXT("The career is saved as you skate."), [this] {
-		if (AIceRunPlayerController* PC = Player())
-		{
-			UKismetSystemLibrary::QuitGame(this, PC, EQuitPreference::Quit, false);
-		}
-	}, nullptr});
-	MenuAt = FMath::Clamp(MenuAt, 0, Menu.Num() - 1);
 }
 
 void AIceRunGameMode::Present(const FIceFrame& Frame, bool bSnap)
@@ -526,6 +420,16 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		}
 		Configure();
 		StartRun();
+		if (!bPrefsLoaded)
+		{
+			// A first launch wears Northlight, as the Godot game's new sessions do.
+			const TArray<TSharedPtr<FJsonValue>>& Skins = CatalogList(TEXT("skins"));
+			for (int32 I = 0; I < Skins.Num(); ++I)
+			{
+				if (Skins[I]->AsObject()->GetStringField(TEXT("id")) == TEXT("northlight")) CostumeIndex = I;
+			}
+		}
+		WearCostume();
 	}
 	else if (Reply.Op == TEXT("start"))
 	{
@@ -534,12 +438,20 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		Present(FIceFrame::Parse(Reply.Data), true);
 		bPlaying = true;
 		TickDebt = 0.0;
+		StartMusic();
 		UE_LOG(LogIceRun, Log, TEXT("Skating: mode %s, setup %s, scheme %d."), *RunMode, SetupId.IsEmpty() ? TEXT("(original schemes)") : *SetupId, Scheme);
-		if (ShotTimes.Num() > 0 && FParse::Param(FCommandLine::Get(), TEXT("IceOpenMenu")))
+		FString OpenPage;
+		if (ShotTimes.Num() > 0 && FParse::Value(FCommandLine::Get(), TEXT("IceOpenMenu="), OpenPage))
 		{
-			// For a still of the menu itself.
-			OpenMenu();
+			// For a still of a menu page itself.
+			OpenMenu(OpenPage);
 		}
+		else if (!bTitleShown && !bSmoke && ShotTimes.Num() == 0)
+		{
+			// The title screen, once, over the first run.
+			OpenMenu(TEXT("home"));
+		}
+		bTitleShown = true;
 		int32 Skips = 0;
 		if (RunMode == TEXT("lesson") && FParse::Value(FCommandLine::Get(), TEXT("IceSkipSteps="), Skips))
 		{
@@ -556,6 +468,11 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		if (Latest.bFinished)
 		{
 			bPlaying = false;
+			// The program is over: the music lets go.
+			if (Music && Music->IsPlaying())
+			{
+				Music->FadeOut(3.f, 0.f);
+			}
 		}
 	}
 	else if (Reply.Op == TEXT("export"))
@@ -563,6 +480,56 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		FString Path;
 		Reply.Data->TryGetStringField(TEXT("path"), Path);
 		NoticeText = FString::Printf(TEXT("Replay saved: %s"), *Path);
+	}
+	else if (Reply.Op == TEXT("replay"))
+	{
+		// The run again from its own inputs: the menu goes, the playback skates.
+		Rink->ClearTraces();
+		Present(FIceFrame::Parse(Reply.Data), true);
+		bPlaying = true;
+		FinishedFor = -1.0;
+		CloseMenu();
+		StartMusic();
+	}
+	else if (Reply.Op == TEXT("dress"))
+	{
+		// The atelier's preview: the design as a skin, worn but not kept.
+		const TSharedPtr<FJsonObject>* Skin = nullptr;
+		if (Reply.Data->TryGetObjectField(TEXT("skin"), Skin))
+		{
+			Skater->ApplyCostume(*Skin);
+		}
+	}
+	else if (Reply.Data.IsValid() && Reply.Data->HasField(TEXT("state")))
+	{
+		// train, drill, rest, plan, armFocus, design, configure, skipStep: the career and wardrobe as they now are.
+		const FIceFrame Updated = FIceFrame::Parse(Reply.Data);
+		if (Updated.bValid)
+		{
+			Latest = Updated;
+		}
+		if (Reply.Op == TEXT("design") && PendingWearSlot >= 0)
+		{
+			// Wear the design just kept: presets first, then the slots that hold one.
+			int32 Index = CatalogList(TEXT("skins")).Num();
+			const TSharedPtr<FJsonObject>* Wardrobe = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Skins = nullptr;
+			if (Latest.Raw->TryGetObjectField(TEXT("wardrobe"), Wardrobe) && (*Wardrobe)->TryGetArrayField(TEXT("skins"), Skins))
+			{
+				for (int32 I = 0; I < PendingWearSlot && I < Skins->Num(); ++I)
+				{
+					Index += (*Skins)[I]->Type == EJson::Object ? 1 : 0;
+				}
+			}
+			CostumeIndex = Index;
+			PendingWearSlot = -1;
+			WearCostume();
+			SavePreferences();
+		}
+		if (bPaused)
+		{
+			RebuildPage();
+		}
 	}
 }
 
@@ -609,30 +576,35 @@ void AIceRunGameMode::HandleMenus()
 	{
 		if (Presses.bPause || Presses.bBack)
 		{
-			CloseMenu();
+			PopPage();
 			return;
 		}
-		if (Menu.Num() == 0)
+		TArray<FMenuItem>& Items = MenuPage.Items;
+		if (Items.Num() == 0)
 		{
 			return;
 		}
 		if (Presses.bUp)
 		{
-			MenuAt = (MenuAt + Menu.Num() - 1) % Menu.Num();
+			MoveFocus(-1);
 		}
 		if (Presses.bDown)
 		{
-			MenuAt = (MenuAt + 1) % Menu.Num();
+			MoveFocus(1);
 		}
-		if ((Presses.bLeft || Presses.bRight) && Menu[MenuAt].Adjust)
+		if (!Items.IsValidIndex(MenuAt))
 		{
-			const TFunction<void(int32)> Adjust = Menu[MenuAt].Adjust;
+			return;
+		}
+		if ((Presses.bLeft || Presses.bRight) && Items[MenuAt].Adjust && Items[MenuAt].bEnabled)
+		{
+			const TFunction<void(int32)> Adjust = Items[MenuAt].Adjust;
 			Adjust(Presses.bLeft ? -1 : 1);
 		}
-		else if (Presses.bAccept && Menu[MenuAt].Accept)
+		else if (Presses.bAccept && Items[MenuAt].Accept && Items[MenuAt].bEnabled)
 		{
-			// Copied first: an action may rebuild the menu it came from.
-			const TFunction<void()> Accept = Menu[MenuAt].Accept;
+			// Copied first: an action may rebuild the page it came from.
+			const TFunction<void()> Accept = Items[MenuAt].Accept;
 			Accept();
 		}
 		return;
@@ -691,13 +663,20 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 		return;
 	}
 	HandleMenus();
+	// The music waits with the run while a menu is up.
+	const bool bHold = bPaused && RunLive();
+	if (Music && bHold != bMusicPaused)
+	{
+		bMusicPaused = bHold;
+		Music->SetPaused(bHold);
+	}
 	if (Latest.bValid && Latest.bFinished && !bPaused && !bSmoke && ShotTimes.Num() == 0)
 	{
 		// The result stays on the ice a moment, then the menu offers what is next.
 		FinishedFor = FinishedFor < 0.0 ? 0.0 : FinishedFor + DeltaSeconds;
 		if (FinishedFor > 2.5)
 		{
-			OpenMenu();
+			OpenMenu(TEXT("result"));
 		}
 	}
 	if (!bPlaying || !bOperational || bPaused)
@@ -715,7 +694,7 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 			TickDebt -= Ticks;
 			TSharedRef<FJsonObject> Controls = PC->Controls(DeltaSeconds, Scheme);
 			bool bLow = Scheme != 3 && PC->LowHeld();
-			if (bSmoke && Latest.bValid)
+			if ((bSmoke || bMenuTest) && Latest.bValid)
 			{
 				// main.gd's boot test: carve for the edge element, crouch for the pose.
 				double Index = 0;
@@ -751,6 +730,10 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 	if (bSmoke)
 	{
 		SmokeStep(DeltaSeconds);
+	}
+	if (bMenuTest)
+	{
+		MenuTestStep(DeltaSeconds);
 	}
 	if (ShotTimes.Num() > 0)
 	{
@@ -812,4 +795,198 @@ void AIceRunGameMode::SmokeStep(float Dt)
 		SmokeStage = 1;
 		Fail(FString::Printf(TEXT("Career smoke test ran past %.0f s at element %d."), SmokeLimit, int32(Index) + 1));
 	}
+}
+
+const AIceRunGameMode::FMenuItem* AIceRunGameMode::FindItem(const FString& Prefix) const
+{
+	for (const FMenuItem& Item : MenuPage.Items)
+	{
+		if (!Item.bHeader && Item.Label.StartsWith(Prefix))
+		{
+			return &Item;
+		}
+	}
+	return nullptr;
+}
+
+bool AIceRunGameMode::AcceptItem(const FString& Prefix)
+{
+	const FMenuItem* Item = FindItem(Prefix);
+	if (!Item || !Item->bEnabled || !Item->Accept)
+	{
+		return false;
+	}
+	MenuAt = int32(Item - MenuPage.Items.GetData());
+	const TFunction<void()> Accept = Item->Accept;
+	Accept();
+	return true;
+}
+
+bool AIceRunGameMode::AdjustItem(const FString& Prefix, int32 By)
+{
+	const FMenuItem* Item = FindItem(Prefix);
+	if (!Item || !Item->Adjust)
+	{
+		return false;
+	}
+	MenuAt = int32(Item - MenuPage.Items.GetData());
+	const TFunction<void(int32)> Adjust = Item->Adjust;
+	Adjust(By);
+	return true;
+}
+
+void AIceRunGameMode::MenuTestStep(float Dt)
+{
+	MenuTestClock += Dt;
+	auto Pass = [this]
+	{
+		UE_LOG(LogIceRun, Display, TEXT("UNREAL_MENUS_PASS: season, event plan, a career run to its result and story, training, wardrobe, atelier and Composer, through the live bridge"));
+		FPlatformMisc::RequestExitWithStatus(false, 0);
+		MenuTestStage = 99;
+	};
+	auto Stop = [this](const TCHAR* Why)
+	{
+		UE_LOG(LogIceRun, Error, TEXT("UNREAL_MENUS_FAIL at stage %d (%s): %s"), MenuTestStage, *MenuPage.Id, Why);
+		FPlatformMisc::RequestExitWithStatus(false, 1);
+		MenuTestStage = 99;
+	};
+	if (MenuTestStage >= 99 || Bridge.Busy())
+	{
+		return;
+	}
+	if (MenuTestClock > 400.0)
+	{
+		Stop(TEXT("ran out of time"));
+		return;
+	}
+	const TSharedPtr<FJsonObject> Career = Latest.Raw.IsValid() ? Latest.Raw->GetObjectField(TEXT("career")) : nullptr;
+	auto PlanLength = [&Career]
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Plans = nullptr;
+		return Career.IsValid() && Career->TryGetArrayField(TEXT("plans"), Plans) && Plans->IsValidIndex(0) && (*Plans)[0]->Type == EJson::Array ? (*Plans)[0]->AsArray().Num() : -1;
+	};
+	switch (MenuTestStage)
+	{
+	case 0:
+		if (bPaused && MenuPage.Id == TEXT("home") && Catalog.IsValid())
+		{
+			MenuTestStage = AcceptItem(TEXT("The Season")) ? 1 : (Stop(TEXT("no Season on the title")), 99);
+		}
+		break;
+	case 1:
+		if (MenuPage.Id != TEXT("season")) { Stop(TEXT("the Season did not open")); break; }
+		if (MenuPage.Story.IsEmpty()) { Stop(TEXT("the Season has no story")); break; }
+		MenuTestStage = AcceptItem(TEXT("01")) ? 2 : (Stop(TEXT("no first event")), 99);
+		break;
+	case 2:
+		if (MenuPage.Id != TEXT("event")) { Stop(TEXT("the briefing did not open")); break; }
+		AdjustItem(TEXT("+ Add"), 3);
+		MenuTestStage = AcceptItem(TEXT("+ Add")) ? 3 : (Stop(TEXT("no + Add")), 99);
+		break;
+	case 3:
+		if (PlanLength() != 4) { Stop(TEXT("the plan did not take the added element")); break; }
+		MenuTestStage = AcceptItem(TEXT("Use the event's own program")) ? 4 : (Stop(TEXT("no way back to the event's program")), 99);
+		break;
+	case 4:
+		if (PlanLength() != -1) { Stop(TEXT("the plan did not go back")); break; }
+		MenuTestStage = AcceptItem(TEXT("Skate this program")) ? 5 : (Stop(TEXT("could not skate the event")), 99);
+		break;
+	case 5:
+		// The run, skated by the pad script, then its result after a moment on the ice.
+		if (bPaused && MenuPage.Id == TEXT("result"))
+		{
+			if (MenuPage.Story.IsEmpty()) { Stop(TEXT("the result has no chapter ending")); break; }
+			MenuTestStage = AcceptItem(TEXT("Back to the Season")) ? 6 : (Stop(TEXT("no way back to the Season")), 99);
+		}
+		break;
+	case 6:
+		if (MenuPage.Id != TEXT("season")) { Stop(TEXT("back to the Season failed")); break; }
+		MenuTestStage = AcceptItem(TEXT("Training")) ? 7 : (Stop(TEXT("no Training")), 99);
+		break;
+	case 7:
+		if (MenuPage.Id != TEXT("training")) { Stop(TEXT("Training did not open")); break; }
+		MenuTestValue = Career->GetObjectField(TEXT("stats"))->GetNumberField(TEXT("edgeControl"));
+		MenuTestStage = AcceptItem(TEXT("Edge control")) ? 8 : (Stop(TEXT("Edge control could not be trained after a medal")), 99);
+		break;
+	case 8:
+		if (Career->GetObjectField(TEXT("stats"))->GetNumberField(TEXT("edgeControl")) != MenuTestValue + 1) { Stop(TEXT("the stat did not rise")); break; }
+		PopPage();
+		PopPage();
+		MenuTestStage = AcceptItem(TEXT("Wardrobe")) ? 9 : (Stop(TEXT("no Wardrobe")), 99);
+		break;
+	case 9:
+	{
+		if (MenuPage.Id != TEXT("wardrobe")) { Stop(TEXT("the Wardrobe did not open")); break; }
+		const int32 Before = CostumeIndex;
+		AdjustItem(TEXT("Costume"), 1);
+		if (CostumeIndex == Before) { Stop(TEXT("the costume did not change")); break; }
+		MenuTestStage = AcceptItem(TEXT("Slot 1")) ? 10 : (Stop(TEXT("no atelier slot")), 99);
+		break;
+	}
+	case 10:
+		if (MenuPage.Id != TEXT("design")) { Stop(TEXT("the atelier did not open")); break; }
+		AdjustItem(TEXT("Bodice"), 1);
+		MenuTestStage = 11;
+		break;
+	case 11:
+		MenuTestStage = AcceptItem(TEXT("Keep it")) ? 12 : (Stop(TEXT("could not keep the design")), 99);
+		break;
+	case 12:
+	{
+		const TArray<TSharedPtr<FJsonValue>>& Skins = Latest.Raw->GetObjectField(TEXT("wardrobe"))->GetArrayField(TEXT("skins"));
+		if (Skins.Num() == 0 || Skins[0]->Type != EJson::Object) { Stop(TEXT("the design was not kept")); break; }
+		if (CostumeIndex != CatalogList(TEXT("skins")).Num()) { Stop(TEXT("the kept design is not worn")); break; }
+		PopPage();
+		MenuTestStage = AcceptItem(TEXT("The Composer")) ? 13 : (Stop(TEXT("no Composer")), 99);
+		break;
+	}
+	case 13:
+	{
+		if (MenuPage.Id != TEXT("composer")) { Stop(TEXT("the Composer did not open")); break; }
+		const int32 Before = Sequence.Num();
+		AcceptItem(TEXT("+ Add"));
+		if (Sequence.Num() != Before + 1) { Stop(TEXT("the Composer did not add a phrase")); break; }
+		Pass();
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+void AIceRunGameMode::StartMusic()
+{
+	if (!Music)
+	{
+		return;
+	}
+	Music->Stop();
+	bMusicPaused = false;
+	if (!bMusicOn || !Latest.Raw.IsValid())
+	{
+		return;
+	}
+	double Track = TrackIndex;
+	Latest.Raw->TryGetNumberField(TEXT("track"), Track);
+	const TArray<TSharedPtr<FJsonValue>>& Tracks = CatalogList(TEXT("tracks"));
+	if (!Tracks.IsValidIndex(int32(Track)))
+	{
+		return;
+	}
+	const FString Id = Tracks[int32(Track)]->AsObject()->GetStringField(TEXT("id"));
+	// tools/build_content.py records where each track went.
+	FString Manifest, Path;
+	TSharedPtr<FJsonObject> Paths;
+	if (FFileHelper::LoadFileToString(Manifest, *FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Generated/music.json"))) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Manifest), Paths) && Paths.IsValid())
+	{
+		Paths->TryGetStringField(Id, Path);
+	}
+	USoundBase* Sound = Path.IsEmpty() ? nullptr : LoadObject<USoundBase>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (!Sound)
+	{
+		return;
+	}
+	Music->SetSound(Sound);
+	Music->Play(0.f);
+	UE_LOG(LogIceRun, Log, TEXT("Music: %s from its start."), *Id);
 }

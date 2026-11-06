@@ -5,7 +5,7 @@
 //   node games/ice-run-unreal/tools/prepare.mjs [--content] [--no-build]
 //
 // UE_ROOT is the installed engine (default ~/UnrealEngine/Linux_Unreal_Engine_5.8.4).
-import {existsSync, statSync, readdirSync} from 'node:fs';
+import {existsSync, statSync, readdirSync, readFileSync, mkdirSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {dirname, join} from 'node:path';
@@ -28,8 +28,22 @@ function newest(dir) {
   return latest;
 }
 
-// 1. The bridge's runtime: the same TypeScript the browser and Godot games run, prepared once.
-execFileSync(process.execPath, [join(godot, 'tools/prepare.mjs'), '--engine-only'], {stdio: 'inherit'});
+// 1. The bridge's runtime: the same TypeScript the browser and Godot games run, prepared once;
+// with FFmpeg, the music too (Ogg Vorbis, which tools/build_content.py imports).
+let ffmpeg = true;
+try { execFileSync('ffmpeg', ['-version'], {stdio: 'ignore'}); } catch { ffmpeg = false; }
+execFileSync(process.execPath, [join(godot, 'tools/prepare.mjs'), ...(ffmpeg ? [] : ['--engine-only'])], {stdio: 'inherit'});
+
+// Unreal's importer reads audio-only Ogg Vorbis: the MP3s carry cover art, which an Ogg made from them
+// keeps as a second stream it cannot read. So the music gets its own copies, the audio alone.
+const audio = join(root, '../../tools/ice-lab/game/audio');
+const tracks = JSON.parse(readFileSync(join(audio, 'tracks.json'), 'utf8'));
+mkdirSync(join(root, 'Intermediate/Music'), {recursive: true});
+if (ffmpeg) for (const track of tracks) {
+  const source = join(audio, track.file), out = join(root, 'Intermediate/Music', `${track.id}.ogg`);
+  if (existsSync(out) && statSync(out).mtimeMs >= statSync(source).mtimeMs) continue;
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', source, '-vn', '-map', '0:a:0', '-c:a', 'libvorbis', '-q:a', '5', out]);
+}
 
 if (!existsSync(editorCmd)) {
   console.error(`No Unreal Engine at ${engine}. Set UE_ROOT to an installed 5.8 build.`);
@@ -43,7 +57,7 @@ if (!args.has('--no-build') && (!existsSync(library) || newest(join(root, 'Sourc
 }
 
 // 3. Content: the skaters through Interchange, and the materials, when missing or asked for.
-const manifest = join(root, 'Content/Generated/skaters.json');
+const manifest = join(root, 'Content/Generated/music.json');
 const sources = [join(root, 'tools/build_content.py'), ...['skater-athlete', 'skater-competition', 'skater-berserker', 'skater'].map(n => join(godot, `assets/generated/${n}.glb`))];
 const stale = !existsSync(manifest) || sources.some(s => existsSync(s) && statSync(s).mtimeMs > statSync(manifest).mtimeMs);
 if (args.has('--content') || stale) {

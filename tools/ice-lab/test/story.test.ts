@@ -58,6 +58,9 @@ test("the coach points at an injury first, then rust before a jump, then wear, t
   // No XP for the weakest: skate for it.
   assert.match(coachAdvice(view({ xp: 20 }))[0], /better medal pays the 110 XP/);
   assert.match(coachAdvice(view({ weeks: 0, xp: 500 }))[0], /No weeks left/);
+  // A new career's stats are all 50: none is the weakest.
+  const fresh = view({ xp: 0, stats: { strength: 50, spring: 50, edgeControl: 50, balance: 50, stamina: 50 } });
+  assert.deepEqual(coachAdvice(fresh), ['"Your stats are level, at 50. A better medal pays the 120 XP to train one."']);
 });
 
 test("the coach reads and never writes", () => {

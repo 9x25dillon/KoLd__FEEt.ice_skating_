@@ -151,11 +151,48 @@ def ice_material():
     return m
 
 
+# tools/prepare.mjs makes these: each track's audio alone, as Ogg Vorbis.
+AUDIO_DIR = os.path.join(PROJECT, "Intermediate", "Music")
+TRACKS = os.path.normpath(os.path.join(PROJECT, "..", "..", "tools", "ice-lab", "game", "audio", "tracks.json"))
+MUSIC = GENERATED + "/Music"
+
+
+def import_music():
+    """The five tracks, as games/ice-run-godot/tools/prepare.mjs converts them to Ogg Vorbis."""
+    out = {}
+    if not os.path.exists(TRACKS):
+        log("no " + TRACKS)
+        return out
+    with open(TRACKS) as f:
+        tracks = json.load(f)
+    for track in tracks:
+        source = os.path.join(AUDIO_DIR, track["id"] + ".ogg")
+        if not os.path.exists(source):
+            log("missing " + source)
+            continue
+        task = unreal.AssetImportTask()
+        task.filename = source
+        task.destination_path = MUSIC
+        task.destination_name = track["id"]
+        task.replace_existing = True
+        task.automated = True
+        task.save = True
+        tools.import_asset_tasks([task])
+        path = MUSIC + "/" + track["id"]
+        if assets.does_asset_exist(path):
+            out[track["id"]] = path + "." + track["id"]
+    log("music: " + json.dumps(out))
+    return out
+
+
 def main():
     log("project " + PROJECT)
     log("skaters from " + GLB_DIR)
     surface_material()
     ice_material()
+    music = import_music()
+    with open(os.path.join(PROJECT, "Content", "Generated", "music.json"), "w") as out:
+        json.dump(music, out, indent=2)
     manifest = {}
     for glb, folder in SKATERS:
         mesh = import_skater(glb, folder)

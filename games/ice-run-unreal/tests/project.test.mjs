@@ -53,7 +53,22 @@ test("the C++ skater keeps skater.gd's constants", () => {
 const engine = process.env.UE_ROOT ?? join(homedir(), 'UnrealEngine/Linux_Unreal_Engine_5.8.4');
 const editorCmd = join(engine, 'Engine/Binaries/Linux/UnrealEditor-Cmd');
 const built = existsSync(join(root, 'Binaries/Linux/libUnrealEditor-IceRun.so')) && existsSync(join(godot, 'runtime/sim/solver.js'));
+
 test('the live engine skates the first career routine in Unreal', {skip: !existsSync(editorCmd) || !built ? 'needs UE_ROOT, a built module and the prepared runtime' : false, timeout: 600_000}, () => {
   const out = execFileSync(editorCmd, [join(root, 'IceRun.uproject'), '-game', '-nullrhi', '-unattended', '-nosplash', '-nosound', '-IceSmoke', '-UseFixedTimeStep', '-FPS=60', '-stdout'], {encoding: 'utf8', maxBuffer: 256 << 20});
   assert.match(out, /UNREAL_SMOKE_PASS/);
+});
+
+test('the menus walk a career round through the live engine: plan, skate, result and story, train, dress, compose', {skip: !existsSync(editorCmd) || !built ? 'needs UE_ROOT, a built module and the prepared runtime' : false, timeout: 600_000}, () => {
+  const out = execFileSync(editorCmd, [join(root, 'IceRun.uproject'), '-game', '-nullrhi', '-unattended', '-nosplash', '-nosound', '-IceMenuTest', '-UseFixedTimeStep', '-FPS=60', '-stdout', '-FullStdOutLogOutput'], {encoding: 'utf8', maxBuffer: 256 << 20});
+  assert.match(out, /UNREAL_MENUS_PASS/);
+});
+
+test('the story and the coach reach the bridge catalog and snapshot the menus read', async () => {
+  const {IceEngine} = await import('../../ice-run-godot/bridge/engine.mjs');
+  const e = new IceEngine();
+  const story = e.catalog().story;
+  assert.equal(story.chapters.length, e.catalog().events.length);
+  for (const key of ['season', 'coach', 'cast', 'statTitles']) assert.ok(story[key], key);
+  assert.ok(Array.isArray(e.snapshot().career.advice));
 });

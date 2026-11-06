@@ -111,38 +111,115 @@ void AIceRunHUD::TutorialCard(const TSharedPtr<FJsonObject>& T, float U)
 
 void AIceRunHUD::PauseMenu(const AIceRunGameMode* Mode, float U)
 {
+	DrawPage(Mode, U);
+}
+
+void AIceRunHUD::DrawPage(const AIceRunGameMode* Mode, float U)
+{
 	UFont* Large = GEngine->GetLargeFont();
 	UFont* Medium = GEngine->GetMediumFont();
-	Panel(0.f, 0.f, Canvas->ClipX, Canvas->ClipY, FLinearColor(.01f, .02f, .04f, .62f));
-	const float X = Canvas->ClipX * .5f - 330.f * U;
-	float Y = Canvas->ClipY * .14f;
-	const FIceFrame& F = Mode->Frame();
-	FString Title = TEXT("Paused");
-	FString Sub = TEXT("A / Enter chooses  ·  ◀ ▶ changes  ·  B / Esc goes back to the ice");
-	const TSharedPtr<FJsonObject> Result = Obj(F.Raw, TEXT("result"));
-	if (F.bValid && F.bFinished && Result.IsValid())
-	{
-		Title = Str(Result, TEXT("title"));
-		Sub = Str(Result, TEXT("detail"));
-	}
-	Line(Title, X, Y, Ink, 1.6f * U, Large);
-	Paragraph(Sub, X, Y, 660.f * U, Soft, .95f * U, Medium);
+	const AIceRunGameMode::FMenuPage& Page = Mode->Page();
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	// The list on the left, the story and tables on the right; the skater turns in the gap.
+	const float LeftX = W * .035f, LeftW = W * .36f, RightX = W * .62f, RightW = W * .345f;
+	Panel(0.f, 0.f, LeftX + LeftW + 24.f * U, H, FLinearColor(.01f, .02f, .04f, .72f));
+	Panel(RightX - 24.f * U, 0.f, W - RightX + 24.f * U, H, FLinearColor(.01f, .02f, .04f, .55f));
+	float Y = H * .07f;
+	Line(Page.Title, LeftX, Y, Ink, 1.7f * U, Large);
+	Paragraph(Page.Subtitle, LeftX, Y, LeftW, Champagne, .95f * U, Medium);
 	Y += 14.f * U;
-	const TArray<AIceRunGameMode::FMenuItem>& Items = Mode->MenuItems();
-	for (int32 I = 0; I < Items.Num(); ++I)
+	// The list scrolls to keep the focus in view.
+	const float RowH = 31.f * U;
+	const float ListTop = Y, ListBottom = H * .74f;
+	const int32 Fits = FMath::Max(1, int32((ListBottom - ListTop) / RowH));
+	const int32 Focus = Mode->MenuIndex();
+	const int32 First = FMath::Clamp(Focus - Fits / 2, 0, FMath::Max(0, Page.Items.Num() - Fits));
+	for (int32 I = First; I < Page.Items.Num() && I < First + Fits; ++I)
 	{
-		const bool bAt = I == Mode->MenuIndex();
+		const AIceRunGameMode::FMenuItem& Item = Page.Items[I];
+		float RY = ListTop + (I - First) * RowH;
+		if (Item.bHeader)
+		{
+			float HY = RY + 8.f * U;
+			Line(Item.Label.ToUpper(), LeftX, HY, Champagne, .8f * U, Medium);
+			continue;
+		}
+		const bool bAt = I == Focus;
 		if (bAt)
 		{
-			Panel(X - 12.f * U, Y - 3.f * U, 680.f * U, 30.f * U, FLinearColor(.86f, .76f, .58f, .22f));
+			Panel(LeftX - 12.f * U, RY - 3.f * U, LeftW + 24.f * U, RowH - 2.f * U, FLinearColor(.86f, .76f, .58f, .22f));
 		}
-		Line(Items[I].Label, X, Y, bAt ? Ink : Soft, 1.05f * U, Medium);
-		Y += 4.f * U;
+		float X = LeftX;
+		if (Item.Chip.A > 0.f)
+		{
+			Panel(X, RY + 2.f * U, 18.f * U, 18.f * U, FLinearColor(Item.Chip.R, Item.Chip.G, Item.Chip.B, 1.f));
+			X += 26.f * U;
+		}
+		const FLinearColor Colour = !Item.bEnabled ? FLinearColor(.5f, .55f, .6f, 1.f) : bAt ? Ink : Soft;
+		float LY = RY;
+		Line(Item.Label, X, LY, Colour, 1.02f * U, Medium);
+		if (!Item.Value.IsEmpty())
+		{
+			float VW = 0.f, VH = 0.f;
+			Canvas->StrLen(Medium, Item.Value, VW, VH);
+			float VY = RY + 2.f * U;
+			Line(Item.Value, LeftX + LeftW - VW * .9f * U, VY, Item.bEnabled ? Champagne : FLinearColor(.5f, .55f, .6f, 1.f), .9f * U, Medium);
+		}
 	}
-	if (Items.IsValidIndex(Mode->MenuIndex()))
+	if (First > 0)
 	{
-		Y += 12.f * U;
-		Paragraph(Items[Mode->MenuIndex()].Detail, X, Y, 660.f * U, Champagne, .9f * U, Medium);
+		float AY = ListTop - 18.f * U;
+		Line(TEXT("▲"), LeftX + LeftW * .5f, AY, Soft, .8f * U, Medium);
+	}
+	if (First + Fits < Page.Items.Num())
+	{
+		float AY = ListTop + Fits * RowH;
+		Line(TEXT("▼"), LeftX + LeftW * .5f, AY, Soft, .8f * U, Medium);
+	}
+	// The focused line's words, under the list.
+	float DY = H * .77f;
+	if (Page.Items.IsValidIndex(Focus))
+	{
+		Paragraph(Page.Items[Focus].Detail, LeftX, DY, LeftW, Soft, .9f * U, Medium);
+	}
+	float KY = H - 34.f * U;
+	Line(TEXT("A / Enter chooses   ·   ◀ ▶ changes   ·   B / Esc back"), LeftX, KY, FLinearColor(.6f, .66f, .72f, 1.f), .8f * U, Medium);
+	// The right side: the story, then notes, then a table.
+	float SY = H * .07f;
+	if (!Page.Story.IsEmpty())
+	{
+		Paragraph(Page.Story, RightX, SY, RightW, Ink, .95f * U, Medium);
+		SY += 12.f * U;
+	}
+	for (const FString& Note : Page.Notes)
+	{
+		Paragraph(Note, RightX, SY, RightW, Champagne, .9f * U, Medium);
+		SY += 4.f * U;
+	}
+	if (!Page.RowsTitle.IsEmpty() && Page.Rows.Num() > 0)
+	{
+		SY += 14.f * U;
+		Line(Page.RowsTitle.ToUpper(), RightX, SY, Champagne, .8f * U, Medium);
+		for (const AIceRunGameMode::FMenuRow& Row : Page.Rows)
+		{
+			if (SY > H - 60.f * U)
+			{
+				break;
+			}
+			const FLinearColor C = Row.bYou ? Champagne : Soft;
+			float RY = SY;
+			Line(Row.Left, RightX, RY, C, .9f * U, Medium);
+			float MY = SY;
+			Line(Row.Middle, RightX + 34.f * U, MY, C, .9f * U, Medium);
+			if (!Row.Right.IsEmpty())
+			{
+				float RW = 0.f, RH = 0.f;
+				Canvas->StrLen(Medium, Row.Right, RW, RH);
+				float TY = SY;
+				Line(Row.Right, RightX + RightW - RW * .9f * U, TY, C, .9f * U, Medium);
+			}
+			SY = FMath::Max(RY, MY);
+		}
 	}
 }
 
@@ -194,6 +271,12 @@ void AIceRunHUD::DrawHUD()
 	{
 		Line(Mode->Faulted() ? TEXT("The skating engine stopped.") : TEXT("Starting Ice Lab…"), Margin, Y, Ink, 1.6f * U, Large);
 		Paragraph(Mode->Notice(), Margin, Y, Canvas->ClipX - 2 * Margin, Warning, 1.1f * U, Medium);
+		return;
+	}
+	if (Mode->Paused())
+	{
+		// A menu page is the whole screen's words; the skating readouts wait underneath.
+		DrawPage(Mode, U);
 		return;
 	}
 	const FIceState& S = F.State;
@@ -334,10 +417,6 @@ void AIceRunHUD::DrawHUD()
 	Canvas->StrLen(Medium, Keys, W, H);
 	Line(Keys, Canvas->ClipX - Margin - W * .85f * U, NY, FLinearColor(.6f, .66f, .72f, 1.f), .85f * U, Medium);
 	BalanceMeter(Obj(Raw, TEXT("balance")), Obj(Raw, TEXT("steady")), U);
-	if (Mode->Paused())
-	{
-		PauseMenu(Mode, U);
-	}
 }
 
 void AIceRunHUD::BalanceMeter(const TSharedPtr<FJsonObject>& B, const TSharedPtr<FJsonObject>& Steady, float U)

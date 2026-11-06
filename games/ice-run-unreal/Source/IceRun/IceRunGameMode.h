@@ -21,7 +21,8 @@ class AIceRunPlayerController;
  * (or none for the original schemes), -IceMode=free|career|rookie|timed,
  * -IceEvent=N, -IceSteady=off|light|firm, -IceSkater=Athlete|Competition|Berserker|Violet (or -IceModel=/Game/...),
  * -IceSmoke (the headless check), -IceCamera=N, and for stills -IceShots=2,5.5,9 -IceShotDir=<dir>
- * (the game quits after the last one); -IceAuto carves left and right on a clock instead of the pad.
+ * (the game quits after the last one); -IceAuto carves left and right on a clock instead of the pad;
+ * -IceMenuTest walks the menus headless (UNREAL_MENUS_PASS); -IceOpenMenu=<page> for a still of a page.
  */
 UCLASS()
 class AIceRunGameMode : public AGameModeBase
@@ -34,18 +35,50 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 
-	/** One line of the pause menu: Accept on A / Enter, Adjust on left / right. */
+	/** One line of a menu page: Accept on A / Enter, Adjust on left / right. */
 	struct FMenuItem
 	{
 		FString Label;
+		/** Right-aligned: a medal, a cost, a setting's value. */
+		FString Value;
+		/** The side panel's words while it has focus. */
 		FString Detail;
 		TFunction<void()> Accept;
 		TFunction<void(int32)> Adjust;
+		bool bEnabled = true;
+		/** A section title: drawn, never focused. */
+		bool bHeader = false;
+		/** A colour swatch before the label, when it has any alpha. */
+		FLinearColor Chip = FLinearColor(0, 0, 0, 0);
+	};
+	/** A table line: standings, a protocol. */
+	struct FMenuRow
+	{
+		FString Left;
+		FString Middle;
+		FString Right;
+		bool bYou = false;
+	};
+	/** A whole menu page, rebuilt from the latest snapshot whenever it changes. */
+	struct FMenuPage
+	{
+		FString Id;
+		FString Title;
+		FString Subtitle;
+		/** A paragraph for the side panel: the chapter, the season. */
+		FString Story;
+		/** Lines under it: the coach, a protocol's totals. */
+		TArray<FString> Notes;
+		TArray<FMenuItem> Items;
+		FString RowsTitle;
+		TArray<FMenuRow> Rows;
 	};
 
 	bool Paused() const { return bPaused; }
-	const TArray<FMenuItem>& MenuItems() const { return Menu; }
+	const FMenuPage& Page() const { return MenuPage; }
 	int32 MenuIndex() const { return MenuAt; }
+	/** The camera turns slowly round the skater while a menu is up (main.gd's showcase). */
+	bool Showcase() const { return bPaused && !bShotsWithoutMenu; }
 
 	const FIceFrame& Frame() const { return Latest; }
 	const FString& Notice() const { return NoticeText; }
@@ -62,13 +95,44 @@ private:
 	void Fail(const FString& Message);
 	void Present(const FIceFrame& Frame, bool bSnap);
 	void HandleMenus();
-	void OpenMenu();
+	/** Opens the menu on a page (the bottom of its stack); the run waits underneath. */
+	void OpenMenu(const FString& PageId = TEXT("home"));
 	void CloseMenu();
-	void BuildMenu();
+	void PushPage(const FString& PageId);
+	/** Back: the page before, or the ice when there is a run to go back to. */
+	void PopPage();
+	/** The current page again, from the latest snapshot, keeping the focus where it was. */
+	void RebuildPage();
+	void BuildPage(const FString& Id, FMenuPage& Out);
+	void BuildHome(FMenuPage& P);
+	void BuildSeason(FMenuPage& P);
+	void BuildEvent(FMenuPage& P);
+	void BuildTraining(FMenuPage& P);
+	void BuildStyle(FMenuPage& P);
+	void BuildComposer(FMenuPage& P);
+	void BuildWardrobe(FMenuPage& P);
+	void BuildDesign(FMenuPage& P);
+	void BuildLessons(FMenuPage& P);
+	void BuildSettings(FMenuPage& P);
+	void BuildResult(FMenuPage& P);
+	void MoveFocus(int32 By);
+	void SendOp(const FString& Op, const TSharedRef<FJsonObject>& Payload);
+	/** The costume list: the catalog's presets, then your atelier designs that exist. */
+	TArray<TSharedPtr<FJsonObject>> Costumes() const;
+	void WearCostume();
+	void LoadSkaterModel();
+	void LoadPreferences();
+	void SavePreferences() const;
+	FString PreferencesPath() const;
+	/** A catalog list by key, or empty. */
+	const TArray<TSharedPtr<FJsonValue>>& CatalogList(const TCHAR* Key) const;
+	TSharedPtr<FJsonObject> CareerObject() const;
+	FString ElementTitle(const FString& Id) const;
 	/** A lesson needs its setup in force first: the course and its words are that pad's (main.gd start_lesson). */
 	void StartLesson(const FString& Course, const FString& NeededSetup);
 	void StartMode(const FString& Mode, int32 Event = 0);
 	void ChangeSetup(int32 By);
+	bool RunLive() const { return Latest.bValid && !Latest.bFinished; }
 	FString SetupName(const FString& Id) const;
 	void SmokeStep(float Dt);
 	void ShotStep(float Dt);
@@ -97,8 +161,36 @@ private:
 	FString SteadyChoice;
 
 	bool bPaused = false;
-	TArray<FMenuItem> Menu;
+	FMenuPage MenuPage;
+	TArray<FString> PageStack;
+	TArray<int32> FocusStack;
 	int32 MenuAt = 0;
+	bool bShotsWithoutMenu = false;
+	/** The career event the briefing page shows. */
+	int32 FocusEvent = 0;
+	/** The element the "+ Add" lines would add, by catalog order. */
+	int32 AddPick = 0;
+	/** The atelier: the slot being designed, and the design as it stands (game/atelier.ts). */
+	int32 DesignSlot = 0;
+	int32 DesignStart = 0;
+	TSharedPtr<FJsonObject> Design;
+	/** The Composer's program (main.gd's sequence), up to 16 phrases. */
+	TArray<FString> Sequence = {TEXT("glide"), TEXT("edge"), TEXT("jump"), TEXT("spin"), TEXT("pose")};
+	/** The wardrobe: which skater model, which costume (presets first, then your designs). */
+	int32 CharacterIndex = 0;
+	int32 CostumeIndex = 0;
+	/** Free skate's skater level (sim/profile.ts SAMPLE_PROFILES), sent as configure's profile. */
+	int32 ProfileIndex = 0;
+	/** Free skate's music (catalog tracks), sent as configure's track; the career plays its own. */
+	int32 TrackIndex = 0;
+	bool bMusicOn = true;
+	bool bMusicPaused = false;
+	/** Plays the run's own track from its start (the snapshot's track: a career program's laid music, else yours). */
+	void StartMusic();
+	/** An atelier slot just kept: worn once the wardrobe comes back with it. */
+	int32 PendingWearSlot = -1;
+	/** The title screen comes up once, over the first run. */
+	bool bTitleShown = false;
 	/** Seconds since the run finished, or -1: the menu opens once the result has been seen. */
 	double FinishedFor = -1.0;
 	/** Content/Generated/skaters.json's name for the model, or an object path with -IceModel=. */
@@ -110,6 +202,17 @@ private:
 	double ShotClock = 0.0;
 	int32 ShotsTaken = 0;
 	int32 StartCamera = 0;
+
+	/** -IceMenuTest: the menus driven headless, a player's way through them; prints UNREAL_MENUS_PASS. */
+	bool bMenuTest = false;
+	int32 MenuTestStage = 0;
+	double MenuTestClock = 0.0;
+	double MenuTestValue = 0.0;
+	void MenuTestStep(float Dt);
+	const FMenuItem* FindItem(const FString& Prefix) const;
+	bool AcceptItem(const FString& Prefix);
+	bool AdjustItem(const FString& Prefix, int32 By);
+	bool bPrefsLoaded = false;
 
 	bool bAuto = false;
 	bool bSmoke = false;
@@ -124,4 +227,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<AIceShotCamera> ShotCamera;
+
+	UPROPERTY()
+	TObjectPtr<class UAudioComponent> Music;
 };
