@@ -82,6 +82,8 @@ export interface CandidateRun {
   transform: Transform;
   required: Requirement;
   track: TrackFrame[];
+  /** JPSE-009: one MotionFrame per tick, for renderers and other stages. */
+  frames: MotionFrame[];
   report: CandidateReport;
   /** The edgework-replay/1 clip of this run. */
   replayJson: string;
@@ -159,6 +161,47 @@ function frameOf(s: SkaterState, prev: TrackFrame | null, p: Params): TrackFrame
   };
 }
 
+/** JPSE-009's record, docs/jpse/schema/motion-frame.schema.json. Unrounded. */
+export interface MotionBlade {
+  contact: { x: number; y: number }; tangent: { x: number; y: number }; tilt: number;
+  code: string; regime: string; inContact: boolean; normalLoad: number; weight: number;
+}
+export interface MotionFrame {
+  schema: "jpse-frame/1";
+  tick: number;
+  com: { x: number; y: number; z: number };
+  vel: { x: number; y: number };
+  heading: { x: number; y: number };
+  yawRate: number; lean: number; knee: number;
+  supportFoot: number; supportMode: number; fallen: boolean;
+  jumpPhase: "none" | "load" | "air";
+  rotation: number; angMomentum: number; inertia: number;
+  blades: [MotionBlade, MotionBlade];
+  kappaCom: number; kappaBaseline: number; alpha: number;
+}
+
+const PHASE_NAME = ["none", "load", "air"] as const;
+
+function motionFrame(s: SkaterState, f: TrackFrame): MotionFrame {
+  const blade = (i: 0 | 1): MotionBlade => {
+    const b = s.blade[i];
+    return {
+      contact: { ...b.contact }, tangent: { ...b.tangent }, tilt: b.tilt, code: codeToString(b.code),
+      regime: REGIME_NAME[b.regime], inContact: b.inContact, normalLoad: b.normalLoad, weight: b.weight,
+    };
+  };
+  return {
+    schema: "jpse-frame/1", tick: s.tick,
+    com: { x: s.pos.x, y: s.pos.y, z: s.comZ }, vel: { ...s.vel }, heading: { ...s.heading },
+    yawRate: s.yawRate, lean: s.lean, knee: s.knee,
+    supportFoot: s.supportFoot, supportMode: s.supportMode, fallen: s.fallen,
+    jumpPhase: PHASE_NAME[s.jump.phase] ?? "none",
+    rotation: s.jump.rotation, angMomentum: s.jump.angMomentum, inertia: s.jump.inertia,
+    blades: [blade(0), blade(1)],
+    kappaCom: f.kappaCom, kappaBaseline: f.kappaBaseline, alpha: f.alpha,
+  };
+}
+
 const mean = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
 /**
@@ -194,6 +237,7 @@ export function runCandidate(
   const rec = new ReplayRecorder(p, prog.speed, 0);
   const required = requirementFor(jumpKind, t);
   const track: TrackFrame[] = [];
+  const frames: MotionFrame[] = [];
   let takeoff: CandidateReport["takeoff"] = null, landing: CandidateReport["landing"] = null;
   let loadStart = -1, loadLapsed = -1, landTick = -1, finite = true, prevPhase: number = JUMP_PHASE.None;
   let lastGround: TrackFrame | null = null;
@@ -204,6 +248,7 @@ export function runCandidate(
     try { rec.capture(input, p, s, events); } catch { finite = false; break; }
     const f = frameOf(s, track.length ? track[track.length - 1] : null, p);
     track.push(f);
+    frames.push(motionFrame(s, f));
     if (loadStart < 0 && s.jump.phase === JUMP_PHASE.Load) loadStart = s.tick;
     if (loadLapsed < 0 && prevPhase === JUMP_PHASE.Load && s.jump.phase === JUMP_PHASE.None) loadLapsed = s.tick;
     prevPhase = s.jump.phase;
@@ -303,7 +348,7 @@ export function runCandidate(
     landing, gates, rejected: reasons.length > 0, reasons,
     replay: { ticks: replayTicks, digest: rec.lastDigest, verified },
   };
-  return { id, transform: t, required, track, report, replayJson: rec.toJson() };
+  return { id, transform: t, required, track, frames, report, replayJson: rec.toJson() };
 }
 
 // ── invariants across candidates ────────────────────────────────────────────

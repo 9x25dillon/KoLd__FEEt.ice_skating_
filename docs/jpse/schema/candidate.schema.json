@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kold-feet.invalid/jpse/candidate.schema.json",
+  "title": "Candidate",
+  "description": "One entrance to try: a canonical InputProgram, the transform applied to it, and the jump it is held to.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "jpse-candidate/1"
+    },
+    "id": {
+      "type": "string"
+    },
+    "transform": {
+      "$ref": "#/$defs/Transform"
+    },
+    "jump": {
+      "enum": [
+        "T",
+        "S",
+        "Lo",
+        "F",
+        "Lz",
+        "A",
+        "none"
+      ]
+    },
+    "setup": {
+      "type": "string"
+    },
+    "program": {
+      "$ref": "input-program.schema.json"
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "transform",
+    "jump",
+    "setup",
+    "program"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Transform": {
+      "type": "object",
+      "properties": {
+        "mirror": {
+          "type": "boolean"
+        },
+        "reverse": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mirror",
+        "reverse"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

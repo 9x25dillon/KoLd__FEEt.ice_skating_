@@ -1,9 +1,10 @@
-// node jpse/cli.ts [--out report.json] [--replays dir]
+// node jpse/cli.ts [--out report.json] [--replays dir] [--frames dir]
 //
 // Runs issue #74's first JPSE slice (the measured double loop, four entrance
 // candidates) and prints what Ice Lab did with each. --out writes the full
 // deterministic report; --replays writes each candidate's edgework-replay/1
-// clip, which `node replay/verify.ts` and the browser player both accept.
+// clip, which `node replay/verify.ts` and the browser player both accept;
+// --frames writes each candidate's MotionFrame stream (JPSE-009) as JSON lines.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -43,4 +44,9 @@ const dir = opt("--replays");
 if (dir) {
   mkdirSync(dir, { recursive: true });
   for (const r of runs) writeFileSync(join(dir, `jpse-${r.id.replace("+", "-")}.replay.json`), r.replayJson);
+}
+const framesDir = opt("--frames");
+if (framesDir) {
+  mkdirSync(framesDir, { recursive: true });
+  for (const r of runs) writeFileSync(join(framesDir, `jpse-${r.id.replace("+", "-")}.frames.jsonl`), r.frames.map((f) => JSON.stringify(f)).join("\n") + "\n");
 }

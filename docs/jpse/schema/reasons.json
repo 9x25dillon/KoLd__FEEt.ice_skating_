@@ -1,0 +1,53 @@
+{
+  "schema": "jpse-reasons/1",
+  "description": "The closed list of hard gates, in evaluation order, and the reason each fails with. A reason is the prefix, then optional detail after it. Adding a gate or a prefix is an additive change.",
+  "gates": [
+    {
+      "gate": "finite-state",
+      "reasons": [
+        "state:non-finite"
+      ]
+    },
+    {
+      "gate": "replay-deterministic",
+      "reasons": [
+        "replay:diverged"
+      ]
+    },
+    {
+      "gate": "rotation-modelled",
+      "reasons": [
+        "rotation:cw-not-modelled"
+      ]
+    },
+    {
+      "gate": "took-off",
+      "reasons": [
+        "takeoff:none"
+      ]
+    },
+    {
+      "gate": "takeoff-edge",
+      "reasons": [
+        "takeoff-edge:"
+      ],
+      "when": "only after a takeoff"
+    },
+    {
+      "gate": "takeoff-contact",
+      "reasons": [
+        "takeoff-contact:"
+      ],
+      "when": "only after a takeoff; detail is the solver's regime"
+    },
+    {
+      "gate": "completed",
+      "reasons": [
+        "landing:none",
+        "landing:called-",
+        "landing:fell",
+        "landing:stood-"
+      ]
+    }
+  ]
+}

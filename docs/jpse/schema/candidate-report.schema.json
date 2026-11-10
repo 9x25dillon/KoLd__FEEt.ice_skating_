@@ -1,0 +1,473 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kold-feet.invalid/jpse/candidate-report.schema.json",
+  "title": "CandidateReport",
+  "description": "What the solver did with one candidate, and the hard gates it passed or failed. Numbers rounded to 1e-6.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "transform": {
+      "$ref": "candidate.schema.json#/$defs/Transform"
+    },
+    "initialSpeed": {
+      "type": "number"
+    },
+    "required": {
+      "$ref": "#/$defs/Requirement"
+    },
+    "entrance": {
+      "$ref": "#/$defs/Entrance"
+    },
+    "takeoff": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Takeoff"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "flight": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Flight"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "landing": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Landing"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Gate"
+      }
+    },
+    "rejected": {
+      "type": "boolean"
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "replay": {
+      "type": "object",
+      "properties": {
+        "ticks": {
+          "type": "integer"
+        },
+        "digest": {
+          "type": "integer"
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ticks",
+        "digest",
+        "verified"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "id",
+    "transform",
+    "initialSpeed",
+    "required",
+    "entrance",
+    "takeoff",
+    "flight",
+    "landing",
+    "gates",
+    "rejected",
+    "reasons",
+    "replay"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Requirement": {
+      "type": "object",
+      "properties": {
+        "jump": {
+          "enum": [
+            "T",
+            "S",
+            "Lo",
+            "F",
+            "Lz",
+            "A",
+            "none"
+          ]
+        },
+        "takeoff": {
+          "type": "string",
+          "pattern": "^([LR][FB-][OI-]|---)$"
+        },
+        "toe": {
+          "type": "boolean"
+        },
+        "rotation": {
+          "enum": [
+            "ccw",
+            "cw"
+          ]
+        }
+      },
+      "required": [
+        "jump",
+        "takeoff",
+        "toe",
+        "rotation"
+      ],
+      "additionalProperties": false
+    },
+    "Entrance": {
+      "type": "object",
+      "properties": {
+        "ticks": {
+          "type": "integer"
+        },
+        "loadStartTick": {
+          "type": "integer"
+        },
+        "loadLapsedTick": {
+          "type": "integer"
+        },
+        "edgeTimeline": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "integer"
+              },
+              "to": {
+                "type": "integer"
+              },
+              "code": {
+                "type": "string",
+                "pattern": "^([LR][FB-][OI-]|---)$"
+              },
+              "mode": {
+                "enum": [
+                  0,
+                  1,
+                  2
+                ]
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "code",
+              "mode"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "comPath": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "bladePath": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "meanKappaCom": {
+          "type": "number"
+        },
+        "meanKappaBlade": {
+          "type": "number"
+        },
+        "meanKappaBaseline": {
+          "type": "number"
+        },
+        "meanKappaBaselineError": {
+          "type": "number"
+        },
+        "maxBladeSkew": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ticks",
+        "loadStartTick",
+        "loadLapsedTick",
+        "edgeTimeline",
+        "comPath",
+        "bladePath",
+        "meanKappaCom",
+        "meanKappaBlade",
+        "meanKappaBaseline",
+        "meanKappaBaselineError",
+        "maxBladeSkew"
+      ],
+      "additionalProperties": false
+    },
+    "Takeoff": {
+      "type": "object",
+      "properties": {
+        "tick": {
+          "type": "integer"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^([LR][FB-][OI-]|---)$"
+        },
+        "regime": {
+          "enum": [
+            "UNLOADED",
+            "GLIDE",
+            "EDGE",
+            "CARVE",
+            "SKID",
+            "TOEPICK",
+            "BRAKE"
+          ]
+        },
+        "simCalls": {
+          "enum": [
+            "T",
+            "S",
+            "Lo",
+            "F",
+            "Lz",
+            "A",
+            "none"
+          ]
+        },
+        "com": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "vel": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "speed": {
+          "type": "number"
+        },
+        "lean": {
+          "type": "number"
+        },
+        "yawRate": {
+          "type": "number"
+        },
+        "blade": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "bladeHeading": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "alpha": {
+          "type": "number"
+        },
+        "supportLoad": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "vz": {
+          "type": "number"
+        },
+        "angMomentum": {
+          "type": "number"
+        },
+        "quality": {
+          "type": "number"
+        },
+        "edgeError": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "tick",
+        "code",
+        "regime",
+        "simCalls",
+        "com",
+        "vel",
+        "speed",
+        "lean",
+        "yawRate",
+        "blade",
+        "bladeHeading",
+        "alpha",
+        "supportLoad",
+        "vz",
+        "angMomentum",
+        "quality",
+        "edgeError"
+      ],
+      "additionalProperties": false
+    },
+    "Flight": {
+      "type": "object",
+      "properties": {
+        "airTime": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "peakOmega": {
+          "type": "number"
+        },
+        "comPath": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      },
+      "required": [
+        "airTime",
+        "height",
+        "peakOmega",
+        "comPath"
+      ],
+      "additionalProperties": false
+    },
+    "Landing": {
+      "type": "object",
+      "properties": {
+        "tick": {
+          "type": "integer"
+        },
+        "simCalls": {
+          "enum": [
+            "T",
+            "S",
+            "Lo",
+            "F",
+            "Lz",
+            "A",
+            "none"
+          ]
+        },
+        "turned": {
+          "type": "number"
+        },
+        "rotationCall": {
+          "enum": [
+            "clean",
+            "q",
+            "<",
+            "<<"
+          ]
+        },
+        "edgeCall": {
+          "enum": [
+            "clean",
+            "!",
+            "e"
+          ]
+        },
+        "fall": {
+          "type": "boolean"
+        },
+        "twoFoot": {
+          "type": "boolean"
+        },
+        "stepOut": {
+          "type": "boolean"
+        },
+        "landingQuality": {
+          "type": "number"
+        },
+        "stoodTicks": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tick",
+        "simCalls",
+        "turned",
+        "rotationCall",
+        "edgeCall",
+        "fall",
+        "twoFoot",
+        "stepOut",
+        "landingQuality",
+        "stoodTicks"
+      ],
+      "additionalProperties": false
+    },
+    "Gate": {
+      "type": "object",
+      "properties": {
+        "gate": {
+          "type": "string"
+        },
+        "pass": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "gate",
+        "pass"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
