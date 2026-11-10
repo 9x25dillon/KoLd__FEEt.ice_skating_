@@ -3,14 +3,20 @@
 // canonical, mirror, reverse, mirror+reverse — each run through the
 // unmodified solver, with a deterministic report.
 //
-// MEASURED 2026-11-09, on the Experimental setup with the sheet on:
-//   canonical       RBO off a CARVE, called Lo, 1.971 revolutions, clean, stood 144 ticks: ACCEPTED
-//   mirror          LBO off a SKID, no jump, 0.58 revolutions, fell: rotation:cw-not-modelled, takeoff-contact:SKID
-//   reverse         RFO swivels to RBO mid-SKID, no rotation at all: takeoff-contact:SKID
-//   mirror+reverse  loads on LFO, the load lapses, never leaves the ice: takeoff:none
-// The mirror on the ice is exact until the solver's own handedness parts it:
-// the sheet's row boundary at y = 0, the tick-seeded fatigue wobble, and the
-// two-foot tie that goes to the right foot.
+// MEASURED 2026-11-09, on the Experimental setup with the sheet on, before
+// jumpDirMode: the canonical accepted; the mirror off a SKID, no jump
+// (rotation:cw-not-modelled); the reverse swivelling RFO to RBO mid-SKID; the
+// mirror+reverse's load lapsing. The mirror on the ice was exact until the
+// solver's own handedness parted it: the sheet's row boundary at y = 0, the
+// tick-seeded fatigue wobble, and the two-foot tie that went to the right foot.
+//
+// MEASURED 2026-11-09, jumpDirMode on in every setup (a jump turns the way its
+// entry turns it; the tie keeps its foot):
+//   canonical       RBO off a CARVE, Lo, 1.971 revolutions ccw, stood: ACCEPTED
+//   mirror          LBO off a CARVE, Lo, 1.971 revolutions cw, L -28.3, stood: ACCEPTED
+//   reverse         the load lapses: takeoff:none
+//   mirror+reverse  the load lapses: takeoff:none
+// With the sheet and the wobble off the mirror is exact through the entrance.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -82,23 +88,24 @@ test("naming each push's leg changes nothing the solver does", () => {
     runCandidate("b", pinned, id, p, JUMP.Loop, 144).report.replay.digest);
 });
 
-test("the transformed entrances fail hard gates, each for its own measured reason", () => {
-  assert.deepEqual(report.accepted, ["canonical"]);
-  const m = cand("mirror"), r = cand("reverse"), mr = cand("mirror+reverse");
-  assert.ok(m.reasons.some((x) => x.startsWith("rotation:cw-not-modelled")));
-  assert.ok(m.reasons.includes("takeoff-contact:SKID"));
-  assert.equal(m.takeoff!.code, "LBO");
-  // The reverse leaves on the loop's own code, RBO, but off a blade the solver has skidding
-  // across its path: the code alone would have passed it.
-  assert.equal(r.takeoff!.code, "RBO");
-  assert.ok(r.gates.find((g) => g.gate === "takeoff-edge")!.pass);
-  assert.deepEqual(r.reasons.filter((x) => x.startsWith("takeoff")), ["takeoff-contact:SKID"]);
-  assert.ok(bladeSkew(r.takeoff!.alpha) > 1, `skew ${bladeSkew(r.takeoff!.alpha)}`);
-  assert.equal(mr.takeoff, null);
-  assert.ok(mr.reasons.includes("takeoff:none"));
-  assert.ok(mr.entrance.loadStartTick > 0 && mr.entrance.loadLapsedTick > mr.entrance.loadStartTick, "loaded, then the load lapsed");
+test("both directions land the loop; the reversed entrances never leave the ice", () => {
+  assert.deepEqual(report.accepted, ["canonical", "mirror"]);
+  const c = cand("canonical"), m = cand("mirror"), r = cand("reverse"), mr = cand("mirror+reverse");
+  assert.equal(m.takeoff!.code, "LBO"); assert.equal(m.takeoff!.simCalls, "Lo"); assert.equal(m.takeoff!.direction, "cw");
+  assert.equal(m.landing!.simCalls, "Lo"); assert.equal(m.landing!.direction, "cw"); assert.equal(m.landing!.rotationCall, "clean");
+  assert.equal(c.takeoff!.direction, "ccw");
+  // The mirror's angular momentum is the canonical's, turned the other way, to the wobble's last digits.
+  assert.ok(Math.abs(m.takeoff!.angMomentum + c.takeoff!.angMomentum) < 0.05, `${m.takeoff!.angMomentum} vs ${c.takeoff!.angMomentum}`);
+  assert.ok(Math.abs(m.landing!.turned - c.landing!.turned) < 0.01);
+  for (const x of [r, mr]) { assert.equal(x.takeoff, null); assert.ok(x.reasons.includes("takeoff:none"), x.id); }
   // A hard failure is never bought back: every rejected candidate carries a reason per failed gate.
-  for (const c of report.candidates) assert.equal(c.rejected, c.gates.some((g) => !g.pass));
+  for (const k of report.candidates) assert.equal(k.rejected, k.gates.some((g) => !g.pass));
+});
+
+test("at jumpDirMode 0 the mirror cannot turn clockwise: the gate says so", () => {
+  const p = { ...baselineParams(), jumpDirMode: 0 };
+  const m = runCandidate("mirror", pinPushFeet(loopBaselineProgram(), p), { mirror: true, reverse: false }, p, JUMP.Loop, BASELINE.runOut);
+  assert.ok(m.report.reasons.some((x) => x.startsWith("rotation:cw-not-modelled")));
 });
 
 test("the mirror on the ice is exact wherever the solver is symmetric", () => {
@@ -116,10 +123,15 @@ test("the mirror on the ice is exact wherever the solver is symmetric", () => {
       runCandidate("m", carve, { mirror: true, reverse: false }, q, JUMP.Loop, 144), q);
     assert.equal(k.pass, false); assert.equal(k.cause, cause);
   }
-  // The baseline entrance, sheet and wobble off: exact for 118 ticks, then the two-foot tie.
+  // The baseline entrance, sheet and wobble off: exact all through, since jumpDirMode keeps the tie's foot.
   const ctl = report.invariants.mirrorControlled;
-  assert.equal(ctl.divergesAtTick, 119); assert.equal(ctl.cause, "two-foot-tie"); assert.equal(ctl.feetSwapped, true);
-  assert.equal(report.invariants.reverseMirrorControlled.cause, "two-foot-tie");
+  assert.equal(ctl.pass, true); assert.equal(ctl.maxPositionError, 0); assert.equal(ctl.feetSwapped, true);
+  assert.equal(report.invariants.reverseMirrorControlled.pass, true);
+  // At jumpDirMode 0 the two-foot tie went to the right foot and parted it at tick 119.
+  const old = { ...p, jumpDirMode: 0 }, prog = pinPushFeet(loopBaselineProgram(), old);
+  const k0 = checkMirror(runCandidate("c", prog, { mirror: false, reverse: false }, old, JUMP.Loop, 144),
+    runCandidate("m", prog, { mirror: true, reverse: false }, old, JUMP.Loop, 144), old);
+  assert.equal(k0.divergesAtTick, 119); assert.equal(k0.cause, "two-foot-tie");
   // P(L - s): the reverse traverses the curve the other way round.
   assert.equal(report.invariants.reverseCurvatureSense.flipped, true);
 });

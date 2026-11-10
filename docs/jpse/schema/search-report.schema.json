@@ -88,6 +88,10 @@
         },
         "repeat": {
           "type": "integer"
+        },
+        "transform": {
+          "$ref": "candidate.schema.json#/$defs/Transform",
+          "description": "Optional: added after jpse-search/1 shipped."
         }
       },
       "required": [

@@ -13,9 +13,10 @@ import { DEFAULT_PARAMS } from "../sim/params.ts";
 import { fingerprint } from "./pitch-gain-sweep.ts";
 import type { Fingerprint } from "./pitch-gain-sweep.ts";
 
-// MEASURED 2026-09-24, pitchGain 1 (the sweep's row).
+// MEASURED 2026-09-24, pitchGain 1 (the sweep's row). digLate 0 -> -0.144 on
+// 2026-11-09: with jumpDirMode the late dig's wrong-way winding turns clockwise.
 const PINNED: Fingerprint = {
-  counter: 0.126, arrive: 1.300, windLate: -0.207, digLate: 0,
+  counter: 0.126, arrive: 1.300, windLate: -0.207, digLate: -0.144,
   windEarly: 1.005, digEarly: 5.085, plowLeanBack: -0.069, caughtDown: 0.392,
 };
 const TOL = 0.005;

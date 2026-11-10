@@ -50,6 +50,11 @@
 // weight goes across after it (pushFoot and weight change on push ticks);
 // Simulation's scripted fall 711 -> 715, Explorer's 694 -> 696. The encoding
 // now writes a field that disappears (a push's pushFoot) as null.
+// Re-recorded (2026-11-09, solver /39), operator-directed: jumpDirMode on in
+// every setup — a jump turns the way its entry turns it. The experimental and
+// diggate scripts part from tick 1182 (the pad's mapping reads the skater's
+// state, and the mode changed what the script's skating did before then);
+// simulation's mapping is unchanged.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";

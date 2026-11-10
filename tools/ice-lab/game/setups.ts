@@ -48,6 +48,10 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   if (exp) p.freeLegMode = 1;
   // A landing pays for the energy the ice takes (staminaLandingMode): the operator's choice, 2026-10-31.
   if (exp) p.staminaLandingMode = 1;
+  // A jump turns the way its entry turns it, clockwise or counter-clockwise
+  // (jumpDirMode): the operator's choice, 2026-11-09 — "something you can
+  // choose by using the skates, like how you enter the jump". Every setup.
+  p.jumpDirMode = 1;
   return p;
 }
 export function setupInput(c: Controls, s: SkaterState, setup: Setup, st: GameControlState, p: Params, profile: ControllerProfile, assistance = 0.75) {

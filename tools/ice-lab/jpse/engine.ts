@@ -127,6 +127,8 @@ export interface CandidateReport {
     /** The solver's own contact regime for the support blade on the last tick on the ice. */
     regime: string;
     simCalls: string;
+    /** The way the jump turns from this takeoff (jumpDirMode 1 decides it; at 0 always ccw). Optional: added after jpse-report/1 shipped. */
+    direction?: "ccw" | "cw";
     com: [number, number];
     vel: [number, number];
     speed: number;
@@ -143,7 +145,10 @@ export interface CandidateReport {
   };
   flight: null | { airTime: number; height: number; peakOmega: number; comPath: Array<[number, number]> };
   landing: null | {
-    tick: number; simCalls: string; turned: number; rotationCall: string; edgeCall: string;
+    tick: number; simCalls: string;
+    /** Optional: added after jpse-report/1 shipped. */
+    direction?: "ccw" | "cw";
+    turned: number; rotationCall: string; edgeCall: string;
     fall: boolean; twoFoot: boolean; stepOut: boolean; landingQuality: number; stoodTicks: number;
   };
   gates: Gate[];
@@ -267,6 +272,7 @@ export function runCandidate(
       const g = lastGround, J = s.jump;
       takeoff = {
         tick: s.tick, code: codeToString(J.takeoffCode), regime: REGIME_NAME[g.regime],
+        direction: (J.rotDir ?? 1) < 0 ? "cw" : "ccw",
         simCalls: J.kind === JUMP_NONE ? "none" : JUMP_CODE[J.kind],
         com: pt(g.com), vel: pt(g.vel), speed: r6(len(g.vel)), lean: r6(g.lean), yawRate: r6(s.yawRate),
         blade: pt(g.blade), bladeHeading: pt(g.bladeTangent), alpha: r6(g.alpha),
@@ -279,7 +285,8 @@ export function runCandidate(
       const L = s.landed;
       landTick = s.tick;
       landing = {
-        tick: s.tick, simCalls: L.kind === JUMP_NONE ? "none" : JUMP_CODE[L.kind], turned: r6(L.turned),
+        tick: s.tick, simCalls: L.kind === JUMP_NONE ? "none" : JUMP_CODE[L.kind],
+        direction: (L.direction ?? 1) < 0 ? "cw" : "ccw", turned: r6(L.turned),
         rotationCall: ROTATION_MARK[L.rotationCall] || "clean", edgeCall: EDGE_MARK[L.edgeCall] || "clean",
         fall: L.fall, twoFoot: L.twoFoot, stepOut: L.stepOut, landingQuality: r6(L.landingQuality), stoodTicks: 0,
       };
@@ -338,7 +345,7 @@ export function runCandidate(
   const gate = (name: string, pass: boolean, reason: string) => gates.push(pass ? { gate: name, pass } : { gate: name, pass, reason });
   gate("finite-state", finite, "state:non-finite");
   gate("replay-deterministic", verified, "replay:diverged");
-  gate("rotation-modelled", required.rotation === "ccw", "rotation:cw-not-modelled (sim/jump.ts models counter-clockwise only)");
+  gate("rotation-modelled", required.rotation === "ccw" || p.jumpDirMode >= 1, "rotation:cw-not-modelled (jumpDirMode 0: every jump turns counter-clockwise)");
   gate("took-off", takeoff !== null, "takeoff:none");
   if (takeoff) gate("takeoff-edge", takeoff.code === required.takeoff,
     `takeoff-edge:${takeoff.code}!=${required.takeoff}` + (takeoff.simCalls !== "none" ? ` (the solver calls it ${takeoff.simCalls})` : ""));
@@ -348,9 +355,11 @@ export function runCandidate(
   // RBO mid-skid and "takes off RBO" with the blade 110 degrees across its path).
   const okRegime: number[] = [REGIME.Glide, REGIME.Edge, REGIME.Carve, REGIME.ToePick];
   if (takeoff) gate("takeoff-contact", okRegime.includes(REGIME_NAME.indexOf(takeoff.regime as never)), `takeoff-contact:${takeoff.regime}`);
-  const completed = !!landing && landing.simCalls === required.jump && !landing.fall && landing.stoodTicks >= runOut;
+  const completed = !!landing && landing.simCalls === required.jump && landing.direction === required.rotation
+    && !landing.fall && landing.stoodTicks >= runOut;
   gate("completed", completed,
     !landing ? "landing:none" : landing.simCalls !== required.jump ? `landing:called-${landing.simCalls}`
+      : landing.direction !== required.rotation ? `landing:turned-${landing.direction}`
       : landing.fall || landing.stoodTicks < runOut && s.fallen ? "landing:fell" : `landing:stood-${landing.stoodTicks}-of-${runOut}-ticks`);
   const reasons = gates.filter((g) => !g.pass).map((g) => g.reason!);
 
@@ -393,7 +402,7 @@ export const SOLVER_HANDEDNESS = [
     off: "staminaMode 0" },
   { id: "two-foot-tie", where: "sim/solver.ts supportFoot = weights[1] >= weights[0] ? Right : Left",
     what: "on two feet at exactly equal weight the support (and so the heading's) blade is the right one, for a mirrored skater too",
-    off: "no input off-switch; weight 0.5 on two feet is the tie" },
+    off: "jumpDirMode 1: the tie keeps the foot that was carrying (2026-11-09)" },
 ] as const;
 
 export interface MirrorCheck {
@@ -439,7 +448,7 @@ export function checkMirror(a: CandidateRun, m: CandidateRun, params: Params): M
     // The earliest source that was on and can explain it: a two-foot tie the
     // tick before, else the sheet, else the wobble.
     const prev = at > 0 ? at - 1 : 0, f = a.track[prev], g = m.track[prev];
-    if (f.supportMode === 2 && g.supportMode === 2 && f.supportFoot === g.supportFoot) cause = "two-foot-tie";
+    if (params.jumpDirMode < 1 && f.supportMode === 2 && g.supportMode === 2 && f.supportFoot === g.supportFoot) cause = "two-foot-tie";
     else if (params.iceGridMode === 1) cause = "ice-grid";
     else if (params.staminaMode === 1) cause = "fatigue-noise";
     else cause = "unattributed";

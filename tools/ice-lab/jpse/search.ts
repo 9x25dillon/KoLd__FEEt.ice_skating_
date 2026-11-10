@@ -15,7 +15,8 @@
 
 import { BASELINE, BASELINE_KNOBS, baselineParams, loopBaselineProgram } from "./baseline.ts";
 import type { EntranceKnobs } from "./baseline.ts";
-import { pinPushFeet, runCandidate } from "./engine.ts";
+import { pinPushFeet, requirementFor, runCandidate } from "./engine.ts";
+import type { Transform } from "./transform.ts";
 import type { Params } from "../sim/params.ts";
 
 export interface SearchSpec {
@@ -24,6 +25,8 @@ export interface SearchSpec {
   axes: Partial<Record<keyof EntranceKnobs, number[]>>;
   /** How many of the first points to evaluate twice, to measure repeatability. */
   repeat: number;
+  /** The transform every point is skated under; absent, the canonical. Optional: added after jpse-search/1 shipped. */
+  transform?: Transform;
 }
 
 export interface SearchPoint {
@@ -68,8 +71,10 @@ export function gridPoints(spec: SearchSpec, base: EntranceKnobs = BASELINE_KNOB
 const r6 = (x: number): number => Math.round(x * 1e6) / 1e6;
 const prefix = (reason: string): string => reason.split(" ")[0].replace(/(:[a-z]+-).*/, "$1").replace(/-\d.*$/, "-");
 
-function evaluate(index: number, knobs: EntranceKnobs, p: Params, revs: number): { point: SearchPoint; ticks: number } {
-  const run = runCandidate(`grid-${index}`, pinPushFeet(loopBaselineProgram(knobs), p), { mirror: false, reverse: false }, p, BASELINE.jump, BASELINE.runOut);
+const CANONICAL: Transform = { mirror: false, reverse: false };
+
+function evaluate(index: number, knobs: EntranceKnobs, p: Params, revs: number, t: Transform): { point: SearchPoint; ticks: number } {
+  const run = runCandidate(`grid-${index}`, pinPushFeet(loopBaselineProgram(knobs), p), t, p, BASELINE.jump, BASELINE.runOut);
   const r = run.report;
   const turned = r.landing?.turned ?? 0;
   return {
@@ -98,15 +103,16 @@ export function runSearch(spec: SearchSpec, params: Params = baselineParams()): 
   const pts = gridPoints(spec);
   const points: SearchPoint[] = [];
   let ticksTotal = 0;
-  pts.forEach((k, i) => { const e = evaluate(i, k, params, SEARCH_REVOLUTIONS); points.push(e.point); ticksTotal += e.ticks; });
+  const t = spec.transform ?? CANONICAL;
+  pts.forEach((k, i) => { const e = evaluate(i, k, params, SEARCH_REVOLUTIONS, t); points.push(e.point); ticksTotal += e.ticks; });
   let identical = 0;
   const checked = Math.min(spec.repeat, pts.length);
-  for (let i = 0; i < checked; i++) if (evaluate(i, pts[i], params, SEARCH_REVOLUTIONS).point.digest === points[i].digest) identical++;
+  for (let i = 0; i < checked; i++) if (evaluate(i, pts[i], params, SEARCH_REVOLUTIONS, t).point.digest === points[i].digest) identical++;
   const distribution: Record<string, number> = {};
   for (const pt of points) { const key = pt.accepted ? "accepted" : prefix(pt.firstReason); distribution[key] = (distribution[key] ?? 0) + 1; }
   const acc = points.filter((pt) => pt.accepted);
   return {
-    schema: "jpse-search-report/1", jump: "Lo", spec, evaluated: points.length, ticksTotal, points,
+    schema: "jpse-search-report/1", jump: requirementFor(BASELINE.jump, t).jump as "Lo", spec, evaluated: points.length, ticksTotal, points,
     distribution: Object.fromEntries(Object.entries(distribution).sort()),
     repeatability: { checked, identical },
     accepted: acc.map((pt) => pt.index),

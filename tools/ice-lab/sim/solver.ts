@@ -812,7 +812,11 @@ export function step(
     if (b.inContact) loaded++;
   }
   s.supportMode = loaded;
-  s.supportFoot = (weights[1] >= weights[0] ? FOOT.Right : FOOT.Left) as Foot;
+  // jumpDirMode: an exact tie keeps the foot that was carrying, rather than
+  // always the right, so a clockwise skater is the mirror (JPSE, #74).
+  s.supportFoot = (p.jumpDirMode >= 1
+    ? weights[1] > weights[0] ? FOOT.Right : weights[1] < weights[0] ? FOOT.Left : s.supportFoot
+    : weights[1] >= weights[0] ? FOOT.Right : FOOT.Left) as Foot;
   // The heading is the lead blade's, which points forward; the trail's points back.
   if (ina) s.supportFoot = s.inaBauer.lead;
 

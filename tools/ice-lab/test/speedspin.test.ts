@@ -17,8 +17,9 @@ import { JUMP } from "../sim/jump.ts";
 import { setupParams } from "../game/setups.ts";
 
 /** Take off at `v` m/s (negative backward) on `foot` at `lean`, no arms; the takeoff's kind and L. */
-function takeoff(speedSpinMode: number, v: number, foot: number, lean: number, toe: boolean) {
-  const p = { ...setupParams("experimental"), speedSpinMode, jumpMode: 2 }, s = createState(p, v, lean * p.maxLean);
+function takeoff(speedSpinMode: number, v: number, foot: number, lean: number, toe: boolean, jumpDirMode = 0) {
+  // Pinned to jumpDirMode 0: this measures the block, as it was measured, where a jump can only turn counter-clockwise.
+  const p = { ...setupParams("experimental"), speedSpinMode, jumpMode: 2, jumpDirMode }, s = createState(p, v, lean * p.maxLean);
   for (let i = 0; i < 200 && !s.fallen; i++) {
     const events: Parameters<typeof step>[4] = [];
     step(s, { ...NEUTRAL_INPUT, lean, weight: foot, knee: i < 60 ? 0.5 : i < 96 ? 0.95 : 0.2, toe: toe && i === 92 }, p, SIM_DT, events);
@@ -43,4 +44,14 @@ test("the block turns the body against its curve: it eats a loop's rotation and 
   const lutzOff = takeoff(0, -8, 0, 0.3, true), lutzOn = takeoff(1, -8, 0, 0.3, true);
   assert.equal(lutzOn.kind, JUMP.Lutz);
   assert.ok(lutzOff.L === 0 && Math.abs(lutzOn.L - 1.196) < 0.01, `lutz ${lutzOff.L.toFixed(2)} -> ${lutzOn.L.toFixed(2)}`);
+});
+
+test("with the direction free (jumpDirMode), a lutz entry with nothing to counter-rotate it turns with its curve", () => {
+  // MEASURED 2026-11-09, no arms, the block off: off LBO with the pick at 8 m/s
+  // the body turns the way the clockwise edge carries it, and a clockwise jump
+  // off LBO with a pick is the mirrored table's toe loop. The lutz is the
+  // counter-rotated jump: it needs the arms to beat its own edge.
+  const t = takeoff(0, -8, 0, 0.3, true, 1);
+  assert.equal(t.kind, JUMP.Toeloop);
+  assert.ok(t.L < 0, `L ${t.L.toFixed(2)}`);
 });

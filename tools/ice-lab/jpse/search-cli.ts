@@ -3,9 +3,10 @@ import { writeFileSync } from "node:fs";
 import { FIRST_GRID, runSearch } from "./search.ts";
 
 const t0 = performance.now();
-const r = runSearch(FIRST_GRID);
+const mirror = process.argv.includes("--mirror");
+const r = runSearch(mirror ? { ...FIRST_GRID, transform: { mirror: true, reverse: false } } : FIRST_GRID);
 const ms = performance.now() - t0;
-console.log(`JPSE search — ${r.jump}, ${r.evaluated} candidates (+${r.repeatability.checked} repeats), ${r.ticksTotal} solver ticks`);
+console.log(`JPSE search — ${r.jump}${mirror ? " mirrored (clockwise)" : ""}, ${r.evaluated} candidates (+${r.repeatability.checked} repeats), ${r.ticksTotal} solver ticks`);
 console.log(`cost: ${(ms / (r.evaluated + r.repeatability.checked)).toFixed(1)} ms per candidate on this machine (${(ms / 1000).toFixed(1)} s total)`);
 console.log(`repeatability: ${r.repeatability.identical}/${r.repeatability.checked} identical digests`);
 console.log("first failed gate:");

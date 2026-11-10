@@ -45,6 +45,7 @@
       "reasons": [
         "landing:none",
         "landing:called-",
+        "landing:turned-",
         "landing:fell",
         "landing:stood-"
       ]
