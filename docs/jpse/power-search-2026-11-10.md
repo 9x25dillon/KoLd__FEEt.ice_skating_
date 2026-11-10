@@ -170,7 +170,25 @@ one on its first day and the only one with a triple. No style number was changed
 This is the double loop only. What a style is worth over a season (scores, medals,
 falls in a full program) has not been measured.
 
-## 6. For the tutorial
+## 6. A limit found the same day: the music is in these numbers
+
+Every figure on this page was measured on the default beat grid: 128 bpm, counted
+from the try's first tick. That matters on Experimental. Backward on a deep edge the
+skater strokes a crossover by itself on every beat of the music
+(`game/full-controls.ts`, `autoCrossover`), so each recorded entrance has those
+pushes in it, at that grid's moments.
+
+The jump lesson's work (branch `jump-lesson`, same day) measured what that does to
+one entrance, a double loop from 6.6 m/s: the same hands land it 7 times in 10 when
+the try starts at any moment of a 128 bpm track, 2 in 10 on the first shipped track
+(54.3 bpm), and every time when the try starts so that a beat falls where the
+default grid put it.
+
+The windows above have **not** been re-measured at the tracks' tempos (54.3 to
+68.1 bpm). Read them as what the styles do relative to each other on one grid, not
+as timings to play by.
+
+## 7. For the tutorial
 
 - Teach the neutral skater's no-check double first: 7 m/s backward on the deep back
   outside edge, a short load (about a third of a second), and nothing in the air. The
