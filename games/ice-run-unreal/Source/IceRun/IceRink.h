@@ -48,6 +48,10 @@ public:
 	void SetTutorialTargets(const TArray<FIceTarget>& Targets, int32 Next);
 	/** An arrow on the ice, a little ahead of the skater, pointing at a sim-space target; hidden without one. */
 	void PointArrow(const FVector& Skater, const TOptional<FVector2D>& Aim);
+	/** arena.gd react: the audience rises on a landing (1 for a clean one) and settles over a few seconds. */
+	void CrowdReact(double Amount);
+	/** Each frame: where the skater is, for the audience's heads, and how roused the hall still is. */
+	void UpdateCrowd(const FVector& SkaterAt, float Dt);
 
 	/** The roof and its fixtures: the high Rink camera looks down through them (main.gd's roof cutaway). */
 	const TArray<TWeakObjectPtr<UPrimitiveComponent>>& Roof() const { return RoofParts; }
@@ -90,6 +94,14 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<class USkyLightComponent> Sky;
+
+	/** arena.gd's audience, seated on the four banks (Content/Generated/crowd.json's spectator and M_Crowd). */
+	void SeatCrowd(const FVector& Middle);
+	UPROPERTY()
+	TObjectPtr<class UInstancedStaticMeshComponent> Crowd;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CrowdMaterial;
+	double CrowdMood = 0.0;
 
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> RoofParts;
 	TArray<TWeakObjectPtr<UPrimitiveComponent>> CourseParts;

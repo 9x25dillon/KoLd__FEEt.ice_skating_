@@ -422,3 +422,20 @@ test("a lesson's travel steps reach the snapshot with their targets, and the off
  e.configure({steady:'light'});
  assert.equal(e.snapshot().tutorial.offer,'','not once it is on');
 });
+
+test('the season has its story: chapters in the catalog, the coach in the snapshot, the ending in the result',()=>{
+ const e=new IceEngine();
+ const story=e.catalog().story;
+ assert.equal(story.chapters.length,e.catalog().events.length);
+ assert.equal(story.coach.name,'Mara Ellison');
+ assert.equal(story.cast[0].name,'Remi Castellan');
+ const advice=e.snapshot().career.advice;
+ assert.ok(Array.isArray(advice)&&advice.length>=1&&advice.length<=2,JSON.stringify(advice));
+ // A career run that ends tells its chapter's ending; free skate tells none.
+ e.configure({setup:null,scheme:1,beginner:true,cruise:true});e.start({mode:'career',event:0});
+ for(let i=0;i<800&&!e.finished;i++)e.advance({...emptyControls(),kx:i>200&&i<500?-1:0},12,i>=500);
+ assert.ok(e.finished,'the first event finishes');
+ const r=e.snapshot().result;
+ assert.ok(r.story.length>40,r.story);
+ assert.equal(r.finale,'','no season ending before the championship');
+});

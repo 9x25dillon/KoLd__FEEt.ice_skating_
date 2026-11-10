@@ -259,6 +259,18 @@ double FIceBridge::Waiting() const
 	return Pending.Num() > 0 ? FPlatformTime::Seconds() - WaitStart : 0.0;
 }
 
+bool FIceBridge::BusyBeyondFrames() const
+{
+	for (const TPair<int32, FString>& Op : Pending)
+	{
+		if (Op.Value != TEXT("frame"))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 FString FIceBridge::PendingOps() const
 {
 	TArray<FString> Ops;

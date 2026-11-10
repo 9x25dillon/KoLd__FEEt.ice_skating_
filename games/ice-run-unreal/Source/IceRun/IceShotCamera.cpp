@@ -70,6 +70,23 @@ void AIceShotCamera::Cycle(const FIceState& State)
 
 void AIceShotCamera::Follow(const FIceState& S, const FVector& SkaterLocation, float Dt)
 {
+	const AIceRunGameMode* Game = GetWorld() ? GetWorld()->GetAuthGameMode<AIceRunGameMode>() : nullptr;
+	if (Game && Game->Showcase())
+	{
+		// main.gd's menu camera: close, slowly turning about the skater from in front, a little to one side.
+		ShowClock += Dt;
+		const double A = .38 + FMath::Sin(ShowClock * .09) * .22;
+		const FVector Front = IceSimSpace::Direction(S.Heading.X, S.Heading.Y).GetSafeNormal();
+		const FVector Around = Front.RotateAngleAxis(-FMath::RadiansToDegrees(A), FVector::UpVector);
+		const FVector Desired = SkaterLocation + Around * 5.8 * M + FVector(0, 0, 1.2 * M);
+		const FVector Look = SkaterLocation + FVector(0, 0, .88 * M);
+		const FVector At = bPlaced ? FMath::Lerp(GetActorLocation(), Desired, Ease(3.0, Dt)) : Desired;
+		bPlaced = true;
+		Fov = FMath::Lerp(Fov, 38.0, Ease(2.5, Dt));
+		SetActorLocationAndRotation(At, (Look - At).Rotation());
+		GetCameraComponent()->SetFieldOfView(float(Fov));
+		return;
+	}
 	const FVector Velocity = IceSimSpace::Direction(S.Vel.X, S.Vel.Y);
 	if (Velocity.Size() > .5 && S.JumpPhase != IceJumpPhase::Air)
 	{
