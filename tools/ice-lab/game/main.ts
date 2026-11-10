@@ -579,7 +579,7 @@ function frame(now: number) {
       else if (wasSpinning) {
         const segments = spinTracker.finish();
         if (spinThresholds) {
-          const result = scoreSpinLevel(segments, spinThresholds, spinTracker.footChanges);
+          const result = scoreSpinLevel(segments, spinThresholds, spinTracker.footChanges, spinTracker.variations);
           lastSpinLabel = `Last spin: level ${result.level > 0 ? result.level : "B"}`;
         }
         spinTracker.reset();

@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 
 import { PRESETS, SIM_DT } from "../sim/params.ts";
 import { createState, step } from "../sim/solver.ts";
-import { NEUTRAL_INPUT, MOVE, SPIN_POSITION } from "../sim/types.ts";
+import { NEUTRAL_INPUT, MOVE, SPIN_POSITION, SPIN_VARIATION } from "../sim/types.ts";
 import type { SkatingInput } from "../sim/types.ts";
 import {
   SpinLevelTracker, loadSpinFeatureThresholds, scoreSpinLevel,
@@ -19,6 +19,7 @@ const T: SpinFeatureThresholds = {
   speedRatioMin: 1.3, speedMinRevolutions: 2, maxSpeedFeatures: 2, longSegmentMinRevolutions: 8,
   reverseMinRevolutions: 3, footChangeMinAirTimeS: 0.12, footChangeMaxRevolutionsLost: 0.75,
   difficultChangeMaxRevolutionsLost: 0.5, secondFootDistinctPositions: 3, secondFootMinRevolutionsEach: 2,
+  variationMinRevolutions: 2, variationMaxCentering: 0.45, maxVariationFeatures: 3,
 };
 const seg = (over: Partial<SpinSegment>): SpinSegment =>
   ({ position: SPIN_POSITION.Upright, dir: 1, foot: 0, revolutions: 3, omegaMin: 10, omegaMax: 10, ...over });
@@ -26,8 +27,20 @@ const seg = (over: Partial<SpinSegment>): SpinSegment =>
 test("no segments: level B, nothing earned", () => {
   assert.deepEqual(scoreSpinLevel([], T), {
     level: 0, speedPositions: [], eightRevolutions: false, bothDirections: false,
-    footChangeByJump: false, difficultChangeOfFoot: false, allThreePositionsSecondFoot: false,
+    footChangeByJump: false, difficultChangeOfFoot: false, allThreePositionsSecondFoot: false, difficultVariations: [],
   });
+});
+
+test("difficult_variation: the standing split held two revolutions, centred, counts once per basic position; the attitude does not", () => {
+  // data/spin-features.json: position_flag difficult, min_revolutions_held 2,
+  // max_centering_error_m 0.45, max_per_element 3; counts per basic position.
+  const split = (revolutions: number, travel = 0.1) => ({ variation: SPIN_VARIATION.Split, position: SPIN_POSITION.Upright, revolutions, travel });
+  assert.deepEqual(scoreSpinLevel([], T, [], [split(2.5)]).difficultVariations, [SPIN_POSITION.Upright]);
+  assert.equal(scoreSpinLevel([], T, [], [split(2.5)]).level, 1);
+  assert.equal(scoreSpinLevel([], T, [], [split(1.9)]).level, 0, "under two revolutions");
+  assert.equal(scoreSpinLevel([], T, [], [split(3, 0.5)]).level, 0, "travelled off its centre");
+  assert.equal(scoreSpinLevel([], T, [], [{ ...split(5), variation: SPIN_VARIATION.Attitude }]).level, 0, "not a difficult variation");
+  assert.equal(scoreSpinLevel([], T, [], [split(3), split(4)]).level, 1, "the same basic position counts once");
 });
 
 test("a genuine speed increase within one position earns the feature once", () => {

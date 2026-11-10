@@ -261,7 +261,7 @@ export class Choreography {
       const segments = this.spinTracker.finish();
       if (this.spinThresholds) {
         this.bestSpinLevel = Math.max(this.bestSpinLevel,
-          scoreSpinLevel(segments, this.spinThresholds, this.spinTracker.footChanges).level);
+          scoreSpinLevel(segments, this.spinThresholds, this.spinTracker.footChanges, this.spinTracker.variations).level);
       }
       this.spinTracker.reset();
     }

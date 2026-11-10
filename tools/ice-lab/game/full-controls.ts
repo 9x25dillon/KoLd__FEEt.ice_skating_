@@ -658,6 +658,8 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     // Experimental: with the weight on one foot the other leg is free — its
     // trigger swings it forward (released, it rests), and it does not pump.
     const freeLegIndex = options.pumps && f.foot !== 0.5 && !pushing ? (f.foot === 1 ? 0 : 1) : -1;
+    /** Set while the free leg's paddle is held: that knee's bend, from its stick. */
+    let freeKneeBend = -1;
     if (options.pumps) Object.assign(mapped, pumpInput(f, s, [trigger(6), trigger(7)], [l, arms ? f.bladeRight! : r], h.connected, freeLegIndex, f.foot === 0.5 ? f.nextPushFoot ?? -1 : -1));
     // A push begins: both blades down through it, then the weight goes across.
     if (options.pumps && mapped.push && (mapped.pushFoot === 0 || mapped.pushFoot === 1) && !(leftFoot || rightFoot)) {
@@ -677,7 +679,21 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
       // Its paddle swings it fully forward at once — a paddle is never a
       // push, so there is no snap to wait out — the stronger of the two
       // whatever the trigger asks. The standing leg's paddle does nothing.
-      if (paddle(freeLegIndex === 0 ? "freeLegLeft" : "freeLegRight")) mapped.freeLeg = Math.max(mapped.freeLeg, 1);
+      if (paddle(freeLegIndex === 0 ? "freeLegLeft" : "freeLegRight")) {
+        mapped.freeLeg = Math.max(mapped.freeLeg, 1);
+        // Held with the free leg's trigger pulled, the paddle raises the leg
+        // instead (the owner's binding, 2026-11-09): the further the pull, the
+        // higher, as far as the hip's range lets it go — a spiral, an
+        // attitude, a standing split. The free foot's stick, pulled back,
+        // bends its knee (straight for the split and the spiral, bent for the
+        // attitude); a foot in the air has no heel or toe, so while the paddle
+        // is held that stick stops setting the standing blade's.
+        const freeStick = freeLegIndex === 0 ? left : blade, standStick = freeLegIndex === 0 ? blade : left;
+        if (pull > 0) mapped.freeLegRaise = pull;
+        freeKneeBend = Math.max(0, -freeStick.y);   // y is up-positive (shapeStick of -axis): back is negative
+        const standPitch = relievedPitch(standStick.x, standStick.y);
+        if (!keyPitch) { mapped.pitch = standPitch; mapped.pitchSplit = 0; }
+      }
     }
     // A trigger per knee: LT the left leg, RT the right. The brake moves off LT
     // to D-pad ↑, free in this setup unless the profile has bound it, until
@@ -701,6 +717,8 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
         f.crossStance = moveToward(f.crossStance ?? 0, crossingOver(s, p) ? CROSS_STANCE : 0, CROSS_STANCE_RATE * SIM_DT);
         for (let i = 0; i < 2; i++) knees[i] = Math.max(knees[i], f.crossStance);
       }
+      // The paddle's raise: the free trigger is the raise, so the free knee is its stick's.
+      if (freeKneeBend >= 0 && freeLegIndex >= 0) knees[freeLegIndex] = freeKneeBend;
       mapped.knee = (knees[0] + knees[1]) / 2;
       mapped.kneeSplit = (knees[1] - knees[0]) / 2;
     }

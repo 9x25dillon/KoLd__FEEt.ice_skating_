@@ -197,7 +197,7 @@ export class IceEngine {
   this.comboFlash=Math.max(0,this.comboFlash-SIM_DT);
   const spinning=this.state.move===MOVE.Spin;
   if(spinning)this.spinTracker.sample(this.state.spin);
-  else if(this.wasSpinning){this.spinLevel=scoreSpinLevel(this.spinTracker.finish(),spinThresholds,this.spinTracker.footChanges).level;this.spinTracker.reset();}
+  else if(this.wasSpinning){this.spinLevel=scoreSpinLevel(this.spinTracker.finish(),spinThresholds,this.spinTracker.footChanges,this.spinTracker.variations).level;this.spinTracker.reset();}
   this.wasSpinning=spinning;
   if(this.routine)this.routine.sample(this.state,this.low,SIM_DT,events);
   if(this.routine?.done) {

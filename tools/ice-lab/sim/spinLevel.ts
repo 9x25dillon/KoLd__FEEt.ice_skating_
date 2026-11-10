@@ -7,6 +7,12 @@
 // purely from physics). Read the whole list before assuming a gap here is an
 // oversight — most of it is a wall, not a queue.
 //
+// 2026-11-09: difficult_variation is scored now, for the one difficult
+// variation the sim reads off the body itself — the standing split, the free
+// leg's raise and knee (sim/moves.ts spinVariation), held for the data's
+// revolutions and centred. The paragraph below stays true of every other
+// named variation and of the entrance and exit.
+//
 // Every DECLARED feature (difficult_variation, difficult_entrance,
 // difficult_exit) needs pose or joint-angle data this rig does not have at
 // all: design-bible.md §3.1 is explicit that the sim is a REDUCED-ORDER
@@ -56,7 +62,7 @@
 // this file can attain up to six. jump_within_spin and the three DECLARED
 // pose features remain real gaps; this file does not pretend otherwise.
 
-import { SPIN_POSITION } from "./types.ts";
+import { SPIN_POSITION, SPIN_VARIATION_DIFFICULT } from "./types.ts";
 import type { SpinState } from "./types.ts";
 
 export interface SpinSegment {
@@ -78,6 +84,16 @@ export interface SpinFootChange {
   positionChanged: boolean;
 }
 
+/** A named variation held within a spin (SpinState.variation), at its longest. */
+export interface SpinVariationHeld {
+  variation: number;
+  /** The basic position it was held in: difficult_variation counts per basic position. */
+  position: number;
+  revolutions: number;
+  /** The spin's drift from where it began at that moment, m: the feature's centering. */
+  travel: number;
+}
+
 /**
  * Rebuilds the segment list spinTick's own fields overwrite as they go. A
  * segment boundary is a position change, a direction reversal, or a foot
@@ -92,6 +108,8 @@ export class SpinLevelTracker {
    *  change_foot_by_jump/difficult_change_of_foot only ever credit once
    *  (`max_per_element: 1`), but every attempt is kept for the caller to inspect. */
   readonly footChanges: SpinFootChange[] = [];
+  /** Every variation held this spin, each at its most revolutions (present only with the free leg's raise in play). */
+  readonly variations: SpinVariationHeld[] = [];
   private cur: SpinSegment | null = null;
   private lastPosition = -1;
   private lastDir = 0;
@@ -101,6 +119,7 @@ export class SpinLevelTracker {
   reset(): void {
     this.segments.length = 0;
     this.footChanges.length = 0;
+    this.variations.length = 0;
     this.cur = null;
     this.lastPosition = -1;
     this.lastDir = 0;
@@ -124,6 +143,12 @@ export class SpinLevelTracker {
     seg.revolutions = spin.segRevs;
     seg.omegaMin = Math.min(seg.omegaMin, spin.omega);
     seg.omegaMax = Math.max(seg.omegaMax, spin.omega);
+    if ((spin.variation ?? 0) > 0) {
+      const v = spin.variation!, held = this.variations.find((x) => x.variation === v && x.position === spin.position);
+      const revolutions = spin.varRevs ?? 0;
+      if (!held) this.variations.push({ variation: v, position: spin.position, revolutions, travel: spin.travel });
+      else if (revolutions > held.revolutions) { held.revolutions = revolutions; held.travel = spin.travel; }
+    }
     if (spin.changeCompletedTick >= 0 && spin.changeCompletedTick !== this.lastChangeCompletedTick) {
       this.lastChangeCompletedTick = spin.changeCompletedTick;
       this.footChanges.push({
@@ -162,6 +187,10 @@ export interface SpinFeatureThresholds {
   /** spin.all_three_positions_second_foot: distinct_basic_positions_after_foot_change, min_revolutions_each. */
   secondFootDistinctPositions: number;
   secondFootMinRevolutionsEach: number;
+  /** spin.difficult_variation: min_revolutions_held, max_centering_error_m, max_per_element. The pose tolerance is read where the variation is (sim/moves.ts spinVariation). */
+  variationMinRevolutions: number;
+  variationMaxCentering: number;
+  maxVariationFeatures: number;
 }
 
 /**
@@ -184,7 +213,8 @@ export function loadSpinFeatureThresholds(json: string): SpinFeatureThresholds {
   const footChange = find("spin.change_foot_by_jump");
   const difficultChange = find("spin.difficult_change_of_foot");
   const secondFoot = find("spin.all_three_positions_second_foot");
-  if (!speed || !long || !reverse || !footChange || !difficultChange || !secondFoot) {
+  const variation = find("spin.difficult_variation");
+  if (!speed || !long || !reverse || !footChange || !difficultChange || !secondFoot || !variation) {
     throw new Error("spin-features.json: missing a feature this scorer reads");
   }
   const num = (v: unknown, what: string): number => {
@@ -202,6 +232,9 @@ export function loadSpinFeatureThresholds(json: string): SpinFeatureThresholds {
     difficultChangeMaxRevolutionsLost: num(difficultChange.requires?.max_revolutions_lost, "spin.difficult_change_of_foot.requires.max_revolutions_lost"),
     secondFootDistinctPositions: num(secondFoot.requires?.distinct_basic_positions_after_foot_change, "spin.all_three_positions_second_foot.requires.distinct_basic_positions_after_foot_change"),
     secondFootMinRevolutionsEach: num(secondFoot.requires?.min_revolutions_each, "spin.all_three_positions_second_foot.requires.min_revolutions_each"),
+    variationMinRevolutions: num(variation.requires?.min_revolutions_held, "spin.difficult_variation.requires.min_revolutions_held"),
+    variationMaxCentering: num(variation.requires?.max_centering_error_m, "spin.difficult_variation.requires.max_centering_error_m"),
+    maxVariationFeatures: num(variation.max_per_element, "spin.difficult_variation.max_per_element"),
   };
 }
 
@@ -220,6 +253,8 @@ export interface SpinLevelResult {
   /** spin.all_three_positions_second_foot: the foot reached after a change held all three basic
    *  positions for secondFootMinRevolutionsEach or more. */
   allThreePositionsSecondFoot: boolean;
+  /** spin.difficult_variation: the basic positions a difficult variation was held in, up to maxVariationFeatures. */
+  difficultVariations: number[];
 }
 
 const SIT_OR_CAMEL = new Set<number>([SPIN_POSITION.Sit, SPIN_POSITION.Camel]);
@@ -264,6 +299,7 @@ function hasAllThreePositionsSecondFoot(segments: readonly SpinSegment[], minRev
 export function scoreSpinLevel(
   segments: readonly SpinSegment[], t: SpinFeatureThresholds,
   footChanges: readonly SpinFootChange[] = [],
+  variations: readonly SpinVariationHeld[] = [],
 ): SpinLevelResult {
   const speedPositions: number[] = [];
   const seen = new Set<number>();
@@ -278,13 +314,20 @@ export function scoreSpinLevel(
   const footChangeByJump = footChanges.some((c) => c.airTimeS >= t.footChangeMinAirTimeS && c.revolutionsLost <= t.footChangeMaxRevolutionsLost);
   const difficultChangeOfFoot = footChanges.some((c) => c.positionChanged && c.revolutionsLost <= t.difficultChangeMaxRevolutionsLost);
   const allThreePositionsSecondFoot = hasAllThreePositionsSecondFoot(segments, t.secondFootMinRevolutionsEach, t.secondFootDistinctPositions);
+  // A difficult variation (the data's flag), held long enough and centred: one per basic position.
+  const difficultVariations: number[] = [];
+  for (const v of variations) {
+    if (difficultVariations.length >= t.maxVariationFeatures) break;
+    if (!SPIN_VARIATION_DIFFICULT[v.variation] || difficultVariations.includes(v.position)) continue;
+    if (v.revolutions >= t.variationMinRevolutions && v.travel <= t.variationMaxCentering) difficultVariations.push(v.position);
+  }
   const level = Math.min(
-    speedPositions.length + (eightRevolutions ? 1 : 0) + (bothDirections ? 1 : 0)
+    difficultVariations.length + speedPositions.length + (eightRevolutions ? 1 : 0) + (bothDirections ? 1 : 0)
       + (footChangeByJump ? 1 : 0) + (difficultChangeOfFoot ? 1 : 0) + (allThreePositionsSecondFoot ? 1 : 0),
     4,
   );
   return {
     level, speedPositions, eightRevolutions, bothDirections,
-    footChangeByJump, difficultChangeOfFoot, allThreePositionsSecondFoot,
+    footChangeByJump, difficultChangeOfFoot, allThreePositionsSecondFoot, difficultVariations,
   };
 }
