@@ -275,6 +275,10 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       rebased onto them on 2026-11-02, every digest unchanged: replayed
 //       through 9f622f7 and today's build, all 240 ticks matched on every state
 //       field and event. /39 clips recorded before those levers do not load.
+//       2026-11-09, also unbumped for the same /40: jumpDirMode (0 by
+//       default, 1 in every setup), JumpState optional loadSense/windupSign/
+//       rotDir and JumpResult optional direction, present only at 1. The
+//       fixture was rebased, every digest unchanged.
 export const REPLAY_SOLVER = "ice-lab-f64/39";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;

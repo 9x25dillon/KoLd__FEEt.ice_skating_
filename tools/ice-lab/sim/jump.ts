@@ -290,7 +290,15 @@ export function jumpGround(
     if (kneeIn >= p.jumpLoadKnee) {
       J.phase = JUMP_PHASE.Load;
       J.t = 0; J.peakKnee = s.knee; J.preRotation = 0; J.setup = 0; J.toeInLoad = false;
-      if (p.jumpDirMode >= 1) J.loadSense = s.yawRate < 0 ? -1 : 1;
+      // The edge's own turn: its lean against the way it travels, the sign of
+      // its carve (counter-clockwise when they agree). Not the instant yaw
+      // rate, which a skid or an edge change can leave at exactly 0 on this
+      // tick and so hand every tie to one direction. A dead-flat blade falls
+      // back to the yaw rate.
+      if (p.jumpDirMode >= 1) {
+        const edge = (dot(s.vel, s.heading) >= 0 ? 1 : -1) * s.lean;
+        J.loadSense = edge > 0 ? 1 : edge < 0 ? -1 : s.yawRate < 0 ? -1 : 1;
+      }
       // rotationCallMode: the takeoff's reference — where the body faces as the load begins.
       if (p.rotationCallMode >= 1) { J.entryHeading = atan2(s.heading.y, s.heading.x); J.takeoffPivot = 0; }
     }
@@ -421,10 +429,11 @@ export function jumpGround(
   // jumpDirMode 1: the same sum taken in the jump's own direction — what
   // turns against it (a vault the wrong way) cancels down to no rotation,
   // never past it — then given back its sign.
-  J.angMomentum = p.jumpMode < JUMP_MODE.Full ? 0
-    : p.jumpDirMode >= 1
-      ? turn * p.inertiaOpen * Math.max(0, turn * (rate + s.spinCarry + vaultSpin / p.inertiaOpen) + p.jumpWhip * whip) * (0.80 + 0.20 * q)
-      : p.inertiaOpen * Math.max(0, rate + s.spinCarry + vaultSpin / p.inertiaOpen + p.jumpWhip * whip) * (0.80 + 0.20 * q);
+  if (p.jumpMode < JUMP_MODE.Full) J.angMomentum = 0;
+  else if (p.jumpDirMode >= 1) {
+    const mag = p.inertiaOpen * Math.max(0, turn * (rate + s.spinCarry + vaultSpin / p.inertiaOpen) + p.jumpWhip * whip) * (0.80 + 0.20 * q);
+    J.angMomentum = mag === 0 ? 0 : turn * mag;   // no spin is +0, never -0
+  } else J.angMomentum = p.inertiaOpen * Math.max(0, rate + s.spinCarry + vaultSpin / p.inertiaOpen + p.jumpWhip * whip) * (0.80 + 0.20 * q);
   if (p.jumpDirMode >= 1) J.rotDir = turn;
   J.windupTick = -1;
   J.windupPeak = 0;

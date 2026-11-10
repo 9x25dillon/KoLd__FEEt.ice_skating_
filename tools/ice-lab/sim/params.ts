@@ -250,7 +250,11 @@ export interface Params {
    * begins, is what "with the jump" and "against it" mean to the arms and the
    * wind-up; the spin the ice and the arms built decides the direction at the
    * release; a clockwise jump is identified, landed (LBO) and linked in
-   * combination off the mirrored table. Nothing is chosen in a
+   * combination off the mirrored table. And on two feet at exactly equal
+   * weight the support foot stays the one it was, instead of always the
+   * right: without that a clockwise skater's two-foot glides were not the
+   * counter-clockwise one's mirror, and the mirrored double loop fell in its
+   * load (JPSE, 2026-11-09). Nothing is chosen in a
    * menu: a skater can turn a clockwise quad and a counter-clockwise triple if
    * they can skate both entrances.
    */

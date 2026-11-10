@@ -402,7 +402,7 @@ export const SOLVER_HANDEDNESS = [
     off: "staminaMode 0" },
   { id: "two-foot-tie", where: "sim/solver.ts supportFoot = weights[1] >= weights[0] ? Right : Left",
     what: "on two feet at exactly equal weight the support (and so the heading's) blade is the right one, for a mirrored skater too",
-    off: "no input off-switch; weight 0.5 on two feet is the tie" },
+    off: "jumpDirMode 1: the tie keeps the foot that was carrying (2026-11-09)" },
 ] as const;
 
 export interface MirrorCheck {
@@ -448,7 +448,7 @@ export function checkMirror(a: CandidateRun, m: CandidateRun, params: Params): M
     // The earliest source that was on and can explain it: a two-foot tie the
     // tick before, else the sheet, else the wobble.
     const prev = at > 0 ? at - 1 : 0, f = a.track[prev], g = m.track[prev];
-    if (f.supportMode === 2 && g.supportMode === 2 && f.supportFoot === g.supportFoot) cause = "two-foot-tie";
+    if (params.jumpDirMode < 1 && f.supportMode === 2 && g.supportMode === 2 && f.supportFoot === g.supportFoot) cause = "two-foot-tie";
     else if (params.iceGridMode === 1) cause = "ice-grid";
     else if (params.staminaMode === 1) cause = "fatigue-noise";
     else cause = "unattributed";

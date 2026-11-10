@@ -180,6 +180,12 @@ function play(setup: Pad, id: string, T = 15, side = 1, entry?: number) {
   return { passed: tut.index > at ? +(k * SIM_DT).toFixed(3) : -1, s, tut, maxWind, v: Math.hypot(s.vel.x, s.vel.y) };
 }
 
+// Re-pinned 2026-11-09, deliberately: jumpDirMode on in every setup (the owner's
+// ask) makes a two-foot glide at exactly equal weight stay on the foot it was on,
+// instead of always the right, so a clockwise skater is the counter-clockwise
+// one's mirror. Every stage still passes without a fall; four times moved:
+// simulation push 5.0 -> 5.217, cross 11.508 -> 11.633, lap 13.3 -> 13.083;
+// experimental lap 15.65 -> 15.383.
 // Re-pinned 2026-11-05, deliberately: the Travel stage (the owner's ask) sits between Edges and
 // Scrape & dig, and "Stop on the mark" follows the snowplow it uses; the words are found by id now.
 test("five stages in order — balance, edges, travel, scrape & dig, air — and the steps follow them", () => {
@@ -268,15 +274,15 @@ test("settling needs steadiness: leaning or moving on resets the settle", () => 
 //          glide gives the arms no edge to pull against (best 0.06 rev). Now from a curve; see SCRIPTS.spin.
 const PASS: Record<string, Record<Pad, number>> = {
   glide: { simulation: 4.008, experimental: 4.008 },
-  push: { simulation: 5.0, experimental: 3.45 },
+  push: { simulation: 5.217, experimental: 3.45 },
   knees: { simulation: 3.092, experimental: 3.092 },
   edge: { simulation: 3.542, experimental: 3.542 },
   other: { simulation: 3.542, experimental: 3.542 },
   turn: { simulation: 3.308, experimental: 3.308 },
   marker: { simulation: 4.033, experimental: 4.033 },
   cone: { simulation: 8.4, experimental: 8.375 },
-  cross: { simulation: 11.508, experimental: 11.4 },
-  lap: { simulation: 13.3, experimental: 15.65 },
+  cross: { simulation: 11.633, experimental: 11.4 },
+  lap: { simulation: 13.083, experimental: 15.383 },
   plow: { simulation: 5.933, experimental: 5.933 },
   spot: { simulation: 5.408, experimental: 5.408 },
   dig: { simulation: 2.967, experimental: 2.967 },
