@@ -42,9 +42,19 @@ export const BASELINE = {
 
 export function baselineParams(): Params { return setupParams(BASELINE.setup); }
 
+/**
+ * The pad script's knobs, for a search to vary (JPSE-007). Defaults are the
+ * measured baseline; `depth` scales the sticks' full deflection (1 = the
+ * measured deep edge).
+ */
+export interface EntranceKnobs { speed: number; loadAt: number; load: number; swingAt: number; checkAt: number; depth: number }
+export const BASELINE_KNOBS: EntranceKnobs = {
+  speed: BASELINE.speed, loadAt: BASELINE.loadAt, load: BASELINE.load, swingAt: BASELINE.swingAt, checkAt: BASELINE.checkAt, depth: 1,
+};
+
 /** Run the pad script once and keep what the solver was fed. Deterministic. */
-export function loopBaselineProgram(): Program {
-  const p = baselineParams(), s = createState(p, BASELINE.speed), profile = defaultControllerProfile();
+export function loopBaselineProgram(knobs: EntranceKnobs = BASELINE_KNOBS): Program {
+  const p = baselineParams(), s = createState(p, knobs.speed), profile = defaultControllerProfile();
   const st: GameControlState = newSchemeState();
   const h: ControllerHardware = { axes: [0, 0, 0, 0], buttons: Array(16).fill(0), keys: [], connected: true };
   const inputs: SkatingInput[] = [];
@@ -58,13 +68,13 @@ export function loopBaselineProgram(): Program {
     step(s, input, p, SIM_DT, events);
     return events;
   };
-  const { loadAt, load, swingAt, checkAt } = BASELINE;
+  const { loadAt, load, swingAt, checkAt, depth } = knobs;
   for (let i = 0; i < 480 && !s.fallen && !landed; i++) {
     const t = i * SIM_DT;
     const events = tick(() => {
       if (took >= 0) { h.buttons[7] = 0.7; h.buttons[1] = t - took >= checkAt ? 1 : 0; return; }
       if (i < 2) h.buttons[1] = 1;
-      h.axes[0] = h.axes[2] = -Math.min(1, t / 0.5);
+      h.axes[0] = h.axes[2] = -depth * Math.min(1, t / 0.5);
       if (t < loadAt) h.buttons[7] = 0.5;
       if (t >= loadAt && t < loadAt + load) { h.buttons[7] = 1; h.buttons[t - loadAt < swingAt ? 1 : 2] = 1; }
     });
@@ -75,5 +85,5 @@ export function loopBaselineProgram(): Program {
     h.buttons[7] = 0.5; h.buttons[1] = 1;
     if (i >= 18) { h.buttons[6] = 0.5; h.buttons[2] = 1; }
   });
-  return { speed: BASELINE.speed, inputs };
+  return { speed: knobs.speed, inputs };
 }

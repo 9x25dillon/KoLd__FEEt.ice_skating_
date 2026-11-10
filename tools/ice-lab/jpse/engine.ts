@@ -109,6 +109,17 @@ export interface CandidateReport {
     meanKappaBaseline: number;
     meanKappaBaselineError: number;
     maxBladeSkew: number;
+    /** JPSE-004, measured over the entrance. Optional in the schema: added after jpse-report/1 first shipped. */
+    supportLoad?: {
+      oneFootTicks: number;
+      twoFootTicks: number;
+      /** Mean share of the normal load on the right blade, over ticks with any load. */
+      meanRightShare: number;
+      /** Peak total normal load during the jump's load phase, in body weights (m g). */
+      loadPhasePeak: number;
+      /** The right blade's share at that peak. */
+      loadPhasePeakRightShare: number;
+    };
   };
   takeoff: null | {
     tick: number;
@@ -302,6 +313,20 @@ export function runCandidate(
     if (last && last.code === f.code && last.mode === f.supportMode) last.to = f.tick;
     else timeline.push({ from: f.tick, to: f.tick, code: f.code, mode: f.supportMode });
   }
+  // JPSE-004: who carried the body, and how hard the load phase pressed.
+  const weight = p.mass * p.gravity;
+  let rightShareSum = 0, loadedTicks = 0, peak = 0, peakRight = 0;
+  for (const f of entry) {
+    const total = f.load[0] + f.load[1];
+    if (total > 0) { rightShareSum += f.load[1] / total; loadedTicks++; }
+    if (loadStart >= 0 && f.tick >= loadStart && total / weight > peak) { peak = total / weight; peakRight = total > 0 ? f.load[1] / total : 0; }
+  }
+  const supportLoad = {
+    oneFootTicks: entry.filter((f) => f.supportMode === 1).length,
+    twoFootTicks: entry.filter((f) => f.supportMode === 2).length,
+    meanRightShare: r6(loadedTicks ? rightShareSum / loadedTicks : 0),
+    loadPhasePeak: r6(peak), loadPhasePeakRightShare: r6(peakRight),
+  };
   const every = PROVENANCE.sampleEvery.value;
   const sample = (fs: TrackFrame[], pick: (f: TrackFrame) => { x: number; y: number }) =>
     fs.filter((_, i) => i % every === 0 || i === fs.length - 1).map((f) => pt(pick(f)));
@@ -347,6 +372,7 @@ export function runCandidate(
       meanKappaBlade: r6(mean(kBlade)),
       meanKappaBaseline: r6(mean(geo.map((f) => f.kappaBaseline))),
       meanKappaBaselineError: r6(mean(geo.map((f) => Math.abs(f.kappaCom - f.kappaBaseline)))),
+      supportLoad,
       maxBladeSkew: r6(Math.max(0, ...entry.filter((f) => len(f.vel) >= PROVENANCE.minSpeedForGeometry.value).map((f) => bladeSkew(f.alpha)))),
     },
     takeoff,

@@ -218,6 +218,35 @@
         },
         "maxBladeSkew": {
           "type": "number"
+        },
+        "supportLoad": {
+          "description": "JPSE-004. Optional: added after jpse-report/1 first shipped.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "oneFootTicks": {
+              "type": "integer"
+            },
+            "twoFootTicks": {
+              "type": "integer"
+            },
+            "meanRightShare": {
+              "type": "number"
+            },
+            "loadPhasePeak": {
+              "type": "number"
+            },
+            "loadPhasePeakRightShare": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "oneFootTicks",
+            "twoFootTicks",
+            "meanRightShare",
+            "loadPhasePeak",
+            "loadPhasePeakRightShare"
+          ]
         }
       },
       "required": [

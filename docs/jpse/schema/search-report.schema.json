@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kold-feet.invalid/jpse/search-report.schema.json",
+  "title": "SearchReport",
+  "description": "JPSE-007: a deterministic bounded search over an entrance's knobs. Grid order is the axes' key order, last fastest; no randomness, so no seed. Wall-clock cost is never stored (it is not deterministic); ticksTotal is the deterministic cost.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "jpse-search-report/1"
+    },
+    "jump": {
+      "enum": [
+        "T",
+        "S",
+        "Lo",
+        "F",
+        "Lz",
+        "A"
+      ]
+    },
+    "spec": {
+      "$ref": "#/$defs/SearchSpec"
+    },
+    "evaluated": {
+      "type": "integer"
+    },
+    "ticksTotal": {
+      "type": "integer"
+    },
+    "points": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SearchPoint"
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "repeatability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "checked": {
+          "type": "integer"
+        },
+        "identical": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "checked",
+        "identical"
+      ]
+    },
+    "accepted": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    },
+    "pareto": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    }
+  },
+  "$defs": {
+    "SearchSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "jpse-search/1"
+        },
+        "axes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "repeat": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema",
+        "axes",
+        "repeat"
+      ]
+    },
+    "SearchPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "type": "integer"
+        },
+        "knobs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "speed": {
+              "type": "number"
+            },
+            "loadAt": {
+              "type": "number"
+            },
+            "load": {
+              "type": "number"
+            },
+            "swingAt": {
+              "type": "number"
+            },
+            "checkAt": {
+              "type": "number"
+            },
+            "depth": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "speed",
+            "loadAt",
+            "load",
+            "swingAt",
+            "checkAt",
+            "depth"
+          ]
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "firstReason": {
+          "type": "string"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "takeoff": {
+          "type": "string",
+          "pattern": "^([LR][FB-][OI-]|---)$"
+        },
+        "simCalls": {
+          "enum": [
+            "T",
+            "S",
+            "Lo",
+            "F",
+            "Lz",
+            "A",
+            "none"
+          ]
+        },
+        "turned": {
+          "type": "number"
+        },
+        "rotationError": {
+          "type": "number"
+        },
+        "takeoffQuality": {
+          "type": "number"
+        },
+        "landingQuality": {
+          "type": "number"
+        },
+        "digest": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "knobs",
+        "accepted",
+        "firstReason",
+        "reasons",
+        "takeoff",
+        "simCalls",
+        "turned",
+        "rotationError",
+        "takeoffQuality",
+        "landingQuality",
+        "digest"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "jump",
+    "spec",
+    "evaluated",
+    "ticksTotal",
+    "points",
+    "distribution",
+    "repeatability",
+    "accepted",
+    "pareto"
+  ]
+}
