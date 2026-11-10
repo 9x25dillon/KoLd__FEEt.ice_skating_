@@ -90,6 +90,32 @@
       "inertia_scale": 1.10,
       "stamina_drain": 0.8
     },
+    {
+      "id": "upright_attitude",
+      "name": "Attitude",
+      "basic_position": "upright",
+      "difficult": false,
+      "reference_pose": "SP_Upright_Attitude",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 15,
+      "inertia_scale": 1.24,
+      "stamina_drain": 0.8,
+      "requires_flexibility": 0.4,
+      "notes": "Free thigh raised to hip height in front, knee bent, shank hanging. inertia_scale from the free leg's segments (thigh 10%, shank and foot 6.1% of body mass; hip 0.1 m off the axis; thigh COM 0.225 m and shank COM 0.45 m out): +0.96 kg m^2 on the 4.0 baseline. Read by the sim (sim/moves.ts SPIN_VARIATION_SCALE) off the free leg's raise and knee. Added 2026-11-09 (issue #74)."
+    },
+    {
+      "id": "upright_i_position",
+      "name": "Standing split (I position)",
+      "basic_position": "upright",
+      "difficult": true,
+      "reference_pose": "SP_Upright_IPosition",
+      "min_revolutions": 2,
+      "pose_tolerance_deg": 10,
+      "inertia_scale": 0.85,
+      "stamina_drain": 1.2,
+      "requires_flexibility": 0.9,
+      "notes": "Free leg straight up beside the head, held at the blade by the hand: the leg's mass stays near the axis and the holding arm cannot open, compact like the Biellmann (0.8) with the other arm free. Gated on flexibility. Read by the sim off the free leg's raise and a straight knee. Added 2026-11-09 (issue #74)."
+    },
 
     {
       "id": "sit_basic",

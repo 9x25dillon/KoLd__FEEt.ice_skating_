@@ -243,6 +243,9 @@ export interface InaBauerState {
 export interface SpiralState {
   /** The one loaded foot, snapshotted at entry. */
   foot: Foot;
+  /** Present only with the free leg's raise in play: its highest, and seconds held at or above the hip (0.5). */
+  peakRaise?: number;
+  aboveHip?: number;
   t: number;
   fromCode: number;
   entrySpeed: number;
@@ -251,6 +254,14 @@ export interface SpiralState {
 /** A spin's basic position (data/spin-positions.json's basic_position). */
 export const SPIN_POSITION = { Upright: 0, Sit: 1, Camel: 2 } as const;
 export const SPIN_POSITION_NAME = ["upright", "sit", "camel"] as const;
+
+/**
+ * Upright variations the free leg's raise makes (data/spin-positions.json):
+ * none, the attitude (thigh at hip height, knee bent) and the standing split
+ * (I position: the free leg straight up, held by the hand).
+ */
+export const SPIN_VARIATION = { None: 0, Attitude: 1, Split: 2 } as const;
+export const SPIN_VARIATION_NAME = ["", "attitude", "standing split"] as const;
 
 /**
  * A spin in progress. Bible §2.5: "a continuous negotiation between speed,
@@ -273,6 +284,14 @@ export interface SpinState {
   swept: number;
   /** SPIN_POSITION now. */
   position: number;
+  /**
+   * Present only once the free leg's raise is in play: the upright
+   * variation now (SPIN_VARIATION), revolutions in it, and the bits of those
+   * held for two revolutions or more.
+   */
+  variation?: number;
+  varRevs?: number;
+  variationsHeld?: number;
   /** Bits of SPIN_POSITION held for two revolutions or more: the data's min_revolutions. */
   positionsHeld: number;
   /** Revolutions in the current position, and the most in any one. */
@@ -446,6 +465,10 @@ export interface MoveResult {
   positions: number;
   bestSegRevs: number;
   travel: number;
+  /** With the free leg's raise in play only: a spin's SPIN_VARIATION bits held two revolutions; a spiral's highest raise and seconds at or above the hip. */
+  variations?: number;
+  peakRaise?: number;
+  aboveHip?: number;
 }
 
 // ── state ───────────────────────────────────────────────────────────────────
@@ -601,6 +624,14 @@ export interface SkaterState {
   /** freeLegMode 1 only: the free leg's angle round the body against the hips, rad, counter-clockwise positive, and its rate. */
   freeSwing?: number;
   freeSwingRate?: number;
+  /**
+   * Present only once freeLegRaise has been asked: the free leg's raise, 0
+   * hanging .. 0.5 hip height .. 1 straight up, its rate (1/s), and the free
+   * knee's bend 0..1.
+   */
+  freeRaise?: number;
+  freeRaiseRate?: number;
+  freeKnee?: number;
   /** freeLegMode 1 only: last tick's asked swing, rad, so the hip knows how fast it is being asked to move. */
   freeSwingTarget?: number;
   /**
@@ -796,6 +827,14 @@ export interface SkatingInput {
    * Optional; absent the leg rests midway.
    */
   freeLeg?: number;
+  /**
+   * 0..1, how high the free leg is asked to be raised: 0 hanging, 0.5 at hip
+   * height, 1 straight up (a standing split), as far as `flexibility` lets
+   * it go. Its knee is the free leg's own (knee and kneeSplit): straight for
+   * a split or a spiral, bent for an attitude. Optional; absent, the leg is
+   * not raised and nothing about it is computed.
+   */
+  freeLegRaise?: number;
   push: boolean;
   brake: boolean;
   /**
