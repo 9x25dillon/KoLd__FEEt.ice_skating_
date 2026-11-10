@@ -38,6 +38,8 @@ public:
 	/** Every complete reply that has arrived, oldest first. False if the engine broke the protocol. */
 	bool Poll(TArray<FReply>& OutReplies, FString& OutError);
 	bool Busy() const { return Pending.Num() > 0; }
+	/** Whether a request other than a skating frame is in flight: a live run always has a frame out. */
+	bool BusyBeyondFrames() const;
 	/** Seconds the oldest outstanding request has waited; 0 when nothing is outstanding. */
 	double Waiting() const;
 	/** The requests still waiting, by op, for a failure message. */

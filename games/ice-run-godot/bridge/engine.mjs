@@ -18,6 +18,7 @@ import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
 import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS,EVENT_FLOORS,LESSON_XP,PLAN_EXTRA} from '../runtime/game/career.js';
 import {Tutorial,STEPS as TRUST_STEPS,STAGES as TRUST_STAGES} from '../runtime/game/tutorial.js';
 import {SteadyHand,STEADY_LEVELS,steadyDefault,isSteadyLevel,steadyStrength,steadyName,safeLean,SAFE_SHARE} from '../runtime/game/steady.js';
+import {SEASON,CHAPTERS,COACH,cast,outcome,finale,coachAdvice,STAT_TITLES} from '../runtime/game/story.js';
 import {RustGate,JUMP_FAMILIES} from '../runtime/game/training.js';
 import {BODY_REGIONS,FallWatch,wearNote} from '../runtime/game/wear.js';
 import {standings,seasonTable,RIVALS} from '../runtime/game/rivals.js';
@@ -53,7 +54,7 @@ export class IceEngine {
   this.steadyChoice=null; this.hand=new SteadyHand(steadyStrength(this.steadyLevel()));
   this.start({mode:'free'});
  }
- catalog() {return {steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {story:{coach:COACH,season:SEASON,chapters:CHAPTERS,cast:cast(),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson'].includes(mode)) throw Error('Unknown skating mode');
@@ -206,7 +207,11 @@ export class IceEngine {
    // prose or recalculating scores. Null PCS remains distinguishable from zero.
    const protocol=r.sheet?{lines:r.sheet.lines,tes:r.technicalScore,pcs:r.pcsScore?.total??null,deductions:r.deductions,total:r.segmentScore}:null;
    const stopped=r.complete?null:{element:ELEMENTS[r.current].title,how:elementHow(r.current,howContext(this.setup,this.controllerProfile))};
-   this.finished=true;this.result={title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls${r.cues?` · ${r.cueResults.filter(x=>x==='on').length}/${r.cues.length} on the music`:''}`,protocol,xp,complete:r.complete,stopped,body:this.bodyNote(),standings:this.mode==='career'&&r.complete?standings(this.event,r.segmentScore):null};
+   // game/story.ts: the chapter's ending for a career run, and the season's after the championship.
+   const story=this.mode==='career'?outcome(this.event,r.medal,r.complete):'';
+   const last=this.mode==='career'&&r.complete&&this.event===CAREER_EVENTS.length-1;
+   const place=last?seasonTable(this.career.best).find(x=>x.you)?.place??0:0;
+   this.finished=true;this.result={story,finale:last?finale(place):'',title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls${r.cues?` · ${r.cueResults.filter(x=>x==='on').length}/${r.cues.length} on the music`:''}`,protocol,xp,complete:r.complete,stopped,body:this.bodyNote(),standings:this.mode==='career'&&r.complete?standings(this.event,r.segmentScore):null};
   } else if(this.drill?.done&&!this.finished){const gained=this.career.recordDrill(this.drill.focus,this.drill.score);this.finished=true;this.result={title:`${ARM_FOCUS[this.drill.focus].title} drill: ${this.drill.score} / 100`,body:this.bodyNote(),detail:gained>0?`A new best, up ${gained}. Your arms give up less for ${ARM_FOCUS[this.drill.focus].title} now.`:`Your best stays ${this.career.armBest[this.drill.focus]}.`,complete:true};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
  }
@@ -304,6 +309,6 @@ export class IceEngine {
    armStyle:this.armStyle,drill:this.drill?{title:this.drill.title,hint:this.drill.hint,seconds:this.drill.seconds,score:this.drill.score,focus:this.drill.focus}:null,
    rookie:{index:this.rookie.index,cleared:this.rookie.cleared,title:this.rookie.title,hint:this.rookie.hint,target:this.rookie.target},
    run:{seconds:this.run.seconds,score:this.run.score,collected:this.run.collected,target:this.run.target},
-   career:{wear:this.career.wear,injured:this.career.injured,weeks:this.career.weeks,rust:this.career.rust,plans:this.career.plans,timelines:this.career.timelines,best:this.career.best,field:CAREER_EVENTS.map((_,i)=>standings(i,this.career.best[i])),season:seasonTable(this.career.best),overall:overall(this.career.profile),floors:EVENT_FLOORS,locks:CAREER_EVENTS.map((_,i)=>this.career.lockReason(i)),lessons:this.career.lessons,armFocus:this.career.armFocus,armBest:this.career.armBest,medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
+   career:{advice:coachAdvice({xp:this.career.profile.xp,weeks:this.career.weeks,unlocked:this.career.unlocked,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)])),rust:this.career.rust,wear:this.career.wear,injured:this.career.injured}),wear:this.career.wear,injured:this.career.injured,weeks:this.career.weeks,rust:this.career.rust,plans:this.career.plans,timelines:this.career.timelines,best:this.career.best,field:CAREER_EVENTS.map((_,i)=>standings(i,this.career.best[i])),season:seasonTable(this.career.best),overall:overall(this.career.profile),floors:EVENT_FLOORS,locks:CAREER_EVENTS.map((_,i)=>this.career.lockReason(i)),lessons:this.career.lessons,armFocus:this.career.armFocus,armBest:this.career.armBest,medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
  }
 }

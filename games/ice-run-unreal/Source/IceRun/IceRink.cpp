@@ -11,6 +11,11 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "TimerManager.h"
 
 namespace
@@ -195,7 +200,7 @@ void AIceRink::Build(double MinX, double MaxX, double MinY, double MaxY, double 
 			const double Depth = 3150 + Row * 135;
 			const double Height = 50 + Row * 72;
 			Box(FVector(135, 6900, 60), Middle + Turn.RotateVector(FVector(Depth, 0, Height - 30)), Yaw, Concrete);
-			Box(FVector(46, 6900, 50), Middle + Turn.RotateVector(FVector(Depth + 30, 0, Height + 25)), Yaw, Seats);
+			Box(FVector(46, 6900, 36), Middle + Turn.RotateVector(FVector(Depth + 30, 0, Height + 18)), Yaw, Seats);
 		}
 		Box(FVector(50, 9100, 1200), Middle + Turn.RotateVector(FVector(4500, 0, 800)), Yaw, Dark);
 		Box(FVector(30, 7200, 140), Middle + Turn.RotateVector(FVector(4300, 0, 820)), Yaw, Steel);
@@ -212,8 +217,103 @@ void AIceRink::Build(double MinX, double MaxX, double MinY, double MaxY, double 
 			RoofParts.Add(Box(FVector(270, 62, 3.5), Middle + FVector(X * 1200, Z * 1100, 1553), 0, Surface(Hex(TEXT("daedff")), .24f, 0.f, 20000.f), false));
 		}
 	}
+	SeatCrowd(Middle);
 	Lights();
 	UE_LOG(LogIceRun, Log, TEXT("Rink built: %d outline points, sheet %.0f x %.0f m, corner %.0f m."), Outline.Num(), MaxX - MinX, MaxY - MinY, Corner);
+}
+
+namespace
+{
+	/** A colour as arena.gd hands it to its shader: the hex's own values, not converted from sRGB. */
+	FLinearColor RawColour(const TCHAR* HexText)
+	{
+		const FColor C = FColor::FromHex(HexText);
+		return FLinearColor(C.R / 255.f, C.G / 255.f, C.B / 255.f);
+	}
+}
+
+void AIceRink::SeatCrowd(const FVector& Middle)
+{
+	FString Manifest, MeshPath, MaterialPath;
+	TSharedPtr<FJsonObject> Paths;
+	if (!FFileHelper::LoadFileToString(Manifest, *FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Generated/crowd.json"))) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Manifest), Paths) || !Paths.IsValid())
+	{
+		UE_LOG(LogIceRun, Log, TEXT("No audience: Content/Generated/crowd.json is missing; tools/prepare.mjs builds it."));
+		return;
+	}
+	Paths->TryGetStringField(TEXT("mesh"), MeshPath);
+	Paths->TryGetStringField(TEXT("material"), MaterialPath);
+	UStaticMesh* Body = MeshPath.IsEmpty() ? nullptr : LoadObject<UStaticMesh>(nullptr, *MeshPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+	UMaterialInterface* Look = MaterialPath.IsEmpty() ? nullptr : LoadObject<UMaterialInterface>(nullptr, *MaterialPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (!Body || !Look)
+	{
+		UE_LOG(LogIceRun, Warning, TEXT("No audience: %s or %s did not load."), *MeshPath, *MaterialPath);
+		return;
+	}
+	Crowd = NewObject<UInstancedStaticMeshComponent>(this);
+	Crowd->SetStaticMesh(Body);
+	Crowd->SetupAttachment(RootComponent);
+	Crowd->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Crowd->SetCastShadow(false);
+	// Per person (M_Crowd): the coat (0-2), the skin (3-5), their own timing (6).
+	Crowd->SetNumCustomDataFloats(7);
+	CrowdMaterial = UMaterialInstanceDynamic::Create(Look, this);
+	Crowd->SetMaterial(0, CrowdMaterial);
+	Crowd->RegisterComponent();
+	// arena.gd: on each bank nine rows of 113 seats at a 60 cm pitch, in blocks with three-seat aisles
+	// every 28, about six seats in seven taken. The spectator faces its +Y once imported: turned to the ice.
+	const FLinearColor Coats[] = {RawColour(TEXT("35475e")), RawColour(TEXT("5f5064")), RawColour(TEXT("939495")), RawColour(TEXT("9e7465")), RawColour(TEXT("233342")), RawColour(TEXT("4d6670"))};
+	const FLinearColor Fair = RawColour(TEXT("a07a62")), Deep = RawColour(TEXT("47332a"));
+	FRandomStream Random(0xA0D1);
+	TArray<FTransform> Bodies;
+	TArray<float> Data;
+	for (int32 Side = 0; Side < 4; ++Side)
+	{
+		const double Yaw = Side * 90.0;
+		const FRotator Turn(0, Yaw, 0);
+		for (int32 Row = 0; Row < 9; ++Row)
+		{
+			const double Depth = 3150 + Row * 135;
+			const double Height = 50 + Row * 72;
+			for (int32 Seat = 0; Seat < 113; ++Seat)
+			{
+				if (Seat % 28 < 3 || Random.FRand() <= .14f)
+				{
+					continue;
+				}
+				const double Along = (-33.8 + Seat * .6) * 100.0;
+				const float Size = Random.FRandRange(.94f, 1.06f);
+				const double Settled = FMath::RadiansToDegrees(Random.FRandRange(-.14f, .14f));
+				const FLinearColor Coat = Coats[Random.RandHelper(UE_ARRAY_COUNT(Coats))] * .5f;
+				const FLinearColor Skin = FMath::Lerp(Fair, Deep, FMath::Pow(Random.FRand(), 1.5f));
+				Bodies.Add(FTransform(FRotator(0, Yaw + 90.0 + Settled, 0), Middle + Turn.RotateVector(FVector(Depth + 30, Along, Height)), FVector(Size)));
+				Data.Append({Coat.R, Coat.G, Coat.B, Skin.R, Skin.G, Skin.B, Random.FRand()});
+			}
+		}
+	}
+	Crowd->AddInstances(Bodies, false, true, false);
+	for (int32 I = 0; I < Bodies.Num(); ++I)
+	{
+		Crowd->SetCustomData(I, TArrayView<const float>(Data.GetData() + I * 7, 7), false);
+	}
+	Crowd->MarkRenderStateDirty();
+	UE_LOG(LogIceRun, Log, TEXT("Audience seated: %d."), Bodies.Num());
+}
+
+void AIceRink::CrowdReact(double Amount)
+{
+	CrowdMood = FMath::Max(CrowdMood, Amount);
+}
+
+void AIceRink::UpdateCrowd(const FVector& SkaterAt, float Dt)
+{
+	// arena.gd update_crowd: a reaction rises at once and takes three and a half seconds to die away.
+	CrowdMood = FMath::Max(0.0, CrowdMood - Dt / 3.5);
+	if (CrowdMaterial)
+	{
+		CrowdMaterial->SetVectorParameterValue(TEXT("Skater"), FLinearColor(SkaterAt.X, SkaterAt.Y, SkaterAt.Z, 0.f));
+		CrowdMaterial->SetScalarParameterValue(TEXT("Cheer"), float(CrowdMood));
+	}
 }
 
 UStaticMeshComponent* AIceRink::Box(const FVector& Size, const FVector& Center, double YawDegrees, UMaterialInterface* Material, bool bShadow)
