@@ -1,0 +1,1682 @@
+{
+ "schema": "jpse-report/1",
+ "issue": 74,
+ "jump": "Lo",
+ "setup": "experimental",
+ "baselineSource": "test/backjump.test.ts, measured 2026-11-02",
+ "provenance": {
+  "mirrorTolerance": {
+   "value": 1e-9,
+   "units": "m, rad",
+   "kind": "tuning",
+   "source": "floating-point headroom for an exact mirror; the measured deviation is reported beside it"
+  },
+  "sampleEvery": {
+   "value": 12,
+   "units": "ticks",
+   "kind": "tuning",
+   "source": "0.1 s at SIM_HZ 120, for the report's sampled paths only"
+  },
+  "minSpeedForGeometry": {
+   "value": 0.5,
+   "units": "m/s",
+   "kind": "tuning",
+   "source": "below this a curvature is noise over a few mm"
+  },
+  "baselineCurvature": {
+   "value": "g tan(phi) / v^2",
+   "units": "1/m",
+   "kind": "inferred",
+   "source": "quasi-steady carve, issue #74; a baseline the solver is compared to, never applied"
+  }
+ },
+ "candidates": [
+  {
+   "id": "canonical",
+   "transform": {
+    "mirror": false,
+    "reverse": false
+   },
+   "initialSpeed": -7,
+   "required": {
+    "jump": "Lo",
+    "takeoff": "RBO",
+    "toe": false,
+    "rotation": "ccw"
+   },
+   "entrance": {
+    "ticks": 240,
+    "loadStartTick": 181,
+    "loadLapsedTick": -1,
+    "edgeTimeline": [
+     {
+      "from": 1,
+      "to": 30,
+      "code": "RB-",
+      "mode": 1
+     },
+     {
+      "from": 31,
+      "to": 66,
+      "code": "RBI",
+      "mode": 1
+     },
+     {
+      "from": 67,
+      "to": 74,
+      "code": "RB-",
+      "mode": 1
+     },
+     {
+      "from": 75,
+      "to": 113,
+      "code": "RBO",
+      "mode": 1
+     },
+     {
+      "from": 114,
+      "to": 149,
+      "code": "RBO",
+      "mode": 2
+     },
+     {
+      "from": 150,
+      "to": 169,
+      "code": "RBO",
+      "mode": 1
+     },
+     {
+      "from": 170,
+      "to": 180,
+      "code": "RBO",
+      "mode": 2
+     },
+     {
+      "from": 181,
+      "to": 240,
+      "code": "RBO",
+      "mode": 1
+     }
+    ],
+    "comPath": [
+     [
+      -0.05831,
+      -0.000026
+     ],
+     [
+      -0.756264,
+      -0.000916
+     ],
+     [
+      -1.450978,
+      -0.002198
+     ],
+     [
+      -2.142174,
+      0.004249
+     ],
+     [
+      -2.828509,
+      0.047018
+     ],
+     [
+      -3.507504,
+      0.132128
+     ],
+     [
+      -4.180381,
+      0.237424
+     ],
+     [
+      -4.852372,
+      0.325066
+     ],
+     [
+      -5.525819,
+      0.358432
+     ],
+     [
+      -6.196009,
+      0.325348
+     ],
+     [
+      -6.859384,
+      0.231906
+     ],
+     [
+      -7.52014,
+      0.097725
+     ],
+     [
+      -8.173786,
+      -0.083753
+     ],
+     [
+      -8.799954,
+      -0.346024
+     ],
+     [
+      -9.337709,
+      -0.754307
+     ],
+     [
+      -9.793782,
+      -1.252672
+     ],
+     [
+      -10.182729,
+      -1.803118
+     ],
+     [
+      -10.555416,
+      -2.36049
+     ],
+     [
+      -10.805812,
+      -2.976565
+     ],
+     [
+      -10.87566,
+      -3.634213
+     ],
+     [
+      -10.774556,
+      -4.229217
+     ]
+    ],
+    "bladePath": [
+     [
+      -0.058314,
+      -0.000036
+     ],
+     [
+      -0.75648,
+      -0.00126
+     ],
+     [
+      -1.45158,
+      -0.002965
+     ],
+     [
+      -2.143276,
+      0.007992
+     ],
+     [
+      -2.826925,
+      0.084674
+     ],
+     [
+      -3.493932,
+      0.240846
+     ],
+     [
+      -4.152047,
+      0.437936
+     ],
+     [
+      -4.827432,
+      0.613172
+     ],
+     [
+      -5.527966,
+      0.710655
+     ],
+     [
+      -6.237846,
+      0.71907
+     ],
+     [
+      -6.919354,
+      0.540883
+     ],
+     [
+      -7.614355,
+      0.456773
+     ],
+     [
+      -8.319648,
+      0.326444
+     ],
+     [
+      -9.097281,
+      0.177022
+     ],
+     [
+      -9.761628,
+      -0.317746
+     ],
+     [
+      -10.273512,
+      -0.871739
+     ],
+     [
+      -10.694996,
+      -1.462502
+     ],
+     [
+      -11.098891,
+      -2.04603
+     ],
+     [
+      -11.411801,
+      -2.8207
+     ],
+     [
+      -11.492776,
+      -3.654541
+     ],
+     [
+      -11.35796,
+      -4.406609
+     ]
+    ],
+    "meanKappaCom": 0.138722,
+    "meanKappaBlade": 0.111289,
+    "meanKappaBaseline": 0.146948,
+    "meanKappaBaselineError": 0.079659,
+    "maxBladeSkew": 0.034364
+   },
+   "takeoff": {
+    "tick": 241,
+    "code": "RBO",
+    "regime": "CARVE",
+    "simCalls": "Lo",
+    "com": [
+     -10.774556,
+     -4.229217
+    ],
+    "vel": [
+     1.864564,
+     -6.319285
+    ],
+    "speed": 6.588624,
+    "lean": -1.024669,
+    "yawRate": 2.792042,
+    "blade": [
+     -11.35796,
+     -4.406609
+    ],
+    "bladeHeading": [
+     -0.282997,
+     0.959121
+    ],
+    "alpha": 3.141593,
+    "supportLoad": [
+     0,
+     574.41231
+    ],
+    "vz": 2.520493,
+    "angMomentum": 28.309358,
+    "quality": 0.6194,
+    "edgeError": 0
+   },
+   "flight": {
+    "airTime": 0.513862,
+    "height": 0.323796,
+    "peakOmega": 49.39368,
+    "comPath": [
+     [
+      -10.757804,
+      -4.281479
+     ],
+     [
+      -10.562659,
+      -4.890296
+     ],
+     [
+      -10.368236,
+      -5.496861
+     ],
+     [
+      -10.174529,
+      -6.10119
+     ],
+     [
+      -9.981534,
+      -6.703301
+     ],
+     [
+      -9.789245,
+      -7.303209
+     ]
+    ]
+   },
+   "landing": {
+    "tick": 302,
+    "simCalls": "Lo",
+    "turned": 1.97114,
+    "rotationCall": "clean",
+    "edgeCall": "clean",
+    "fall": false,
+    "twoFoot": false,
+    "stepOut": false,
+    "landingQuality": 0.601922,
+    "stoodTicks": 144
+   },
+   "gates": [
+    {
+     "gate": "finite-state",
+     "pass": true
+    },
+    {
+     "gate": "replay-deterministic",
+     "pass": true
+    },
+    {
+     "gate": "rotation-modelled",
+     "pass": true
+    },
+    {
+     "gate": "took-off",
+     "pass": true
+    },
+    {
+     "gate": "takeoff-edge",
+     "pass": true
+    },
+    {
+     "gate": "takeoff-contact",
+     "pass": true
+    },
+    {
+     "gate": "completed",
+     "pass": true
+    }
+   ],
+   "rejected": false,
+   "reasons": [],
+   "replay": {
+    "ticks": 446,
+    "digest": 1781158768,
+    "verified": true
+   }
+  },
+  {
+   "id": "mirror",
+   "transform": {
+    "mirror": true,
+    "reverse": false
+   },
+   "initialSpeed": -7,
+   "required": {
+    "jump": "Lo",
+    "takeoff": "LBO",
+    "toe": false,
+    "rotation": "cw"
+   },
+   "entrance": {
+    "ticks": 240,
+    "loadStartTick": 181,
+    "loadLapsedTick": -1,
+    "edgeTimeline": [
+     {
+      "from": 1,
+      "to": 30,
+      "code": "LB-",
+      "mode": 1
+     },
+     {
+      "from": 31,
+      "to": 66,
+      "code": "LBI",
+      "mode": 1
+     },
+     {
+      "from": 67,
+      "to": 74,
+      "code": "LB-",
+      "mode": 1
+     },
+     {
+      "from": 75,
+      "to": 113,
+      "code": "LBO",
+      "mode": 1
+     },
+     {
+      "from": 114,
+      "to": 149,
+      "code": "RBI",
+      "mode": 2
+     },
+     {
+      "from": 150,
+      "to": 169,
+      "code": "LBO",
+      "mode": 1
+     },
+     {
+      "from": 170,
+      "to": 180,
+      "code": "RBI",
+      "mode": 2
+     },
+     {
+      "from": 181,
+      "to": 240,
+      "code": "LBO",
+      "mode": 1
+     }
+    ],
+    "comPath": [
+     [
+      -0.05831,
+      0.000026
+     ],
+     [
+      -0.756264,
+      0.000915
+     ],
+     [
+      -1.450978,
+      0.002198
+     ],
+     [
+      -2.142173,
+      -0.004296
+     ],
+     [
+      -2.828511,
+      -0.047052
+     ],
+     [
+      -3.507502,
+      -0.13218
+     ],
+     [
+      -4.180204,
+      -0.238579
+     ],
+     [
+      -4.852247,
+      -0.325778
+     ],
+     [
+      -5.525744,
+      -0.358105
+     ],
+     [
+      -6.1959,
+      -0.324279
+     ],
+     [
+      -6.859113,
+      -0.229842
+     ],
+     [
+      -7.517975,
+      -0.087767
+     ],
+     [
+      -8.167223,
+      0.107223
+     ],
+     [
+      -8.786204,
+      0.384466
+     ],
+     [
+      -9.316293,
+      0.802028
+     ],
+     [
+      -9.773073,
+      1.299527
+     ],
+     [
+      -10.148422,
+      1.858581
+     ],
+     [
+      -10.487,
+      2.428162
+     ],
+     [
+      -10.778546,
+      2.994949
+     ],
+     [
+      -11.035611,
+      3.558916
+     ],
+     [
+      -11.259231,
+      4.074583
+     ]
+    ],
+    "bladePath": [
+     [
+      -0.058314,
+      0.000036
+     ],
+     [
+      -0.75648,
+      0.001258
+     ],
+     [
+      -1.45158,
+      0.002965
+     ],
+     [
+      -2.143274,
+      -0.00808
+     ],
+     [
+      -2.826931,
+      -0.084724
+     ],
+     [
+      -3.493894,
+      -0.240913
+     ],
+     [
+      -4.151636,
+      -0.440199
+     ],
+     [
+      -4.827603,
+      -0.61482
+     ],
+     [
+      -5.52842,
+      -0.710815
+     ],
+     [
+      -6.238085,
+      -0.71829
+     ],
+     [
+      -6.967984,
+      -0.773796
+     ],
+     [
+      -7.6875,
+      -0.671299
+     ],
+     [
+      -8.402895,
+      -0.516961
+     ],
+     [
+      -9.089851,
+      -0.119779
+     ],
+     [
+      -9.731913,
+      0.382351
+     ],
+     [
+      -10.235605,
+      0.926066
+     ],
+     [
+      -10.704352,
+      1.673794
+     ],
+     [
+      -11.032644,
+      2.441665
+     ],
+     [
+      -11.25724,
+      3.006857
+     ],
+     [
+      -11.447981,
+      3.498726
+     ],
+     [
+      -11.59451,
+      3.89222
+     ]
+    ],
+    "meanKappaCom": -0.085908,
+    "meanKappaBlade": -0.074371,
+    "meanKappaBaseline": -0.119422,
+    "meanKappaBaselineError": 0.089729,
+    "maxBladeSkew": 0.532948
+   },
+   "takeoff": {
+    "tick": 241,
+    "code": "LBO",
+    "regime": "SKID",
+    "simCalls": "none",
+    "com": [
+     -11.259231,
+     4.074583
+    ],
+    "vel": [
+     -2.488155,
+     5.584154
+    ],
+    "speed": 6.113402,
+    "lean": 0.564338,
+    "yawRate": 4.236544,
+    "blade": [
+     -11.59451,
+     3.89222
+    ],
+    "bladeHeading": [
+     0.486736,
+     -0.873549
+    ],
+    "alpha": 3.05241,
+    "supportLoad": [
+     574.41231,
+     0
+    ],
+    "vz": 2.507216,
+    "angMomentum": 8.301928,
+    "quality": 0.6194,
+    "edgeError": 0
+   },
+   "flight": {
+    "airTime": 0.508333,
+    "height": 0,
+    "peakOmega": 0,
+    "comPath": [
+     [
+      -11.279989,
+      4.12108
+     ],
+     [
+      -11.528612,
+      4.677978
+     ],
+     [
+      -11.776358,
+      5.23291
+     ],
+     [
+      -12.023232,
+      5.785891
+     ],
+     [
+      -12.269241,
+      6.336935
+     ],
+     [
+      -12.514392,
+      6.886054
+     ]
+    ]
+   },
+   "landing": {
+    "tick": 302,
+    "simCalls": "none",
+    "turned": 0.579551,
+    "rotationCall": "clean",
+    "edgeCall": "clean",
+    "fall": true,
+    "twoFoot": false,
+    "stepOut": false,
+    "landingQuality": 0.098914,
+    "stoodTicks": 0
+   },
+   "gates": [
+    {
+     "gate": "finite-state",
+     "pass": true
+    },
+    {
+     "gate": "replay-deterministic",
+     "pass": true
+    },
+    {
+     "gate": "rotation-modelled",
+     "pass": false,
+     "reason": "rotation:cw-not-modelled (sim/jump.ts models counter-clockwise only)"
+    },
+    {
+     "gate": "took-off",
+     "pass": true
+    },
+    {
+     "gate": "takeoff-edge",
+     "pass": true
+    },
+    {
+     "gate": "takeoff-contact",
+     "pass": false,
+     "reason": "takeoff-contact:SKID"
+    },
+    {
+     "gate": "completed",
+     "pass": false,
+     "reason": "landing:called-none"
+    }
+   ],
+   "rejected": true,
+   "reasons": [
+    "rotation:cw-not-modelled (sim/jump.ts models counter-clockwise only)",
+    "takeoff-contact:SKID",
+    "landing:called-none"
+   ],
+   "replay": {
+    "ticks": 446,
+    "digest": 3261230288,
+    "verified": true
+   }
+  },
+  {
+   "id": "reverse",
+   "transform": {
+    "mirror": false,
+    "reverse": true
+   },
+   "initialSpeed": 7,
+   "required": {
+    "jump": "Lo",
+    "takeoff": "RBO",
+    "toe": false,
+    "rotation": "ccw"
+   },
+   "entrance": {
+    "ticks": 240,
+    "loadStartTick": 181,
+    "loadLapsedTick": -1,
+    "edgeTimeline": [
+     {
+      "from": 1,
+      "to": 31,
+      "code": "RF-",
+      "mode": 1
+     },
+     {
+      "from": 32,
+      "to": 66,
+      "code": "RFI",
+      "mode": 1
+     },
+     {
+      "from": 67,
+      "to": 74,
+      "code": "RF-",
+      "mode": 1
+     },
+     {
+      "from": 75,
+      "to": 113,
+      "code": "RFO",
+      "mode": 1
+     },
+     {
+      "from": 114,
+      "to": 149,
+      "code": "RFO",
+      "mode": 2
+     },
+     {
+      "from": 150,
+      "to": 169,
+      "code": "RFO",
+      "mode": 1
+     },
+     {
+      "from": 170,
+      "to": 180,
+      "code": "RFO",
+      "mode": 2
+     },
+     {
+      "from": 181,
+      "to": 236,
+      "code": "RFO",
+      "mode": 1
+     },
+     {
+      "from": 237,
+      "to": 240,
+      "code": "RBO",
+      "mode": 1
+     }
+    ],
+    "comPath": [
+     [
+      0.05831,
+      0.000026
+     ],
+     [
+      0.756264,
+      0.000915
+     ],
+     [
+      1.450978,
+      0.002198
+     ],
+     [
+      2.142156,
+      0.01069
+     ],
+     [
+      2.828447,
+      0.05424
+     ],
+     [
+      3.507366,
+      0.139954
+     ],
+     [
+      4.179944,
+      0.247145
+     ],
+     [
+      4.851727,
+      0.336301
+     ],
+     [
+      5.525164,
+      0.369657
+     ],
+     [
+      6.19529,
+      0.335453
+     ],
+     [
+      6.858644,
+      0.240399
+     ],
+     [
+      7.520174,
+      0.104924
+     ],
+     [
+      8.175909,
+      -0.076188
+     ],
+     [
+      8.805711,
+      -0.336547
+     ],
+     [
+      9.349148,
+      -0.741723
+     ],
+     [
+      9.813415,
+      -1.236562
+     ],
+     [
+      10.181116,
+      -1.804132
+     ],
+     [
+      10.504429,
+      -2.390084
+     ],
+     [
+      10.785192,
+      -2.97892
+     ],
+     [
+      11.037437,
+      -3.561162
+     ],
+     [
+      11.259678,
+      -4.085542
+     ]
+    ],
+    "bladePath": [
+     [
+      0.058314,
+      0.000036
+     ],
+     [
+      0.75648,
+      0.001258
+     ],
+     [
+      1.45158,
+      0.002965
+     ],
+     [
+      2.143194,
+      0.016313
+     ],
+     [
+      2.826731,
+      0.092995
+     ],
+     [
+      3.49361,
+      0.249034
+     ],
+     [
+      4.15076,
+      0.44868
+     ],
+     [
+      4.826266,
+      0.626133
+     ],
+     [
+      5.527632,
+      0.72357
+     ],
+     [
+      6.238099,
+      0.730378
+     ],
+     [
+      6.919385,
+      0.549312
+     ],
+     [
+      7.613662,
+      0.461245
+     ],
+     [
+      8.318968,
+      0.330782
+     ],
+     [
+      9.097741,
+      0.184731
+     ],
+     [
+      9.765369,
+      -0.303637
+     ],
+     [
+      10.284839,
+      -0.851699
+     ],
+     [
+      10.729464,
+      -1.577082
+     ],
+     [
+      11.042966,
+      -2.306554
+     ],
+     [
+      11.246111,
+      -3.04386
+     ],
+     [
+      11.325301,
+      -3.838012
+     ],
+     [
+      11.273921,
+      -4.453363
+     ]
+    ],
+    "meanKappaCom": -0.086758,
+    "meanKappaBlade": -0.107311,
+    "meanKappaBaseline": -0.111677,
+    "meanKappaBaselineError": 0.08903,
+    "maxBladeSkew": 1.554838
+   },
+   "takeoff": {
+    "tick": 241,
+    "code": "RBO",
+    "regime": "SKID",
+    "simCalls": "Lo",
+    "com": [
+     11.259678,
+     -4.085542
+    ],
+    "vel": [
+     2.410974,
+     -5.680865
+    ],
+    "speed": 6.171306,
+    "lean": -0.541989,
+    "yawRate": -9.098038,
+    "blade": [
+     11.273921,
+     -4.453363
+    ],
+    "bladeHeading": [
+     -0.998799,
+     -0.049005
+    ],
+    "alpha": 1.923136,
+    "supportLoad": [
+     0,
+     574.41231
+    ],
+    "vz": 2.488922,
+    "angMomentum": 0,
+    "quality": 0.6194,
+    "edgeError": 0
+   },
+   "flight": {
+    "airTime": 0.5,
+    "height": 0,
+    "peakOmega": 0,
+    "comPath": [
+     [
+      11.279763,
+      -4.132822
+     ],
+     [
+      11.513354,
+      -4.6827
+     ],
+     [
+      11.746137,
+      -5.230677
+     ],
+     [
+      11.978118,
+      -5.776766
+     ],
+     [
+      12.209303,
+      -6.32098
+     ],
+     [
+      12.420528,
+      -6.818206
+     ]
+    ]
+   },
+   "landing": {
+    "tick": 301,
+    "simCalls": "none",
+    "turned": 0,
+    "rotationCall": "clean",
+    "edgeCall": "clean",
+    "fall": false,
+    "twoFoot": false,
+    "stepOut": true,
+    "landingQuality": 0.242105,
+    "stoodTicks": 28
+   },
+   "gates": [
+    {
+     "gate": "finite-state",
+     "pass": true
+    },
+    {
+     "gate": "replay-deterministic",
+     "pass": true
+    },
+    {
+     "gate": "rotation-modelled",
+     "pass": true
+    },
+    {
+     "gate": "took-off",
+     "pass": true
+    },
+    {
+     "gate": "takeoff-edge",
+     "pass": true
+    },
+    {
+     "gate": "takeoff-contact",
+     "pass": false,
+     "reason": "takeoff-contact:SKID"
+    },
+    {
+     "gate": "completed",
+     "pass": false,
+     "reason": "landing:called-none"
+    }
+   ],
+   "rejected": true,
+   "reasons": [
+    "takeoff-contact:SKID",
+    "landing:called-none"
+   ],
+   "replay": {
+    "ticks": 446,
+    "digest": 1979799528,
+    "verified": true
+   }
+  },
+  {
+   "id": "mirror+reverse",
+   "transform": {
+    "mirror": true,
+    "reverse": true
+   },
+   "initialSpeed": 7,
+   "required": {
+    "jump": "Lo",
+    "takeoff": "LBO",
+    "toe": false,
+    "rotation": "cw"
+   },
+   "entrance": {
+    "ticks": 446,
+    "loadStartTick": 181,
+    "loadLapsedTick": 211,
+    "edgeTimeline": [
+     {
+      "from": 1,
+      "to": 31,
+      "code": "LF-",
+      "mode": 1
+     },
+     {
+      "from": 32,
+      "to": 66,
+      "code": "LFI",
+      "mode": 1
+     },
+     {
+      "from": 67,
+      "to": 74,
+      "code": "LF-",
+      "mode": 1
+     },
+     {
+      "from": 75,
+      "to": 113,
+      "code": "LFO",
+      "mode": 1
+     },
+     {
+      "from": 114,
+      "to": 149,
+      "code": "RFI",
+      "mode": 2
+     },
+     {
+      "from": 150,
+      "to": 169,
+      "code": "LFO",
+      "mode": 1
+     },
+     {
+      "from": 170,
+      "to": 180,
+      "code": "RFI",
+      "mode": 2
+     },
+     {
+      "from": 181,
+      "to": 282,
+      "code": "LFO",
+      "mode": 1
+     },
+     {
+      "from": 283,
+      "to": 320,
+      "code": "LF-",
+      "mode": 1
+     },
+     {
+      "from": 321,
+      "to": 338,
+      "code": "RF-",
+      "mode": 2
+     },
+     {
+      "from": 339,
+      "to": 339,
+      "code": "---",
+      "mode": 2
+     },
+     {
+      "from": 340,
+      "to": 367,
+      "code": "R--",
+      "mode": 2
+     },
+     {
+      "from": 368,
+      "to": 385,
+      "code": "R-I",
+      "mode": 2
+     },
+     {
+      "from": 386,
+      "to": 394,
+      "code": "R--",
+      "mode": 2
+     },
+     {
+      "from": 395,
+      "to": 416,
+      "code": "R-I",
+      "mode": 2
+     },
+     {
+      "from": 417,
+      "to": 430,
+      "code": "RFI",
+      "mode": 2
+     },
+     {
+      "from": 431,
+      "to": 446,
+      "code": "RFO",
+      "mode": 2
+     }
+    ],
+    "comPath": [
+     [
+      0.05831,
+      -0.000026
+     ],
+     [
+      0.756264,
+      -0.000916
+     ],
+     [
+      1.450978,
+      -0.002198
+     ],
+     [
+      2.142155,
+      -0.010737
+     ],
+     [
+      2.828448,
+      -0.054282
+     ],
+     [
+      3.507361,
+      -0.140026
+     ],
+     [
+      4.179914,
+      -0.24737
+     ],
+     [
+      4.85181,
+      -0.335708
+     ],
+     [
+      5.52525,
+      -0.369173
+     ],
+     [
+      6.195447,
+      -0.336213
+     ],
+     [
+      6.858941,
+      -0.242287
+     ],
+     [
+      7.518844,
+      -0.100346
+     ],
+     [
+      8.170148,
+      0.094214
+     ],
+     [
+      8.787256,
+      0.380617
+     ],
+     [
+      9.305765,
+      0.816592
+     ],
+     [
+      9.745412,
+      1.333365
+     ],
+     [
+      10.159692,
+      1.868075
+     ],
+     [
+      10.627736,
+      2.336824
+     ],
+     [
+      11.151871,
+      2.701275
+     ],
+     [
+      11.688497,
+      3.036192
+     ],
+     [
+      12.201828,
+      3.400775
+     ],
+     [
+      12.714014,
+      3.761262
+     ],
+     [
+      13.246948,
+      4.08063
+     ],
+     [
+      13.784178,
+      4.381208
+     ],
+     [
+      14.319266,
+      4.676739
+     ],
+     [
+      14.851455,
+      4.967789
+     ],
+     [
+      15.380035,
+      5.254726
+     ],
+     [
+      15.904619,
+      5.538217
+     ],
+     [
+      16.425454,
+      5.819262
+     ],
+     [
+      16.468689,
+      5.842583
+     ],
+     [
+      16.468689,
+      5.842583
+     ],
+     [
+      16.468689,
+      5.842583
+     ],
+     [
+      16.468689,
+      5.842583
+     ],
+     [
+      16.469126,
+      5.842322
+     ],
+     [
+      16.472696,
+      5.836304
+     ],
+     [
+      16.477436,
+      5.821975
+     ],
+     [
+      16.482177,
+      5.799608
+     ],
+     [
+      16.485371,
+      5.775652
+     ],
+     [
+      16.485623,
+      5.773699
+     ]
+    ],
+    "bladePath": [
+     [
+      0.058314,
+      -0.000036
+     ],
+     [
+      0.75648,
+      -0.00126
+     ],
+     [
+      1.45158,
+      -0.002965
+     ],
+     [
+      2.143191,
+      -0.016397
+     ],
+     [
+      2.826737,
+      -0.093046
+     ],
+     [
+      3.493568,
+      -0.249119
+     ],
+     [
+      4.15102,
+      -0.449111
+     ],
+     [
+      4.826626,
+      -0.624941
+     ],
+     [
+      5.527378,
+      -0.722266
+     ],
+     [
+      6.237258,
+      -0.730721
+     ],
+     [
+      6.967577,
+      -0.786759
+     ],
+     [
+      7.688276,
+      -0.684353
+     ],
+     [
+      8.405949,
+      -0.530719
+     ],
+     [
+      9.105905,
+      -0.119027
+     ],
+     [
+      9.74297,
+      0.407616
+     ],
+     [
+      10.227123,
+      0.968431
+     ],
+     [
+      10.59685,
+      1.423053
+     ],
+     [
+      10.949155,
+      1.755939
+     ],
+     [
+      11.509437,
+      2.082044
+     ],
+     [
+      12.091843,
+      2.439563
+     ],
+     [
+      12.630012,
+      2.830443
+     ],
+     [
+      13.09343,
+      3.140218
+     ],
+     [
+      13.490954,
+      3.361774
+     ],
+     [
+      13.841137,
+      3.605141
+     ],
+     [
+      14.203481,
+      3.899724
+     ],
+     [
+      14.563159,
+      4.234903
+     ],
+     [
+      14.905509,
+      4.613271
+     ],
+     [
+      15.17396,
+      4.948432
+     ],
+     [
+      15.621281,
+      5.310673
+     ],
+     [
+      16.365982,
+      5.780525
+     ],
+     [
+      16.3635,
+      5.784832
+     ],
+     [
+      16.359388,
+      5.793053
+     ],
+     [
+      16.355721,
+      5.802107
+     ],
+     [
+      16.353366,
+      5.811153
+     ],
+     [
+      16.360097,
+      5.813697
+     ],
+     [
+      16.374396,
+      5.805343
+     ],
+     [
+      16.391645,
+      5.785109
+     ],
+     [
+      16.402159,
+      5.761844
+     ],
+     [
+      16.402722,
+      5.759904
+     ]
+    ],
+    "meanKappaCom": 0.025025,
+    "meanKappaBlade": 0.016903,
+    "meanKappaBaseline": 4.3968,
+    "meanKappaBaselineError": 4.409503,
+    "maxBladeSkew": 1.4952
+   },
+   "takeoff": null,
+   "flight": null,
+   "landing": null,
+   "gates": [
+    {
+     "gate": "finite-state",
+     "pass": true
+    },
+    {
+     "gate": "replay-deterministic",
+     "pass": true
+    },
+    {
+     "gate": "rotation-modelled",
+     "pass": false,
+     "reason": "rotation:cw-not-modelled (sim/jump.ts models counter-clockwise only)"
+    },
+    {
+     "gate": "took-off",
+     "pass": false,
+     "reason": "takeoff:none"
+    },
+    {
+     "gate": "completed",
+     "pass": false,
+     "reason": "landing:none"
+    }
+   ],
+   "rejected": true,
+   "reasons": [
+    "rotation:cw-not-modelled (sim/jump.ts models counter-clockwise only)",
+    "takeoff:none",
+    "landing:none"
+   ],
+   "replay": {
+    "ticks": 446,
+    "digest": 2799526801,
+    "verified": true
+   }
+  }
+ ],
+ "invariants": {
+  "mirror": {
+   "ticks": 180,
+   "maxPositionError": 0.048859229345367794,
+   "maxLeanError": 0.032385235694314396,
+   "feetSwapped": true,
+   "divergesAtTick": 2,
+   "cause": "ice-grid",
+   "pass": false
+  },
+  "reverseMirror": {
+   "ticks": 180,
+   "maxPositionError": 0.09551848704527455,
+   "maxLeanError": 0.0102255722677419,
+   "feetSwapped": true,
+   "divergesAtTick": 2,
+   "cause": "ice-grid",
+   "pass": false
+  },
+  "mirrorControlled": {
+   "ticks": 180,
+   "maxPositionError": 0.0461184029982189,
+   "maxLeanError": 0.034167868617421826,
+   "feetSwapped": true,
+   "divergesAtTick": 119,
+   "cause": "two-foot-tie",
+   "pass": false
+  },
+  "reverseMirrorControlled": {
+   "ticks": 180,
+   "maxPositionError": 0.1053576009708157,
+   "maxLeanError": 0.01190160990943867,
+   "feetSwapped": true,
+   "divergesAtTick": 119,
+   "cause": "two-foot-tie",
+   "pass": false
+  },
+  "reverseCurvatureSense": {
+   "canonical": 0.138722,
+   "reverse": -0.086758,
+   "flipped": true
+  }
+ },
+ "solverHandedness": [
+  {
+   "id": "ice-grid",
+   "where": "sim/ice.ts IceGrid.cellAt",
+   "what": "the sheet's rows split at y = 0 (rinkHalfWidth 15 / ICE_CELL 0.12 = 125 rows) and y = 0 belongs to the row above; a mirrored skater starting on the line cuts onto fresh ice where the canonical cuts onto ice it has already marked",
+   "off": "iceGridMode 0"
+  },
+  {
+   "id": "fatigue-noise",
+   "where": "sim/solver.ts balance loop, staminaBalanceNoiseBase",
+   "what": "the fatigue wobble is seeded by the tick alone, so a mirrored skater gets the same push the same way, not its mirror",
+   "off": "staminaMode 0"
+  },
+  {
+   "id": "two-foot-tie",
+   "where": "sim/solver.ts supportFoot = weights[1] >= weights[0] ? Right : Left",
+   "what": "on two feet at exactly equal weight the support (and so the heading's) blade is the right one, for a mirrored skater too",
+   "off": "no input off-switch; weight 0.5 on two feet is the tie"
+  }
+ ],
+ "accepted": [
+  "canonical"
+ ]
+}

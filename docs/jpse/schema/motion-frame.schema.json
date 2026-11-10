@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kold-feet.invalid/jpse/motion-frame.schema.json",
+  "title": "MotionFrame",
+  "description": "One tick of what the solver did, after the step. One JSON object per line in a .jsonl stream. Unrounded. What a renderer (JPSE-010) reconstructs a pose from.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "jpse-frame/1"
+    },
+    "tick": {
+      "type": "integer"
+    },
+    "com": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "additionalProperties": false
+    },
+    "vel": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    "heading": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    "yawRate": {
+      "type": "number"
+    },
+    "lean": {
+      "type": "number"
+    },
+    "knee": {
+      "type": "number"
+    },
+    "supportFoot": {
+      "enum": [
+        0,
+        1
+      ]
+    },
+    "supportMode": {
+      "enum": [
+        0,
+        1,
+        2
+      ]
+    },
+    "fallen": {
+      "type": "boolean"
+    },
+    "jumpPhase": {
+      "enum": [
+        "none",
+        "load",
+        "air"
+      ]
+    },
+    "rotation": {
+      "type": "number"
+    },
+    "angMomentum": {
+      "type": "number"
+    },
+    "inertia": {
+      "type": "number"
+    },
+    "blades": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Blade"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "kappaCom": {
+      "type": "number"
+    },
+    "kappaBaseline": {
+      "type": "number"
+    },
+    "alpha": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "schema",
+    "tick",
+    "com",
+    "vel",
+    "heading",
+    "yawRate",
+    "lean",
+    "knee",
+    "supportFoot",
+    "supportMode",
+    "fallen",
+    "jumpPhase",
+    "rotation",
+    "angMomentum",
+    "inertia",
+    "blades",
+    "kappaCom",
+    "kappaBaseline",
+    "alpha"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Blade": {
+      "type": "object",
+      "properties": {
+        "contact": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "tangent": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "tilt": {
+          "type": "number"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^([LR][FB-][OI-]|---)$"
+        },
+        "regime": {
+          "enum": [
+            "UNLOADED",
+            "GLIDE",
+            "EDGE",
+            "CARVE",
+            "SKID",
+            "TOEPICK",
+            "BRAKE"
+          ]
+        },
+        "inContact": {
+          "type": "boolean"
+        },
+        "normalLoad": {
+          "type": "number"
+        },
+        "weight": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "contact",
+        "tangent",
+        "tilt",
+        "code",
+        "regime",
+        "inContact",
+        "normalLoad",
+        "weight"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

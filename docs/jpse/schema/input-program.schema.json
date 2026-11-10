@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kold-feet.invalid/jpse/input-program.schema.json",
+  "title": "InputProgram",
+  "description": "A candidate's whole control: starting speed (m/s, signed; negative is backward along +x) and one SkatingInput per 120 Hz tick.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "jpse-program/1"
+    },
+    "speed": {
+      "type": "number",
+      "minimum": -100,
+      "maximum": 100
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SkatingInput"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "speed",
+    "inputs"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "SkatingInput": {
+      "type": "object",
+      "properties": {
+        "lean": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "knee": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "pitch": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "leanSplit": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "pitchSplit": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "kneeSplit": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "toeOut": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "toeOutSplit": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "pushFoot": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "pushPower": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "pushKnee": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "freeLeg": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "push": {
+          "type": "boolean"
+        },
+        "brake": {
+          "type": "boolean"
+        },
+        "carriage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "windup": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "toe": {
+          "type": "boolean"
+        },
+        "turn": {
+          "type": "boolean"
+        },
+        "bracket": {
+          "type": "boolean"
+        },
+        "twizzle": {
+          "type": "boolean"
+        },
+        "spin": {
+          "type": "boolean"
+        },
+        "inaBauer": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "lean",
+        "knee",
+        "weight",
+        "pitch",
+        "leanSplit",
+        "push",
+        "brake",
+        "carriage",
+        "windup",
+        "toe",
+        "turn",
+        "bracket",
+        "twizzle",
+        "spin",
+        "inaBauer"
+      ],
+      "additionalProperties": false,
+      "description": "One tick of control, the solver's SkatingInput (tools/ice-lab/sim/types.ts). Optional fields absent read as the solver's defaults."
+    }
+  }
+}

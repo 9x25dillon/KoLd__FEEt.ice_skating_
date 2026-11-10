@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kold-feet.invalid/jpse/jpse-report.schema.json",
+  "title": "JpseReport",
+  "description": "One slice: every candidate's report, the cross-candidate invariants, and the provenance of every threshold JPSE added.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "jpse-report/1"
+    },
+    "issue": {
+      "type": "integer"
+    },
+    "jump": {
+      "enum": [
+        "T",
+        "S",
+        "Lo",
+        "F",
+        "Lz",
+        "A",
+        "none"
+      ]
+    },
+    "setup": {
+      "type": "string"
+    },
+    "baselineSource": {
+      "type": "string"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Provenance"
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "candidate-report.schema.json"
+      }
+    },
+    "invariants": {
+      "type": "object",
+      "properties": {
+        "mirror": {
+          "$ref": "#/$defs/Mirror"
+        },
+        "reverseMirror": {
+          "$ref": "#/$defs/Mirror"
+        },
+        "mirrorControlled": {
+          "$ref": "#/$defs/Mirror"
+        },
+        "reverseMirrorControlled": {
+          "$ref": "#/$defs/Mirror"
+        },
+        "reverseCurvatureSense": {
+          "type": "object",
+          "properties": {
+            "canonical": {
+              "type": "number"
+            },
+            "reverse": {
+              "type": "number"
+            },
+            "flipped": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "canonical",
+            "reverse",
+            "flipped"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "mirror",
+        "reverseMirror",
+        "mirrorControlled",
+        "reverseMirrorControlled",
+        "reverseCurvatureSense"
+      ],
+      "additionalProperties": false
+    },
+    "solverHandedness": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "where": {
+            "type": "string"
+          },
+          "what": {
+            "type": "string"
+          },
+          "off": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "where",
+          "what",
+          "off"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "accepted": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "issue",
+    "jump",
+    "setup",
+    "baselineSource",
+    "provenance",
+    "candidates",
+    "invariants",
+    "solverHandedness",
+    "accepted"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Provenance": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "units": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "measured",
+            "inferred",
+            "tuning"
+          ]
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "units",
+        "kind",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "Mirror": {
+      "type": "object",
+      "properties": {
+        "ticks": {
+          "type": "integer"
+        },
+        "maxPositionError": {
+          "type": "number"
+        },
+        "maxLeanError": {
+          "type": "number"
+        },
+        "feetSwapped": {
+          "type": "boolean"
+        },
+        "divergesAtTick": {
+          "type": "integer"
+        },
+        "cause": {
+          "type": "string"
+        },
+        "pass": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ticks",
+        "maxPositionError",
+        "maxLeanError",
+        "feetSwapped",
+        "divergesAtTick",
+        "cause",
+        "pass"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
