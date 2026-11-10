@@ -87,14 +87,16 @@ test("the check's timing is the skill: early is short and falls, late over-turns
   assert.ok(late.s.fallen && Math.abs(late.s.landed.turned - 2.20) < 0.01, `late ${late.s.landed.turned.toFixed(3)}`);
 });
 
-test("arms held wound against the jump all through the load take the spin away", () => {
+test("arms held wound against the jump all through the load turn it the other way, a little", () => {
   // The script these tests used until 2026-11-02, from play on 2026-09-23.
-  // Negative control: L was 37.5 before armsWhipMode, and now no spin at all.
+  // Negative control: L was 37.5 before armsWhipMode, then no spin at all.
+  // Since jumpDirMode (2026-11-09) the arms' clockwise swing is not thrown
+  // away: MEASURED L -1.05, a faint clockwise turn.
   const r = run((h, t, i, took) => {
     h.axes = [0, 0, -0.6, 0];
     if (i < 2) h.buttons[1] = 1;
     if (t >= 1 && t < 1.35) { h.buttons[7] = 1; h.axes[3] = 1; h.buttons[1] = 1; }
     if (took >= 0) { h.axes = [0, 0, 0, 0]; h.buttons[7] = 0.7; }
   });
-  assert.ok(Math.abs(r.L) < 0.01, `L ${r.L.toFixed(2)}`);
+  assert.ok(Math.abs(r.L + 1.05) < 0.01, `L ${r.L.toFixed(2)}`);
 });

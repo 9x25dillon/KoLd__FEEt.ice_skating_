@@ -174,12 +174,14 @@ function digJump(deg: number, pitch: number, weight: number, toe: boolean) {
 test("a dig is rotation for the jump: the toe dig's winding leaves the ice with the skater", () => {
   // MEASURED, 6 m/s, 100°, 0.1 s dig then a 0.3 s load, no arms: toe dig L 6.52
   // (full arms alone give inertiaOpen x jumpWhip = 38); flat 0; heel 0 — a
-  // counter-clockwise skater cannot use a clockwise winding. A 150° dig lines
-  // up sooner and gives 0.
+  // counter-clockwise skater could not use a clockwise winding. Since
+  // jumpDirMode (2026-11-09) the heel dig's clockwise winding leaves with the
+  // skater too: L -6.71, a clockwise jump. Toe or heel picks the way round.
+  // A 150° dig lines up sooner and gives less.
   const toe = digJump(100, 0.8, 0, false), flat = digJump(100, 0, 0, false), heel = digJump(100, -0.8, 0, false);
   assert.ok(Math.abs(toe.angMomentum - 6.52) < 0.05, `toe dig L ${toe.angMomentum.toFixed(2)}`);
   assert.equal(flat.angMomentum, 0);
-  assert.equal(heel.angMomentum, 0);
+  assert.ok(Math.abs(heel.angMomentum + 6.71) < 0.05, `heel dig L ${heel.angMomentum.toFixed(2)}`);
   assert.ok(digJump(150, 0.8, 0, false).angMomentum < toe.angMomentum, "the angle of the dig matters");
 });
 

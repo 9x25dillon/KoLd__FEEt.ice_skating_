@@ -80,7 +80,10 @@ export class ComboTracker {
     const element = r.kind !== JUMP_NONE && r.revolutions >= 1;
     const prev = this.jumps[this.jumps.length - 1];
     const extends_ = element && this.linkedAtTakeoff && prev !== undefined
-      && this.jumps.length < MAX_COMBO_JUMPS && canFollow(prev.kind, r.kind);
+      && this.jumps.length < MAX_COMBO_JUMPS && canFollow(prev.kind, r.kind)
+      // jumpDirMode: a clockwise jump lands LBO, so only another clockwise
+      // jump leaves from it — the mirrored table links the same pairs.
+      && (prev.direction ?? 1) === (r.direction ?? 1);
     if (!extends_) this.close();
     if (element) this.jumps.push({ ...r });
     this.linked = element && !r.fall && !r.stepOut && !r.twoFoot && !s.fallen;

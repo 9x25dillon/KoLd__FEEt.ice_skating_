@@ -132,6 +132,16 @@ export interface JumpState {
   pushLift?: number;
   /** The support blade's edge code at the release tick. */
   takeoffCode: number;
+  /**
+   * jumpDirMode 1 only. The way the entry edge was turning the body as this
+   * load began (+1 counter-clockwise, -1 clockwise): what the arms' "with the
+   * jump" and "against it" are measured from. The sign of the last wind-up
+   * flick (+1 clockwise). The direction this jump turns, from its takeoff
+   * until its landing.
+   */
+  loadSense?: number;
+  windupSign?: number;
+  rotDir?: number;
   /** JUMP index, or JUMP_NONE for a hop or an unrecognised takeoff. */
   kind: number;
   /** 0 = on the required edge .. 1 = on the opposite one. */
@@ -178,6 +188,8 @@ export interface JumpResult {
   fall: boolean;
   /** The jump was wound up, and the assist flew its arms. */
   armed: boolean;
+  /** jumpDirMode 1 only: +1 the jump turned counter-clockwise, -1 clockwise. */
+  direction?: number;
   /**
    * rotationCallMode 1 only, kept apart: revolutions turned on the ice
    * through the takeoff (from where the body faced as the load began to the

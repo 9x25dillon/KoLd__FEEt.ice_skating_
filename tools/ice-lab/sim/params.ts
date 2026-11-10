@@ -243,6 +243,19 @@ export interface Params {
    */
   rotationCallMode: number;
   /**
+   * Which way a jump turns (issue #74). 0: every jump turns counter-clockwise,
+   * the direction data/jump-definitions.csv is written for, and a takeoff that
+   * would turn the other way leaves with no rotation at all. 1: a jump turns
+   * the way its takeoff turns it. The entry edge's turn, read as the load
+   * begins, is what "with the jump" and "against it" mean to the arms and the
+   * wind-up; the spin the ice and the arms built decides the direction at the
+   * release; a clockwise jump is identified, landed (LBO) and linked in
+   * combination off the mirrored table. Nothing is chosen in a
+   * menu: a skater can turn a clockwise quad and a counter-clockwise triple if
+   * they can skate both entrances.
+   */
+  jumpDirMode: number;
+  /**
    * rev. The most of a takeoff edge's turn on the ice the call credits.
    * Authored: half, the operator's choice (2026-09-25). A measured double
    * loop turns 470 deg in the air (Frontiers in Sports and Active Living
@@ -1049,6 +1062,7 @@ export const DEFAULT_PARAMS: Params = {
   callUnder: 0.25,
   callDowngrade: 0.5,
   rotationCallMode: 0,
+  jumpDirMode: 0,
   callTakeoffCredit: 0.5,
   callEdgeUnclear: 0.25,
   callEdgeWrong: 0.55,
@@ -1270,6 +1284,7 @@ export function validate(p: Params): string[] {
     errs.push("inertiaTucked must be positive and no more than inertiaOpen");
   if (!(p.callQuarter < p.callUnder && p.callUnder < p.callDowngrade))
     errs.push("rotation call thresholds must rise q < under < downgrade");
+  if (![0, 1].includes(p.jumpDirMode)) errs.push("jumpDirMode is 0 (every jump counter-clockwise) or 1 (a jump turns the way its takeoff turns it)");
   if (![0, 1].includes(p.rotationCallMode)) errs.push("rotationCallMode is 0 (the air alone) or 1 (the takeoff's turn and the air's, called at touchdown)");
   if (!(p.callTakeoffCredit >= 0 && p.callTakeoffCredit <= 0.5)) errs.push("callTakeoffCredit is 0-0.5 of a revolution");
   if (p.callEdgeUnclear >= p.callEdgeWrong)

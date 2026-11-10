@@ -34,13 +34,14 @@ test("digOracle is 0 by default and in every setup, and validates", () => {
 test("leaned late, the dig winds the body the wrong way; leaned early, the right way", () => {
   // MEASURED (toe 0.75 — the lean a forward glide can hold short of the pick):
   // late, the contact averages 0.38 over the dig and the winding is -0.207,
-  // the jump's L 0; leaned 1.5 s early, 0.85 and +1.005, a lutz with L 5.09 —
+  // the jump's L 0 (since jumpDirMode, 2026-11-09, -0.144: the wrong way is
+  // now clockwise); leaned 1.5 s early, 0.85 and +1.005, a lutz with L 5.09 —
   // 85% of the same dig without the pendulum (1.075, L 5.93).
   const late = wind(DIG_BASE, 0.75), early = wind(DIG_BASE, 0.75, 1.5), off = wind(OFF, 0.75, 1.5);
   assert.ok(Math.abs(late.winding + 0.207) < 0.005 && late.contact < 0.5, `late ${late.winding.toFixed(3)} at ${late.contact.toFixed(2)}`);
   assert.ok(Math.abs(early.winding - 1.005) < 0.005 && early.contact > 0.8, `early ${early.winding.toFixed(3)} at ${early.contact.toFixed(2)}`);
   assert.ok(Math.abs(off.winding - 1.075) < 0.005, `off ${off.winding.toFixed(3)}`);
-  assert.equal(digJump(DIG_BASE, 0.75)!.angMomentum, 0);
+  assert.ok(Math.abs(digJump(DIG_BASE, 0.75)!.angMomentum + 0.144) < 0.001);
   const lutz = digJump(DIG_BASE, 0.75, 1.5, true)!;
   assert.equal(lutz.kind, JUMP.Lutz);
   assert.ok(Math.abs(lutz.angMomentum - 5.09) < 0.01, `lutz L ${lutz.angMomentum.toFixed(2)}`);

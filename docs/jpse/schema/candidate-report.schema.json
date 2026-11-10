@@ -330,6 +330,13 @@
         },
         "edgeError": {
           "type": "number"
+        },
+        "direction": {
+          "enum": [
+            "ccw",
+            "cw"
+          ],
+          "description": "Optional: added after jpse-report/1 shipped (jumpDirMode)."
         }
       },
       "required": [
@@ -434,6 +441,13 @@
         },
         "stoodTicks": {
           "type": "integer"
+        },
+        "direction": {
+          "enum": [
+            "ccw",
+            "cw"
+          ],
+          "description": "Optional: added after jpse-report/1 shipped (jumpDirMode)."
         }
       },
       "required": [
