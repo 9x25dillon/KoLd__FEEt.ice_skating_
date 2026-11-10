@@ -4,7 +4,7 @@
 **Newest close:** 9 November 2026, 19:10 PST · Claude Code, Opus 5.5 · session `cd5d8f8d`
 **Where things stand:** Everything from today is on `main` (`d9aa167`, PRs #75–#80). Issue #74's Jump Path Synthesis Engine (**JPSE**) exists in `tools/ice-lab/jpse/`. It has a language-neutral contract in `docs/jpse/` and its first measured search. Jumps now turn **clockwise or counter-clockwise from the entrance** (`jumpDirMode`, on in every setup). The career has four **styles** (Power, Finesse, Technician, Endurance) plus a **custom style** forged from season one, with a nudge. Finesse's **free leg raise** gives spirals, the attitude and the standing split spin. It's on the Elite paddle, and the split counts in spin levels. None of today's work has been played on the pad.
 **Corrects the previous hand-off:** its newest row was 2 November. Since then #70–#73 landed (rivals re-derived, Unreal client, steadying hand), **but PR #73's Unreal work never reached `main`**. It merged into `unreal-bridge-client` after #72 had already merged that branch into `main`, so it sits stranded at `3122266`. "Replay stays at `/39`" still holds: today's new levers are unbumped, per the changelog's policy.
-**Decision needed:** should #73's stranded Unreal work come to `main`? Reply "open a PR from unreal-bridge-client to main" if so.
+**Decision needed:** none. The owner chose to bring #73 to `main`: **PR #82** (`unreal-to-main`) merged cleanly (Ice Lab 969/969, Godot 46/46, Unreal project tests 6/6). Merge with `! gh pr merge 82 --merge`, then merge this hand-off's PR #81.
 **Start with:**
 1. `git fetch origin; git log --oneline -3 origin/main` and `gh run list --branch main --limit 3`: confirm `d9aa167` and green CI. It was still running at close.
 2. Fresh worktree off `origin/main`, then `npm start`. Play the career on Experimental with the Elite 2: pick a style, try a spiral (free leg's paddle plus an *eased* trigger), and try a clockwise jump from a left-foot entrance.
@@ -24,7 +24,8 @@
 | earlier | — | — | `docs/handoff-before-jpse-2026-11-09.md` and older archives |
 
 ## In flight
-- Nothing from today: all merged. Worktrees left in place under no-deletes: `.delivery/jpse`, `.delivery/cw` (branches `jpse-entrance-slice`, `cw-rotation`, `career-styles`, `finesse-spiral`, `custom-style`), `.delivery/handoff-1109`.
+- **#73 to main** on `unreal-to-main` (pushed, PR #82): done: clean merge, tests pass. Left: the owner's merge; one Unreal build and play.
+- Otherwise nothing from today: all merged. Worktrees left in place under no-deletes: `.delivery/jpse`, `.delivery/cw` (branches `jpse-entrance-slice`, `cw-rotation`, `career-styles`, `finesse-spiral`, `custom-style`), `.delivery/handoff-1109`.
 - **Unreal director camera** on `unreal-choreo` (`b230393`, 6 Nov, local only, PUBLIC repo): not this session's. Push only on the owner's word.
 - **Grip search** on `grip-search` (`370dcb7`): unchanged since 1 November.
 
@@ -48,7 +49,7 @@
 - From earlier: rust on input alone; pressing focused buttons from `_input`; regenerating fixtures to pass tests.
 
 ## Open questions (settle these first)
-- **#73 stranded**: bring `unreal-bridge-client` (`3122266`) to `main`? Conflicts likely in the bridge (today changed `engine.mjs`).
+- **#73 stranded**: being fixed by PR #82 (clean merge, all tests pass). After it merges, build and play the Unreal client once against today's engine.
 - **JPSE objective weights**: rotation error vs takeoff vs landing quality. They gate the tutorial optimizer.
 - **Style numbers and journal references are authored (L3)**: Power lands none of the grid's double loops (its entrances need their own search); Endurance jumps lower than its 4% cost suggests. Play and measurement decide.
 - **Do clockwise jumps and the free-leg raise feel right on the pad?** Unplayed.
@@ -65,7 +66,7 @@
 - Fragile: a stale Godot bridge copy fails `engine.test.mjs`'s source-hash test; run `prepare.mjs --engine-only` after any `sim/` change.
 
 ## Next steps, in order
-1. Decide #73; if yes, open the PR and resolve conflicts in a fresh worktree.
+1. Merge PR #82 (#73's Unreal work) and PR #81 (this hand-off); build and play the Unreal client once.
 2. Play the merged build (styles, spiral on the paddle, clockwise jumps); write timestamped notes.
 3. Set the JPSE weights, then build the easy-mode optimizer for tutorials.
 4. Give Power its own entrance search (`npm run jpse:search` with a Power spec).
@@ -92,4 +93,4 @@ Typecheck: `npm install typescript @types/node` in a scratch directory, then fro
 word, referent, idempotent, provenance, invariant, presupposition, stipulate, contiguous, fast-forward, confabulation, threat model, reaction torque, confound, regression, acceptance criterion, race condition, negative control, preregistration, stacked PR, attestation, opt-in, monotonic, triage, Goodhart's law, protocol deviation, chirality, Pareto front
 
 ## Opening prompt for next session (edit the brackets)
-> Read `Hand_off.md` in a fresh worktree off `origin/main` and run its one-shot check. Then [bring #73 to main | here are my play notes: … | set the JPSE weights to …]. Stipulate: live work. When we wrap up: /hanoffed.
+> Read `Hand_off.md` in a fresh worktree off `origin/main` and run its one-shot check. Then [here are my play notes: … | set the JPSE weights to … | build the Unreal client against today's engine]. Stipulate: live work. When we wrap up: /hanoffed.
