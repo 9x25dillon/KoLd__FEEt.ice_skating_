@@ -274,6 +274,13 @@
     "meanKappaBlade": 0.111289,
     "meanKappaBaseline": 0.146948,
     "meanKappaBaselineError": 0.079659,
+    "supportLoad": {
+     "oneFootTicks": 193,
+     "twoFootTicks": 47,
+     "meanRightShare": 0.902083,
+     "loadPhasePeak": 1.257069,
+     "loadPhasePeakRightShare": 1
+    },
     "maxBladeSkew": 0.034364
    },
    "takeoff": {
@@ -634,6 +641,13 @@
     "meanKappaBlade": -0.074371,
     "meanKappaBaseline": -0.119422,
     "meanKappaBaselineError": 0.089729,
+    "supportLoad": {
+     "oneFootTicks": 193,
+     "twoFootTicks": 47,
+     "meanRightShare": 0.097917,
+     "loadPhasePeak": 1.257069,
+     "loadPhasePeakRightShare": 0
+    },
     "maxBladeSkew": 0.532948
    },
    "takeoff": {
@@ -1007,6 +1021,13 @@
     "meanKappaBlade": -0.107311,
     "meanKappaBaseline": -0.111677,
     "meanKappaBaselineError": 0.08903,
+    "supportLoad": {
+     "oneFootTicks": 193,
+     "twoFootTicks": 47,
+     "meanRightShare": 0.902083,
+     "loadPhasePeak": 1.257069,
+     "loadPhasePeakRightShare": 1
+    },
     "maxBladeSkew": 1.554838
    },
    "takeoff": {
@@ -1570,6 +1591,13 @@
     "meanKappaBlade": 0.016903,
     "meanKappaBaseline": 4.3968,
     "meanKappaBaselineError": 4.409503,
+    "supportLoad": {
+     "oneFootTicks": 273,
+     "twoFootTicks": 173,
+     "meanRightShare": 0.193258,
+     "loadPhasePeak": 1.41414,
+     "loadPhasePeakRightShare": 0
+    },
     "maxBladeSkew": 1.4952
    },
    "takeoff": null,
