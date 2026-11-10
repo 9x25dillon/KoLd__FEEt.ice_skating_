@@ -180,6 +180,14 @@
         },
         "digest": {
           "type": "integer"
+        },
+        "height": {
+          "type": "number",
+          "description": "Optional: added after jpse-search/1 shipped."
+        },
+        "angMomentum": {
+          "type": "number",
+          "description": "Optional: added after jpse-search/1 shipped."
         }
       },
       "required": [

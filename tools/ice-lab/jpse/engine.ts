@@ -257,6 +257,8 @@ export function runCandidate(
   let takeoff: CandidateReport["takeoff"] = null, landing: CandidateReport["landing"] = null;
   let loadStart = -1, loadLapsed = -1, landTick = -1, finite = true, prevPhase: number = JUMP_PHASE.None;
   let lastGround: TrackFrame | null = null;
+  // The flight as the takeoff set it: the solver's ballistics are fixed at the release.
+  let flightAtTakeoff = { airTime: 0, height: 0 };
 
   for (const input of prog.inputs) {
     const events: EdgeEvent[] = [];
@@ -279,6 +281,7 @@ export function runCandidate(
         supportLoad: [r6(g.load[0]), r6(g.load[1])],
         vz: r6(J.vz), angMomentum: r6(J.angMomentum), quality: r6(J.quality), edgeError: r6(J.edgeError),
       };
+      flightAtTakeoff = { airTime: J.airTime, height: J.height };
     }
     if (!f.airborne) lastGround = f;
     if (takeoff && !landing && events.some((e) => e.type === EVENT.Landing)) {
@@ -377,7 +380,10 @@ export function runCandidate(
     },
     takeoff,
     flight: takeoff ? {
-      airTime: r6(s.jump.airTime || (air.length * SIM_DT)), height: r6(s.jump.height), peakOmega: r6(s.jump.peakOmega),
+      // Read at the takeoff and the landing, never off the state the program ended on:
+      // a later load can overwrite them (measured: a takeoff reported 0 m high).
+      airTime: r6(flightAtTakeoff.airTime), height: r6(flightAtTakeoff.height),
+      peakOmega: r6(landing ? s.landed.peakOmega : s.jump.peakOmega),
       comPath: sample(air, (f) => f.com),
     } : null,
     landing, gates, rejected: reasons.length > 0, reasons,

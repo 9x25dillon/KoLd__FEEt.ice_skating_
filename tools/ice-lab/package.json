@@ -12,6 +12,7 @@
     "replay": "node replay/verify.ts",
     "jpse": "node jpse/cli.ts",
     "jpse:search": "node jpse/search-cli.ts",
+    "jpse:styles": "node jpse/styles-cli.ts",
     "validate": "node validate.mjs",
     "native:reference": "node native/export-reference.mjs native/reference --check",
     "native:test": "node --test native/tests/*.test.mjs"
