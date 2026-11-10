@@ -47,10 +47,12 @@ export const STYLES: readonly Style[] = [
   },
   {
     id: "finesse", title: "Finesse",
-    blurb: "Deep, quick edges, steady balance and a free leg that goes where it is sent: flow, transitions and line. Slower across the ice, and the jumps leave a little lower.",
+    blurb: "Deep, quick edges, steady balance, and a free leg that goes where it is sent and higher than anyone's: spirals, the attitude and, drilled, the standing split. Slower across the ice, and the jumps leave a little lower.",
     gives: [
       { key: "angulationLimit", mul: 1.08 }, { key: "controlLatency", mul: 0.88 },
       { key: "balanceKd", mul: 1.08 }, { key: "internalGain", mul: 1.08 }, { key: "freeLegTorqueMax", mul: 1.15 },
+      // The hip's range: 0.6 -> 0.9 drilled, the standing split's 0.9; 0.75 at the choice, a haircutter's.
+      { key: "flexibility", mul: 1.5 },
     ],
     costs: [{ key: "strokePower", mul: 0.92 }, { key: "jumpImpulse", mul: 0.95 }],
   },
@@ -65,6 +67,7 @@ export const STYLES: readonly Style[] = [
     blurb: "Conditioning: wind and legs last a whole program, so the last jump is skated as the first. Each takeoff is a little smaller.",
     gives: [
       { key: "staminaWindTimeDrain", mul: 0.75 }, { key: "staminaLegsPerPush", mul: 0.75 }, { key: "staminaLegsPerJump", mul: 0.80 },
+      { key: "staminaLegsPerLegHold", mul: 0.75 },
     ],
     costs: [{ key: "jumpImpulse", mul: 0.96 }, { key: "jumpWhip", mul: 0.96 }],
   },

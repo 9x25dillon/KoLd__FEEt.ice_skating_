@@ -462,6 +462,41 @@ function freeLegTorque(s: SkaterState, p: Params, input: SkatingInput, dt: numbe
 }
 
 /**
+ * THE FREE LEG'S RAISE (SkatingInput.freeLegRaise; issue #74, Finesse). The
+ * free leg lifted at the hip against gravity: one rigid lever of the leg's
+ * mass (freeLegMass), its centre freeLegReach from the hip, shortened by the
+ * free knee's bend (bent double, the thigh carries it a third nearer). Its
+ * angle from hanging is raise x pi: 0.5 at hip height, 1 straight up. The hip
+ * holds it with gravity compensated and a spring-damper to the raise asked
+ * (freeLegStiffness, freeLegDamping), all within freeLegTorqueMax; the joint
+ * stops at `flexibility`, however hard it is asked. Holding it costs the legs
+ * in proportion to the hip's torque (staminaLegsPerLegHold). Raising a leg
+ * moves no centre of mass by itself — the body rearranges round it — so it
+ * asks nothing of the balance here; what it changes is a spin's inertia
+ * (sim/moves.ts) and what a spiral is credited with. Absent the input,
+ * nothing here runs and no state appears.
+ */
+function freeLegRaiseTick(s: SkaterState, p: Params, input: SkatingInput, dt: number, staminaOn: boolean): void {
+  if (input.freeLegRaise === undefined && s.freeRaise === undefined) return;
+  const free = s.move === MOVE.Spin ? 1 - s.spin.foot : s.supportMode === 1 ? 1 - s.supportFoot : -1;
+  const [kl, kr] = legKnees(input);
+  const knee = free < 0 ? 0 : clamp(free === FOOT.Left ? kl : kr, 0, 1);
+  const asked = free < 0 ? 0 : clamp(axis(input.freeLegRaise ?? 0, 0), 0, 1);
+  const stop = Math.PI * clamp(p.flexibility, 0, 1);
+  const r = p.freeLegReach * (1 - knee / 3), m = p.freeLegMass * p.mass, I = (4 / 3) * m * r * r;
+  let th = Math.PI * (s.freeRaise ?? 0), w = Math.PI * (s.freeRaiseRate ?? 0);
+  const target = Math.min(Math.PI * asked, stop);
+  const gravity = m * p.gravity * r * sin(th);
+  const hip = clamp(gravity + p.freeLegStiffness * (target - th) - p.freeLegDamping * w, -p.freeLegTorqueMax, p.freeLegTorqueMax);
+  w += ((hip - gravity) / I) * dt;
+  th += w * dt;
+  if (th > stop) { th = stop; w = Math.min(w, 0); }
+  if (th < 0) { th = 0; w = Math.max(w, 0); }
+  s.freeRaise = th / Math.PI; s.freeRaiseRate = w / Math.PI; s.freeKnee = knee;
+  if (staminaOn) s.legs = clamp(s.legs - p.staminaLegsPerLegHold * Math.abs(hip) / p.freeLegTorqueMax * dt, 0, 1);
+}
+
+/**
  * The jump reads the knee it loads, lands and absorbs on: the standing leg's.
  * Without a split this is the input itself, untouched.
  */
@@ -735,12 +770,18 @@ export function step(
   // An Ina Bauer is held, not a pivot: it ends when the button is let go, or
   // the glide runs out, and the carve skates it in between. A Spiral is the
   // same shape of held move, one blade instead of two.
+  freeLegRaiseTick(s, p, input, dt, staminaOn);
   if (s.move === MOVE.InaBauer) {
     s.inaBauer.t += dt;
     if (!input.inaBauer || s.fallen || len(s.vel) < 0.5 * p.inaBauerMinSpeed) inaBauerEnd(s, events);
   }
   if (s.move === MOVE.Spiral) {
     s.spiral.t += dt;
+    if (s.freeRaise !== undefined) {
+      // What makes it a spiral on a panel's sheet: the free leg at or above the hip.
+      s.spiral.peakRaise = Math.max(s.spiral.peakRaise ?? 0, s.freeRaise);
+      if (s.freeRaise >= 0.5) s.spiral.aboveHip = (s.spiral.aboveHip ?? 0) + dt;
+    }
     if (!input.inaBauer || s.fallen || len(s.vel) < 0.5 * p.spiralMinSpeed) spiralEnd(s, events);
   }
   if (freshMoves & HELD.Turn) turnStart(s, p, false);

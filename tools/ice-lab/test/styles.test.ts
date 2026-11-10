@@ -22,7 +22,7 @@ import { validate } from "../sim/params.ts";
 import { JUMP } from "../sim/jump.ts";
 import { BASELINE, baselineParams, loopBaselineProgram } from "../jpse/baseline.ts";
 import { pinPushFeet, runCandidate } from "../jpse/engine.ts";
-import { SERPENTINE_TICKS, carveRun, serpentineRun, strokeRun } from "../jpse/styles.ts";
+import { SERPENTINE_TICKS, carveRun, serpentineRun, spiralRun, splitRow, strokeRun } from "../jpse/styles.ts";
 
 const base = baselineParams();
 const at = (id: string, mastery = 1) => styleParams(base, STYLES.findIndex((s) => s.id === id), mastery);
@@ -88,6 +88,19 @@ test("the trade-offs are the physics': speed, legs, the hard carve and the serpe
   // Pinned, so a re-tune says what it moved.
   assert.deepEqual([none.serpentineTicks, power.serpentineTicks], [495, 438]);
   assert.ok(Math.abs(power.topSpeed - 13.18) < 0.01 && Math.abs(finesse.topSpeed - 11.99) < 0.01);
+});
+
+test("Finesse's free leg: the spiral highest and cheapest, and only drilled Finesse reaches the standing split", () => {
+  // MEASURED 2026-11-09: spiral leg 0.9 against 0.6 for every other style, legs
+  // 0.037 against 0.064; the split's spin 16.1 rad/s against the plain 13.75.
+  // Chosen but undrilled, Finesse's range is 0.75: not yet the split.
+  const none = { ...spiralRun(base), ...splitRow(base) }, fin = { ...spiralRun(at("finesse")), ...splitRow(at("finesse")) };
+  const tech = { ...spiralRun(at("technician")), ...splitRow(at("technician")) }, fresh = splitRow(at("finesse", 0));
+  assert.ok(Math.abs(fin.spiralPeak - 0.9) < 1e-6 && Math.abs(none.spiralPeak - 0.6) < 1e-6 && Math.abs(tech.spiralPeak - 0.6) < 1e-6);
+  assert.ok(fin.spiralLegs < 0.7 * none.spiralLegs, `${fin.spiralLegs} vs ${none.spiralLegs}`);
+  assert.equal(fin.splitReached, "standing split");
+  assert.equal(none.splitReached, "none"); assert.equal(tech.splitReached, "none"); assert.equal(fresh.splitReached, "none");
+  assert.ok(fin.splitOmega > fin.plainOmega + 2);
 });
 
 test("on the double loop's entrance Power leaves higher and spinning harder, Finesse lower", () => {

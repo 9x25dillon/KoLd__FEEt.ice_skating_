@@ -10,7 +10,7 @@
 import { SIM_DT } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import { createState, step } from "../sim/solver.ts";
-import { NEUTRAL_INPUT, REGIME } from "../sim/types.ts";
+import { NEUTRAL_INPUT, REGIME, MOVE, SPIN_VARIATION_NAME } from "../sim/types.ts";
 import { IceGrid } from "../sim/ice.ts";
 import { len } from "../sim/math.ts";
 import { STYLES, styleParams } from "../game/styles.ts";
@@ -38,6 +38,16 @@ export interface StyleRow {
   carveFell: boolean;
   /** The serpentine: ticks stood (SERPENTINE_TICKS is all of it). */
   serpentineTicks: number;
+  /** The spiral: the free leg's highest raise (0.5 hip height, 1 straight up), seconds at or above the hip, legs it cost, standing at the end. */
+  spiralPeak: number;
+  spiralAboveHip: number;
+  spiralLegs: number;
+  spiralStood: boolean;
+  /** The upright spin with the leg asked straight up: the variation reached (none, attitude, standing split) and the spin rate held in it. */
+  splitReached: string;
+  splitOmega: number;
+  /** The plain upright spin's rate, the same entry: what the split is faster than. */
+  plainOmega: number;
 }
 
 export const STROKE_SECONDS = 20;
@@ -90,6 +100,40 @@ export function serpentineRun(p: Params): { serpentineTicks: number } {
   return { serpentineTicks: s.fallen ? i : SERPENTINE_TICKS };
 }
 
+/** The spiral's run: on the right foot at 5 m/s, the free leg asked as high as it goes, an outside edge then the inside. */
+export const SPIRAL = { speed: 5, seconds: 6, lean: 0.3 } as const;
+
+export function spiralRun(p: Params): { spiralPeak: number; spiralAboveHip: number; spiralLegs: number; spiralStood: boolean } {
+  const s = createState(p, SPIRAL.speed), ice = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
+  for (let i = 0; i < 60; i++) step(s, { ...NEUTRAL_INPUT, weight: 1, knee: 0.25 }, p, SIM_DT, [], ice);
+  const legs0 = s.legs, n = Math.round(SPIRAL.seconds / SIM_DT);
+  for (let i = 0; i < n && !s.fallen; i++)
+    step(s, { ...NEUTRAL_INPUT, weight: 1, knee: 0.25, kneeSplit: 0.25, lean: i < n / 2 ? -SPIRAL.lean : SPIRAL.lean, inaBauer: true, freeLegRaise: 1 }, p, SIM_DT, [], ice);
+  const held = s.move === MOVE.Spiral ? s.spiral : s.moveDone;
+  return { spiralPeak: r4(held.peakRaise ?? 0), spiralAboveHip: r4(held.aboveHip ?? 0), spiralLegs: r4(legs0 - s.legs), spiralStood: !s.fallen };
+}
+
+/** An upright spin entered at 5 m/s on the right foot, the free leg asked to `raise` with the free knee at `freeKnee`; the variation and the rate 200 ticks in. */
+export function spinPose(p: Params, raise: number, freeKnee: number): { variation: number; omega: number } {
+  const s = createState(p, 5), ice = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
+  for (let i = 0; i < 30; i++) step(s, { ...NEUTRAL_INPUT, weight: 1, knee: 0.3, lean: -0.3 }, p, SIM_DT, [], ice);
+  // The standing (right) knee at 0.15, well clear of a sit; the free (left) one at freeKnee:
+  // left = knee - kneeSplit, right = knee + kneeSplit.
+  const knee = (freeKnee + 0.15) / 2, kneeSplit = (0.15 - freeKnee) / 2;
+  let variation = 0, omega = 0;
+  for (let i = 0; i <= 200; i++) {
+    step(s, { ...NEUTRAL_INPUT, weight: 1, knee, kneeSplit, spin: true, carriage: 0.2, freeLegRaise: i > 20 ? raise : 0 }, p, SIM_DT, [], ice);
+    if (s.move === MOVE.Spin) { variation = s.spin.variation ?? 0; omega = s.spin.omega; }
+  }
+  return { variation, omega: r4(omega) };
+}
+
+/** The leg asked straight up, knee straight, against the plain upright spin. */
+export function splitRow(p: Params): { splitReached: string; splitOmega: number; plainOmega: number } {
+  const sp = spinPose(p, 1, 0), plain = spinPose(p, 0, 0);
+  return { splitReached: SPIN_VARIATION_NAME[sp.variation] || "none", splitOmega: sp.omega, plainOmega: plain.omega };
+}
+
 /** The neutral skater, then each style at full mastery. */
 export function compareStyles(spec: SearchSpec, base: Params = baselineParams()): StyleRow[] {
   const rows: StyleRow[] = [];
@@ -107,6 +151,8 @@ export function compareStyles(spec: SearchSpec, base: Params = baselineParams())
       ...strokeRun(p),
       ...carveRun(p),
       ...serpentineRun(p),
+      ...spiralRun(p),
+      ...splitRow(p),
     });
   }
   return rows;

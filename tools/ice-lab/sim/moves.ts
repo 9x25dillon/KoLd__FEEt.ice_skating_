@@ -86,7 +86,7 @@
 // data/motion-primitives.json's -1.1 m/s over 6 m at 6 m/s.
 
 import { rotate, normalizeOr, len, mul, dot, sin, tan, atan2, sign, clamp, lerp, moveToward } from "./math.ts";
-import { MOVE, TURN_KIND, FOOT, EVENT, EDGE_CODE_NONE, REGIME, SPIN_POSITION, DIR, EDGE, makeCode } from "./types.ts";
+import { MOVE, TURN_KIND, FOOT, EVENT, EDGE_CODE_NONE, REGIME, SPIN_POSITION, SPIN_VARIATION, DIR, EDGE, makeCode } from "./types.ts";
 import type { SkaterState, TurnState, SpinState, InaBauerState, SpiralState, MoveResult, EdgeEvent, Foot } from "./types.ts";
 import type { Params } from "./params.ts";
 import { effectiveRocker } from "./blade.ts";
@@ -173,6 +173,7 @@ export function spiralStart(s: SkaterState, p: Params): boolean {
   const Sp = s.spiral;
   Sp.foot = s.supportFoot;
   Sp.t = 0;
+  if (Sp.peakRaise !== undefined) Sp.peakRaise = Sp.aboveHip = undefined;
   Sp.fromCode = s.blade[s.supportFoot].code;
   Sp.entrySpeed = speed;
   s.move = MOVE.Spiral;
@@ -189,6 +190,9 @@ export function spiralEnd(s: SkaterState, events: EdgeEvent[]): void {
   r.tick = s.tick; r.kind = MOVE.Spiral; r.detail = Sp.foot; r.revolutions = 0;
   r.fromCode = Sp.fromCode; r.toCode = b.code; r.speedLost = Sp.entrySpeed - len(s.vel); r.seconds = Sp.t;
   r.positions = 0; r.bestSegRevs = 0; r.travel = 0;
+  if (Sp.peakRaise !== undefined) { r.peakRaise = Sp.peakRaise; r.aboveHip = Sp.aboveHip ?? 0; }
+  else if (r.peakRaise !== undefined) r.peakRaise = r.aboveHip = undefined;
+  if (r.variations !== undefined) r.variations = undefined;
   s.move = MOVE.None;
   events.push({
     tick: s.tick, type: EVENT.Spiral, foot: Sp.foot,
@@ -202,6 +206,28 @@ export function spiralEnd(s: SkaterState, events: EdgeEvent[]): void {
  * test/spin.test.ts holds them to the file.
  */
 export const SPIN_INERTIA_SCALE = [1.0, 1.25, 2.2] as const;
+
+/**
+ * The upright variations' inertia_scale (SPIN_VARIATION: none, attitude,
+ * standing split), data/spin-positions.json's upright_attitude and
+ * upright_i_position; test/spin.test.ts holds them to the file.
+ */
+export const SPIN_VARIATION_SCALE = [1.0, 1.24, 0.85] as const;
+/**
+ * The raise and free knee each variation is read off: the thigh at the hip
+ * with the knee bent; the leg straight up with the knee straight. The split's
+ * raise is its requires_flexibility, 0.9, less the data's pose_tolerance_deg
+ * (10 deg, 0.056 of the half-turn the raise spans): 0.85.
+ */
+const ATTITUDE_RAISE = 0.4, ATTITUDE_KNEE = 0.5, SPLIT_RAISE = 0.85, SPLIT_KNEE = 0.3;
+
+/** The upright variation the free leg makes now, or none. */
+export function spinVariation(s: SkaterState): number {
+  const e = s.freeRaise ?? 0, k = s.freeKnee ?? 0;
+  if (e >= SPLIT_RAISE && k < SPLIT_KNEE) return SPIN_VARIATION.Split;
+  if (e >= ATTITUDE_RAISE && e < SPLIT_RAISE && k >= ATTITUDE_KNEE) return SPIN_VARIATION.Attitude;
+  return SPIN_VARIATION.None;
+}
 
 /** Radians of blade tilt on the spinning edge: a shallow back edge, well clear of flat. */
 const SPIN_EDGE = 0.26;
@@ -553,6 +579,7 @@ export function spinStart(s: SkaterState, p: Params, carriage: number, knee: num
   Sp.omega = Sp.angMomentum / Sp.inertia;
   Sp.swept = 0;
   Sp.positionsHeld = 0;
+  if (Sp.variation !== undefined) Sp.variation = Sp.varRevs = Sp.variationsHeld = undefined;
   Sp.segRevs = 0;
   Sp.bestSegRevs = 0;
   Sp.segOmegaMin = Sp.omega;
@@ -607,8 +634,20 @@ export function spinTick(
     Sp.segOmegaMin = Sp.omega;
     Sp.segOmegaMax = Sp.omega;
   }
+  // The free leg's raise (sim/solver.ts freeLegRaiseTick), upright: the
+  // attitude carries the leg out at the hip, the standing split up by the axis.
+  let varScale = 1, arms = clamp(carriage, 0, 1);
+  if (s.freeRaise !== undefined) {
+    const v = pos === SPIN_POSITION.Upright ? spinVariation(s) : SPIN_VARIATION.None, was = Sp.variation ?? 0;
+    if (v !== was && was > 0 && (Sp.varRevs ?? 0) >= 2) Sp.variationsHeld = (Sp.variationsHeld ?? 0) | (1 << was);
+    if (v !== was) Sp.varRevs = 0;
+    Sp.variation = v; Sp.varRevs ??= 0; Sp.variationsHeld ??= 0;
+    varScale = SPIN_VARIATION_SCALE[v];
+    // The split's hand holds the blade by the head: that arm cannot be thrown wide.
+    if (v === SPIN_VARIATION.Split) arms = Math.min(arms, 0.5);
+  }
   // Arms and a free leg move at the rate a jump's pull-in does.
-  const target = SPIN_INERTIA_SCALE[pos] * lerp(p.inertiaTucked, p.inertiaOpen, clamp(carriage, 0, 1));
+  const target = SPIN_INERTIA_SCALE[pos] * varScale * lerp(p.inertiaTucked, p.inertiaOpen, arms);
   Sp.inertia = moveToward(Sp.inertia, target, p.inertiaPullRate * dt);
 
   // data/spin-features.json's both_directions: held stick against Sp.dir, past
@@ -643,6 +682,7 @@ export function spinTick(
   const dAngle = Sp.omega * dt;
   Sp.swept += dAngle;
   Sp.segRevs += dAngle / (2 * Math.PI);
+  if (Sp.varRevs !== undefined) Sp.varRevs += dAngle / (2 * Math.PI);
   Sp.bestSegRevs = Math.max(Sp.bestSegRevs, Sp.segRevs);
   Sp.segOmegaMin = Math.min(Sp.segOmegaMin, Sp.omega);
   Sp.segOmegaMax = Math.max(Sp.segOmegaMax, Sp.omega);
@@ -698,6 +738,7 @@ export function spinTick(
   const ended = !held || (Sp.omega < p.spinMinOmega && !checking && !Sp.changingFoot);
   if (ended) {
     if (Sp.segRevs >= 2) Sp.positionsHeld |= 1 << Sp.position;
+    if ((Sp.variation ?? 0) > 0 && (Sp.varRevs ?? 0) >= 2) Sp.variationsHeld = (Sp.variationsHeld ?? 0) | (1 << Sp.variation!);
     const exitFoot = (Sp.dir > 0 ? FOOT.Right : FOOT.Left) as Foot;
     // The check-out: pushed away backward onto that foot's back outside edge.
     s.vel = mul(s.heading, -p.spinExitSpeed);
@@ -709,6 +750,9 @@ export function spinTick(
     r.speedLost = Sp.entrySpeed - p.spinExitSpeed;
     r.seconds = Sp.t;
     r.positions = Sp.positionsHeld; r.bestSegRevs = Sp.bestSegRevs; r.travel = Sp.travel;
+    if (Sp.variationsHeld !== undefined) r.variations = Sp.variationsHeld;
+    else if (r.variations !== undefined) r.variations = undefined;
+    if (r.peakRaise !== undefined) r.peakRaise = r.aboveHip = undefined;
     s.move = MOVE.None;
   }
   return { lat: 0, cusp: false, ended };

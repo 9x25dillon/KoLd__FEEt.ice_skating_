@@ -789,6 +789,16 @@ export interface Params {
   freeLegDamping: number;
   freeLegTorqueMax: number;
   /**
+   * 0..1, the highest the free leg can be raised (0.5 hip height, 1 straight
+   * up), the hip's range. data/spin-positions.json gates positions on the
+   * same scale (requires_flexibility: catch-foot 0.6, haircutter 0.75,
+   * Biellmann 0.85; the standing split 0.9). Authored: 0.6, a trained
+   * skater's arabesque a little above the hip.
+   */
+  flexibility: number;
+  /** Legs drained per second holding the free leg up at the hip's full torque (staminaMode). Authored. */
+  staminaLegsPerLegHold: number;
+  /**
    * The hip through a jump's push-off (pushOffMode). 0: the hip's PD tracks
    * the asked swing as everywhere — so as the leg nears a pose that has
    * stopped moving, its damping brakes it on the ice, and the gripping blade
@@ -1206,6 +1216,8 @@ export const DEFAULT_PARAMS: Params = {
   freeLegStiffness: 150,
   freeLegDamping: 20,
   freeLegTorqueMax: 100,
+  flexibility: 0.6,
+  staminaLegsPerLegHold: 0.02,
   freeLegSwingThroughMode: 0,
 
   armsWhipMode: 0,
@@ -1288,6 +1300,8 @@ export function validate(p: Params): string[] {
     errs.push("inertiaTucked must be positive and no more than inertiaOpen");
   if (!(p.callQuarter < p.callUnder && p.callUnder < p.callDowngrade))
     errs.push("rotation call thresholds must rise q < under < downgrade");
+  if (!(p.flexibility >= 0 && p.flexibility <= 1)) errs.push("flexibility is the free leg's highest raise, 0..1");
+  if (!(p.staminaLegsPerLegHold >= 0)) errs.push("staminaLegsPerLegHold cannot be negative");
   if (![0, 1].includes(p.jumpDirMode)) errs.push("jumpDirMode is 0 (every jump counter-clockwise) or 1 (a jump turns the way its takeoff turns it)");
   if (![0, 1].includes(p.rotationCallMode)) errs.push("rotationCallMode is 0 (the air alone) or 1 (the takeoff's turn and the air's, called at touchdown)");
   if (!(p.callTakeoffCredit >= 0 && p.callTakeoffCredit <= 0.5)) errs.push("callTakeoffCredit is 0-0.5 of a revolution");
