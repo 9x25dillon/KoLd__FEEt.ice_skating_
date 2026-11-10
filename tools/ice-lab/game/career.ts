@@ -16,7 +16,13 @@ import { PcsMeter, pcsInputsFrom, scorePcs } from "../sim/pcs.ts";
 import type { SegmentRule, PcsScore } from "../sim/pcs.ts";
 import type { IceGrid } from "../sim/ice.ts";
 import { JUMP_FAMILIES, RUST_PER_STEP, RUST_PER_WEEK, RUST_TURN, landingFamily } from "./training.ts";
-import { STYLES, STYLE_PER_WEEK, STYLE_RUST_PER_STEP } from "./styles.ts";
+import { STYLES, STYLE_PER_WEEK, STYLE_RUST_PER_STEP, customStyle } from "./styles.ts";
+import type { Style } from "./styles.ts";
+import { RunJournal, addJournal, emptyJournal, leanings, styleShares } from "./journal.ts";
+import type { Journal } from "./journal.ts";
+
+/** The custom style's index, after the four (game/styles.ts STYLES). */
+export const CUSTOM_STYLE = STYLES.length;
 import type { JumpFamily, Rust } from "./training.ts";
 import { BODY_REGIONS, HEALED_UNDER, INJURED_AT, REST_PER_WEEK, noInjury, noWear, wornProfile } from "./wear.ts";
 import type { BodyRegion, FallHit, Injured, Wear } from "./wear.ts";
@@ -180,6 +186,8 @@ export class Choreography {
   pcsScore: PcsScore | null = null;
   /** 0..1, game/armfocus.ts: what the skater chose their arms to do, as the panel sees it. */
   armExpression = 0;
+  /** game/journal.ts: what the physics saw this run, for the season's custom style. */
+  readonly journal = new RunJournal();
   private segmentRules?: readonly SegmentRule[];
   private ice?: IceGrid;
   private sessionMeter = new SessionMeter();
@@ -231,6 +239,7 @@ export class Choreography {
     if (this.done || !Number.isFinite(dt) || dt <= 0) return;
     this.elapsed = Math.min(this.event.seconds, this.elapsed + dt);
     this.hypeSum += s.hype; this.flowSum += s.flow; this.samples++;
+    this.journal.sample(s, dt);
     if (this.startMusicCredit < 0) this.startMusicCredit = s.musicCredit;
     if (this.startLobeAlternations < 0) this.startLobeAlternations = s.lobeAlternations;
     if (this.startLobeRepeats < 0) this.startLobeRepeats = s.lobeRepeats;
@@ -371,7 +380,22 @@ export class CareerState {
   wear: Wear = noWear();
   /** game/styles.ts: the style skated (an index into STYLES, -1 none), and each style's drilled mastery, 0..1. */
   style = -1;
-  styleMastery: number[] = STYLES.map(() => 0);
+  styleMastery: number[] = [...STYLES.map(() => 0), 0];
+  /**
+   * game/journal.ts: the first season's journal, filled by every finished
+   * career run until the finale is medalled; then the leanings it reads into
+   * (STYLES order), from which the custom style (index CUSTOM_STYLE) is
+   * forged, and the player's nudge toward one of the four (-1 none).
+   */
+  journal: Journal = emptyJournal();
+  customLeanings: number[] | null = null;
+  customNudge = -1;
+  /** The custom style as it stands, nudge included; null until the first season is done. */
+  get custom(): Style | null { return this.customLeanings ? customStyle(styleShares(this.customLeanings, this.customNudge)) : null; }
+  /** The style skated: one of the four, the custom one, or null for none. */
+  get activeStyle(): Style | null { return this.style === CUSTOM_STYLE ? this.custom : STYLES[this.style] ?? null; }
+  /** Tip the custom style a quarter toward one of the four, or back to none. Free, any time. */
+  nudgeCustom(i: number) { if (i === -1 || STYLES[i]) this.customNudge = i; }
   /** Regions injured: set at INJURED_AT, cleared under HEALED_UNDER. */
   injured: Injured = noInjury();
 
@@ -411,6 +435,11 @@ export class CareerState {
     const earned = improved * 150 + bonus;
     if (improved > 0) this.weeks += improved * WEEKS_PER_TIER;
     if (this.medals[i] === 0 && routine.medal > 0) this.seasonStep();
+    // The first season's journal: every finished run, until the finale's medal forges the custom style.
+    if (!this.customLeanings) {
+      this.journal = addJournal(this.journal, routine.journal.finish());
+      if (i === CAREER_EVENTS.length - 1 && routine.medal > 0) this.customLeanings = leanings(this.journal);
+    }
     if (routine.complete) this.best[i] = Math.max(this.best[i] ?? -Infinity, routine.segmentScore);
     this.medals[i] = Math.max(this.medals[i], routine.medal);
     this.profile = { ...this.profile, xp: this.profile.xp + earned };
@@ -451,10 +480,10 @@ export class CareerState {
     this.drilled = { ...this.drilled, [family]: true };
   }
   /** Take up a style, or -1 for none. Free: its cost comes at once, and a style put down keeps its mastery but rusts. */
-  chooseStyle(i: number) { if (i === -1 || STYLES[i]) this.style = i; }
+  chooseStyle(i: number) { if (i === -1 || STYLES[i] || (i === CUSTOM_STYLE && this.customLeanings)) this.style = i; }
   /** A week of style drills: mastery up, toward the style's full benefit. */
   drillStyle() {
-    if (this.weeks < 1 || !STYLES[this.style] || this.styleMastery[this.style] >= 1) return;
+    if (this.weeks < 1 || !this.activeStyle || this.styleMastery[this.style] >= 1) return;
     this.weeks--;
     this.styleMastery = this.styleMastery.map((m, i) => i === this.style ? Math.min(1, m + STYLE_PER_WEEK) : m);
   }
@@ -505,7 +534,7 @@ export class CareerState {
     const plan = this.plans[i];
     return plan ? { ...CAREER_EVENTS[i], routine: plan } : CAREER_EVENTS[i];
   }
-  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, timelines: this.timelines, best: this.best, wear: this.wear, injured: this.injured, style: this.style, styleMastery: this.styleMastery }); }
+  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, timelines: this.timelines, best: this.best, wear: this.wear, injured: this.injured, style: this.style, styleMastery: this.styleMastery, journal: this.journal, customLeanings: this.customLeanings, customNudge: this.customNudge }); }
   static restore(json: string | null): CareerState {
     const career = new CareerState();
     try {
@@ -540,8 +569,15 @@ export class CareerState {
       if (regions.every(r => Number.isFinite(saved.wear?.[r]) && saved.wear[r] >= 0)) career.wear = Object.fromEntries(regions.map(r => [r, saved.wear[r]])) as Wear;
       if (regions.every(r => typeof saved.injured?.[r] === "boolean")) career.injured = Object.fromEntries(regions.map(r => [r, saved.injured[r]])) as Injured;
       // Saves from before styles skate with none. A bad field keeps the default.
-      if (Number.isInteger(saved.style) && (saved.style === -1 || STYLES[saved.style])) career.style = saved.style;
-      if (Array.isArray(saved.styleMastery) && saved.styleMastery.length === STYLES.length && saved.styleMastery.every((m: unknown) => unit(m))) career.styleMastery = [...saved.styleMastery];
+      // Saves from before the custom style have four masteries and no journal.
+      if (Array.isArray(saved.styleMastery) && (saved.styleMastery.length === STYLES.length || saved.styleMastery.length === STYLES.length + 1) && saved.styleMastery.every((m: unknown) => unit(m)))
+        career.styleMastery = [...saved.styleMastery, ...(saved.styleMastery.length === STYLES.length ? [0] : [])];
+      const j = emptyJournal();
+      if (saved.journal && (Object.keys(j) as (keyof Journal)[]).every((k) => Number.isFinite(saved.journal[k]) && saved.journal[k] >= 0))
+        career.journal = Object.fromEntries((Object.keys(j) as (keyof Journal)[]).map((k) => [k, saved.journal[k]])) as unknown as Journal;
+      if (Array.isArray(saved.customLeanings) && saved.customLeanings.length === STYLES.length && saved.customLeanings.every((m: unknown) => unit(m))) career.customLeanings = [...saved.customLeanings];
+      if (Number.isInteger(saved.customNudge) && (saved.customNudge === -1 || STYLES[saved.customNudge])) career.customNudge = saved.customNudge;
+      if (Number.isInteger(saved.style) && (saved.style === -1 || STYLES[saved.style] || (saved.style === CUSTOM_STYLE && career.customLeanings))) career.style = saved.style;
       if (Array.isArray(saved.lessons) && saved.lessons.length <= 200 && saved.lessons.every((l: unknown) => typeof l === "string" && l.length <= 40)) career.lessons = [...saved.lessons];
     } catch { /* A missing or invalid save starts a playable career. */ }
     return career;
