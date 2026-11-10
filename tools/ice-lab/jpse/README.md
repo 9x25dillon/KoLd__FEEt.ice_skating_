@@ -12,6 +12,18 @@ node jpse/cli.ts --replays dir                 # each candidate as an edgework-r
 node replay/verify.ts dir/jpse-canonical.replay.json
 ```
 
+The search (JPSE-007) and the styles:
+
+```sh
+npm run jpse:search                                             # the first grid, the neutral skater
+npm run jpse:search -- --grid power --style power --mastery 0   # Power's grid, the day it is chosen
+npm run jpse:search -- --grid power --style power --windows     # every check tick: how wide each window is
+npm run jpse:styles                                             # each style through the first grid
+```
+
+The pad script is recorded on the skater who skates it, so a style's check and run-out
+are timed to its own flight (`docs/jpse/power-search-2026-11-10.md`).
+
 ## What it is
 
 - **A candidate is an input program**, the SkatingInput stream the solver is fed.

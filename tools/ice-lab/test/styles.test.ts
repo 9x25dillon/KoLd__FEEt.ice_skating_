@@ -12,6 +12,9 @@
 //   endurance       12.68         0.669     stands        495
 // On the double loop's entrance Power leaves with L 18.7 mean against 14.2 and
 // highest; Finesse lowest and least spin.
+// (2026-11-10: those grid means were on the neutral skater's pad script. The
+// grid now skates each style's own script, test/jpse-power.test.ts; Power's
+// mean L there is 17.6, still the most.)
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";

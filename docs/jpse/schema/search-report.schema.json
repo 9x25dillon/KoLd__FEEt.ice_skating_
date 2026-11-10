@@ -188,6 +188,10 @@
         "angMomentum": {
           "type": "number",
           "description": "Optional: added after jpse-search/1 shipped."
+        },
+        "airTime": {
+          "type": "number",
+          "description": "Seconds in the air as the takeoff set them; 0 with no takeoff. Optional: added 2026-11-10."
         }
       },
       "required": [
