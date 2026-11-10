@@ -16,7 +16,8 @@ import { readFileSync } from "node:fs";
 
 import { SIM_DT, validate, DEFAULT_PARAMS } from "../sim/params.ts";
 import { createState, step } from "../sim/solver.ts";
-import { NEUTRAL_INPUT, SPIN_VARIATION } from "../sim/types.ts";
+import { NEUTRAL_INPUT, SPIN_VARIATION, SPIN_VARIATION_DIFFICULT, SPIN_POSITION, MOVE } from "../sim/types.ts";
+import { SpinLevelTracker, loadSpinFeatureThresholds, scoreSpinLevel } from "../sim/spinLevel.ts";
 import { SPIN_VARIATION_SCALE } from "../sim/moves.ts";
 import { IceGrid } from "../sim/ice.ts";
 import { baselineParams } from "../jpse/baseline.ts";
@@ -80,4 +81,28 @@ test("a spiral is credited with the leg's height and the time it was at or above
   assert.equal(r.spiralStood, true);
   // The leg nearer vertical is a shorter lever against gravity: holding it costs less.
   assert.ok(flexible.spiralLegs < r.spiralLegs, `${flexible.spiralLegs} vs ${r.spiralLegs}`);
+});
+
+test("each variation's difficult flag is data/spin-positions.json's", () => {
+  const data = JSON.parse(readFileSync(new URL("../../../data/spin-positions.json", import.meta.url), "utf8"));
+  const flag = (id: string) => data.positions.find((x: { id: string }) => x.id === id).difficult;
+  assert.deepEqual([...SPIN_VARIATION_DIFFICULT], [flag("upright_basic"), flag("upright_attitude"), flag("upright_i_position")]);
+});
+
+test("a standing split held through a spin earns the spin's difficult variation, scored as the career scores it", () => {
+  const p = { ...base, flexibility: 0.9 };
+  const tracker = new SpinLevelTracker(), plainTracker = new SpinLevelTracker();
+  const T = loadSpinFeatureThresholds(readFileSync(new URL("../../../data/spin-features.json", import.meta.url), "utf8"));
+  const run = (raise: number, tr: SpinLevelTracker) => {
+    const q = createState(p, 5), grid = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
+    for (let i = 0; i < 30; i++) step(q, { ...NEUTRAL_INPUT, weight: 1, knee: 0.3, lean: -0.3 }, p, SIM_DT, [], grid);
+    for (let i = 0; i < 300; i++) {
+      step(q, { ...NEUTRAL_INPUT, weight: 1, knee: 0.075, kneeSplit: 0.075, spin: true, carriage: 0.2, freeLegRaise: i > 20 ? raise : 0 }, p, SIM_DT, [], grid);
+      if (q.move === MOVE.Spin) tr.sample(q.spin);
+    }
+    return scoreSpinLevel(tr.finish(), T, tr.footChanges, tr.variations);
+  };
+  const withSplit = run(1, tracker), plain = run(0, plainTracker);
+  assert.deepEqual(withSplit.difficultVariations, [SPIN_POSITION.Upright]);
+  assert.equal(withSplit.level, plain.level + 1, `${withSplit.level} vs ${plain.level}`);
 });

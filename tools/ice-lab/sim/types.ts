@@ -262,6 +262,8 @@ export const SPIN_POSITION_NAME = ["upright", "sit", "camel"] as const;
  */
 export const SPIN_VARIATION = { None: 0, Attitude: 1, Split: 2 } as const;
 export const SPIN_VARIATION_NAME = ["", "attitude", "standing split"] as const;
+/** Each variation's `difficult` flag in data/spin-positions.json (upright_basic, upright_attitude, upright_i_position); test/free-leg-raise.test.ts holds them to the file. */
+export const SPIN_VARIATION_DIFFICULT = [false, false, true] as const;
 
 /**
  * A spin in progress. Bible §2.5: "a continuous negotiation between speed,

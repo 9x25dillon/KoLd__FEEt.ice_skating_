@@ -1,8 +1,9 @@
-import { CareerState, Choreography, CAREER_EVENTS, ELEMENTS, MEDALS } from "./career.ts";
+import { CareerState, Choreography, CAREER_EVENTS, CUSTOM_STYLE, ELEMENTS, MEDALS } from "./career.ts";
 import type { ElementId } from "./career.ts";
 import { addElement, canAdd, moveEarlier, planRows, removeAt } from "./programplan.ts";
 import { ARM_FOCUS, ArmDrill, armExpression, armParams } from "./armfocus.ts";
 import { STYLES, styleParams } from "./styles.ts";
+import { leanings, styleShares } from "./journal.ts";
 import { seasonTable, standings } from "./rivals.ts";
 import { BODY_REGIONS, FallWatch } from "./wear.ts";
 import { overall, xpToRaise } from "../sim/profile.ts";
@@ -192,7 +193,7 @@ function start() {
   armDrill = drillNext ? new ArmDrill(career.armFocus) : null; drillNext = false;
   if (careerMode || armDrill) params = armParams(params, career.armFocus, career.armBest[career.armFocus]);
   // The career skater's style (game/styles.ts): career only, like the arms' trade.
-  if (careerMode) params = styleParams(params, career.style, career.styleMastery[career.style] ?? 0);
+  if (careerMode && career.activeStyle) params = styleParams(params, career.activeStyle, career.styleMastery[career.style] ?? 0);
   el("result-standings").hidden = true;
   fallWatch = careerMode || armDrill ? new FallWatch() : null; newInjuries = [];
   applyTrack(params);
@@ -579,7 +580,7 @@ function frame(now: number) {
       else if (wasSpinning) {
         const segments = spinTracker.finish();
         if (spinThresholds) {
-          const result = scoreSpinLevel(segments, spinThresholds, spinTracker.footChanges);
+          const result = scoreSpinLevel(segments, spinThresholds, spinTracker.footChanges, spinTracker.variations);
           lastSpinLabel = `Last spin: level ${result.level > 0 ? result.level : "B"}`;
         }
         spinTracker.reset();
@@ -758,7 +759,27 @@ function refreshCareer() {
     row.append(button, makeText("p", st.blurb));
     styles.append(row);
   });
-  if (career.style >= 0) styles.append(makeButton("style-drill", `Drill ${STYLES[career.style].title} · 1 week`,
+  // The custom style: forged from the first season, nudged by the player (game/journal.ts).
+  {
+    const row = document.createElement("div"); row.className = "arm-tier";
+    const lean = career.customLeanings ?? leanings(career.journal);
+    const shares = styleShares(lean, career.customNudge);
+    const mix = STYLES.map((st, i) => `${st.title} ${Math.round(shares[i] * 100)}%`).join(" · ");
+    if (career.customLeanings) {
+      const chosen = career.style === CUSTOM_STYLE;
+      const button = makeButton("style-custom", `${chosen ? "● " : ""}Your style · drilled ${Math.round(career.styleMastery[CUSTOM_STYLE] * 100)}%`,
+        () => { career.chooseStyle(CUSTOM_STYLE); saveCareer(); refreshCareer(); });
+      button.setAttribute("aria-pressed", String(chosen));
+      row.append(button, makeText("p", `Forged from how you skated your first season: ${mix}. Nudge it a little toward one:`));
+      [{ title: "No nudge" }, ...STYLES].forEach((st, k) => {
+        const i = k - 1;
+        row.append(makeButton(`nudge-${i < 0 ? "none" : STYLES[i].id}`, `${career.customNudge === i ? "● " : ""}${st.title}`,
+          () => { career.nudgeCustom(i); saveCareer(); refreshCareer(); }));
+      });
+    } else row.append(makeText("p", `Your own style is forged when you medal the Championship and finish your first season. How you skate until then is what it is made of — so far: ${mix}.`));
+    styles.append(row);
+  }
+  if (career.activeStyle) styles.append(makeButton("style-drill", `Drill ${career.activeStyle.title} · 1 week`,
     () => { career.drillStyle(); saveCareer(); refreshCareer(); }, career.weeks < 1 || career.styleMastery[career.style] >= 1));
   const training = el("career-training"); training.replaceChildren();
   for (const [stat, label] of [["strength", "Push power"], ["spring", "Jump spring"], ["edgeControl", "Edge control"], ["balance", "Balance"], ["stamina", "Stamina"]] as const) {

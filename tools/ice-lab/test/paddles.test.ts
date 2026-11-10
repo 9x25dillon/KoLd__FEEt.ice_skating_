@@ -220,3 +220,28 @@ test("paddles: a hockey-stop-style scrape — the thumbs hold both edges while a
     assert.equal(caught.s.fallen, true); assert.equal(caught.s.tick, 141);
   }
 });
+
+test("paddles: the free leg's paddle held with its trigger pulled raises the leg; its stick pulled back bends the knee", () => {
+  // The owner's binding, 2026-11-09. Weight on the right (B), the left leg free:
+  // bottom-left paddle held from tick 30, LT eased in over half a second (a
+  // snap of the free trigger is a push gesture, and a raise is not a snap).
+  const plan = (bend: number) => (i: number, h: ControllerHardware) => {
+    onRight(i, h);
+    if (i >= 30) { h.buttons[BOTTOM_LEFT] = 1; h.buttons[6] = Math.min(1, (i - 30) / 60); h.axes[1] = bend; }
+  };
+  const straight = elite("experimental", plan(0), 300, 4), bent = elite("experimental", plan(0.8), 300, 4);
+  const at = straight.inputs[200], bentAt = bent.inputs[200];
+  assert.equal(at.freeLegRaise, 1);
+  const leftKnee = (x: SkatingInput) => x.knee - (x.kneeSplit ?? 0);
+  assert.ok(Math.abs(leftKnee(at)) < 1e-9, `free knee ${leftKnee(at)}`);
+  // Through the profile's stick curve: 0.8 of the stick back is a bend of 0.67.
+  assert.ok(leftKnee(bentAt) > 0.5, `bent free knee ${leftKnee(bentAt)}`);
+  assert.equal(at.pitchSplit, 0, "the free stick no longer sets the standing blade's heel and toe");
+  // The leg goes up as far as the hip's range lets it: the default 0.6.
+  assert.ok(Math.abs(straight.s.freeRaise! - 0.6) < 0.01, `raise ${straight.s.freeRaise}`);
+  assert.equal(straight.s.fallen, false);
+  // The paddle alone still swings the leg forward and raises nothing.
+  const alone = elite("experimental", (i, h) => { onRight(i, h); if (i >= 30) h.buttons[BOTTOM_LEFT] = 1; }, 120, 4);
+  assert.equal(alone.inputs[100].freeLegRaise, undefined);
+  assert.equal(alone.inputs[100].freeLeg, 1);
+});

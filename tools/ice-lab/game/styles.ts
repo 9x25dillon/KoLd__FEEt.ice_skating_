@@ -26,7 +26,7 @@ import type { Params } from "../sim/params.ts";
 export interface StyleEffect { key: keyof Params; mul: number }
 
 export interface Style {
-  id: "power" | "finesse" | "technician" | "endurance";
+  id: "power" | "finesse" | "technician" | "endurance" | "custom";
   title: string;
   blurb: string;
   /** What the style is good at: scaled by mastery, half at the choice and the rest drilled. */
@@ -87,9 +87,31 @@ export function styleStrength(mastery: number): number {
   return STYLE_CHOSEN_SHARE + (1 - STYLE_CHOSEN_SHARE) * m;
 }
 
-/** A run's params under a style (index into STYLES, -1 for none) at its mastery. */
-export function styleParams(base: Params, style: number, mastery: number): Params {
-  const st = STYLES[style];
+/**
+ * The custom style (the owner, 2026-11-09): the four styles blended by the
+ * shares a season's skating gave them (game/journal.ts styleShares, nudge
+ * included). Each multiplier's distance from 1 is weighted by its style's
+ * share, gains and costs alike, so a custom style is never stronger than the
+ * styles it is made of — only shaped like the skater who made it.
+ */
+export function customStyle(shares: readonly number[]): Style {
+  const blend = (part: "gives" | "costs"): StyleEffect[] => {
+    const sum = new Map<keyof Params, number>();
+    STYLES.forEach((st, i) => {
+      for (const e of st[part]) sum.set(e.key, (sum.get(e.key) ?? 0) + (shares[i] ?? 0) * (e.mul - 1));
+    });
+    return [...sum].map(([key, d]) => ({ key, mul: 1 + d }));
+  };
+  return {
+    id: "custom", title: "Your style",
+    blurb: "Forged from how you skated your first season, and leaning where you nudge it.",
+    gives: blend("gives"), costs: blend("costs"),
+  };
+}
+
+/** A run's params under a style (index into STYLES, -1 for none; or a Style itself) at its mastery. */
+export function styleParams(base: Params, style: number | Style, mastery: number): Params {
+  const st = typeof style === "number" ? STYLES[style] : style;
   if (!st) return base;
   const p = { ...base };
   const k = styleStrength(mastery);
