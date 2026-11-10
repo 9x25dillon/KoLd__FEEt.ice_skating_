@@ -16,6 +16,7 @@ import { PcsMeter, pcsInputsFrom, scorePcs } from "../sim/pcs.ts";
 import type { SegmentRule, PcsScore } from "../sim/pcs.ts";
 import type { IceGrid } from "../sim/ice.ts";
 import { JUMP_FAMILIES, RUST_PER_STEP, RUST_PER_WEEK, RUST_TURN, landingFamily } from "./training.ts";
+import { STYLES, STYLE_PER_WEEK, STYLE_RUST_PER_STEP } from "./styles.ts";
 import type { JumpFamily, Rust } from "./training.ts";
 import { BODY_REGIONS, HEALED_UNDER, INJURED_AT, REST_PER_WEEK, noInjury, noWear, wornProfile } from "./wear.ts";
 import type { BodyRegion, FallHit, Injured, Wear } from "./wear.ts";
@@ -368,6 +369,9 @@ export class CareerState {
   best: (number | null)[] = CAREER_EVENTS.map(() => null);
   /** game/wear.ts: what falling has done to the body, 0 fresh upward, by region. */
   wear: Wear = noWear();
+  /** game/styles.ts: the style skated (an index into STYLES, -1 none), and each style's drilled mastery, 0..1. */
+  style = -1;
+  styleMastery: number[] = STYLES.map(() => 0);
   /** Regions injured: set at INJURED_AT, cleared under HEALED_UNDER. */
   injured: Injured = noInjury();
 
@@ -446,6 +450,14 @@ export class CareerState {
     this.rust = { ...this.rust, [family]: Math.max(0, this.rust[family] - RUST_PER_WEEK) };
     this.drilled = { ...this.drilled, [family]: true };
   }
+  /** Take up a style, or -1 for none. Free: its cost comes at once, and a style put down keeps its mastery but rusts. */
+  chooseStyle(i: number) { if (i === -1 || STYLES[i]) this.style = i; }
+  /** A week of style drills: mastery up, toward the style's full benefit. */
+  drillStyle() {
+    if (this.weeks < 1 || !STYLES[this.style] || this.styleMastery[this.style] >= 1) return;
+    this.weeks--;
+    this.styleMastery = this.styleMastery.map((m, i) => i === this.style ? Math.min(1, m + STYLE_PER_WEEK) : m);
+  }
   /** A fall in career. Returns the region if this one made it an injury. */
   takeFall(hit: FallHit): BodyRegion | null {
     this.wear = { ...this.wear, [hit.region]: this.wear[hit.region] + hit.wear };
@@ -467,6 +479,8 @@ export class CareerState {
     for (const { id } of JUMP_FAMILIES) if (!this.drilled[id]) this.rust[id] = Math.min(1, this.rust[id] + RUST_PER_STEP);
     this.rust = { ...this.rust };
     this.drilled = { toe: false, edge: false };
+    // A style put down rusts; the one skated holds.
+    this.styleMastery = this.styleMastery.map((m, i) => i === this.style ? m : Math.max(0, m - STYLE_RUST_PER_STEP));
   }
   /** Sets event `i`'s layout, or null for its own. Returns whether it was allowed. */
   setPlan(i: number, plan: ElementId[] | null): boolean {
@@ -491,7 +505,7 @@ export class CareerState {
     const plan = this.plans[i];
     return plan ? { ...CAREER_EVENTS[i], routine: plan } : CAREER_EVENTS[i];
   }
-  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, timelines: this.timelines, best: this.best, wear: this.wear, injured: this.injured }); }
+  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, timelines: this.timelines, best: this.best, wear: this.wear, injured: this.injured, style: this.style, styleMastery: this.styleMastery }); }
   static restore(json: string | null): CareerState {
     const career = new CareerState();
     try {
@@ -525,6 +539,9 @@ export class CareerState {
       const regions = BODY_REGIONS.map(r => r.id);
       if (regions.every(r => Number.isFinite(saved.wear?.[r]) && saved.wear[r] >= 0)) career.wear = Object.fromEntries(regions.map(r => [r, saved.wear[r]])) as Wear;
       if (regions.every(r => typeof saved.injured?.[r] === "boolean")) career.injured = Object.fromEntries(regions.map(r => [r, saved.injured[r]])) as Injured;
+      // Saves from before styles skate with none. A bad field keeps the default.
+      if (Number.isInteger(saved.style) && (saved.style === -1 || STYLES[saved.style])) career.style = saved.style;
+      if (Array.isArray(saved.styleMastery) && saved.styleMastery.length === STYLES.length && saved.styleMastery.every((m: unknown) => unit(m))) career.styleMastery = [...saved.styleMastery];
       if (Array.isArray(saved.lessons) && saved.lessons.length <= 200 && saved.lessons.every((l: unknown) => typeof l === "string" && l.length <= 40)) career.lessons = [...saved.lessons];
     } catch { /* A missing or invalid save starts a playable career. */ }
     return career;

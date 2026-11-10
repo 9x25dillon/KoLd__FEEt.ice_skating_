@@ -42,6 +42,9 @@ export interface SearchPoint {
   rotationError: number;
   takeoffQuality: number;
   landingQuality: number;
+  /** Takeoff height (m) and angular momentum (kg m^2/s, signed); 0 with no takeoff. Optional: added after jpse-search/1 shipped. */
+  height?: number;
+  angMomentum?: number;
   digest: number;
 }
 
@@ -84,6 +87,7 @@ function evaluate(index: number, knobs: EntranceKnobs, p: Params, revs: number, 
       takeoff: r.takeoff?.code ?? "---", simCalls: r.landing?.simCalls ?? "none",
       turned, rotationError: r6(Math.abs(turned - revs)),
       takeoffQuality: r.takeoff?.quality ?? 0, landingQuality: r.landing?.landingQuality ?? 0,
+      height: r.flight?.height ?? 0, angMomentum: r.takeoff?.angMomentum ?? 0,
       digest: r.replay.digest,
     },
   };

@@ -2,6 +2,7 @@ import { CareerState, Choreography, CAREER_EVENTS, ELEMENTS, MEDALS } from "./ca
 import type { ElementId } from "./career.ts";
 import { addElement, canAdd, moveEarlier, planRows, removeAt } from "./programplan.ts";
 import { ARM_FOCUS, ArmDrill, armExpression, armParams } from "./armfocus.ts";
+import { STYLES, styleParams } from "./styles.ts";
 import { seasonTable, standings } from "./rivals.ts";
 import { BODY_REGIONS, FallWatch } from "./wear.ts";
 import { overall, xpToRaise } from "../sim/profile.ts";
@@ -190,6 +191,8 @@ function start() {
   // Only career trades balance for line; every other mode has both at once (game/armfocus.ts).
   armDrill = drillNext ? new ArmDrill(career.armFocus) : null; drillNext = false;
   if (careerMode || armDrill) params = armParams(params, career.armFocus, career.armBest[career.armFocus]);
+  // The career skater's style (game/styles.ts): career only, like the arms' trade.
+  if (careerMode) params = styleParams(params, career.style, career.styleMastery[career.style] ?? 0);
   el("result-standings").hidden = true;
   fallWatch = careerMode || armDrill ? new FallWatch() : null; newInjuries = [];
   applyTrack(params);
@@ -745,6 +748,18 @@ function refreshCareer() {
     drillNext = true; careerMode = false; courseMode = false; tutorialMode = false; freeSkate = true; cruise = setup === null;
     resumeAfterCareer = false; careerBoard.close(); start();
   }));
+  const styles = el("career-style"); styles.replaceChildren();
+  [{ title: "No style", blurb: "The skater as trained, nothing traded." }, ...STYLES].forEach((st, k) => {
+    const i = k - 1, chosen = i === career.style;
+    const row = document.createElement("div"); row.className = "arm-tier";
+    const mastery = i >= 0 ? ` · drilled ${Math.round(career.styleMastery[i] * 100)}%` : "";
+    const button = makeButton(`style-${i < 0 ? "none" : STYLES[i].id}`, `${chosen ? "● " : ""}${st.title}${mastery}`, () => { career.chooseStyle(i); saveCareer(); refreshCareer(); });
+    button.setAttribute("aria-pressed", String(chosen));
+    row.append(button, makeText("p", st.blurb));
+    styles.append(row);
+  });
+  if (career.style >= 0) styles.append(makeButton("style-drill", `Drill ${STYLES[career.style].title} · 1 week`,
+    () => { career.drillStyle(); saveCareer(); refreshCareer(); }, career.weeks < 1 || career.styleMastery[career.style] >= 1));
   const training = el("career-training"); training.replaceChildren();
   for (const [stat, label] of [["strength", "Push power"], ["spring", "Jump spring"], ["edgeControl", "Edge control"], ["balance", "Balance"], ["stamina", "Stamina"]] as const) {
     const value = career.profile.stats[stat], cost = xpToRaise(value);
