@@ -58,10 +58,10 @@ Each stage is **takes → gives**. The status column says what exists, not who m
 | JPSE-001 | Canonical entrance | a measured source (a pad script, a replay, a capture) | `InputProgram` | reference: `jpse/baseline.ts` |
 | JPSE-002 | Direction transforms | `InputProgram`, `Transform` | `InputProgram` | reference: `jpse/transform.ts` |
 | JPSE-003 | Blade/travel geometry | `MotionFrame` stream | curvature, alpha_b, baseline kappa | reference: `jpse/geometry.ts` |
-| JPSE-004 | Support load | `MotionFrame` stream | per-blade load share over the entrance | in the frames; no separate summary yet |
+| JPSE-004 | Support load | `MotionFrame` stream | one-foot/two-foot ticks, right-blade share, load-phase peak in body weights | reference: `entrance.supportLoad` in `jpse/engine.ts` |
 | JPSE-005 | Takeoff state | `MotionFrame` stream, solver events | `TakeoffState` | reference: `jpse/engine.ts` |
 | JPSE-006 | Solver coupling | `Candidate` | `MotionFrame` stream, replay clip | reference: `jpse/engine.ts runCandidate` |
-| JPSE-007 | Candidate search | `SearchSpec` | ranked `CandidateReport`s, seed and order recorded | open |
+| JPSE-007 | Candidate search | `SearchSpec` | `SearchReport`: every point's gates, outcome distribution, repeatability, Pareto front | first pass: deterministic grid, `jpse/search.ts`. Objective weights open |
 | JPSE-008 | Flight and landing validation | `MotionFrame` stream, solver landing result | `Flight`, `Landing`, gates | reference: `jpse/engine.ts` |
 | JPSE-009 | Motion telemetry | `MotionFrame` stream | `MotionFrame` JSON lines, for renderers | reference: `jpse/cli.ts --frames` |
 | JPSE-010 | Animation reconstruction | `MotionFrame` stream | a skeletal pose per tick | open (renderer side) |
@@ -97,6 +97,7 @@ the table below is the summary.
 | `MotionFrame` | `motion-frame.schema.json` | one tick of what the solver did: COM, both blades, edge, load, jump phase |
 | `CandidateReport` | `candidate-report.schema.json` | entrance, takeoff, flight, landing, gates, reasons, replay |
 | `JpseReport` | `jpse-report.schema.json` | a slice: every candidate, the invariants, provenance |
+| `SearchReport` | `search-report.schema.json` | a JPSE-007 run: spec, points, distribution, repeatability, Pareto front |
 | reason codes | `reasons.json` | the closed list of gate names and reason prefixes |
 
 ### Transforms, defined on the ice
