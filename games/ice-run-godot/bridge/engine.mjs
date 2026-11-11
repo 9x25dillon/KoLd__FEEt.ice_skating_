@@ -25,6 +25,7 @@ import {standings,seasonTable,RIVALS} from '../runtime/game/rivals.js';
 import {rivalLook} from '../runtime/game/cast.js';
 import {libraryIndex,CLIP_BY_ID} from '../runtime/game/motion/library.js';
 import {styleById,choreograph,suggestStyles} from '../runtime/game/motion/dance.js';
+import {MotionPlayer} from '../runtime/game/motion/player.js';
 import {WarmupGroup,WARMUP_SECONDS} from '../runtime/game/warmup.js';
 import {podium} from '../runtime/game/podium.js';
 import {COURSES,courseById,courseSteps,howContext,elementHow,recoverHow} from '../runtime/game/padcourse.js';
@@ -113,6 +114,9 @@ export class IceEngine {
   // game/warmup.ts: a career program can open with its warm-up group, the event's field on the ice
   // with you. No program runs during it; when it ends (or is skipped) the career start runs again,
   // fresh, so the program, its replay and its ice see nothing of the warm-up. Off unless asked.
+  // game/motion/player.ts: what the client draws from the motion library this run.
+  const runTrack=tracks[this.runTrack];
+  this.motion=new MotionPlayer(this.danceStyle??null,runTrack?{bpm:runTrack.bpm,beatsPerBar:runTrack.beatsPerBar,offset:runTrack.offset}:null,this.routine?.event.seconds??180,index+1);
   this.warmup=null;
   if(mode==='career'&&options.warmup){
    const field=standings(index,null).map(r=>r.name);
@@ -155,6 +159,8 @@ export class IceEngine {
   if(o.profile!==undefined){if(!Number.isInteger(o.profile)||!SAMPLE_PROFILES[o.profile])throw Error('Unknown profile');this.profile=o.profile;}
   if(this.setup){this.scheme=3;if(this.setup!=='repertoire')this.beginner=false;if(this.setup==='simulation'||this.setup==='experimental')this.cruise=false;}
   if(o.steady!==undefined)this.steadyChoice=o.steady;
+  // game/motion/dance.ts: the style whose arms dress a run (presentation only), or null for none.
+  if(o.danceStyle!==undefined){if(o.danceStyle!==null&&!styleById(o.danceStyle))throw Error('Unknown dance style');this.danceStyle=o.danceStyle;}
   // At once, mid-run too: it is a hand on the input, nothing in the params.
   this.hand.strength=steadyStrength(this.steadyLevel());
  }
@@ -334,7 +340,7 @@ export class IceEngine {
    :s.turn.kind===TURN_KIND.Loop?'Loop':s.turn.kind===TURN_KIND.Rocker?'Rocker'
    :'Three-turn';
   const move=s.fallen?`Recover · ${recoverHow(words)}`:s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
-  return {warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+  return {motion:this.motion?this.motion.frame(this.state,this.elapsed):null,danceStyle:this.danceStyle??null,warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    recover:recoverHow(words),
    tutorial:l?{unproven:l.step?.id==='spin'&&this.setup==='explorer'?UNPROVEN_AIR:'',course:this.course,index:l.index,total:l.steps.length,title:l.step?.title??'',

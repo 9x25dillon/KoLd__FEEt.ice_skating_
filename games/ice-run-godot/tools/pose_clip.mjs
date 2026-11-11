@@ -7,13 +7,17 @@ import {IceEngine} from '../bridge/engine.mjs';
 import {createState} from '../runtime/sim/solver.js';
 import {NEUTRAL_INPUT} from '../runtime/sim/types.js';
 import {SKINS} from '../runtime/game/appearance.js';
+import {MotionPlayer} from '../runtime/game/motion/player.js';
+// --motion: each frame carries game/motion/player.ts's clip (a fall's, or --style=<id>'s arms), as the bridge sends it.
+const motionArg=process.argv.includes('--motion'),styleArg=process.argv.find(a=>a.startsWith('--style='))?.slice(8)??null;
+const player=motionArg?new MotionPlayer(styleArg,{bpm:120,beatsPerBar:4,offset:0},120):null;
 const e=new IceEngine();
 e.start({mode:'free'});
 e.state=createState(e.params,6);
 e.state.pos.y=18;
 const pick=b=>({contact:b.contact,tangent:b.tangent,tilt:b.tilt,weight:b.weight,normalLoad:b.normalLoad,inContact:b.inContact,latSlipAccel:b.latSlipAccel,longSpeed:b.longSpeed,demandRatio:b.demandRatio});
 const frames=[],marks=[];
-const record=()=>{const s=e.state;frames.push({low:false,state:{tick:s.tick,pos:s.pos,vel:s.vel,heading:s.heading,yawRate:s.yawRate,lean:s.lean,comZ:s.comZ,knee:s.knee,intAccel:s.intAccel,balanceError:s.balanceError,latAccel:s.latAccel,armsL:s.armsL,strokeTime:s.strokeTime,strokeFoot:s.strokeFoot,twist:s.twist,freeSwing:s.freeSwing,fallen:s.fallen,move:s.move,supportMode:s.supportMode,supportFoot:s.supportFoot,jump:{phase:s.jump.phase,z:s.jump.z,vz:s.jump.vz,rotation:s.jump.rotation,inertia:s.jump.inertia},spin:{position:s.spin.position,inertia:s.spin.inertia,omega:s.spin.omega},blade:s.blade.map(pick)}});};
+const record=()=>{const s=e.state;const motion=player?player.frame(s,s.tick/120):null;frames.push({low:false,motion,state:{tick:s.tick,pos:s.pos,vel:s.vel,heading:s.heading,yawRate:s.yawRate,lean:s.lean,comZ:s.comZ,knee:s.knee,intAccel:s.intAccel,balanceError:s.balanceError,latAccel:s.latAccel,armsL:s.armsL,strokeTime:s.strokeTime,strokeFoot:s.strokeFoot,twist:s.twist,freeSwing:s.freeSwing,fallen:s.fallen,move:s.move,supportMode:s.supportMode,supportFoot:s.supportFoot,jump:{phase:s.jump.phase,z:s.jump.z,vz:s.jump.vz,rotation:s.jump.rotation,inertia:s.jump.inertia},spin:{position:s.spin.position,inertia:s.spin.inertia,omega:s.spin.omega},blade:s.blade.map(pick)}});};
 const run=(name,ticks,input)=>{marks.push({name,tick:frames.length});for(let i=0;i<ticks;i++){e.tick({...NEUTRAL_INPUT,...input(i)});record();}};
 // --falls: a real fall each way and getting up, instead of the passage below.
 if(process.argv.includes('--falls')){
