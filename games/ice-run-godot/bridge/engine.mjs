@@ -23,6 +23,7 @@ import {RustGate,JUMP_FAMILIES} from '../runtime/game/training.js';
 import {BODY_REGIONS,FallWatch,wearNote} from '../runtime/game/wear.js';
 import {standings,seasonTable,RIVALS} from '../runtime/game/rivals.js';
 import {rivalLook} from '../runtime/game/cast.js';
+import {WarmupGroup,WARMUP_SECONDS} from '../runtime/game/warmup.js';
 import {COURSES,courseById,courseSteps,howContext,elementHow,recoverHow} from '../runtime/game/padcourse.js';
 import {ARM_FOCUS,ArmDrill,armParams,armExpression} from '../runtime/game/armfocus.js';
 import {Practice,LESSONS} from '../runtime/game/practice.js';
@@ -60,6 +61,8 @@ export class IceEngine {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson'].includes(mode)) throw Error('Unknown skating mode');
   if(options.pairsChallenge!==undefined&&typeof options.pairsChallenge!=='boolean')throw Error('Invalid pairs challenge');
+  if(options.warmup!==undefined&&typeof options.warmup!=='boolean')throw Error('Invalid warm-up choice');
+  if(options.warmupSeconds!==undefined&&(!Number.isFinite(options.warmupSeconds)||options.warmupSeconds<1||options.warmupSeconds>360))throw Error('A warm-up runs 1–360 seconds');
   const index=options.event??this.event??0;
   if(mode==='career'&&(!Number.isInteger(index)||index<0||index>this.career.unlocked)) throw Error('Complete the previous career event first');
   if(options.sequence) {
@@ -104,7 +107,20 @@ export class IceEngine {
   // sim/moves.ts spinTick's foot change: never surfaced here before, the
   // same decaying-flash idiom game/main.ts's own `flash` uses.
   this.lastChangeCompletedTick=-1;this.footChangeFlash=0;this.combo=new ComboTracker();this.comboFlash=0;this.comboLabel='';
+  // game/warmup.ts: a career program can open with its warm-up group, the event's field on the ice
+  // with you. No program runs during it; when it ends (or is skipped) the career start runs again,
+  // fresh, so the program, its replay and its ice see nothing of the warm-up. Off unless asked.
+  this.warmup=null;
+  if(mode==='career'&&options.warmup){
+   const field=standings(index,null).map(r=>r.name);
+   this.warmup=new WarmupGroup(field,options.warmupSeconds??WARMUP_SECONDS);this.routine=null;
+  }
   return this.snapshot();
+ }
+ /** Ends the warm-up group and starts the program itself, fresh. */
+ endWarmup(){
+  if(!this.warmup)throw Error('No warm-up is running');
+  return this.start({mode:'career',event:this.event});
  }
  configure(o) {
   if(o.setup!==undefined&&o.setup!==null&&!isSetup(o.setup))throw Error('Unknown skating setup');
@@ -160,6 +176,7 @@ export class IceEngine {
     this.tick(this.rusty?this.rusty.apply(input,s):input,(c.pairHold?1:0)|(c.pairLift?2:0));
    }
    this.elapsed+=SIM_DT;
+   if(this.warmup){this.warmup.tick();if(this.warmup.done){this.endWarmup();break;}}
    if(this.state.tick%4===0)this.trace.push(this.state.blade.map(b=>({x:b.contact.x,y:b.contact.y,contact:b.inContact&&this.state.jump.phase!==JUMP_PHASE.Air&&!this.state.fallen})));
    if(this.pairs&&this.state.tick%4===0)this.partnerTrace.push(this.pairs.partner.blade.map(b=>({x:b.contact.x,y:b.contact.y,contact:b.inContact&&this.pairs.partner.jump.phase!==JUMP_PHASE.Air&&!this.pairs.partner.fallen&&this.pairs.liftPhase==='none'})));
   }
@@ -296,7 +313,7 @@ export class IceEngine {
    :s.turn.kind===TURN_KIND.Loop?'Loop':s.turn.kind===TURN_KIND.Rocker?'Rocker'
    :'Three-turn';
   const move=s.fallen?`Recover · ${recoverHow(words)}`:s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
-  return {pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+  return {warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    recover:recoverHow(words),
    tutorial:l?{unproven:l.step?.id==='spin'&&this.setup==='explorer'?UNPROVEN_AIR:'',course:this.course,index:l.index,total:l.steps.length,title:l.step?.title??'',

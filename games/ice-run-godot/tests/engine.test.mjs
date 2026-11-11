@@ -460,3 +460,28 @@ test('season two: the gala places nobody, and its result carries season two\'s l
  assert.ok(r.story.length>40);
  assert.match(r.finale,/Grand Prix|Nationals|two seasons/i,r.finale);
 });
+
+test('the warm-up group: the field skates with you, no program runs, and the program starts fresh after',()=>{
+ const e=new IceEngine(),still={hardware:{axes:[0,0,0,0],buttons:Array(16).fill(0),keys:[],connected:true}};
+ e.configure({setup:'simulation',beginner:false,cruise:false});
+ let f=e.start({mode:'career',event:0,warmup:true,warmupSeconds:4});
+ assert.equal(f.warmup.skaters.length,5,'season one: five rivals');
+ assert.deepEqual(f.warmup.skaters.map(k=>k.name).sort(),['Ansa Merrow','Katya Vell','Lio Tarrant','Noor Ashdown','Remi Castellan']);
+ assert.equal(f.routine,null,'no program during the warm-up');
+ const at=f.warmup.skaters[0].state.pos;
+ f=e.advance(still,12,false);
+ assert.notDeepEqual(f.warmup.skaters[0].state.pos,at,'they skate');
+ for(let i=0;i<60&&e.warmup;i++)f=e.advance(still,12,false);
+ assert.equal(f.warmup,null,'it ends on its own');
+ assert.ok(f.routine,'and the program begins');
+ assert.equal(e.recorder.ticks,0,'its replay holds none of the warm-up');
+ // Season two's field has six, and a skipped warm-up starts the program at once.
+ e.career.medals=e.career.medals.map((_,i)=>i<5?2:0);
+ e.career.profile={...e.career.profile,stats:{strength:60,spring:60,edgeControl:60,balance:60,stamina:60}};
+ f=e.start({mode:'career',event:5,warmup:true});
+ assert.equal(f.warmup.skaters.length,6);
+ f=e.endWarmup();
+ assert.equal(f.warmup,null);assert.ok(f.routine);
+ assert.throws(()=>e.endWarmup(),/No warm-up/);
+ assert.equal(e.start({mode:'career',event:0}).warmup,null,'off unless asked');
+});

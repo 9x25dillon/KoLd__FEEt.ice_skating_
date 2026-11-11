@@ -21,6 +21,8 @@ var arena: Node3D
 var skater: Node3D
 # scripts/podium.gd: the top three after a career result.
 var podium: Node3D
+# game/warmup.ts: the event's field on the ice before a career program, by name.
+var warmup_skaters := {}
 var partner: Node3D
 var pair_hold_pending := false
 var pair_lift_pending := false
@@ -419,6 +421,8 @@ func show_page(page: String) -> void:
 			menu.add_child(button("Continue skating →",resume_game,true))
 			if frame.get("tutorial") != null:
 				menu.add_child(button("Skip this step   /   earns no XP",func():link.send("skipStep")))
+			if frame.get("warmup") != null:
+				menu.add_child(button("Skip the warm-up   /   start the program",func():link.send("endWarmup");resume_game()))
 		menu.add_child(button("The Season   /   Career →",func():show_page("career"),true))
 		menu.add_child(button("Learn your controls   /   A course for each setup",func():show_page("learn")))
 		menu.add_child(button("The Composer   /   Author a program",func():show_page("composer")))
@@ -1050,7 +1054,9 @@ func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
 	skater.load_model(CHARACTERS[character].path)
 	partner.visible = false
 	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile,"steady":steady_choice if not steady_choice.is_empty() else null}})
-	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null}})
+	# A career program opens with its warm-up group (game/warmup.ts); the tests skate straight in.
+	var warm := mode == "career" and not boot_test and (not screenshot_test or "--capture-warmup" in OS.get_cmdline_user_args())
+	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null,"warmup":warm}})
 
 func on_engine(op: String, data: Dictionary) -> void:
 	if op == "hello":
@@ -1072,7 +1078,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		if boot_test:
 			start_game("career")
 		elif screenshot_test:
-			start_game("free")
+			start_game("career" if "--capture-warmup" in OS.get_cmdline_user_args() else "free")
 		return
 	if op == "controller":
 		controller_profile = data.profile
@@ -1106,7 +1112,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		return
 	if op == "configure":
 		return
-	if op == "start" or op == "replay":
+	if op == "start" or op == "replay" or op == "endWarmup":
 		push_pending = false
 		toe_pending = false
 		trick_pending = false
@@ -1115,6 +1121,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		arena.set_course(str(frame.mode),catalog)
 		skater.apply_frame(frame,true)
 		apply_partner(true)
+		apply_warmup(true)
 		last_result_tick = -1
 		last_landing_tick = -1
 		music.stream = load("res://assets/generated/audio/"+str(catalog.tracks[int(frame.track)].file))
@@ -1127,8 +1134,14 @@ func on_engine(op: String, data: Dictionary) -> void:
 		broadcast.announce("TAKE THE ICE", "Northlight Arena  /  "+active_mode.capitalize())
 		notice.text = ""
 	else:
-		skater.apply_frame(frame)
+		# The warm-up ended inside this batch: the program starts fresh, from its own start.
+		var program_begins: bool = frame.get("warmup") == null and not warmup_skaters.is_empty()
+		skater.apply_frame(frame,program_begins)
+		if program_begins:
+			arena.clear_traces()
+			broadcast.announce("THE GROUP LEAVES THE ICE","Your program  /  "+str(frame.routine.title) if frame.routine != null else "Your program")
 		apply_partner(false)
+		apply_warmup(false)
 	arena.trace_lifted = skater.lifted_blade()
 	arena.add_traces(frame.trace)
 	arena.update_course(frame)
@@ -1149,6 +1162,31 @@ func on_engine(op: String, data: Dictionary) -> void:
 	if frame.finished and last_result_tick != int(frame.state.tick):
 		last_result_tick = int(frame.state.tick)
 		show_page("result")
+
+# game/warmup.ts: each rival in their own model and costume (game/cast.ts), posed from their own sim state.
+func apply_warmup(snap: bool) -> void:
+	var group = frame.get("warmup")
+	if group == null:
+		for k in warmup_skaters.values():
+			k.queue_free()
+		warmup_skaters.clear()
+		return
+	var looks := {}
+	for c in catalog.get("story",{}).get("cast",[]):
+		if c.get("look") != null: looks[str(c.name)] = c.look
+	for k in group.skaters:
+		var name := str(k.name)
+		var fresh := not warmup_skaters.has(name)
+		if fresh:
+			var look: Dictionary = looks.get(name,{})
+			var model = look.get("model")
+			var r := Skater.new()
+			var path := "res://assets/generated/%s.glb" % model if model != null else ""
+			r.model_path = path if not path.is_empty() and ResourceLoader.exists(path) else CHARACTERS[0].path
+			add_child(r)
+			r.apply_skin(look.get("costume",{}))
+			warmup_skaters[name] = r
+		warmup_skaters[name].apply_frame(k,snap or fresh)
 
 func apply_partner(snap: bool) -> void:
 	var pairs = frame.get("pairs")
@@ -1217,7 +1255,13 @@ func update_hud() -> void:
 	coach_title.text = ""
 	coach_tip.text = ""
 	coach_progress.text = ""
-	if frame.routine != null:
+	if frame.get("warmup") != null:
+		var w: Dictionary = frame.warmup
+		coach_title.text = "Warm-up"
+		coach_tip.text = "Your group shares the ice before the program: %d skaters, each on their own line. Find your edges and your speed. The program starts when the warm-up ends." % w.skaters.size()
+		coach_progress.text = "Pause to skip the warm-up"
+		hud_time.text = "%02d:%02d" % [int(w.seconds)/60,int(w.seconds)%60]
+	elif frame.routine != null:
 		var r: Dictionary = frame.routine
 		hud_time.text = "%02d:%02d" % [int(r.seconds)/60,int(r.seconds)%60]
 		# sim/pcs.ts's own score, never shown here before — silently absent
@@ -1604,6 +1648,19 @@ func capture_podium() -> void:
 	overlay.visible = true
 
 func capture() -> void:
+	if "--capture-warmup" in OS.get_cmdline_user_args():
+		# The group a few seconds in, from the follow camera and from the high one.
+		await get_tree().create_timer(6.0).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-warmup.png")
+		camera_mode = 1
+		await get_tree().create_timer(2.0).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-warmup-high.png")
+		print("GODOT_WARMUP_CAPTURE: %d in the group" % warmup_skaters.size())
+		print("GODOT_CAPTURE_PASS")
+		get_tree().quit()
+		return
 	playing = false
 	if "--capture-podium" in OS.get_cmdline_user_args():
 		await capture_podium()
