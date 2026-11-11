@@ -2,6 +2,7 @@ extends Node3D
 const EngineLink = preload("res://scripts/engine_link.gd")
 const Arena = preload("res://scripts/arena.gd")
 const Skater = preload("res://scripts/skater.gd")
+const Podium = preload("res://scripts/podium.gd")
 const SimSpace = preload("res://scripts/sim_space.gd")
 const Shot = preload("res://scripts/shot.gd")
 const Ribbon = preload("res://scripts/ribbon.gd")
@@ -18,6 +19,8 @@ const CHARACTERS: Array[Dictionary] = [
 var link: Node
 var arena: Node3D
 var skater: Node3D
+# scripts/podium.gd: the top three after a career result.
+var podium: Node3D
 var partner: Node3D
 var pair_hold_pending := false
 var pair_lift_pending := false
@@ -141,6 +144,8 @@ func _ready() -> void:
 	skater = Skater.new()
 	skater.model_path = CHARACTERS[character].path
 	add_child(skater)
+	podium = Podium.new()
+	add_child(podium)
 	partner = Skater.new()
 	partner.model_path = CHARACTERS[2].path
 	partner.visible = false
@@ -398,6 +403,9 @@ func focus_menu() -> void:
 			return
 
 func show_page(page: String) -> void:
+	if page != "result" and podium and podium.visible:
+		podium.clear()
+		skater.visible = true
 	current_page = page
 	if page != "music" and preview: preview.stop()
 	overlay.show()
@@ -736,6 +744,13 @@ func show_page(page: String) -> void:
 		menu.add_child(button("← Settings",func():show_page("settings")))
 	elif page == "result":
 		clear_menu(str(frame.result.title),str(frame.result.detail))
+		# The event's top three on the podium, while the result is up: game/rivals.ts standings.
+		if frame.result.get("standings") != null and podium.places.is_empty():
+			var looks := {}
+			for c in catalog.get("story",{}).get("cast",[]):
+				if c.get("look") != null: looks[str(c.name)] = c.look
+			if podium.present(frame.result.standings,looks,CHARACTERS[character].path,current_skin()) > 0:
+				skater.visible = false
 		# game/story.ts: the chapter's ending for a career run, and the season's after the championship.
 		if not str(frame.result.get("story","")).is_empty():
 			menu.add_child(paragraph(str(frame.result.story),16))
@@ -1030,6 +1045,8 @@ func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
 	active_mode = mode
 	event_index = index
 	playing = false
+	podium.clear()
+	skater.visible = true
 	skater.load_model(CHARACTERS[character].path)
 	partner.visible = false
 	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile,"steady":steady_choice if not steady_choice.is_empty() else null}})
@@ -1454,6 +1471,12 @@ func _process(dt: float) -> void:
 					get_tree().quit(1)
 					return
 				print("GODOT_SMOKE_PASS: live Ice Lab completed the three-element career routine; traces=",arena.trace_count)
+				# scripts/podium.gd: the event's top three, each in a model that loaded.
+				if podium.places.size() != 3 or not podium.visible or skater.visible:
+					push_error("Podium smoke test: %d on the podium, visible %s" % [podium.places.size(),podium.visible])
+					get_tree().quit(1)
+					return
+				print("GODOT_PODIUM_PASS: ",", ".join(podium.places.map(func(p): return "%d %s (%s)" % [p.place,p.name,str(p.model).get_file()])))
 				# Second stage: the same live engine, in pairs mode.
 				test_stage = 2
 				test_seconds = 0.0
@@ -1564,8 +1587,29 @@ func smoke_protocol_ui() -> bool:
 	print("GODOT_PROTOCOL_PASS: empty sheet, 32 numbered elements, calls, and focus scrolling")
 	return true
 
+# scripts/podium.gd, with the menu out of the way: the champion, Remi, and you in third.
+func capture_podium() -> void:
+	var looks := {}
+	for c in catalog.get("story",{}).get("cast",[]):
+		if c.get("look") != null: looks[str(c.name)] = c.look
+	var rows := [{"place":1,"name":"Teodora Wynn","you":false},{"place":2,"name":"Remi Castellan","you":false},{"place":3,"name":"You","you":true}]
+	podium.present(rows,looks,CHARACTERS[character].path,current_skin())
+	skater.visible = false
+	overlay.visible = false
+	await get_tree().create_timer(3.0).timeout
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-podium.png")
+	podium.clear()
+	skater.visible = true
+	overlay.visible = true
+
 func capture() -> void:
 	playing = false
+	if "--capture-podium" in OS.get_cmdline_user_args():
+		await capture_podium()
+		print("GODOT_CAPTURE_PASS")
+		get_tree().quit()
+		return
 	await RenderingServer.frame_post_draw
 	var image := get_viewport().get_texture().get_image()
 	image.save_png("/tmp/edgework-godot-rink.png")
@@ -1601,6 +1645,7 @@ func capture() -> void:
 	await get_tree().create_timer(2.0).timeout
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-design.png")
+	await capture_podium()
 	start_lesson("experimental","experimental")
 	await get_tree().create_timer(2.0).timeout
 	await RenderingServer.frame_post_draw
@@ -1631,7 +1676,12 @@ func update_camera(dt: float) -> void:
 		desired = focus-follow_direction*3.5+follow_direction.cross(Vector3.UP)*1.8+Vector3(0,-.25,0)
 		look = focus+Vector3(0,-.3,0)
 		fov = 46
-	if overlay.visible:
+	if podium.visible:
+		# The podium, from the ice in front of it, drifting slowly side to side.
+		desired = Vector3(sin(presentation_clock*.12)*1.1,1.45,6.4)
+		look = Vector3(0,1.15,0)
+		fov = 34
+	elif overlay.visible:
 		var a := .38+sin(presentation_clock*.09)*.22
 		var front := SimSpace.direction(s.heading.x,s.heading.y)
 		var showcase := front.rotated(Vector3.UP,a)
