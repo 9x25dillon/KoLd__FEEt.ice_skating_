@@ -104,6 +104,8 @@ public:
 	bool Showcase() const { return bPaused && !bShotsWithoutMenu; }
 
 	const FIceFrame& Frame() const { return Latest; }
+	/** game/podium.ts: true, with the gold block's foot (cm), while a result's podium stands on the ice. */
+	bool PodiumFocus(FVector& Centre) const { Centre = PodiumCentre; return PodiumSkaters.Num() > 0; }
 	/** The catalog's rink (minX, maxX, minY, maxY, corner, in sim metres), for the HUD's map. */
 	TSharedPtr<FJsonObject> RinkShape() const
 	{
@@ -127,6 +129,19 @@ private:
 	void OnReply(const FIceBridge::FReply& Reply);
 	void Fail(const FString& Message);
 	void Present(const FIceFrame& Frame, bool bSnap);
+	/** game/warmup.ts: each rival of the group in their own model and costume, posed from their own sim state. */
+	void PresentWarmup(bool bSnap);
+	/** game/podium.ts: the result's top three on their blocks; cleared by the next run. */
+	void BuildPodium();
+	/** The podium from a list of rows (game/podium.ts PodiumPlace): a result's, or a preview's. */
+	void BuildPodiumFrom(const TArray<TSharedPtr<FJsonValue>>& Rows);
+	void ClearPodium();
+	/** game/cast.ts via the catalog: a rival's look (model and costume), or null. */
+	TSharedPtr<FJsonObject> RivalLook(const FString& Name) const;
+	/** Content/Generated/skaters.json: a skeletal mesh path by folder, or empty. */
+	FString SkaterAsset(const FString& Folder) const;
+	/** A skater for the warm-up or the podium, in a rival's model and costume (or yours). */
+	AIceSkater* SpawnFieldSkater(const FString& Name, bool bYou);
 	void HandleMenus();
 	/** Opens the menu on a page (the bottom of its stack); the run waits underneath. */
 	void OpenMenu(const FString& PageId = TEXT("home"));
@@ -295,6 +310,16 @@ private:
 	/** The pairs partner (main.gd's partner: the sim skates them too), shown only in pairs. */
 	UPROPERTY()
 	TObjectPtr<AIceSkater> Partner;
+	/** game/warmup.ts: the group on the ice before a career program, by name. */
+	UPROPERTY()
+	TMap<FString, TObjectPtr<AIceSkater>> WarmupSkaters;
+	/** game/podium.ts: the three skaters and their blocks. */
+	UPROPERTY()
+	TArray<TObjectPtr<AIceSkater>> PodiumSkaters;
+	UPROPERTY()
+	TArray<TObjectPtr<AActor>> PodiumBlocks;
+	FVector PodiumCentre = FVector::ZeroVector;
+	bool bPodiumBuilt = false;
 	/** The next pairs run is the 90-second challenge. */
 	bool bPairsChallenge = false;
 

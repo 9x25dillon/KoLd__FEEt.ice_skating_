@@ -457,6 +457,7 @@ test('season two: the gala places nobody, and its result carries season two\'s l
  e.advance(emptyControls(),1,false);
  const r=e.snapshot().result;
  assert.equal(r.standings,null,'an exhibition places nobody');
+ assert.equal(r.podium,null,'and stands nobody on a podium');
  assert.ok(r.story.length>40);
  assert.match(r.finale,/Grand Prix|Nationals|two seasons/i,r.finale);
 });
@@ -484,4 +485,15 @@ test('the warm-up group: the field skates with you, no program runs, and the pro
  assert.equal(f.warmup,null);assert.ok(f.routine);
  assert.throws(()=>e.endWarmup(),/No warm-up/);
  assert.equal(e.start({mode:'career',event:0}).warmup,null,'off unless asked');
+});
+
+test('a career result carries its podium: the top three as standing sim states on their blocks',()=>{
+ const e=new IceEngine();
+ e.configure({setup:null,scheme:1,beginner:true,cruise:true});e.start({mode:'career',event:0});
+ e.routine.index=e.routine.event.routine.length;e.routine.elapsed=e.routine.event.seconds;
+ e.advance(emptyControls(),1,false);
+ const p=e.snapshot().result.podium;
+ assert.deepEqual(p.map(x=>x.place),[1,2,3]);
+ assert.deepEqual(p.map(x=>x.name),e.snapshot().result.standings.slice(0,3).map(x=>x.name));
+ assert.ok(p.every(x=>x.height>0&&!x.state.fallen&&x.state.pos.y===18));
 });

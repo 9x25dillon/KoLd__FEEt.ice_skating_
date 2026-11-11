@@ -24,6 +24,7 @@ import {BODY_REGIONS,FallWatch,wearNote} from '../runtime/game/wear.js';
 import {standings,seasonTable,RIVALS} from '../runtime/game/rivals.js';
 import {rivalLook} from '../runtime/game/cast.js';
 import {WarmupGroup,WARMUP_SECONDS} from '../runtime/game/warmup.js';
+import {podium} from '../runtime/game/podium.js';
 import {COURSES,courseById,courseSteps,howContext,elementHow,recoverHow} from '../runtime/game/padcourse.js';
 import {ARM_FOCUS,ArmDrill,armParams,armExpression} from '../runtime/game/armfocus.js';
 import {Practice,LESSONS} from '../runtime/game/practice.js';
@@ -116,6 +117,12 @@ export class IceEngine {
    this.warmup=new WarmupGroup(field,options.warmupSeconds??WARMUP_SECONDS);this.routine=null;
   }
   return this.snapshot();
+ }
+ /** For a still of the podium: the one event `event` would have, had you scored `score` there. Changes nothing. */
+ podiumPreview(event,score){
+  if(!Number.isInteger(event)||!CAREER_EVENTS[event])throw Error('Unknown career event');
+  if(!Number.isFinite(score))throw Error('A score is a number');
+  return {podium:podium(standings(event,score),this.params)};
  }
  /** Ends the warm-up group and starts the program itself, fresh. */
  endWarmup(){
@@ -231,6 +238,8 @@ export class IceEngine {
    const last=this.mode==='career'&&r.complete&&seasonEnds(this.event),season=seasonOf(this.event);
    const place=last?seasonTable(this.career.best,season).find(x=>x.you)?.place??0:0;
    this.finished=true;this.result={story,finale:last?finale(place,season):'',title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls${r.cues?` · ${r.cueResults.filter(x=>x==='on').length}/${r.cues.length} on the music`:''}`,protocol,xp,complete:r.complete,stopped,body:this.bodyNote(),standings:this.mode==='career'&&r.complete&&!CAREER_EVENTS[this.event].exhibition?standings(this.event,r.segmentScore):null};
+   // game/podium.ts: the top three as standing sim states, for a client to pose like any skater.
+   this.result.podium=this.result.standings?podium(this.result.standings,this.params):null;
   } else if(this.drill?.done&&!this.finished){const gained=this.career.recordDrill(this.drill.focus,this.drill.score);this.finished=true;this.result={title:`${ARM_FOCUS[this.drill.focus].title} drill: ${this.drill.score} / 100`,body:this.bodyNote(),detail:gained>0?`A new best, up ${gained}. Your arms give up less for ${ARM_FOCUS[this.drill.focus].title} now.`:`Your best stays ${this.career.armBest[this.drill.focus]}.`,complete:true};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
  }
