@@ -402,7 +402,7 @@ void AIceRunGameMode::BuildHome(FMenuPage& P)
 	const TSharedPtr<FJsonObject> Career = CareerObject();
 	const int32 Unlocked = int32(Num(Career, TEXT("unlocked")));
 	const TSharedPtr<FJsonObject> Next = At(CatalogList(TEXT("events")), Unlocked);
-	P.Items.Add(Line(TEXT("The Season"), Str(Next, TEXT("title")), TEXT("Your first season: five events, a coach, and the skaters you'll be measured against. Train between them."), [this] { PushPage(TEXT("season")); }));
+	P.Items.Add(Line(TEXT("The Season"), Str(Next, TEXT("title")), Num(Career, TEXT("seasonNumber")) >= 2 ? TEXT("The Nationals season: sectionals, two internationals, Nationals at the Coliseum and its gala.") : TEXT("Your first season: five events, a coach, and the skaters you'll be measured against. Train between them."), [this] { PushPage(TEXT("season")); }));
 	P.Items.Add(Line(TEXT("Lessons"), TEXT(""), TEXT("Trust the ice, the tutorial: balance, edges, getting where you mean to go, stops, the air. And a course for each setup's pad."), [this] { PushPage(TEXT("lessons")); }));
 	P.Items.Add(Line(TEXT("The Composer"), FString::Printf(TEXT("%d phrases"), Sequence.Num()), TEXT("Build your own program, phrase by phrase, and skate it."), [this] { PushPage(TEXT("composer")); }));
 	P.Items.Add(Line(RunLive() && Latest.Mode == TEXT("free") ? TEXT("Skate freely") : TEXT("Free skate"), TEXT(""), TEXT("Quiet ice. No judges, no clock; the practice list follows along."), [this]
@@ -439,9 +439,13 @@ void AIceRunGameMode::BuildSeason(FMenuPage& P)
 	P.Title = TEXT("The Season");
 	P.Subtitle = FString::Printf(TEXT("%d XP   ·   %d training weeks   ·   overall %.1f"), int32(Num(Career, TEXT("xp"))), Weeks, Num(Career, TEXT("overall")));
 	const TArray<TSharedPtr<FJsonValue>>& Won = Arr(Career, TEXT("medals"));
+	// game/story.ts: each season's opening until a medal is won in it (game/career.ts SEASONS).
+	const int32 SeasonNow = FMath::Max(1, int32(Num(Career, TEXT("seasonNumber"))));
+	auto SeasonOf = [&Events](int32 I) { const TSharedPtr<FJsonObject> E = At(Events, I); return E.IsValid() && E->HasField(TEXT("season")) ? int32(Num(E, TEXT("season"))) : 1; };
 	bool bAny = false;
-	for (const TSharedPtr<FJsonValue>& M : Won) bAny |= M->AsNumber() > 0;
-	const TSharedPtr<FJsonObject> Season = Obj(Story, TEXT("season"));
+	for (int32 I = 0; I < Won.Num(); ++I) bAny |= SeasonOf(I) == SeasonNow && Won[I]->AsNumber() > 0;
+	const TArray<TSharedPtr<FJsonValue>>& Seasons = Arr(Story, TEXT("seasons"));
+	const TSharedPtr<FJsonObject> Season = Seasons.IsValidIndex(SeasonNow - 1) ? Seasons[SeasonNow - 1]->AsObject() : Obj(Story, TEXT("season"));
 	P.Story = !bAny ? Str(Season, TEXT("opening")) : Str(At(Chapters, FMath::Min(Unlocked, Chapters.Num() - 1)), TEXT("before"));
 	const TSharedPtr<FJsonObject> Coach = Obj(Story, TEXT("coach"));
 	if (Coach.IsValid())
@@ -452,12 +456,17 @@ void AIceRunGameMode::BuildSeason(FMenuPage& P)
 	{
 		P.Notes.Add(A->AsString());
 	}
-	P.Items.Add(Header(TEXT("Events")));
+	auto SeasonTitle = [&Seasons](int32 N)
+	{
+		const FString Title = Seasons.IsValidIndex(N - 1) ? Str(Seasons[N - 1]->AsObject(), TEXT("title")) : FString();
+		return Title.IsEmpty() ? FString::Printf(TEXT("Season %d"), N) : FString::Printf(TEXT("Season %d   ·   %s"), N, *Title);
+	};
 	const TArray<TSharedPtr<FJsonValue>>& Plans = Arr(Career, TEXT("plans"));
 	const TArray<TSharedPtr<FJsonValue>>& Locks = Arr(Career, TEXT("locks"));
 	for (int32 I = 0; I < Events.Num(); ++I)
 	{
 		const TSharedPtr<FJsonObject> E = At(Events, I);
+		if (I == 0 || SeasonOf(I) != SeasonOf(I - 1)) P.Items.Add(Header(SeasonTitle(SeasonOf(I))));
 		const int32 Medal = Won.IsValidIndex(I) ? int32(Won[I]->AsNumber()) : 0;
 		const FString Lock = Locks.IsValidIndex(I) ? Locks[I]->AsString() : FString();
 		TArray<FString> Program;
@@ -479,7 +488,7 @@ void AIceRunGameMode::BuildSeason(FMenuPage& P)
 	const TSharedPtr<FJsonObject> Focus = At(CatalogList(TEXT("armFocus")), int32(Num(Career, TEXT("armFocus"))));
 	P.Items.Add(Line(TEXT("Skating style"), Str(Focus, TEXT("title")), TEXT("What your arms do most in competition: Function, Shared or Expression. Drills shrink the trade-off for the style you drill."), [this] { PushPage(TEXT("style")); }));
 	P.Items.Add(Line(TEXT("Lessons"), FString::Printf(TEXT("+%d XP a step"), int32(Num(Catalog, TEXT("lessonXp")))), TEXT("Each new lesson step you pass pays XP toward training."), [this] { PushPage(TEXT("lessons")); }));
-	P.RowsTitle = TEXT("Season standings");
+	P.RowsTitle = FString::Printf(TEXT("Season %d standings"), SeasonNow);
 	for (const TSharedPtr<FJsonValue>& V : Arr(Career, TEXT("season")))
 	{
 		const TSharedPtr<FJsonObject> R = V->AsObject();

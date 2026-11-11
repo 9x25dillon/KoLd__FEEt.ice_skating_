@@ -13,3 +13,13 @@ assets/generated/*
 !assets/generated/skater-competition.glb.import
 exports/
 *.tmp
+!assets/generated/skater-rival-ansa.glb
+!assets/generated/skater-rival-ansa.glb.import
+!assets/generated/skater-rival-katya.glb
+!assets/generated/skater-rival-katya.glb.import
+!assets/generated/skater-rival-noor.glb
+!assets/generated/skater-rival-noor.glb.import
+!assets/generated/skater-rival-remi.glb
+!assets/generated/skater-rival-remi.glb.import
+!assets/generated/skater-rival-teodora.glb
+!assets/generated/skater-rival-teodora.glb.import

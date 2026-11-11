@@ -4,6 +4,7 @@
 //
 //   node games/ice-run-godot/tools/prepare.mjs --engine-only
 //   node games/ice-run-godot/tools/rival_baseline.mjs          about 3 minutes
+//   node games/ice-run-godot/tools/rival_baseline.mjs --from=5 --wide   season two, as measured 2026-11-11
 //
 // Each element's own pad is the 2026-11-01 baseline script's (it was never committed; recovered
 // from that session), except the jump: Simulation's measured half turn, test/padcourse.test.ts
@@ -12,7 +13,8 @@
 //    steering with the lean that speed can hold (test/figurebot.ts's steering, round the rink
 //    centre, through Simulation's stick mapping) and tapping A; a spin waits for 4 m/s, because it
 //    hooks only above spinMinSpeed 3 and the carve into it bleeds speed;
-//  - a jump out of a spin three-turns to forward first (game/tutorial.ts: on a curve, tap B);
+//  - an element out of a spin, but the pose, three-turns to forward first (game/tutorial.ts: on a
+//    curve, tap B); until 2026-11-11 only a jump did, and season one has no other;
 //  - a fall: tap A to get up (game/padcourse.ts recoverHow), then the element again;
 //  - after the last element the program runs on: the same steering, round the rink. In
 //    Simulation a hands-off skater falls once the speed is gone (measured 2026-11-03).
@@ -27,7 +29,9 @@ import {FALL_NAME,MOVE} from '../runtime/sim/types.js';
 import {BASELINE} from '../runtime/game/rivals.js';
 
 const A=0,B=1,Y=3,LT=6,RT=7,L3=10;
-const RADII=[9,10,11,12,13,14,15],JUMP_ENTRIES=[3,3.3,3.6],SPIN_ENTRY=4;
+// --wide: season two's grid (2026-11-11), radii 8..16 and five jump entries; its two-jump programs are clean too rarely on the narrow one.
+const WIDE=process.argv.includes('--wide');
+const RADII=WIDE?[8,9,10,11,12,13,14,15,16]:[9,10,11,12,13,14,15],JUMP_ENTRIES=WIDE?[2.8,3,3.3,3.6,3.9]:[3,3.3,3.6],SPIN_ENTRY=4;
 const tap=(t,every)=>Math.floor(t*60)%Math.round(every*60)<3;
 // Simulation's lean: both sticks, shaped by the default profile (deadzone .22, curve 1.35, gain .7), times maxLean.
 const G=9.81,CX=0,CY=18,MAX_LEAN=1.13,GAIN=.7,DZ=.22,CURVE=1.35;
@@ -54,9 +58,13 @@ function pad(h,s,cur,t,mem,R,entry){
  if(cur===undefined){if(!mem.free){mem.free=true;mem.dir=undefined;}orbit(h,s,t,mem,R,3);return;}
  if(mem.cur!==cur){mem.prev=mem.cur;mem.cur=cur;mem.readyAt=undefined;mem.dir=undefined;}
  if(mem.readyAt===undefined){
-  const forward=cur==='jump'&&mem.prev==='spin';
-  if(v<entry[cur]||(forward&&backwardOf(s))){
-   orbit(h,s,t,mem,R,entry[cur]+.3);
+  // Out of a spin she turns forward first, for any element but the pose (2026-11-11: season two
+  // skates crossovers after spins). Season one's only such elements were a jump and the pose.
+  const forward=cur!=='pose'&&mem.prev==='spin';
+  // A crossover out of a spin gets back to an edge's speed first: the spin has bled it away.
+  const need=cur==='crossover'&&mem.prev==='spin'?entry.edge:entry[cur];
+  if(v<need||(forward&&backwardOf(s))){
+   orbit(h,s,t,mem,R,need+.3);
    if(forward&&backwardOf(s)&&v>=2&&tap(t,1)){h.buttons[A]=0;h.buttons[B]=1;}
    return;
   }
@@ -86,7 +94,7 @@ export function skate(i,R=12,jumpEntry=3){
  e.start({mode:'career',event:i});
  const r=e.routine,mem={},falls=[],jumps=[];
  let wasFallen=false,wasAir=false;
- for(let k=0;!e.finished&&k<200/SIM_DT;k++){
+ for(let k=0;!e.finished&&k<(CAREER_EVENTS[i].seconds+20)/SIM_DT;k++){
   const t=k*SIM_DT,h={axes:[0,0,0,0],buttons:Array(16).fill(0),keys:[],connected:true};
   pad(h,e.state,r.current,t,mem,R,entry);
   e.advance({hardware:h},1,false);
@@ -103,7 +111,9 @@ const median=a=>{const s=[...a].sort((x,y)=>x-y),n=s.length;return n%2?s[(n-1)/2
 
 if(import.meta.url===`file://${process.argv[1]}`){
  const derived=[];
+ const from=Number(process.argv.find(a=>a.startsWith('--from='))?.slice(7)??0);
  for(const [i,ev] of CAREER_EVENTS.entries()){
+  if(i<from)continue;
   const runs=[];
   for(const R of RADII)for(const j of ev.routine.includes('jump')?JUMP_ENTRIES:[3])runs.push(skate(i,R,j));
   const clean=runs.filter(x=>x.complete&&x.falls.length===0).map(x=>x.total);
