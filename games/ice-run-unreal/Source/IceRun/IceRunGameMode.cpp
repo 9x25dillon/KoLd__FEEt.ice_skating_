@@ -71,6 +71,7 @@ void AIceRunGameMode::StartPlay()
 	FParse::Value(Line, TEXT("IceEvent="), EventIndex);
 	FParse::Value(Line, TEXT("IceCourse="), Course);
 	FParse::Value(Line, TEXT("IceSteady="), SteadyChoice);
+	FParse::Value(Line, TEXT("IceDanceStyle="), DanceStyle);
 	FParse::Value(Line, TEXT("IceSkater="), SkaterName);
 	FParse::Value(Line, TEXT("IceModel="), ModelPath);
 	if (ModelPath.IsEmpty())
@@ -256,6 +257,8 @@ void AIceRunGameMode::Configure()
 	{
 		Options->SetStringField(TEXT("steady"), SteadyChoice);
 	}
+	if (DanceStyle.IsEmpty()) Options->SetField(TEXT("danceStyle"), MakeShared<FJsonValueNull>());
+	else Options->SetStringField(TEXT("danceStyle"), DanceStyle);
 	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetObjectField(TEXT("options"), Options);
 	Bridge.Send(TEXT("configure"), Payload);

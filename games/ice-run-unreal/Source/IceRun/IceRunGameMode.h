@@ -214,6 +214,8 @@ private:
 	FString Course = TEXT("trust");
 	/** The steadying hand (game/steady.ts): empty follows the setup's default, else off / light / firm. */
 	FString SteadyChoice;
+	/** game/motion/dance.ts: the style whose arms dress a run, empty for none (presentation only). */
+	FString DanceStyle;
 
 	bool bPaused = false;
 	FMenuPage MenuPage;

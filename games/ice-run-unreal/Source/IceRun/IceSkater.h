@@ -72,6 +72,10 @@ public:
 private:
 	bool bEffects = true;
 	double LiftHeight = 0.0;
+	TSharedPtr<FJsonObject> MotionPose;
+	FString MotionLayer;
+	bool bMotionLive = false;
+	double MotionWeight = 0.0;
 
 private:
 	void MeasureRig();
@@ -87,6 +91,15 @@ private:
 	void AimBone(FName Name, const FVector& Head, const FVector& Tail, double Twist = 0.0);
 	void MeasureSkirt();
 	void SwingSkirt(float Dt, const FVector& Hip, const FVector& Spine, const TArray<FVector>& Legs);
+	/**
+	 * game/motion/player.ts's clip this frame (frame.motion: a fall, or a dance style's arms),
+	 * the twin of skater.gd apply_motion: joints placed with this model's lengths, eased in and out.
+	 * A full-body clip moves the pelvis; the skirt then hangs from Hip and Spine as it sets them.
+	 */
+	void ApplyMotion(float Dt, FVector& Hip, FVector& Spine);
+	/** A bone's head where the pose has put it, in the body frame. */
+	FVector BoneHead(FName Name) const;
+	FVector SegDir(const TCHAR* Name, const FVector& Fallback) const;
 	/** Godot's world frame (x along the sheet, y up, z = 18 - sim y; metres) and the body's rotation.y in it. */
 	FVector GodotWorld(const FVector& BodyPoint) const;
 	FVector GodotLocal(const FVector& WorldPoint) const;
