@@ -149,3 +149,19 @@ test("a straight fall's other-shoulder twin is a different fall, not the same on
     assert.ok(apart > 0.1, `${f.id}: ${apart.toFixed(3)} m apart at most`);
   }
 });
+
+test("the shoulders twist against the hips: a three-turn winds, turns and checks; épaulement turns the shoulders, not the body", () => {
+  const three = CLIP_BY_ID.get("move.three-turn")!;
+  const tw = three.keys.map(k => k.pose.twist ?? 0);
+  assert.ok(tw[0] < -20 && tw[1] > 20, `wind-up then turn: ${tw.join()}`);
+  assert.ok(tw.every(t => Math.abs(t) <= 60));
+  const square = joints({ pelvis: 0.89, seg: {} }), turned = joints({ pelvis: 0.89, seg: {}, twist: 40 });
+  assert.ok(turned.shoulderR[2] > square.shoulderR[2] + 0.05, "positive twist takes her right shoulder back");
+  assert.ok(turned.shoulderL[2] < square.shoulderL[2] - 0.05, "and her left forward");
+  assert.deepEqual([turned.hipL, turned.hipR], [square.hipL, square.hipR], "the hips stay square");
+  const ep = CLIP_BY_ID.get("expr.carriage.epaulement")!.keys[0].pose;
+  assert.ok(ep.twist !== undefined && ep.twist < 0, `épaulement twists: ${ep.twist}`);
+  assert.equal(CLIP_BY_ID.get("expr.carriage.proud")!.keys[0].pose.twist, undefined, "a lean back is not a twist");
+  const m = CLIP_BY_ID.get("move.three-turn.mirror")!;
+  assert.deepEqual(m.keys.map(k => k.pose.twist), tw.map(t => -t), "the mirror twists the other way");
+});

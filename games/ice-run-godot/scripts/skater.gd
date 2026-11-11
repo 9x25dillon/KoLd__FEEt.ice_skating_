@@ -993,14 +993,19 @@ func apply_motion(dt: float) -> Array:
 		var spine_at := pelvis+trunk*hips_length
 		var neck := spine_at+trunk*spine_length
 		aim_bone("Hips",pelvis,spine_at)
+		# game/motion twist: the shoulder line turned against the hips (positive: her right shoulder back).
+		var twist := deg_to_rad(clampf(float(motion_pose.get("twist",0.0)),-60.0,60.0))*w
+		var turned_was := upper_turn
+		upper_turn = -twist
 		aim_bone("Spine",spine_at,neck)
+		upper_turn = turned_was
 		aim_bone("Head",neck,neck+seg_dir("head",trunk)*.22)
 		for side in [["L",-1.0],["R",1.0]]:
 			var s: String = side[0]
 			var hip_at: Vector3 = pelvis+right*hip_half_width*float(side[1])
 			var leg: Array = limb.call("Thigh"+s,"Shin"+s,"Foot"+s,hip_at,seg_dir("thigh"+s,Vector3.DOWN),thigh,seg_dir("shin"+s,Vector3.DOWN),shin)
 			aim_bone("Foot"+s,leg[1],leg[1]+seg_dir("foot"+s,Vector3(0,-.34,-.94))*.2)
-			var across := (right-trunk*right.dot(trunk)).normalized()
+			var across := (right-trunk*right.dot(trunk)).normalized().rotated(trunk,-twist)
 			var shoulder: Vector3 = neck-trunk*shoulder_rest.y+across*shoulder_rest.x*float(side[1])
 			var arm: Array = limb.call("Arm"+s,"Forearm"+s,"Hand"+s,shoulder,seg_dir("upperArm"+s,Vector3.DOWN),upper_arm,seg_dir("forearm"+s,Vector3.DOWN),forearm)
 			aim_bone("Hand"+s,arm[1],arm[1]+(arm[1]-arm[0]).normalized()*.1)

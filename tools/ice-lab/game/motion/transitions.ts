@@ -7,7 +7,7 @@
 // Written skating on the left foot where it matters (free leg the right); each one-sided move has
 // its mirror. AUTHORED shapes and timings, judged by eye.
 
-import { clip, dir, mirrorClip, DOWN, UP } from "./types.ts";
+import { clip, dir, mirrorClip, trunkAsTwist, DOWN, UP } from "./types.ts";
 import type { Clip, Key, Pose, Segment, Vec3 } from "./types.ts";
 
 type Segs = Partial<Record<Segment, Vec3>>;
@@ -172,8 +172,12 @@ const turnsLeft: Clip[] = [
 
 const ONE_SIDED = new Set(["move.three-turn", "move.mohawk", "move.choctaw", "move.bracket", "move.rocker", "move.counter", "move.loop", "move.twizzle", "move.crossover.forward", "move.crossover.back", "move.landing-check", "move.edge-change", "move.waltz-prep", "move.bunny-hop", "move.t-stop", "move.spiral.forward", "move.spiral.back", "move.spiral.y", "move.spiral.catch-foot", "move.lunge", "move.shoot-the-duck", "move.hydroblade", "move.charlotte"]);
 
+// The turns' near-upright trunk bearings are shoulder twist (wind-up and check); the body's own
+// rotation through a turn is the sim's heading. Field moves keep theirs (a lean is a lean).
+const turnsTwisted = turnsLeft.map(c => trunkAsTwist(c, true));
+
 export const LEGS: readonly Clip[] = [...freeLegLeft, ...freeLegLeft.map(c => mirrorClip(c, `${c.id}.mirror`, `${c.name} (other leg)`))];
 export const TRANSITIONS: readonly Clip[] = [
-  ...fieldLeft, ...turnsLeft,
-  ...[...fieldLeft, ...turnsLeft].filter(c => ONE_SIDED.has(c.id)).map(c => mirrorClip(c, `${c.id}.mirror`, `${c.name} (other foot)`)),
+  ...fieldLeft, ...turnsTwisted,
+  ...[...fieldLeft, ...turnsTwisted].filter(c => ONE_SIDED.has(c.id)).map(c => mirrorClip(c, `${c.id}.mirror`, `${c.name} (other foot)`)),
 ];

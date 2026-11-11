@@ -93,6 +93,9 @@ def apply(pose):
         target = arm_dir(want)
         turn = cur.col[1].normalized().rotation_difference(target).to_matrix()
         new = turn @ cur
+        if name == 'Spine' and pose.get('twist'):
+            # game/motion twist: the shoulders turned about the trunk; the body-to-Blender map is a proper rotation, so the sign carries.
+            new = Matrix.Rotation(-math.radians(max(-60, min(60, pose['twist']))), 3, target) @ new
         head = pb.matrix.translation.copy()
         if name == 'Hips' and 'pelvis' in pose:
             head = rig.matrix_world.inverted() @ Vector((0, 0, pose['pelvis']))
