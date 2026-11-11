@@ -327,6 +327,7 @@ void AIceRunGameMode::LoadPreferences()
 		SetupId = Setup == TEXT("none") ? FString() : Setup;
 	}
 	P->TryGetStringField(TEXT("steady"), SteadyChoice);
+	P->TryGetStringField(TEXT("danceStyle"), DanceStyle);
 	double V = 0;
 	if (P->TryGetNumberField(TEXT("assistance"), V)) Assistance = FMath::Clamp(V, .5, 1.0);
 	if (P->TryGetNumberField(TEXT("profile"), V)) ProfileIndex = FMath::Clamp(int32(V), 0, 3);
@@ -359,6 +360,7 @@ void AIceRunGameMode::SavePreferences() const
 	TSharedRef<FJsonObject> P = MakeShared<FJsonObject>();
 	P->SetStringField(TEXT("setup"), SetupId.IsEmpty() ? TEXT("none") : SetupId);
 	P->SetStringField(TEXT("steady"), SteadyChoice);
+	P->SetStringField(TEXT("danceStyle"), DanceStyle);
 	P->SetNumberField(TEXT("assistance"), Assistance);
 	P->SetNumberField(TEXT("profile"), ProfileIndex);
 	P->SetNumberField(TEXT("character"), CharacterIndex);
@@ -899,6 +901,25 @@ void AIceRunGameMode::BuildSettings(FMenuPage& P)
 	P.Items.Add(Line(FString::Printf(TEXT("Steadying hand   ◀  %s  ▶"), SteadyChoice.IsEmpty() ? *FString::Printf(TEXT("%s (setup default)"), *Name) : *Name), TEXT(""),
 		TEXT("A hand on your stick, never the physics: it keeps the lean you ask for to what your speed can carry. Off by default where a setup promises minimal assistance; Light elsewhere; Firm holds you to the safe lean."),
 		[Step] { Step(1); }, [Step](int32 By) { Step(By); }));
+	// game/motion/dance.ts: the 18 styles from the catalog, and none.
+	{
+		const TArray<TSharedPtr<FJsonValue>>& Styles = Arr(Obj(Catalog, TEXT("motion")), TEXT("styles"));
+		FString StyleName = TEXT("None"), StyleDetail = TEXT("Choose a dance style and its arms and carriage dress your skating on the music, while your arms are free: never in the air, a spin or a jump's load, where they are physics.");
+		int32 Now = 0;
+		for (int32 I = 0; I < Styles.Num(); ++I)
+		{
+			if (Str(Styles[I]->AsObject(), TEXT("id")) == DanceStyle) { Now = I + 1; StyleName = Str(Styles[I]->AsObject(), TEXT("name")); StyleDetail = Str(Styles[I]->AsObject(), TEXT("blurb")) + TEXT("   ") + Str(Styles[I]->AsObject(), TEXT("music")); }
+		}
+		auto StepStyle = [this, Styles, Now](int32 By)
+		{
+			const int32 Next = Wrap(Now + By, Styles.Num() + 1);
+			DanceStyle = Next == 0 ? FString() : Str(Styles[Next - 1]->AsObject(), TEXT("id"));
+			Configure();
+			SavePreferences();
+			RebuildPage();
+		};
+		P.Items.Add(Line(FString::Printf(TEXT("Dance style   ◀  %s  ▶"), *StyleName), TEXT(""), StyleDetail, [StepStyle] { StepStyle(1); }, [StepStyle](int32 By) { StepStyle(By); }));
+	}
 	if (SetupId == TEXT("explorer"))
 	{
 		auto Assist = [this](int32 By) { Assistance = FMath::Clamp(Assistance + By * .05, .5, 1.0); Configure(); SavePreferences(); RebuildPage(); };

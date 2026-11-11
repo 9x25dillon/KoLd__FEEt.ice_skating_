@@ -307,6 +307,15 @@ void AIceSkater::ApplyFrame(const FIceFrame& Frame, bool bSnap)
 {
 	State = Frame.State;
 	bHaveState = true;
+	// game/motion/player.ts: the clip for this frame, if any; the last pose is kept to ease out of.
+	const TSharedPtr<FJsonObject>* Motion = nullptr;
+	bMotionLive = Frame.Raw.IsValid() && Frame.Raw->TryGetObjectField(TEXT("motion"), Motion) && Motion->IsValid();
+	if (bMotionLive)
+	{
+		const TSharedPtr<FJsonObject>* P = nullptr;
+		if ((*Motion)->TryGetObjectField(TEXT("pose"), P)) MotionPose = *P;
+		(*Motion)->TryGetStringField(TEXT("layer"), MotionLayer);
+	}
 	bPoseLow = Frame.bLow;
 	ArmStyle = Frame.ArmStyle;
 	FrameAge = 0.0;
@@ -858,7 +867,95 @@ void AIceSkater::Pose(float Dt)
 		AimBone(FName(TEXT("Hand") + Suffix), HandAt, HandAt + HandAim[I] * .1);
 	}
 	LastContacts = {Contacts[0], Contacts[1]};
+	ApplyMotion(Dt, Hip, Spine);
 	SwingSkirt(Dt, Hip, Spine, Legs);
+}
+
+FVector AIceSkater::BoneHead(FName Name) const
+{
+	if (!Rest.Contains(Name)) return FVector::ZeroVector;
+	return IceSimSpace::ToBody(Body->GetRelativeTransform().TransformPosition(Body->GetBoneLocationByName(Name, EBoneSpaces::ComponentSpace)));
+}
+
+FVector AIceSkater::SegDir(const TCHAR* Name, const FVector& Fallback) const
+{
+	const TSharedPtr<FJsonObject>* Seg = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* V = nullptr;
+	if (!MotionPose.IsValid() || !MotionPose->TryGetObjectField(TEXT("seg"), Seg) || !(*Seg)->TryGetArrayField(Name, V) || V->Num() < 3) return Fallback;
+	return FVector((*V)[0]->AsNumber(), (*V)[1]->AsNumber(), (*V)[2]->AsNumber()).GetSafeNormal();
+}
+
+namespace
+{
+	/** A right-handed turn of V about a unit axis, in the body frame's own (right-handed) numbers. */
+	FVector TurnAbout(const FVector& V, const FVector& Axis, double Angle)
+	{
+		const double C = FMath::Cos(Angle), S = FMath::Sin(Angle);
+		return V * C + FVector::CrossProduct(Axis, V) * S + Axis * FVector::DotProduct(Axis, V) * (1.0 - C);
+	}
+}
+
+void AIceSkater::ApplyMotion(float Dt, FVector& Hip, FVector& Spine)
+{
+	MotionWeight = FMath::Clamp(MotionWeight + (bMotionLive ? 1.0 : -1.0) * Dt * 4.0, 0.0, 1.0);
+	if (MotionWeight <= 0.0 || !MotionPose.IsValid()) return;
+	const double W = MotionWeight * MotionWeight * (3.0 - 2.0 * MotionWeight);
+	auto Mix = [&](const TCHAR* Bone, const FVector& Target) { return FMath::Lerp(BoneHead(FName(Bone)), Target, W); };
+	auto Limb = [&](const FString& Upper, const FString& Lower, const FString& End, const FVector& From, const FVector& D1, double L1, const FVector& D2, double L2, FVector& Tip)
+	{
+		const FVector Mid = Mix(*Lower, From + D1 * L1);
+		Tip = Rest.Contains(FName(*End)) ? Mix(*End, Mid + D2 * L2) : Mid + D2 * L2;
+		AimBone(FName(*Upper), From, Mid);
+		AimBone(FName(*Lower), Mid, Tip);
+		return Mid;
+	};
+	double PelvisHeight = 0.0;
+	if (MotionLayer == TEXT("full") && MotionPose->TryGetNumberField(TEXT("pelvis"), PelvisHeight))
+	{
+		FVector PelvisRight(1.0, 0.0, 0.0);
+		const TArray<TSharedPtr<FJsonValue>>* R = nullptr;
+		if (MotionPose->TryGetArrayField(TEXT("pelvisRight"), R) && R->Num() >= 3) PelvisRight = FVector((*R)[0]->AsNumber(), (*R)[1]->AsNumber(), (*R)[2]->AsNumber()).GetSafeNormal();
+		double TwistDeg = 0.0;
+		MotionPose->TryGetNumberField(TEXT("twist"), TwistDeg);
+		const double Twist = FMath::DegreesToRadians(FMath::Clamp(TwistDeg, -60.0, 60.0)) * W;
+		const FVector Pelvis = Mix(TEXT("Hips"), FVector(0.0, PelvisHeight, 0.0));
+		const FVector Trunk = SegDir(TEXT("trunk"), FVector(0.0, 1.0, 0.0));
+		const FVector SpineAt = Pelvis + Trunk * HipsLength;
+		const FVector Neck = SpineAt + Trunk * SpineLength;
+		AimBone(TEXT("Hips"), Pelvis, SpineAt);
+		// A positive library twist takes her right shoulder back: clockwise from above, AimBone's negative.
+		AimBone(TEXT("Spine"), SpineAt, Neck, -Twist);
+		AimBone(TEXT("Head"), Neck, Neck + SegDir(TEXT("head"), Trunk) * .22);
+		const FVector Across = TurnAbout((PelvisRight - Trunk * FVector::DotProduct(PelvisRight, Trunk)).GetSafeNormal(), Trunk, -Twist);
+		for (int32 I = 0; I < 2; ++I)
+		{
+			const FString Sfx = I == 0 ? TEXT("L") : TEXT("R");
+			const double Side = I == 0 ? -1.0 : 1.0;
+			FVector Ankle, Wrist;
+			Limb(TEXT("Thigh") + Sfx, TEXT("Shin") + Sfx, TEXT("Foot") + Sfx, Pelvis + PelvisRight * HipHalfWidth * Side,
+				SegDir(*(TEXT("thigh") + Sfx), FVector(0, -1, 0)), Thigh, SegDir(*(TEXT("shin") + Sfx), FVector(0, -1, 0)), Shin, Ankle);
+			AimBone(FName(TEXT("Foot") + Sfx), Ankle, Ankle + SegDir(*(TEXT("foot") + Sfx), FVector(0, -.34, -.94)) * .2);
+			const FVector Shoulder = Neck - Trunk * ShoulderRest.Y + Across * ShoulderRest.X * Side;
+			const FVector Elbow = Limb(TEXT("Arm") + Sfx, TEXT("Forearm") + Sfx, TEXT("Hand") + Sfx, Shoulder,
+				SegDir(*(TEXT("upperArm") + Sfx), FVector(0, -1, 0)), UpperArm, SegDir(*(TEXT("forearm") + Sfx), FVector(0, -1, 0)), Forearm, Wrist);
+			AimBone(FName(TEXT("Hand") + Sfx), Wrist, Wrist + (Wrist - Elbow).GetSafeNormal() * .1);
+		}
+		Hip = Pelvis;
+		Spine = SpineAt;
+		return;
+	}
+	// A layer over the skating: the shoulders stay where the sim's pose put them.
+	const FVector Neck = BoneHead(TEXT("Head"));
+	AimBone(TEXT("Head"), Neck, FMath::Lerp(Neck + FVector(0, .22, 0), Neck + SegDir(TEXT("head"), FVector(0, 1, 0)) * .22, W));
+	for (int32 I = 0; I < 2; ++I)
+	{
+		const FString Sfx = I == 0 ? TEXT("L") : TEXT("R");
+		FVector Wrist;
+		const FVector Shoulder = BoneHead(FName(TEXT("Arm") + Sfx));
+		const FVector Elbow = Limb(TEXT("Arm") + Sfx, TEXT("Forearm") + Sfx, TEXT("Hand") + Sfx, Shoulder,
+			SegDir(*(TEXT("upperArm") + Sfx), FVector(0, -1, 0)), UpperArm, SegDir(*(TEXT("forearm") + Sfx), FVector(0, -1, 0)), Forearm, Wrist);
+		AimBone(FName(TEXT("Hand") + Sfx), Wrist, Wrist + (Wrist - Elbow).GetSafeNormal() * .1);
+	}
 }
 
 FVector AIceSkater::GodotWorld(const FVector& BodyPoint) const
