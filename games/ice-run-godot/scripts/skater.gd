@@ -174,6 +174,13 @@ var contact_shadow: MeshInstance3D
 var lift_height := 0.0
 
 # s since this fall began, -1 when up; and which side of the body (+x, -x) takes it.
+# game/motion/player.ts: a clip from the motion library this frame (a fall, or a dance style's
+# arms), eased in and out by motion_weight; the last pose is kept to ease out of.
+var motion: Dictionary = {}
+var motion_pose: Dictionary = {}
+var motion_layer := ""
+var motion_weight := 0.0
+const MOTION_RATE := 4.0
 var fall_clock := -1.0
 var fall_side := 1.0
 
@@ -494,6 +501,11 @@ func find_skeleton(node: Node) -> Skeleton3D:
 func apply_frame(frame: Dictionary, snap: bool = false) -> void:
 	state = frame.state
 	pose_low = frame.low
+	var next_motion = frame.get("motion")
+	motion = next_motion if next_motion is Dictionary else {}
+	if not motion.is_empty():
+		motion_pose = motion.get("pose",{})
+		motion_layer = str(motion.get("layer",""))
 	arm_style = float(frame.get("armStyle",1.0))
 	frame_age = 0.0
 	if snap:
@@ -938,4 +950,68 @@ func _process(dt: float) -> void:
 		hand_aim[i] = hand_aim[i].lerp((along+bend).normalized(),1.0-exp(-WRIST_RATE*dt)).normalized()
 		aim_bone("Hand"+suffix,hand_at,hand_at+hand_aim[i]*.1)
 	last_contacts = contacts
+	# A full-body clip moves the pelvis: the skirt hangs from where the clip puts it.
+	var moved: Array = apply_motion(dt)
+	if not moved.is_empty():
+		hip = moved[0]
+		spine = moved[1]
 	swing_skirt(dt,hip,spine,legs)
+
+func seg_dir(name: String, fallback: Vector3) -> Vector3:
+	var segs: Dictionary = motion_pose.get("seg",{})
+	if not segs.has(name):
+		return fallback
+	var v: Array = segs[name]
+	return Vector3(float(v[0]),float(v[1]),float(v[2])).normalized()
+
+# Where a bone's head is now, in this node's frame (after the sim-driven pose above).
+func bone_head(name: String) -> Vector3:
+	if not bone_ids.has(name):
+		return Vector3.ZERO
+	return to_local(skeleton.to_global(skeleton.get_bone_global_pose(bone_ids[name]).origin))
+
+# game/motion: a pose is the pelvis and a direction per segment in this frame (x her right, y up,
+# z behind her); joints are placed with this model's own lengths (measure_rig), each eased from
+# where the sim's pose put it by motion_weight, and the bones aimed between them.
+func apply_motion(dt: float) -> Array:
+	motion_weight = move_toward(motion_weight,0.0 if motion.is_empty() else 1.0,dt*MOTION_RATE)
+	if motion_weight <= 0.0 or motion_pose.is_empty():
+		return []
+	var w := smoothstep(0.0,1.0,motion_weight)
+	var mix := func(bone: String, target: Vector3) -> Vector3: return bone_head(bone).lerp(target,w)
+	var limb := func(upper: String, lower: String, end: String, from: Vector3, d1: Vector3, l1: float, d2: Vector3, l2: float) -> Array:
+		var mid: Vector3 = mix.call(lower,from+d1*l1)
+		var tip: Vector3 = mix.call(end,mid+d2*l2) if bone_ids.has(end) else from+d1*l1+d2*l2
+		aim_bone(upper,from,mid)
+		aim_bone(lower,mid,tip)
+		return [mid,tip]
+	if motion_layer == "full" and motion_pose.has("pelvis"):
+		var right_v: Array = motion_pose.get("pelvisRight",[1,0,0])
+		var right := Vector3(float(right_v[0]),float(right_v[1]),float(right_v[2])).normalized()
+		var pelvis: Vector3 = mix.call("Hips",Vector3(0,float(motion_pose.pelvis),0))
+		var trunk := seg_dir("trunk",Vector3.UP)
+		var spine_at := pelvis+trunk*hips_length
+		var neck := spine_at+trunk*spine_length
+		aim_bone("Hips",pelvis,spine_at)
+		aim_bone("Spine",spine_at,neck)
+		aim_bone("Head",neck,neck+seg_dir("head",trunk)*.22)
+		for side in [["L",-1.0],["R",1.0]]:
+			var s: String = side[0]
+			var hip_at: Vector3 = pelvis+right*hip_half_width*float(side[1])
+			var leg: Array = limb.call("Thigh"+s,"Shin"+s,"Foot"+s,hip_at,seg_dir("thigh"+s,Vector3.DOWN),thigh,seg_dir("shin"+s,Vector3.DOWN),shin)
+			aim_bone("Foot"+s,leg[1],leg[1]+seg_dir("foot"+s,Vector3(0,-.34,-.94))*.2)
+			var across := (right-trunk*right.dot(trunk)).normalized()
+			var shoulder: Vector3 = neck-trunk*shoulder_rest.y+across*shoulder_rest.x*float(side[1])
+			var arm: Array = limb.call("Arm"+s,"Forearm"+s,"Hand"+s,shoulder,seg_dir("upperArm"+s,Vector3.DOWN),upper_arm,seg_dir("forearm"+s,Vector3.DOWN),forearm)
+			aim_bone("Hand"+s,arm[1],arm[1]+(arm[1]-arm[0]).normalized()*.1)
+		return [pelvis,spine_at]
+	else:
+		# A layer over the skating: the shoulders stay where the sim's pose put them.
+		var neck := bone_head("Head")
+		if bone_ids.has("Head"):
+			aim_bone("Head",neck,(neck+Vector3.UP*.22).lerp(neck+seg_dir("head",Vector3.UP)*.22,w))
+		for s in ["L","R"]:
+			var shoulder := bone_head("Arm"+s)
+			var arm: Array = limb.call("Arm"+s,"Forearm"+s,"Hand"+s,shoulder,seg_dir("upperArm"+s,Vector3.DOWN),upper_arm,seg_dir("forearm"+s,Vector3.DOWN),forearm)
+			aim_bone("Hand"+s,arm[1],arm[1]+(arm[1]-arm[0]).normalized()*.1)
+	return []

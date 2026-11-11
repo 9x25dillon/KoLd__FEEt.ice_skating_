@@ -79,6 +79,8 @@ var skating_setup := "explorer"
 var assistance := 0.75
 ## game/steady.ts: "" follows the setup's default (off in Simulation, Experimental and Dig Gate, light elsewhere).
 var steady_choice := ""
+# game/motion/dance.ts: the style whose arms dress a run, "" for none (presentation only).
+var dance_style := ""
 var controller_profile: Dictionary = {}
 var saved_controller_profile: Dictionary = {}
 var track := 0
@@ -659,6 +661,18 @@ func show_page(page: String) -> void:
 			var order := ["","off","light","firm"]
 			steady_choice=order[(order.find(steady_choice)+1)%order.size()];save_preferences();show_page("settings")))
 		menu.add_child(paragraph("A hand on your stick, never the physics: it keeps the lean you ask for to what your speed can carry. Off by default where a setup promises minimal assistance.",12))
+		# game/motion/dance.ts: cycle the dance styles; their arms dress a run while hers are free.
+		var styles: Array = catalog.get("motion",{}).get("styles",[])
+		var style_ids: Array = [""]
+		for st in styles: style_ids.append(str(st.id))
+		var style_name := "None"
+		for st in styles:
+			if str(st.id) == dance_style: style_name = str(st.name)
+		menu.add_child(button("Dance style: "+style_name,func():
+			dance_style = str(style_ids[(style_ids.find(dance_style)+1)%style_ids.size()]);save_preferences();show_page("settings")))
+		for st in styles:
+			if str(st.id) == dance_style:
+				menu.add_child(paragraph("%s  ·  %d–%d bpm  ·  %s" % [str(st.blurb),int(st.tempo.min),int(st.tempo.max),str(st.music)],12))
 		menu.add_child(button("Legacy override: "+["Lean & load","Assisted steering","Two-foot control","Full repertoire"][scheme],func():skating_setup="";scheme=(scheme+1)%4;show_page("settings")))
 		menu.add_child(button("Controller tuning & bindings",func():show_page("controller")))
 		if skating_setup not in ["simulation","experimental"]:
@@ -1053,7 +1067,7 @@ func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
 	skater.visible = true
 	skater.load_model(CHARACTERS[character].path)
 	partner.visible = false
-	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile,"steady":steady_choice if not steady_choice.is_empty() else null}})
+	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile,"steady":steady_choice if not steady_choice.is_empty() else null,"danceStyle":dance_style if not dance_style.is_empty() else null}})
 	# A career program opens with its warm-up group (game/warmup.ts); the tests skate straight in.
 	var warm := mode == "career" and not boot_test and (not screenshot_test or "--capture-warmup" in OS.get_cmdline_user_args())
 	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null,"warmup":warm}})
@@ -1790,6 +1804,7 @@ func load_preferences() -> void:
 		skating_setup = ""
 	assistance = clampf(float(saved.get("assistance",.75)),.5,1)
 	steady_choice = str(saved.get("steady",""))
+	dance_style = str(saved.get("danceStyle",""))
 	if steady_choice not in ["","off","light","firm"]:
 		steady_choice = ""
 	beginner = bool(saved.get("beginner",true))
@@ -1817,6 +1832,6 @@ func save_preferences() -> void:
 		return
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"steady":steady_choice,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"rumble":rumble_enabled,"paddles":paddle_layout,"sequence":sequence}))
+		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"steady":steady_choice,"danceStyle":dance_style,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"rumble":rumble_enabled,"paddles":paddle_layout,"sequence":sequence}))
 	else:
 		on_error("Preferences could not be saved.")
