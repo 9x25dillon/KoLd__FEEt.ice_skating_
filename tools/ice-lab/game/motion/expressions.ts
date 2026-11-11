@@ -10,7 +10,7 @@
 // What the arms do to the physics is game/armfocus.ts's and the sim's (arm carriage, armsL):
 // this is how they look, never what they cost. AUTHORED shapes, judged by eye.
 
-import { clip, dir, mirrorClip } from "./types.ts";
+import { clip, dir, mirrorClip, trunkAsTwist } from "./types.ts";
 import type { Clip, Pose, Segment, Vec3 } from "./types.ts";
 
 type Arms = Partial<Record<Segment, Vec3>>;
@@ -134,10 +134,12 @@ const phrasesLeft: Clip[] = [
 ];
 
 /** Every expression: the holds, the carriages, the phrases and their mirrors (one-sided ones only). */
-export const EXPRESSIONS: readonly Clip[] = [
+// Épaulement, a tango frame, a spiralling reach: a near-upright trunk with a bearing is the
+// shoulders turned against the hips (game/motion/types.ts trunkAsTwist); a lean back stays a lean.
+export const EXPRESSIONS: readonly Clip[] = ([
   ...holds, ...carriage, ...phrasesLeft,
   ...phrasesLeft.filter(c => ["expr.phrase.spiral-reach", "expr.phrase.tango-frame", "expr.phrase.fosse", "expr.phrase.flamenco-desplante", "expr.phrase.salute", "expr.phrase.cha-cha-hips"].includes(c.id))
     .map(c => mirrorClip(c, `${c.id}.mirror`, `${c.name} (other side)`)),
   ...(["third", "fourthEnHaut", "arabesque1", "arabesque2", "attitudeArms", "oneHandHip", "reachUpOne"] as const)
     .map(k => mirrorClip(holds.find(h => h.id === `expr.hold.${k}`)!, `expr.hold.${k}.mirror`, `${HOLD_NAMES[k]} (other side)`)),
-];
+] as Clip[]).map(c => trunkAsTwist(c, false));

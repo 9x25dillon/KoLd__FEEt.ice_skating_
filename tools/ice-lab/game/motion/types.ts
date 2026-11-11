@@ -33,7 +33,16 @@ export interface Pose {
   pelvisUp?: Vec3;
   /** Each segment's direction, from its root joint toward its far end (normalised on use). */
   seg?: Partial<Record<Segment, Vec3>>;
+  /**
+   * The shoulder line turned about the trunk against the hips, degrees, positive toward her
+   * right (her right shoulder back): a turn's wind-up and check, épaulement, a tango frame.
+   * A direction cannot say this (a trunk turned about itself points the same way). Omit for square.
+   */
+  twist?: number;
 }
+
+/** A shoulder line's reach against the hips, degrees each way. AUTHORED, from anatomy. */
+export const TWIST_LIMIT = 60;
 
 export type Ease = "linear" | "in" | "out" | "inOut" | "hold";
 export interface Key { t: number; pose: Pose; ease?: Ease }
@@ -99,6 +108,7 @@ export function mirrorPose(p: Pose): Pose {
     ...(p.pelvis !== undefined ? { pelvis: p.pelvis } : {}),
     ...(p.pelvisRight ? { pelvisRight: [p.pelvisRight[0], -p.pelvisRight[1], -p.pelvisRight[2]] as Vec3 } : {}),
     ...(p.pelvisUp ? { pelvisUp: flipX(p.pelvisUp) } : {}),
+    ...(p.twist !== undefined ? { twist: -p.twist } : {}),
     seg,
   };
 }
@@ -140,6 +150,8 @@ function blend(a: Pose, b: Pose, u: number): Pose {
   if (pelvis !== undefined) out.pelvis = pelvis;
   if (right) out.pelvisRight = right;
   if (up) out.pelvisUp = up;
+  const twist = num(a.twist, b.twist);
+  if (twist !== undefined) out.twist = twist;
   return out;
 }
 /**
@@ -173,7 +185,7 @@ export const DEFAULT_RIG: Rig = {
   upperArm: 0.29, forearm: 0.2074, thigh: 0.4105, shin: 0.3755, foot: 0.24, ankleHeight: 0.105,
 };
 /** The standing pose every clip's missing segments default to: upright, arms hanging a little away. */
-export const STAND: Required<Pose> = {
+export const STAND: Required<Omit<Pose, "twist">> = {
   pelvis: DEFAULT_RIG.thigh + DEFAULT_RIG.shin + DEFAULT_RIG.ankleHeight,
   pelvisRight: RIGHT, pelvisUp: UP,
   seg: {
@@ -201,7 +213,12 @@ export function joints(pose: Pose, rig: Rig = DEFAULT_RIG): Joints {
   const crown = add(neck, d("head"), rig.head);
   // The shoulders ride the trunk: across it along the pelvis's right axis, made square to the trunk.
   const t = d("trunk"), dot = right[0] * t[0] + right[1] * t[1] + right[2] * t[2];
-  const across = norm([right[0] - t[0] * dot, right[1] - t[1] * dot, right[2] - t[2] * dot]);
+  const square = norm([right[0] - t[0] * dot, right[1] - t[1] * dot, right[2] - t[2] * dot]);
+  // The twist turns the shoulder line about the trunk (Rodrigues; square is perpendicular to t).
+  // Negated: a positive twist takes her right shoulder back (+z), and +angle about up would bring it forward.
+  const tw = -Math.max(-TWIST_LIMIT, Math.min(TWIST_LIMIT, pose.twist ?? 0)) * RAD, ct = Math.cos(tw), st = Math.sin(tw);
+  const txs: Vec3 = [t[1] * square[2] - t[2] * square[1], t[2] * square[0] - t[0] * square[2], t[0] * square[1] - t[1] * square[0]];
+  const across = norm([square[0] * ct + txs[0] * st, square[1] * ct + txs[1] * st, square[2] * ct + txs[2] * st]);
   const shoulderL = add(add(chest, across, -rig.shoulderHalfWidth), t, -rig.shoulderDrop);
   const shoulderR = add(add(chest, across, rig.shoulderHalfWidth), t, -rig.shoulderDrop);
   const elbowL = add(shoulderL, d("upperArmL"), rig.upperArm), elbowR = add(shoulderR, d("upperArmR"), rig.upperArm);
@@ -252,6 +269,26 @@ export function onIce(pose: Pose, rig: Rig = DEFAULT_RIG): Pose {
     clamp(`forearm${side}`, elbow, rig.forearm, 0.02);
   }
   return { ...pose, seg: out };
+}
+
+/**
+ * A near-upright trunk written with a bearing (dir(b, e), e >= 80) read as what it meant: the
+ * shoulders turned against the hips. Within 90 degrees the bearing is the twist; past it (only
+ * when `throughTurn`: a turn's body has come round, which the sim's heading carries) the rest
+ * of the half turn is. Clamped to TWIST_LIMIT. A lean back (dir(180, 85)) stays a lean otherwise.
+ */
+export function trunkAsTwist(c: Clip, throughTurn: boolean): Clip {
+  const keys = c.keys.map(k => {
+    const t = k.pose.seg?.trunk;
+    if (!t || k.pose.twist !== undefined) return k;
+    const n = norm(t), e = Math.asin(n[1]) / RAD;
+    if (e < 80) return k;
+    let b = Math.atan2(n[0], -n[2]) / RAD;
+    if (Math.abs(b) < 1) return k;
+    if (Math.abs(b) > 90) { if (!throughTurn) return k; b = b > 0 ? b - 180 : b + 180; }
+    return { ...k, pose: { ...k.pose, twist: Math.max(-TWIST_LIMIT, Math.min(TWIST_LIMIT, b)), seg: { ...k.pose.seg, trunk: dir(0, e) } } };
+  });
+  return { ...c, keys };
 }
 
 /** A clip from keys, with its duration taken from the last key unless given; every key settled onIce. */
