@@ -52,9 +52,18 @@ export const BASELINE_KNOBS: EntranceKnobs = {
   speed: BASELINE.speed, loadAt: BASELINE.loadAt, load: BASELINE.load, swingAt: BASELINE.swingAt, checkAt: BASELINE.checkAt, depth: 1,
 };
 
-/** Run the pad script once and keep what the solver was fed. Deterministic. */
-export function loopBaselineProgram(knobs: EntranceKnobs = BASELINE_KNOBS): Program {
-  const p = baselineParams(), s = createState(p, knobs.speed), profile = defaultControllerProfile();
+/**
+ * Run the pad script once and keep what the solver was fed. Deterministic.
+ *
+ * `params` is the skater the script is recorded on; absent, the neutral one.
+ * It matters because two of the script's presses are timed off what that
+ * skater does, as a player's are: the check comes `checkAt` after ITS takeoff,
+ * and the run-out follows ITS landing (a skater who never lands gets no
+ * run-out at all). A script recorded on one skater and replayed on another
+ * checks at the wrong moment of the other's flight.
+ */
+export function loopBaselineProgram(knobs: EntranceKnobs = BASELINE_KNOBS, params: Params = baselineParams()): Program {
+  const p = { ...params }, s = createState(p, knobs.speed), profile = defaultControllerProfile();
   const st: GameControlState = newSchemeState();
   const h: ControllerHardware = { axes: [0, 0, 0, 0], buttons: Array(16).fill(0), keys: [], connected: true };
   const inputs: SkatingInput[] = [];
