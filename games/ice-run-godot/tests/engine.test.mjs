@@ -487,6 +487,21 @@ test('the warm-up group: the field skates with you, no program runs, and the pro
  assert.equal(e.start({mode:'career',event:0}).warmup,null,'off unless asked');
 });
 
+test('the motion library reaches the client: its index in the catalog, a clip by id, a style laid over a track',()=>{
+ const e=new IceEngine(),m=e.catalog().motion;
+ assert.ok(m.counts.fall>=50&&m.counts.total>=300&&m.counts.styles>=15,JSON.stringify(m.counts));
+ assert.ok(m.clips.some(c=>c.id==='SP_Camel_Basic'));
+ const c=e.motionClip('fall.hip-slide.brace.left');
+ assert.ok(c.keys.length>=3&&c.keys.at(-1).pose.pelvis<0.3);
+ assert.throws(()=>e.motionClip('nope'),/Unknown motion clip/);
+ const laid=e.choreograph({style:'classical',track:0,seconds:150,seed:3});
+ assert.equal(laid.style,'classical');
+ assert.ok(laid.cues.length>10&&laid.cues.every(x=>m.clips.some(c=>c.id===x.clip)));
+ assert.ok(laid.cues.at(-1).at<150);
+ assert.equal(laid.suggested.length,5);
+ assert.throws(()=>e.choreograph({style:'nope'}),/Unknown dance style/);
+});
+
 test('a career result carries its podium: the top three as standing sim states on their blocks',()=>{
  const e=new IceEngine();
  e.configure({setup:null,scheme:1,beginner:true,cruise:true});e.start({mode:'career',event:0});

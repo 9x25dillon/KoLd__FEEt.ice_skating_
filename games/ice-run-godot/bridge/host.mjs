@@ -33,6 +33,8 @@ lines.on('line',line=>{
    case 'dress':data={skin:engine.dress(req.design)};break;
    case 'design':engine.saveDesign(req.slot,req.design);data=engine.snapshot();break;
    case 'skipStep':data=engine.skipStep();break;
+   case 'motionClip':data=engine.motionClip(req.id);break;
+   case 'choreograph':data=engine.choreograph(req.options);break;
    case 'endWarmup':data=engine.endWarmup();break;
    case 'podiumPreview':data=engine.podiumPreview(req.event,req.score);break;
    case 'export':{const path=join(saveDir,'ice-run-replay.json');writeFileSync(path,engine.exportReplay());data={path};break;}
