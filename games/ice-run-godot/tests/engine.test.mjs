@@ -325,7 +325,7 @@ test('career prompts follow the setup, and every stat can be trained',()=>{
  assert.match(f.recover,/Snap a trigger/);
  e.configure({setup:'explorer'});
  assert.match(e.start({mode:'career',event:0}).routine.how,/A \/ Cross/);
- assert.deepEqual(e.snapshot().career.floors,[0,50.5,51.35,51.9,52.5]);
+ assert.deepEqual(e.snapshot().career.floors,[0,50.5,51.35,51.9,52.5,53.05,53.6,53.9,54.45,55]);
  assert.equal(e.snapshot().career.locks[0],'');
  e.career.profile={...e.career.profile,xp:1000};
  e.train('stamina');assert.equal(e.career.profile.stats.stamina,51);
@@ -428,7 +428,10 @@ test('the season has its story: chapters in the catalog, the coach in the snapsh
  const story=e.catalog().story;
  assert.equal(story.chapters.length,e.catalog().events.length);
  assert.equal(story.coach.name,'Mara Ellison');
- assert.equal(story.cast[0].name,'Remi Castellan');
+ // Both seasons' field, best first: the national champion joins in season two.
+ assert.deepEqual(story.cast.slice(0,2).map(c=>[c.name,c.season]),[['Teodora Wynn',2],['Remi Castellan',1]]);
+ assert.deepEqual(story.seasons.map(x=>x.title),['Your first season','The Nationals season']);
+ assert.equal(e.snapshot().career.seasonNumber,1);
  const advice=e.snapshot().career.advice;
  assert.ok(Array.isArray(advice)&&advice.length>=1&&advice.length<=2,JSON.stringify(advice));
  // A career run that ends tells its chapter's ending; free skate tells none.
@@ -438,4 +441,22 @@ test('the season has its story: chapters in the catalog, the coach in the snapsh
  const r=e.snapshot().result;
  assert.ok(r.story.length>40,r.story);
  assert.equal(r.finale,'','no season ending before the championship');
+});
+
+test('season two: the gala places nobody, and its result carries season two\'s last words',()=>{
+ const e=new IceEngine();
+ // Season one done, and a skater whose overall clears every floor.
+ e.career.medals=e.career.medals.map((_,i)=>i<9?2:0);
+ e.career.profile={...e.career.profile,stats:{strength:60,spring:60,edgeControl:60,balance:60,stamina:60}};
+ assert.equal(e.career.unlocked,9);
+ assert.equal(e.snapshot().career.seasonNumber,2);
+ assert.equal(e.snapshot().career.season.length,7,'six rivals and you');
+ e.configure({setup:null,scheme:1,beginner:true,cruise:true});e.start({mode:'career',event:9});
+ // Finished by fiat: every element done, the program's time run out.
+ e.routine.index=e.routine.event.routine.length;e.routine.elapsed=e.routine.event.seconds;
+ e.advance(emptyControls(),1,false);
+ const r=e.snapshot().result;
+ assert.equal(r.standings,null,'an exhibition places nobody');
+ assert.ok(r.story.length>40);
+ assert.match(r.finale,/Grand Prix|Nationals|two seasons/i,r.finale);
 });

@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import {
   CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX, TECHNICAL_XP_PER_POINT, SPIN_LEVEL_XP,
-  STEP_LEVEL_XP, EVENT_FLOORS, JUMP_TURN, LESSON_XP, START_WEEKS, WEEKS_PER_TIER, validPlan,
+  STEP_LEVEL_XP, EVENT_FLOORS, SEASONS, SEASON_ONE_FINALE, seasonOf, seasonEnds, JUMP_TURN, LESSON_XP, START_WEEKS, WEEKS_PER_TIER, validPlan,
 } from "../game/career.ts";
 import { RUST_PER_STEP, RUST_TURN, landingFamily } from "../game/training.ts";
 import { AIR_TURN } from "../game/tutorial.ts";
@@ -129,7 +129,7 @@ test("career unlocks sequentially and pays only improved medals, once", () => {
   // re-spaced on 2026-11-02 (statCap 0), so none of the remaining four events
   // can award: they are blocked by stats, not sequence.
   for (const event of CAREER_EVENTS.slice(1)) c.award(finish(event));
-  assert.deepEqual(c.medals, [3, 0, 0, 0, 0]);
+  assert.deepEqual(c.medals, [3, ...Array(CAREER_EVENTS.length - 1).fill(0)]);
   assert.equal(c.statCap, 0); assert.equal(c.unlocked, 0);
   assert.equal(c.profile.xp, 450, "450 for event 0's climb to gold; the stat gate allowed nothing more");
 });
@@ -408,7 +408,7 @@ test("training raises overall past an event floor and lifts the stat gate", () =
   for (let i = 0; i < 5; i++) c.train("edgeControl");
   assert.ok(overall(c.profile) >= EVENT_FLOORS[2] && overall(c.profile) < EVENT_FLOORS[3], `overall ${overall(c.profile)}`);
   assert.equal(c.statCap, 2);
-  assert.equal(CAREER_EVENTS.length, TIERS.length, "the five events and the five tiers are the same ladder");
+  assert.equal(SEASONS[0].last + 1, TIERS.length, "season one's five events and the five tiers are the same ladder");
   assert.equal(EVENT_FLOORS.length, CAREER_EVENTS.length);
 });
 
@@ -433,23 +433,23 @@ test("the whole ladder can be reached: silver alone pays for every floor, bronze
     assert.equal(c.unlocked >= i, true, `event ${i} opens (overall ${overall(c.profile)}, ${c.profile.xp} XP)`);
     assert.equal(c.award(finish(CAREER_EVENTS[i], 1)), 300);
   }
-  assert.deepEqual(c.medals, [2, 2, 2, 2, 2]);
+  assert.deepEqual(c.medals, CAREER_EVENTS.map(() => 2));
 });
 
 test("a save holding more XP than five medals still loads: bonuses are real XP", () => {
   const c = new CareerState();
-  c.medals = [3, 3, 0, 0, 0];
+  c.medals = [3, 3, ...Array(CAREER_EVENTS.length - 2).fill(0)];
   c.profile = { ...c.profile, xp: 2600 };
   const back = CareerState.restore(c.serialize());
   assert.equal(back.profile.xp, 2600, "a career was wiped on load past 2,250 XP");
-  assert.deepEqual(back.medals, [3, 3, 0, 0, 0]);
+  assert.deepEqual(back.medals, c.medals);
 });
 
 test("a closed event says why, and which gate", () => {
   const c = new CareerState();
   assert.equal(c.lockReason(0), "");
   assert.match(c.lockReason(1), /medal/);
-  c.medals = [1, 1, 0, 0, 0];
+  c.medals = [1, 1, ...Array(CAREER_EVENTS.length - 2).fill(0)];
   assert.match(c.lockReason(2), /Needs overall 51\.35; you are at 50\.00/);
   assert.match(c.lockReason(3), /medal/);
 });
@@ -530,7 +530,7 @@ test("silver alone can reach every floor and still keep both families sharp", ()
     c.award(finish(CAREER_EVENTS[i], 1));
   }
   assert.deepEqual(c.rust, { toe: 0, edge: 0 });
-  assert.deepEqual(c.medals, [2, 2, 2, 2, 2]);
+  assert.deepEqual(c.medals, CAREER_EVENTS.map(() => 2));
 });
 
 test("a plan must hold what its event asks, adds up to PLAN_EXTRA, and awards the same rung", () => {
@@ -574,4 +574,39 @@ test("weeks, rust, plans and best scores survive a save; a save from before them
   const kept = CareerState.restore(JSON.stringify(bad));
   assert.equal(kept.plans[1], null, "a plan that no longer fits falls back to the event's own");
   assert.deepEqual(kept.rust, { toe: 0, edge: 0 });
+});
+
+test("season two: five more events after season one's, its own floors, and a gala that places nobody", () => {
+  assert.deepEqual(SEASONS.map(x => [x.first, x.last]), [[0, 4], [5, 9]]);
+  assert.equal(CAREER_EVENTS.length, 10);
+  assert.deepEqual(CAREER_EVENTS.map((_, i) => seasonOf(i)), [1, 1, 1, 1, 1, 2, 2, 2, 2, 2]);
+  assert.deepEqual(CAREER_EVENTS.map((_, i) => seasonEnds(i)), [false, false, false, false, true, false, false, false, false, true]);
+  assert.equal(CAREER_EVENTS[SEASON_ONE_FINALE].id, "finale");
+  assert.equal(CAREER_EVENTS.filter(e => e.exhibition).map(e => e.id).join(), "gala");
+  // Senior lengths, data/segment-rules.csv: a short program of 160 s, a free skate of 240 s.
+  for (const e of CAREER_EVENTS.slice(5, 9)) assert.equal(e.seconds, e.segment === "free" ? 240 : 160, e.id);
+  // Each season-two floor sits just under what silver XP buys before it (measured 2026-11-11):
+  // 53.08, 53.64, 53.92, 54.48, 55.04.
+  for (let i = 1; i < EVENT_FLOORS.length; i++) assert.ok(EVENT_FLOORS[i] > EVENT_FLOORS[i - 1], `floor ${i} rises`);
+  assert.deepEqual(EVENT_FLOORS.slice(5), [53.05, 53.6, 53.9, 54.45, 55.0]);
+});
+
+test("a save from before season two keeps its season one and gains season two, unplayed", () => {
+  const c = new CareerState();
+  c.medals = [3, 2, 2, 1, 1, ...Array(5).fill(0)];
+  c.profile = { ...c.profile, xp: 900 };
+  c.setPlan(1, [...CAREER_EVENTS[1].routine, "spiral"]);
+  c.best[4] = 31.2;
+  const old = JSON.parse(c.serialize());
+  for (const k of ["medals", "plans", "timelines", "best"]) old[k] = old[k].slice(0, 5);
+  const back = CareerState.restore(JSON.stringify(old));
+  assert.deepEqual(back.medals, c.medals, "season one's medals survive");
+  assert.equal(back.profile.xp, 900);
+  assert.deepEqual(back.plans[1], [...CAREER_EVENTS[1].routine, "spiral"]);
+  assert.equal(back.best[4], 31.2);
+  assert.equal(back.best.length, CAREER_EVENTS.length);
+  assert.equal(back.medalCap, 5, "season two's first event is the next to earn");
+  // Any other length is still a broken save.
+  old.medals = [3, 2, 2];
+  assert.deepEqual(CareerState.restore(JSON.stringify(old)).medals, CAREER_EVENTS.map(() => 0));
 });

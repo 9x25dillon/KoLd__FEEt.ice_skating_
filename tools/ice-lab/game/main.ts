@@ -1,4 +1,4 @@
-import { CareerState, Choreography, CAREER_EVENTS, CUSTOM_STYLE, ELEMENTS, MEDALS } from "./career.ts";
+import { CareerState, Choreography, CAREER_EVENTS, CUSTOM_STYLE, ELEMENTS, MEDALS, seasonEnds, seasonOf } from "./career.ts";
 import type { ElementId } from "./career.ts";
 import { addElement, canAdd, moveEarlier, planRows, removeAt } from "./programplan.ts";
 import { ARM_FOCUS, ArmDrill, armExpression, armParams } from "./armfocus.ts";
@@ -801,7 +801,7 @@ function refreshCareer() {
       () => { career.rest(region.id); saveCareer(); refreshCareer(); }, career.weeks < 1 || wear <= 0), makeText("p", region.blurb));
     body.append(row);
   }
-  el("career-season").replaceChildren(standingsTable(seasonTable(career.best), (row: { points: number }) => String(row.points), "Points"));
+  el("career-season").replaceChildren(standingsTable(seasonTable(career.best, seasonOf(career.unlocked)), (row: { points: number }) => String(row.points), "Points"));
   el("career-save").textContent = `${career.weeks} training weeks left. ${saveNotice}`;
 
   if (key !== undefined) {
@@ -864,7 +864,8 @@ function finishCareer() {
   mode = "done"; musicEl.pause();
   const c = choreography, xp = career.award(c); saveCareer();
   el("title").textContent = c.complete ? `${MEDALS[c.medal]} on ice.` : "One more rehearsal.";
-  const next = careerEvent < CAREER_EVENTS.length - 1 ? `Next event: ${CAREER_EVENTS[careerEvent + 1].title}. Open Career to continue.` : "Season complete! Replay events to improve your medals.";
+  const next = seasonEnds(careerEvent) && careerEvent < CAREER_EVENTS.length - 1 ? `Season ${seasonOf(careerEvent)} complete! Season ${seasonOf(careerEvent + 1)} opens with ${CAREER_EVENTS[careerEvent + 1].title}. Open Career to continue.`
+    : careerEvent < CAREER_EVENTS.length - 1 ? `Next event: ${CAREER_EVENTS[careerEvent + 1].title}. Open Career to continue.` : "Season complete! Replay events to improve your medals.";
   // sim/pcs.ts's own score, never shown anywhere before this — silently absent (rather than a
   // misleading "0.00") whenever finalizePcs left it null (no segmentRules/ice at construction).
   const pcs = c.pcsScore ? ` · PCS ${c.pcsScore.total.toFixed(2)} (Comp ${c.pcsScore.composition.toFixed(2)} / Pres ${c.pcsScore.presentation.toFixed(2)} / Skills ${c.pcsScore.skatingSkills.toFixed(2)})` : "";

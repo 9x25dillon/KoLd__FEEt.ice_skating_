@@ -59,6 +59,14 @@ export interface CareerEvent {
    * it, the same graceful degradation every other score here already has.
    */
   discipline?: string; segment?: string;
+  /** The career season this event belongs to, 1 when unset (SEASONS below). */
+  season?: number;
+  /**
+   * An exhibition: skated, scored and paid like any event, but no field is
+   * placed against it and it adds nothing to the season's points (design
+   * bible § Game modes, Gala / Exhibition: no rules, no required elements).
+   */
+  exhibition?: boolean;
 }
 export const CAREER_EVENTS: readonly CareerEvent[] = [
   { id: "first-ice", title: "First ice", venue: "Community rink · foundations", seconds: 75, routine: ["glide", "edge", "pose"], discipline: "women", segment: "short" },
@@ -66,7 +74,30 @@ export const CAREER_EVENTS: readonly CareerEvent[] = [
   { id: "jump-showcase", title: "Jump showcase", venue: "District exhibition · take flight", seconds: 105, routine: ["edge", "crossover", "jump", "pose"], discipline: "women", segment: "short" },
   { id: "regional", title: "Regional spotlight", venue: "Regional arena · rotation & control", seconds: 120, routine: ["glide", "edge", "jump", "spin", "pose"], discipline: "women", segment: "short" },
   { id: "finale", title: "Championship program", venue: "Championship arena · your complete routine", seconds: 150, routine: ["glide", "crossover", "jump", "edge", "spin", "jump", "pose"], discipline: "women", segment: "free" },
+  // Season two, the Nationals season (owner, 2026-11-11; design bible § The Season:
+  // club → regionals → nationals). Senior lengths: a short program of 2:40 and a free
+  // skate of 4:00, data/segment-rules.csv's women rows. The routines use only the six
+  // elements the rival pilot (games/ice-run-godot/tools/rival_baseline.mjs) can skate,
+  // so every BASELINE is measured, and each jump follows an edge: on
+  // 2026-11-11's engine the pilot falls on a half turn straight out of a crossover; spiral, step and combo wait on measured pads (the
+  // owner's call). A player adds them with a plan, up to PLAN_EXTRA.
+  { id: "sectionals", title: "Sectional qualifier", venue: "Sectionals · the road to Nationals", seconds: 160, routine: ["glide", "crossover", "edge", "jump", "spin", "pose"], discipline: "women", segment: "short", season: 2 },
+  { id: "autumn-trophy", title: "Autumn Trophy", venue: "Senior B · your first international", seconds: 160, routine: ["glide", "edge", "jump", "spin", "crossover", "edge", "jump", "pose"], discipline: "women", segment: "short", season: 2 },
+  { id: "northern-cup", title: "Northern Cup", venue: "Senior B · the four-minute free", seconds: 240, routine: ["glide", "crossover", "edge", "jump", "spin", "crossover", "edge", "jump", "spin", "pose"], discipline: "women", segment: "free", season: 2 },
+  { id: "nationals", title: "Nationals", venue: "Nationals Coliseum · six thousand seats", seconds: 240, routine: ["glide", "crossover", "edge", "jump", "spin", "crossover", "edge", "jump", "spin", "crossover", "edge", "jump", "pose"], discipline: "women", segment: "free", season: 2 },
+  { id: "gala", title: "Exhibition gala", venue: "Nationals Coliseum · the medallists' gala", seconds: 180, routine: ["glide", "edge", "spin", "pose"], discipline: "women", segment: "short", season: 2, exhibition: true },
 ];
+/** Each season's events, as CAREER_EVENTS indices, first to last. */
+export const SEASONS = [
+  { season: 1, first: 0, last: 4 },
+  { season: 2, first: 5, last: 9 },
+] as const;
+/** The season event `i` belongs to. */
+export function seasonOf(i: number): number { return CAREER_EVENTS[i]?.season ?? 1; }
+/** Whether event `i` closes its season: its result carries the season's last words. */
+export function seasonEnds(i: number): boolean { return SEASONS.some(x => x.last === i); }
+/** Season one's championship: its medal forges the custom style (game/journal.ts). */
+export const SEASON_ONE_FINALE = SEASONS[0].last;
 export const MEDALS = ["Unplayed", "Bronze", "Silver", "Gold"] as const;
 /** XP each of hypeMean and flowMean can add at 1.0, on top of a medal's own 150 — the operator's
  *  bridge, made a number: a routine skated with sustained hype and flow can be worth as much again. */
@@ -102,7 +133,7 @@ export const PCS_XP_PER_POINT = 3;
  * each event is 50, 50.56, 51.40, 51.96, 52.52; each floor sits just under it, so
  * every event asks for the XP of the ones before it spent on training. Owner's call.
  */
-export const EVENT_FLOORS = [0, 50.5, 51.35, 51.9, 52.5] as const;
+export const EVENT_FLOORS = [0, 50.5, 51.35, 51.9, 52.5, 53.05, 53.6, 53.9, 54.45, 55.0] as const;
 /** Training weeks a new career starts with, and what each improved medal tier adds. Authored. */
 export const START_WEEKS = 4, WEEKS_PER_TIER = 2;
 /** Elements a planned program may add past its event's own. Authored. */
@@ -438,7 +469,7 @@ export class CareerState {
     // The first season's journal: every finished run, until the finale's medal forges the custom style.
     if (!this.customLeanings) {
       this.journal = addJournal(this.journal, routine.journal.finish());
-      if (i === CAREER_EVENTS.length - 1 && routine.medal > 0) this.customLeanings = leanings(this.journal);
+      if (i === SEASON_ONE_FINALE && routine.medal > 0) this.customLeanings = leanings(this.journal);
     }
     if (routine.complete) this.best[i] = Math.max(this.best[i] ?? -Infinity, routine.segmentScore);
     this.medals[i] = Math.max(this.medals[i], routine.medal);
@@ -539,6 +570,14 @@ export class CareerState {
     const career = new CareerState();
     try {
       const saved = JSON.parse(json ?? "null");
+      // A save from before season two holds season one's five events: it gains the rest, unplayed.
+      const one = SEASONS[0].last + 1, n = CAREER_EVENTS.length;
+      const fit = (a: unknown, fill: unknown): unknown[] | null =>
+        Array.isArray(a) && a.length === n ? a : Array.isArray(a) && a.length === one ? [...a, ...Array(n - one).fill(fill)] : null;
+      if (saved && typeof saved === "object") {
+        saved.medals = fit(saved.medals, 0) ?? saved.medals;
+        for (const k of ["plans", "timelines", "best"]) if (saved[k] !== undefined) saved[k] = fit(saved[k], null) ?? saved[k];
+      }
       if (saved?.version !== 1 || !Array.isArray(saved.medals) || saved.medals.length !== CAREER_EVENTS.length ||
           !saved.medals.every((m: unknown) => Number.isInteger(m) && Number(m) >= 0 && Number(m) <= 3) ||
           !Number.isSafeInteger(saved.xp) || saved.xp < 0 ||

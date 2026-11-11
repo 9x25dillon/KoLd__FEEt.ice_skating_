@@ -427,18 +427,28 @@ func show_page(page: String) -> void:
 			menu.add_child(paragraph("Connecting to Ice Lab…"))
 		else:
 			menu.add_child(label("%d XP   ·   %d training weeks   ·   overall %.1f" % [int(frame.career.xp),int(frame.career.weeks),float(frame.career.overall)],16,Color("d5bd96")))
-			# game/story.ts: the season's opening until a medal is won, then the coach's word on what is next.
+			# game/story.ts: each season's opening until a medal is won in it, then the coach's word on what is next.
 			var story: Dictionary = catalog.get("story",{})
+			var season_now := int(frame.career.get("seasonNumber",1))
 			var won := false
-			for m in frame.career.medals:
-				won = won or int(m) > 0
-			if not won and story.has("season"):
-				menu.add_child(paragraph(str(story.season.opening),14))
+			for i in frame.career.medals.size():
+				if int(catalog.events[i].get("season",1)) == season_now:
+					won = won or int(frame.career.medals[i]) > 0
+			var seasons: Array = story.get("seasons",[story.get("season",{})])
+			if not won and season_now-1 < seasons.size() and seasons[season_now-1].has("opening"):
+				menu.add_child(label(str(seasons[season_now-1].get("title","")),21))
+				menu.add_child(paragraph(str(seasons[season_now-1].opening),14))
 			for line in frame.career.get("advice",[]):
 				menu.add_child(paragraph("%s: %s" % [str(story.get("coach",{}).get("name","Your coach")),str(line)],13))
 			menu.add_child(button("Learn your controls   /   each new step +%d XP" % int(catalog.lessonXp),func():show_page("learn")))
 			for i in catalog.events.size():
 				var event: Dictionary = catalog.events[i]
+				# A heading where each season starts: game/career.ts SEASONS.
+				if i == 0 or int(event.get("season",1)) != int(catalog.events[i-1].get("season",1)):
+					var season_title := "Season %d" % int(event.get("season",1))
+					var n := int(event.get("season",1))
+					if n-1 < seasons.size(): season_title += "   /   " + str(seasons[n-1].get("title",""))
+					menu.add_child(label(season_title,18,Color("d5bd96")))
 				var medal := str(catalog.medals[int(frame.career.medals[i])])
 				var event_button := button("%02d   %s   /   %s" % [i+1,event.title,medal],func():focus_event=i;show_page("event"),i == int(frame.career.unlocked))
 				event_button.disabled = i > int(frame.career.unlocked)
@@ -484,7 +494,7 @@ func show_page(page: String) -> void:
 				menu.add_child(keyed(rest_button,"rest-%s" % region.id))
 				menu.add_child(paragraph(str(region.blurb),12))
 			menu.add_child(HSeparator.new())
-			menu.add_child(label("Season standings",21))
+			menu.add_child(label("Season %d standings" % season_now,21))
 			show_table(frame.career.season,"points")
 		menu.add_child(button("← Back",func():show_page("home")))
 	elif page == "event":

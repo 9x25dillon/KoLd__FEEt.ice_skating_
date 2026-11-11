@@ -11,6 +11,9 @@
 // Everything here is AUTHORED words. Nothing in it changes a score, a medal,
 // an unlock or a training cost: coachAdvice() only reads the career and says
 // what the coach would point at first.
+//
+// Season two (2026-11-11, owner's pick): the Nationals season, sectionals to the
+// Coliseum's gala, with Teodora Wynn, the national champion, joining the field.
 
 import { CAREER_EVENTS, type ElementId } from "./career.ts";
 import { RIVALS } from "./rivals.ts";
@@ -27,6 +30,7 @@ export const RIVAL_PARTS: Record<(typeof RIVALS)[number]["name"], string> = {
   "Katya Vell": "Your rinkmate at six in the morning. Runs her edges in the far corner while you run yours.",
   "Noor Ashdown": "Hasn't missed an element all season. Skates like a metronome.",
   "Remi Castellan": "The name the whole sport is saying. Waiting at the championship.",
+  "Teodora Wynn": "The national champion. Has stood on top of the Coliseum's podium twice and skates as if the third is already hers.",
 };
 
 /** One event's chapter: before you skate it, and after, by how it went. */
@@ -50,6 +54,20 @@ export const SEASON = {
     field: "A first season, finished. Mara: \"Every skater you watched this year started exactly where you did. Next season we go further.\"",
   },
 } as const;
+
+/** Season two: the Nationals season (owner, 2026-11-11). The same coach, the same rivals grown, one new senior. */
+export const SEASON_TWO = {
+  title: "The Nationals season",
+  opening: "Same rink, same hour, but the ice is no longer new to you. Mara has a calendar now instead of a notebook: sectionals, two senior internationals, then Nationals at the Coliseum. \"Six thousand seats,\" she says. \"And Teodora Wynn, who has won it twice. Last season you learned to trust the ice. This season it has to trust you back.\"",
+  finale: {
+    champion: "National champion. Teodora Wynn finds you at the gala's end and hands you the bouquet someone threw her. \"Keep it. Next year they'll throw them at you.\" Mara: \"The Grand Prix sends invitations in spring. Ours is coming.\"",
+    podium: "A national medal in your second season, and an exhibition skated under the Coliseum's lights for the people who stayed. Mara: \"The federation is talking about you. The Grand Prix is next. We get ready.\"",
+    field: "Your first Nationals, finished, and a gala skated for the crowd that stayed to watch. Mara: \"Two seasons ago you couldn't stand on it. Look at the ice you skated this year.\"",
+  },
+} as const;
+
+/** Each season's words, in order: SEASONS in game/career.ts. */
+export const SEASONS_STORY = [SEASON, SEASON_TWO] as const;
 
 /** By game/career.ts's CAREER_EVENTS, in order. */
 export const CHAPTERS: readonly Chapter[] = [
@@ -88,6 +106,42 @@ export const CHAPTERS: readonly Chapter[] = [
     bronze: "Not the program you planned: the one you finished, on championship ice. Mara: \"A first season is for learning what the ice will give you. You learned it.\"",
     short: "The music ended with the program unfinished. The crowd's silence is kind; the sport is like that. Mara: \"Again. As many times as it takes.\"",
   },
+  // Season two: the Nationals season.
+  {
+    before: "Sectionals, in a rink you have never skated, at senior length for the first time: two minutes forty. Katya Vell is in your warm-up group, and so is Noor Ashdown. Mara: \"Longer programs don't ask for more skating. They ask you to keep skating well when the legs are going. Pace it.\"",
+    gold: "Clean, at senior length, and the qualifying list has your name at the top of it. Katya hugs you at the boards and says \"Nationals\" in your ear like a secret.",
+    silver: "One fall in the long middle of it, and the end was as strong as the start. You're through. Mara: \"That's the shape of a senior program. The legs go; you don't.\"",
+    bronze: "Through to Nationals, and not prettily. Mara puts the protocol in her bag without reading it. \"We qualified. Tomorrow we find out why it was hard.\"",
+    short: "Two minutes forty is a long way. The program ran out before it reached the pose. Mara: \"We build the legs first. The skating is already there.\"",
+  },
+  {
+    before: "Your first international, a senior B in a cold town with a warm crowd, and a flag on your back you have only seen on television. Ansa Merrow is here too, a season older and no less fearless. Mara: \"Nobody here knows your name. That's a gift. Skate like it.\"",
+    gold: "Gold at your first international. The anthem is your country's and you didn't know you knew the words. Ansa, on the podium beside you: \"Next time I'm teaching you something.\"",
+    silver: "A medal abroad, with a fall in it. The panel didn't hold it against you for long and neither does Mara. \"Those judges will remember you at the next one.\"",
+    bronze: "A rough one, a long way from home. On the bus Mara makes you list three things that went right before she lets you list anything else. You get to five.",
+    short: "The program ran out in a strange rink, on a strange ice. Mara: \"It's the same sport everywhere. Next time it will feel like it.\"",
+  },
+  {
+    before: "The Northern Cup, and the four-minute free for the first time. Lio Tarrant has added a jump nobody thought he had, and Remi Castellan is entered too, testing her free before Nationals. Mara: \"Four minutes. The first jump is easy. The last one is the one you train for.\"",
+    gold: "Four minutes, every element, no falls, and Remi Castellan clapping from the kiss-and-cry. Mara writes something in the calendar's margin you aren't allowed to see.",
+    silver: "One fall in four minutes, and the last jump stood up anyway. Remi, passing: \"The end of yours was better than the end of mine.\"",
+    bronze: "Some of the four minutes were skating and some were getting up, and you finished all of them. Mara: \"That's the distance. Now we make it short.\"",
+    short: "The free ran past the music. Mara: \"Four minutes is a new country. We'll learn the roads.\"",
+  },
+  {
+    before: "The Nationals Coliseum: warm wood, six thousand seats, the broadcast lights, and every skater you have met in two seasons in one warm-up group. Teodora Wynn skates last. Mara, at the boards, quieter than she has ever been: \"You've skated this program a hundred times at six in the morning. This is just a bigger morning.\"",
+    gold: "Clean at Nationals. The Coliseum stands before the pose is finished, and Teodora Wynn is waiting at the bottom of the stairs to shake your hand. Mara doesn't let go of the boards for a long time.",
+    silver: "One fall under six thousand pairs of eyes, and you got up into the next element as if you'd rehearsed it. The crowd was louder after it than before. Mara: \"That's what Nationals is for.\"",
+    bronze: "Not the Nationals you planned: the one you finished, on the biggest ice of your life. Mara: \"Everyone in that building fell once to get here. You just did it where they could see.\"",
+    short: "The music ended and the program hadn't. The Coliseum's silence is the kind one, and then the applause comes anyway. Mara: \"Next year. We'll be here.\"",
+  },
+  {
+    before: "The medallists' gala, at the Coliseum the night after. No panel, no protocol that matters, no required elements: a spotlight, the music you love, and a crowd that stayed. Mara: \"Tonight nobody's judging. Skate the way you skate at six in the morning when you think nobody is watching.\"",
+    gold: "Not a fall in it. The spotlight follows you all the way round, and six thousand people hum the end of the music with you.",
+    silver: "A fall, and the crowd cheered you up off the ice like it was choreography. In a gala, it was.",
+    bronze: "Rough at the edges, and the Coliseum loved it anyway. Galas are like that: they came to see you skate, not to count.",
+    short: "The music ran out before the skating did, so you kept skating. In a gala you're allowed. The crowd stayed for all of it.",
+  },
 ];
 
 /** Readable stat names for the coach and the menus. */
@@ -103,9 +157,10 @@ export function outcome(event: number, medal: number, complete: boolean): string
   return medal >= 3 ? c.gold : medal === 2 ? c.silver : c.bronze;
 }
 
-/** The season's last words, by your place in game/rivals.ts's season table. */
-export function finale(place: number): string {
-  return place === 1 ? SEASON.finale.champion : place <= 3 ? SEASON.finale.podium : SEASON.finale.field;
+/** A season's last words (1 or 2), by your place in game/rivals.ts's season table. */
+export function finale(place: number, season = 1): string {
+  const f = (SEASONS_STORY[season - 1] ?? SEASON).finale;
+  return place === 1 ? f.champion : place <= 3 ? f.podium : f.field;
 }
 
 /** What the career knows that the coach reads: the snapshot's own fields. */
@@ -157,7 +212,7 @@ export function coachAdvice(c: CareerView): string[] {
   return out.slice(0, 2);
 }
 
-/** Who you'll meet at an event: the field's rivals, with their parts, best first. */
-export function cast(): { name: string; part: string }[] {
-  return [...RIVALS].sort((a, b) => b.level - a.level).map(r => ({ name: r.name, part: RIVAL_PARTS[r.name] }));
+/** Who you'll meet in a season: its field's rivals, with their parts, best first. */
+export function cast(season = 1): { name: string; part: string; season: number }[] {
+  return RIVALS.filter(r => r.season <= season).sort((a, b) => b.level - a.level).map(r => ({ name: r.name, part: RIVAL_PARTS[r.name], season: r.season }));
 }
