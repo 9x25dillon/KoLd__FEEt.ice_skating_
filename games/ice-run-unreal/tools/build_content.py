@@ -26,6 +26,12 @@ SKATERS = [
     ("skater-competition.glb", "Competition"),
     ("skater-berserker.glb", "Berserker"),
     ("skater.glb", "Violet"),
+    # The career's rivals (game/cast.ts), folder named by model: the warm-up group and the podium.
+    ("skater-rival-ansa.glb", "skater-rival-ansa"),
+    ("skater-rival-katya.glb", "skater-rival-katya"),
+    ("skater-rival-noor.glb", "skater-rival-noor"),
+    ("skater-rival-remi.glb", "skater-rival-remi"),
+    ("skater-rival-teodora.glb", "skater-rival-teodora"),
 ]
 
 tools = unreal.AssetToolsHelpers.get_asset_tools()

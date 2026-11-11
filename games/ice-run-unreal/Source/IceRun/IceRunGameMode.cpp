@@ -280,6 +280,12 @@ void AIceRunGameMode::StartRun()
 		for (const FString& Id : Sequence) Ids.Add(MakeShared<FJsonValueString>(Id));
 		Options->SetArrayField(TEXT("sequence"), Ids);
 	}
+	// A career program opens with its warm-up group (game/warmup.ts); the smoke run and stills skate straight in.
+	if (RunMode == TEXT("career") && !bSmoke && (ShotTimes.Num() == 0 || FParse::Param(FCommandLine::Get(), TEXT("IceWarmup"))))
+	{
+		Options->SetBoolField(TEXT("warmup"), true);
+	}
+	ClearPodium();
 	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetObjectField(TEXT("options"), Options);
 	bPlaying = false;
@@ -387,6 +393,7 @@ void AIceRunGameMode::Present(const FIceFrame& Frame, bool bSnap)
 			}
 		}
 	}
+	PresentWarmup(bSnap);
 	Rink->AddTraces(Latest.Trace, Skater->LiftedBlade());
 	// A lesson's travel targets (game/tutorial.ts), the next one glowing, and an arrow on the ice toward it.
 	TArray<FIceTarget> Targets;
@@ -504,8 +511,13 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		}
 		WearCostume();
 	}
-	else if (Reply.Op == TEXT("start"))
+	else if (Reply.Op == TEXT("start") || Reply.Op == TEXT("endWarmup"))
 	{
+		if (Reply.Op == TEXT("endWarmup"))
+		{
+			for (const TPair<FString, TObjectPtr<AIceSkater>>& K : WarmupSkaters) if (K.Value) K.Value->Destroy();
+			WarmupSkaters.Empty();
+		}
 		Rink->ClearTraces();
 		Rink->SetCourse(RunMode, Catalog);
 		Present(FIceFrame::Parse(Reply.Data), true);
@@ -533,6 +545,14 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 			OpenMenu(TEXT("home"));
 		}
 		bTitleShown = true;
+		if (Reply.Op == TEXT("start") && FParse::Param(FCommandLine::Get(), TEXT("IcePodiumPreview")))
+		{
+			// For a still of the podium without a scripted program skated clean: this event's, at three times its baseline.
+			TSharedRef<FJsonObject> Ask = MakeShared<FJsonObject>();
+			Ask->SetNumberField(TEXT("event"), EventIndex);
+			Ask->SetNumberField(TEXT("score"), 60.0);
+			Bridge.Send(TEXT("podiumPreview"), Ask);
+		}
 		int32 Skips = 0;
 		if (RunMode == TEXT("lesson") && FParse::Value(FCommandLine::Get(), TEXT("IceSkipSteps="), Skips))
 		{
@@ -543,6 +563,14 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 			}
 		}
 	}
+	else if (Reply.Op == TEXT("podiumPreview"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (Reply.Data->TryGetArrayField(TEXT("podium"), Rows))
+		{
+			BuildPodiumFrom(*Rows);
+		}
+	}
 	else if (Reply.Op == TEXT("frame"))
 	{
 		Present(FIceFrame::Parse(Reply.Data), false);
@@ -550,6 +578,7 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		if (Latest.bFinished)
 		{
 			bPlaying = false;
+			BuildPodium();
 			// The program is over: the music lets go.
 			if (Music && Music->IsPlaying())
 			{
