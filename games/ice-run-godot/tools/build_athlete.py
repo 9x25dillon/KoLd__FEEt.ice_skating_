@@ -1,11 +1,18 @@
 """The competition athlete, rebuilt on MakeHuman's CC0 anatomy (assets/source/makehuman).
 
   blender --background --python games/ice-run-godot/tools/build_athlete.py
+  blender --background --python games/ice-run-godot/tools/build_athlete.py -- --rival=ansa
+
+With --rival=<id> it builds one of the career's rivals (game/rivals.ts) instead, on
+the same rig and the same material names, so the game dresses and poses them as it
+does the athlete: their own build, height, skin and hair, from RIVALS below, to
+assets/generated/skater-rival-<id>.glb. Their costumes' colours are game data
+(game/cast.ts), not baked here. Without the flag nothing changes.
 
 Builds to the same bone names as tools/build_skater.py, with one difference that
 matters: L bones rest on the anatomical left, so a pose never drags skin across
 the body. The dress, boots and sleeves are cut from the body's own surface."""
-import bpy, bmesh, math, random
+import bpy, bmesh, math, random, sys
 from pathlib import Path
 from mathutils import Vector, Matrix
 from mathutils.kdtree import KDTree
@@ -14,7 +21,28 @@ ROOT=Path(__file__).resolve().parents[1]
 MH=ROOT/'assets/source/makehuman'
 OUT=ROOT/'assets/generated'
 bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
-random.seed(20261101)
+# The career's rivals (owner, 2026-11-11: "the five rivals"). AUTHORED looks: shape targets
+# and their weights, a height in metres, the skin and hair from the CC0 pack (assets/source/makehuman/README.md).
+RIVALS={
+ # Two years younger and afraid of nothing: the smallest, slight, platinum ponytail.
+ 'ansa':{'targets':[('caucasian-female-young',1),('universal-female-young-minmuscle-minweight',.55),('female-young-averagemuscle-averageweight-idealproportions',.3)],'height':1.50,
+  'skin':'young_lightskinned_female_diffuse2.png','hair':'ponytail01','hair_png':'ponytail01_platinum.png','seed':20261111},
+ # The rinkmate in the far corner: average build, a black braid.
+ 'katya':{'targets':[('asian-female-young',1),('universal-female-young-averagemuscle-minweight',.45),('universal-female-young-maxmuscle-minweight',.2),('female-young-averagemuscle-averageweight-idealproportions',.5)],'height':1.57,
+  'skin':'young_lightskinned_female_diffuse3.png','hair':'braid01','hair_png':'braid01_diffuse_black.png','seed':20261112},
+ # The metronome: compact and strong, a close natural crop.
+ 'noor':{'targets':[('african-female-young',1),('universal-female-young-maxmuscle-averageweight',.45),('universal-female-young-averagemuscle-minweight',.3)],'height':1.58,
+  'skin':'young_darkskinned_female_diffuse.png','hair':'afro01','hair_png':'afro_diffuse.png','seed':20261113},
+ # The name the whole sport is saying: long lines, a gold ponytail.
+ 'remi':{'targets':[('caucasian-female-young',1),('universal-female-young-averagemuscle-minweight',.5),('universal-female-young-maxmuscle-minweight',.3),('female-young-averagemuscle-averageweight-idealproportions',.6)],'height':1.65,
+  'skin':'young_lightskinned_female_diffuse.png','hair':'ponytail01','hair_png':'ponytail01_gold.png','seed':20261114},
+ # The national champion: the tallest and the most muscle, cropped hair.
+ 'teodora':{'targets':[('african-female-young',.6),('caucasian-female-young',.4),('universal-female-young-maxmuscle-averageweight',.55),('universal-female-young-averagemuscle-minweight',.3)],'height':1.68,
+  'skin':'young_darkskinned_female_diffuse.png','hair':'short04','hair_png':'short04_Brown.png','seed':20261115},
+}
+RIVAL=next((a.split('=',1)[1] for a in sys.argv[sys.argv.index('--')+1:] if a.startswith('--rival=')),None) if '--' in sys.argv else None
+LOOK=RIVALS[RIVAL] if RIVAL else None
+random.seed(LOOK['seed'] if LOOK else 20261101)
 
 # ---- MakeHuman data ----
 def read_obj(path):
@@ -31,10 +59,29 @@ def read_obj(path):
  return verts,uvs,faces,groups
 base,base_uv,base_faces,base_groups=read_obj(MH/'base.obj')
 # A lean young athlete: part way from average to low body fat, some extra muscle.
-for name,weight in [('caucasian-female-young',1),('universal-female-young-averagemuscle-averageweight',.4),('universal-female-young-averagemuscle-minweight',.35),('universal-female-young-maxmuscle-minweight',.25),('female-young-averagemuscle-averageweight-idealproportions',.5)]:
+ATHLETE_TARGETS=[('caucasian-female-young',1),('universal-female-young-averagemuscle-averageweight',.4),('universal-female-young-averagemuscle-minweight',.35),('universal-female-young-maxmuscle-minweight',.25),('female-young-averagemuscle-averageweight-idealproportions',.5)]
+def read_target(name):
+ out={}
  for line in open(MH/(name+'.target')):
   if line[0]=='#' or not line.strip():continue
-  p=line.split();base[int(p[0])]=base[int(p[0])]+Vector(map(float,p[1:4]))*weight
+  p=line.split();out[int(p[0])]=Vector(map(float,p[1:4]))
+ return out
+for name,weight in (LOOK['targets'] if LOOK else ATHLETE_TARGETS):
+ for i,d in read_target(name).items():base[i]=base[i]+d*weight
+# A rival's height is stated in metres, crown to sole, without the boot: shape targets move it
+# too, so it is measured with them applied and the height target's weight solved for it (a
+# target is linear in its weight). Negative weights run toward the short target.
+def stature(verts):
+ ids={i for f in base_groups['body'] for i,_ in base_faces[f]}
+ ys=[verts[i].y for i in ids];return (max(ys)-min(ys))*.1
+if LOOK and 'height' in LOOK:
+ have=stature(base)
+ tall=read_target('female-young-averagemuscle-averageweight-maxheight');short=read_target('female-young-averagemuscle-averageweight-minheight')
+ grown=list(base)
+ for i,d in (tall if LOOK['height']>have else short).items():grown[i]=grown[i]+d
+ w=min(1,(LOOK['height']-have)/(stature(grown)-have))
+ for i,d in (tall if LOOK['height']>have else short).items():base[i]=base[i]+d*w
+ print('RIVAL %s: %.3f m before the height target, weight %.3f %s, %.3f m after'%(RIVAL,have,w,'tall' if LOOK['height']>have else 'short',stature(base)))
 SOLE=.055 # steel and stanchions under the boot
 sole_mh=min(base[i].y for f in base_groups['body'] for i,_ in base_faces[f])
 def to_body(v):return Vector((v.x*.1,-v.z*.1,(v.y-sole_mh)*.1+SOLE))
@@ -92,13 +139,13 @@ def material(name,color,metal=0,rough=.5,image=None,alpha=False):
   m.node_tree.links.new(t.outputs['Color'],p.inputs['Base Color'])
   if alpha:m.node_tree.links.new(t.outputs['Alpha'],p.inputs['Alpha'])
  return m
-SKIN='young_lightskinned_female_diffuse.png'
+SKIN=LOOK['skin'] if LOOK else 'young_lightskinned_female_diffuse.png'
 skin=material('Warm porcelain',(1,1,1),0,.46,SKIN)
 tights=material('Skin-tone tights',(1,1,1),0,.56,SKIN)
 bodice=material('Midnight plum satin',(.025,.09,.14),.12,.3)
 skirt_mat=material('Flowing skirt satin',(.025,.09,.14),.12,.3)
 sleeve=material('Illusion sleeve',(.31,.23,.23),0,.53)
-hair=material('Espresso hair',(1,1,1),0,.42,'ponytail01_diffuse.png',True)
+hair=material('Espresso hair',(1,1,1),0,.42,LOOK['hair_png'] if LOOK else 'ponytail01_diffuse.png',True)
 crystal=material('Champagne crystals',(.85,.72,.48),.75,.18)
 leather=material('Ivory leather boots',(.90,.88,.82),0,.27)
 lace_mat=material('Boot laces',(.72,.72,.70),0,.7)
@@ -615,7 +662,7 @@ def project_iris(obj):
    toward=max(0,min(1,.5+.5*((mid.z-v.co.z)+(v.co.x-mid.x)*sign)/reach))
    v.co.y+=EYE_SEAT_LEAST+(EYE_SEAT_MOST-EYE_SEAT_LEAST)*toward*toward
  return obj
-proxies=[project_iris(fit_proxy('high-poly',eye,'Head',outer_shell)),fit_proxy('eyebrow001',brow,'Head'),fit_proxy('eyelashes02',lash,'Head'),fit_proxy('ponytail01',hair,'Head')]
+proxies=[project_iris(fit_proxy('high-poly',eye,'Head',outer_shell)),fit_proxy('eyebrow001',brow,'Head'),fit_proxy('eyelashes02',lash,'Head'),fit_proxy(LOOK['hair'] if LOOK else 'ponytail01',hair,'Head')]
 
 # ---- one skinned mesh ----
 everything=[body,dress,sheer,skirt]+seams+trim_objs+parts+proxies
@@ -745,7 +792,9 @@ def add_blink(obj):
 add_blink(bpy.context.view_layer.objects.active)
 rig.select_set(True);bpy.context.view_layer.objects.active=rig
 source=ROOT/'assets/source';source.mkdir(parents=True,exist_ok=True)
-bpy.ops.file.pack_all()
-bpy.ops.wm.save_as_mainfile(filepath=str(source/'skater-athlete.blend'))
-bpy.ops.export_scene.gltf(filepath=str(OUT/'skater-athlete.glb'),export_format='GLB',use_selection=True,export_animations=False,export_apply=False,export_image_format='AUTO')
+# A rival is rebuilt from this script and its RIVALS entry; only the athlete keeps a .blend.
+if not LOOK:
+ bpy.ops.file.pack_all()
+ bpy.ops.wm.save_as_mainfile(filepath=str(source/'skater-athlete.blend'))
+bpy.ops.export_scene.gltf(filepath=str(OUT/(f'skater-rival-{RIVAL}.glb' if LOOK else 'skater-athlete.glb')),export_format='GLB',use_selection=True,export_animations=False,export_apply=False,export_image_format='AUTO')
 print('ATHLETE: %d polygons, height %.3f m'%(len(bpy.context.view_layer.objects['Athlete'].data.polygons) if 'Athlete' in bpy.context.view_layer.objects else -1,top_of_head))
