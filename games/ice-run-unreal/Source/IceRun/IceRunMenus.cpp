@@ -397,6 +397,11 @@ void AIceRunGameMode::BuildHome(FMenuPage& P)
 		{
 			P.Items.Add(Line(TEXT("Skip this step"), TEXT(""), TEXT("Earns no XP; the next step starts at once."), [this] { SendOp(TEXT("skipStep"), MakeShared<FJsonObject>()); CloseMenu(); }));
 		}
+		const TSharedPtr<FJsonObject>* Warm = nullptr;
+		if (Latest.Raw.IsValid() && Latest.Raw->TryGetObjectField(TEXT("warmup"), Warm))
+		{
+			P.Items.Add(Line(TEXT("Skip the warm-up"), TEXT(""), TEXT("The group leaves the ice and your program starts."), [this] { SendOp(TEXT("endWarmup"), MakeShared<FJsonObject>()); CloseMenu(); }));
+		}
 		P.Items.Add(Line(TEXT("Start it again"), TEXT(""), TEXT("From the first push."), [this] { StartRun(); CloseMenu(); }));
 	}
 	const TSharedPtr<FJsonObject> Career = CareerObject();

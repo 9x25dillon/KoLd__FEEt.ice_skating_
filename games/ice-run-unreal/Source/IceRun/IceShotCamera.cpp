@@ -71,6 +71,20 @@ void AIceShotCamera::Cycle(const FIceState& State)
 void AIceShotCamera::Follow(const FIceState& S, const FVector& SkaterLocation, float Dt)
 {
 	const AIceRunGameMode* Game = GetWorld() ? GetWorld()->GetAuthGameMode<AIceRunGameMode>() : nullptr;
+	FVector Podium;
+	if (Game && Game->PodiumFocus(Podium))
+	{
+		// scripts/podium.gd's shot: from the ice in front of the podium (sim -y is Unreal +Y), drifting side to side.
+		ShowClock += Dt;
+		const FVector Desired = Podium + FVector(FMath::Sin(ShowClock * .12) * 1.1 * M, 6.4 * M, 1.45 * M);
+		const FVector Look = Podium + FVector(0, 0, 1.15 * M);
+		const FVector At = bPlaced ? FMath::Lerp(GetActorLocation(), Desired, Ease(3.0, Dt)) : Desired;
+		bPlaced = true;
+		Fov = FMath::Lerp(Fov, 34.0, Ease(2.5, Dt));
+		SetActorLocationAndRotation(At, (Look - At).Rotation());
+		GetCameraComponent()->SetFieldOfView(float(Fov));
+		return;
+	}
 	if (Game && Game->Showcase())
 	{
 		// main.gd's menu camera: close, slowly turning about the skater from in front, a little to one side.

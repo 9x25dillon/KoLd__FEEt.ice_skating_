@@ -34,6 +34,7 @@ lines.on('line',line=>{
    case 'design':engine.saveDesign(req.slot,req.design);data=engine.snapshot();break;
    case 'skipStep':data=engine.skipStep();break;
    case 'endWarmup':data=engine.endWarmup();break;
+   case 'podiumPreview':data=engine.podiumPreview(req.event,req.score);break;
    case 'export':{const path=join(saveDir,'ice-run-replay.json');writeFileSync(path,engine.exportReplay());data={path};break;}
    case 'replay':{const path=join(saveDir,'ice-run-replay.json');if(!existsSync(path))throw Error('Save a replay first');data=engine.replay(readFileSync(path,'utf8'));break;}
    case 'metrics':{const path=join(saveDir,'session-metrics.json');writeFileSync(path,JSON.stringify(engine.meter.summary(),null,2));data={path};break;}
