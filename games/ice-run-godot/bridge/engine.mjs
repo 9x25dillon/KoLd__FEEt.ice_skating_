@@ -23,6 +23,8 @@ import {RustGate,JUMP_FAMILIES} from '../runtime/game/training.js';
 import {BODY_REGIONS,FallWatch,wearNote} from '../runtime/game/wear.js';
 import {standings,seasonTable,RIVALS} from '../runtime/game/rivals.js';
 import {rivalLook} from '../runtime/game/cast.js';
+import {libraryIndex,CLIP_BY_ID} from '../runtime/game/motion/library.js';
+import {styleById,choreograph,suggestStyles} from '../runtime/game/motion/dance.js';
 import {WarmupGroup,WARMUP_SECONDS} from '../runtime/game/warmup.js';
 import {COURSES,courseById,courseSteps,howContext,elementHow,recoverHow} from '../runtime/game/padcourse.js';
 import {ARM_FOCUS,ArmDrill,armParams,armExpression} from '../runtime/game/armfocus.js';
@@ -56,7 +58,7 @@ export class IceEngine {
   this.steadyChoice=null; this.hand=new SteadyHand(steadyStrength(this.steadyLevel()));
   this.start({mode:'free'});
  }
- catalog() {return {story:{coach:COACH,season:SEASON,seasons:SEASONS_STORY,chapters:CHAPTERS,cast:cast(SEASONS.length).map(c=>({...c,look:rivalLook(c.name)})),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {motion:libraryIndex(),story:{coach:COACH,season:SEASON,seasons:SEASONS_STORY,chapters:CHAPTERS,cast:cast(SEASONS.length).map(c=>({...c,look:rivalLook(c.name)})),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson'].includes(mode)) throw Error('Unknown skating mode');
@@ -116,6 +118,16 @@ export class IceEngine {
    this.warmup=new WarmupGroup(field,options.warmupSeconds??WARMUP_SECONDS);this.routine=null;
   }
   return this.snapshot();
+ }
+ /** game/motion: one clip of the motion library, keys and all, by id. */
+ motionClip(id){const c=CLIP_BY_ID.get(id);if(!c)throw Error('Unknown motion clip');return c;}
+ /** game/motion/dance.ts: a style laid over a track's bars (the program's length by default), and the styles that suit it. */
+ choreograph(o={}){
+  const t=tracks[o.track??this.track];if(!t)throw Error('Unknown track');
+  const s=styleById(o.style);if(!s)throw Error('Unknown dance style');
+  const seconds=Number.isFinite(o.seconds)?Math.max(10,Math.min(360,o.seconds)):150;
+  const bars=Math.max(1,Math.floor((seconds-t.offset)/(60/t.bpm*t.beatsPerBar)));
+  return {style:s.id,track:o.track??this.track,cues:choreograph(s,{bpm:t.bpm,beatsPerBar:t.beatsPerBar,offset:t.offset,bars},Number.isInteger(o.seed)?o.seed:1),suggested:suggestStyles(t.bpm,t.beatsPerBar).slice(0,5).map(x=>({id:x.style.id,name:x.style.name,fit:x.fit}))};
  }
  /** Ends the warm-up group and starts the program itself, fresh. */
  endWarmup(){

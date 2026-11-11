@@ -10,7 +10,7 @@ const manifest={};
 mkdirSync(join(root,'runtime'),{recursive:true});
 // These files belong to Node, not Godot's resource/translation importer.
 writeFileSync(join(root,'runtime/.gdignore'),'');
-for(const folder of ['sim','app','game']) {
+for(const folder of ['sim','app','game','game/motion']) {
  const out=join(root,'runtime',folder); mkdirSync(out,{recursive:true});
  for(const name of readdirSync(join(lab,folder)).filter(n=>n.endsWith('.ts'))) {
   const source=readFileSync(join(lab,folder,name),'utf8');
