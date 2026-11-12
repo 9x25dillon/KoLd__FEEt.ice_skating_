@@ -266,6 +266,11 @@ void AIceRunGameMode::Configure()
 
 void AIceRunGameMode::StartRun()
 {
+	if (bWearingWho)
+	{
+		bWearingWho = false;
+		LoadSkaterModel();
+	}
 	TSharedRef<FJsonObject> Options = MakeShared<FJsonObject>();
 	Options->SetStringField(TEXT("mode"), RunMode);
 	Options->SetNumberField(TEXT("event"), EventIndex);
@@ -287,6 +292,11 @@ void AIceRunGameMode::StartRun()
 	if (RunMode == TEXT("career") && !bSmoke && (ShotTimes.Num() == 0 || FParse::Param(FCommandLine::Get(), TEXT("IceWarmup"))))
 	{
 		Options->SetBoolField(TEXT("warmup"), true);
+	}
+	// game/modes.ts: a picked skater, program and dance (IceRunModes.cpp StartWith).
+	if (RunExtra.IsValid())
+	{
+		for (const auto& Pair : RunExtra->Values) Options->SetField(FString(*Pair.Key), Pair.Value);
 	}
 	ClearPodium();
 	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
@@ -333,6 +343,8 @@ void AIceRunGameMode::StartLesson(const FString& LessonCourse, const FString& Ne
 
 void AIceRunGameMode::StartMode(const FString& Mode, int32 Event)
 {
+	// Only an exhibition and a showcase carry picks; every other mode starts plain.
+	if (Mode != TEXT("exhibition") && Mode != TEXT("showcase")) RunExtra.Reset();
 	RunMode = Mode;
 	EventIndex = Event;
 	StartRun();
@@ -514,7 +526,7 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		}
 		WearCostume();
 	}
-	else if (Reply.Op == TEXT("start") || Reply.Op == TEXT("endWarmup"))
+	else if (Reply.Op == TEXT("start") || Reply.Op == TEXT("endWarmup") || Reply.Op == TEXT("arcade"))
 	{
 		if (Reply.Op == TEXT("endWarmup"))
 		{
@@ -524,6 +536,7 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		Rink->ClearTraces();
 		Rink->SetCourse(RunMode, Catalog);
 		Present(FIceFrame::Parse(Reply.Data), true);
+		WearWho();
 		bPlaying = true;
 		TickDebt = 0.0;
 		LastLandingTick = -1;

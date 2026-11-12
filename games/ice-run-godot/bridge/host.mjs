@@ -3,14 +3,18 @@ import {mkdirSync,readFileSync,writeFileSync,renameSync,existsSync} from 'node:f
 import {resolve,join} from 'node:path';
 import {IceEngine} from './engine.mjs';
 const saveDir=resolve(process.argv[2]??'.');mkdirSync(saveDir,{recursive:true});
-const savePath=join(saveDir,'career-v1.json'),wardrobePath=join(saveDir,'wardrobe-v1.json');
+const savePath=join(saveDir,'career-v1.json'),wardrobePath=join(saveDir,'wardrobe-v1.json'),studioPath=join(saveDir,'studio-v1.json'),boardPath=join(saveDir,'arcade-v1.json');
 let saved=null;try{saved=readFileSync(savePath,'utf8');}catch{}
 let worn=null;try{worn=readFileSync(wardrobePath,'utf8');}catch{}
-const engine=new IceEngine(saved,worn);
+let made=null;try{made=readFileSync(studioPath,'utf8');}catch{}
+let scores=null;try{scores=readFileSync(boardPath,'utf8');}catch{}
+const engine=new IceEngine(saved,worn,made,scores);
 function keep(path,data){writeFileSync(path+'.tmp',data);renameSync(path+'.tmp',path);}
 function save(){
  const data=engine.career.serialize();if(data!==saved){keep(savePath,data);saved=data;}
  const wardrobe=engine.wardrobe.serialize();if(wardrobe!==worn){keep(wardrobePath,wardrobe);worn=wardrobe;}
+ const studio=engine.studio.serialize();if(studio!==made){keep(studioPath,studio);made=studio;}
+ const board=engine.board.serialize();if(board!==scores){keep(boardPath,board);scores=board;}
 }
 const lines=createInterface({input:process.stdin,crlfDelay:Infinity});
 lines.on('line',line=>{
@@ -36,6 +40,12 @@ lines.on('line',line=>{
    case 'motionClip':data=engine.motionClip(req.id);break;
    case 'choreograph':data=engine.choreograph(req.options);break;
    case 'endWarmup':data=engine.endWarmup();break;
+   case 'sheet':data=engine.sheetEdit(req.options);break;
+   case 'studio':data=engine.studioEdit(req.options);break;
+   case 'careerStyle':engine.careerStyle(req.options);data=engine.snapshot();break;
+   case 'arcade':data=engine.arcadeStart(req.character);break;
+   // A new career never overwrites the old one: it is kept beside the save, dated, before the swap.
+   case 'newCareer':{const old=engine.career.serialize();if(existsSync(savePath)){const stamp=new Date().toISOString().replace(/[:.]/g,'-');keep(join(saveDir,`career-v1-before-${stamp}.json`),old);}data=engine.newCareer(req.slot);break;}
    case 'podiumPreview':data=engine.podiumPreview(req.event,req.score);break;
    case 'export':{const path=join(saveDir,'ice-run-replay.json');writeFileSync(path,engine.exportReplay());data={path};break;}
    case 'replay':{const path=join(saveDir,'ice-run-replay.json');if(!existsSync(path))throw Error('Save a replay first');data=engine.replay(readFileSync(path,'utf8'));break;}

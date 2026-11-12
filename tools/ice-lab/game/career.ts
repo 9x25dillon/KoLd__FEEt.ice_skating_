@@ -26,6 +26,9 @@ export const CUSTOM_STYLE = STYLES.length;
 import type { JumpFamily, Rust } from "./training.ts";
 import { BODY_REGIONS, HEALED_UNDER, INJURED_AT, REST_PER_WEEK, noInjury, noWear, wornProfile } from "./wear.ts";
 import type { BodyRegion, FallHit, Injured, Wear } from "./wear.ts";
+import { parseSheet, sheetProfile } from "./creator.ts";
+import type { SkaterSheet } from "./creator.ts";
+import { ORIGIN_STAT, ORIGIN_STYLE_MASTERY } from "./backstories.ts";
 import { checkTimeline, cueResult, parseTimeline, timelineOrder } from "./composer.ts";
 import type { BeatGrid, CueResult, CueTime, Timeline } from "./composer.ts";
 
@@ -429,6 +432,30 @@ export class CareerState {
   nudgeCustom(i: number) { if (i === -1 || STYLES[i]) this.customNudge = i; }
   /** Regions injured: set at INJURED_AT, cleared under HEALED_UNDER. */
   injured: Injured = noInjury();
+  /**
+   * game/creator.ts: the created skater this career belongs to, or null for the
+   * original "Career skater" (every save from before 2026-11-11). Their body,
+   * name and costume; their stats live on `profile` as they train.
+   */
+  skater: SkaterSheet | null = null;
+
+  /**
+   * A new career for a created skater: their origin's (reshaped) stats on their
+   * body, and their origin's style taken up, one week drilled
+   * (backstories.ts ORIGIN_STYLE_MASTERY), which is also where the custom style
+   * leans once it is forged. Everything else is a new career's.
+   */
+  static fromSheet(sheet: SkaterSheet): CareerState {
+    const career = new CareerState();
+    career.skater = { ...sheet, stats: { ...sheet.stats } };
+    career.profile = sheetProfile(sheet);
+    if (STYLES[sheet.style]) {
+      career.style = sheet.style;
+      career.customNudge = sheet.style;
+      career.styleMastery = career.styleMastery.map((m, i) => i === sheet.style ? ORIGIN_STYLE_MASTERY : m);
+    }
+    return career;
+  }
 
   /** How far medals alone would unlock: the first not-yet-earned event. */
   get medalCap(): number {
@@ -565,7 +592,7 @@ export class CareerState {
     const plan = this.plans[i];
     return plan ? { ...CAREER_EVENTS[i], routine: plan } : CAREER_EVENTS[i];
   }
-  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, timelines: this.timelines, best: this.best, wear: this.wear, injured: this.injured, style: this.style, styleMastery: this.styleMastery, journal: this.journal, customLeanings: this.customLeanings, customNudge: this.customNudge }); }
+  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, timelines: this.timelines, best: this.best, wear: this.wear, injured: this.injured, style: this.style, styleMastery: this.styleMastery, journal: this.journal, customLeanings: this.customLeanings, customNudge: this.customNudge, skater: this.skater }); }
   static restore(json: string | null): CareerState {
     const career = new CareerState();
     try {
@@ -578,15 +605,20 @@ export class CareerState {
         saved.medals = fit(saved.medals, 0) ?? saved.medals;
         for (const k of ["plans", "timelines", "best"]) if (saved[k] !== undefined) saved[k] = fit(saved[k], null) ?? saved[k];
       }
+      // A created skater (game/creator.ts) may start under 50 in a stat; the original never did.
+      const sheet = saved?.skater == null ? null : parseSheet(saved.skater);
+      if (saved?.skater != null && !sheet) return career;
+      const floor = sheet ? ORIGIN_STAT.min : 50;
       if (saved?.version !== 1 || !Array.isArray(saved.medals) || saved.medals.length !== CAREER_EVENTS.length ||
           !saved.medals.every((m: unknown) => Number.isInteger(m) && Number(m) >= 0 && Number(m) <= 3) ||
           !Number.isSafeInteger(saved.xp) || saved.xp < 0 ||
-          !STAT_NAMES.every(n => Number.isInteger(saved.stats?.[n]) && saved.stats[n] >= 50 && saved.stats[n] <= 100)) return career;
+          !STAT_NAMES.every(n => Number.isInteger(saved.stats?.[n]) && saved.stats[n] >= floor && saved.stats[n] <= 100)) return career;
       // Reject a broken unlock chain instead of silently skipping events.
       const firstEmpty = saved.medals.indexOf(0);
       if (firstEmpty >= 0 && saved.medals.slice(firstEmpty).some((m: number) => m !== 0)) return career;
       career.medals = [...saved.medals];
-      career.profile = makeProfile("Career skater", { xp: saved.xp, stats: saved.stats });
+      career.skater = sheet;
+      career.profile = sheet ? { ...sheetProfile(sheet, saved.xp), stats: { ...saved.stats } } : makeProfile("Career skater", { xp: saved.xp, stats: saved.stats });
       // Absent from saves older than the arm drills; a bad value keeps the defaults, not the whole career at risk.
       if ([0, 1, 2].includes(saved.armFocus)) career.armFocus = saved.armFocus;
       if (Array.isArray(saved.armBest) && saved.armBest.length === 3 && saved.armBest.every((b: unknown) => Number.isInteger(b) && Number(b) >= 0 && Number(b) <= 100)) career.armBest = [...saved.armBest];
