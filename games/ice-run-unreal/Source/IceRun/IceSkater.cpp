@@ -580,10 +580,12 @@ void AIceSkater::Pose(float Dt)
 	}
 	if (bPoseLow)
 	{
-		Hip.Y -= .16;
-		Spine = Hip + FVector(0.0, .10, .12);
-		Neck = Spine + FVector(0.0, .18, .22);
-		Head = Neck + FVector(0.0, .10, .03);
+		// The closing pose, as skater.gd draws it (2026-11-12, the owner found the old crouch "off putting"):
+		// up to a soft knee, the trunk tall with the chest lifted a little, the chin up. Presentation only.
+		Hip.Y += .07;
+		Spine = Hip + FVector(0.0, 1.0, .10).GetSafeNormal() * HipsLength;
+		Neck = Spine + FVector(0.0, 1.0, .06).GetSafeNormal() * SpineLength;
+		Head = Neck + FVector(0.0, .12, -.015);
 	}
 	if (S.bFallen)
 	{
@@ -816,8 +818,9 @@ void AIceSkater::Pose(float Dt)
 		}
 		if (bPoseLow)
 		{
-			Elbow = FVector(Side * .24, .02, .03);
-			Hand = FVector(Side * .44, -.02, .05);
+			// Fourth en haut: one arm curved overhead, the other open to the side and a little forward.
+			Elbow = Side > 0 ? FVector(Side * .16, .24, -.05) : FVector(Side * .26, -.04, -.06);
+			Hand = Side > 0 ? FVector(Side * .05, .50, -.09) : FVector(Side * .50, .02, -.14);
 		}
 		if (bUnder)
 		{

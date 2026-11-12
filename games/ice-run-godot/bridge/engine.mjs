@@ -120,7 +120,7 @@ export class IceEngine {
   this.rusty=mode==='career'?new RustGate(this.career.rust):null;
   this.routine=mode==='career'?new Choreography(this.career.planned(index),tables,spinThresholds,stepThresholds,segmentRules,this.ice):mode==='composer'?new Choreography({id:'authored',title:'Your signature program',venue:'Composer rehearsal',seconds:180,routine:this.sequence,discipline:'women',segment:'free'},tables,spinThresholds,stepThresholds,segmentRules,this.ice):null;
   // game/modes.ts: an arcade round is its career event at full time, so its score compares with the rival's measured one.
-  this.pilot=null;this.showcase=null;
+  this.pilot=null;this.showcase=null;this.pilotShown=null;
   if(mode==='arcade'){this.routine=new Choreography(this.arcade.current.program,tables,spinThresholds,stepThresholds,segmentRules,this.ice);this.routine.fullTime=true;}
   if(mode==='exhibition')this.routine=new Choreography(exhibitionEvent(program,options.title??'Exhibition'),tables,spinThresholds,stepThresholds,segmentRules,this.ice);
   if(mode==='showcase'){
@@ -289,6 +289,8 @@ export class IceEngine {
     const live={...c,push:(i===0&&c.push)||repeat,autoPush:repeat,toe:i===0&&c.toe};
     // game/pilot.ts: in a showcase the computer's pad replaces the player's, through Simulation's own mapping, unaided.
     const pad=this.pilot?{...emptyControls(),hardware:this.pilot.pad(s,this.routine?.current,SIM_DT)}:null;
+    // The demonstration's controller: every button pressed in this batch stays lit (a 3-tick tap would fall between frames); sticks and triggers are the last tick's.
+    if(pad){const h=pad.hardware,shown=this.pilotShown;this.pilotShown={axes:[...h.axes],buttons:h.buttons.map((b,j)=>Math.max(b,i>0&&shown?shown.buttons[j]??0:0)),doing:this.pilot.doing};}
     const mapped=pad?setupInput(pad,s,'simulation',this.steering,this.params,PILOT_PROFILE)
       :this.setup?setupInput(live,s,this.setup,this.steering,this.params,this.controllerProfile,this.assistance)
       :gameInput(live,s,this.scheme,this.steering,low,this.params,this.controllerProfile);
@@ -445,7 +447,7 @@ export class IceEngine {
   const move=s.fallen?`Recover · ${recoverHow(words)}`:s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
   return {sheet:this.sheetView(),studio:{skaters:this.studio.skaters,programs:this.studio.programs,dances:this.studio.dances},characters:this.characters(),
    arcade:this.arcade?{character:this.arcade.character,round:this.arcade.round,rounds:this.arcade.rounds.map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title})),lives:this.arcade.lives,points:this.arcade.points,over:this.arcade.over,cleared:this.arcade.cleared}:null,board:this.board.entries,
-   showcase:this.showcase,who:this.who?{id:this.who.id,name:this.who.name,costume:this.who.costume}:null,
+   showcase:this.showcase,pilotPad:this.pilot?this.pilotShown:null,who:this.who?{id:this.who.id,name:this.who.name,costume:this.who.costume}:null,
    motion:this.motion?this.motion.frame(this.state,this.elapsed):null,danceStyle:this.danceStyle??null,runDance:this.runDance??null,warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    recover:recoverHow(words),

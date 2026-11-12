@@ -715,10 +715,13 @@ func _process(dt: float) -> void:
 		neck = spine+Vector3(0,.29,-.13)
 		head = neck+Vector3(0,.12,0)
 	if pose_low:
-		hip.y -= .16
-		spine = hip+Vector3(0,.10,.12)
-		neck = spine+Vector3(0,.18,.22)
-		head = neck+Vector3(0,.10,.03)
+		# The closing pose (2026-11-12, the owner: the old sunk, tipped-back crouch was "off putting"):
+		# a finish, not a sit. Up out of the sim's deep cantilever knee to a soft one, the trunk tall
+		# with the chest lifted a little, the chin up. Presentation only: the sim's state is untouched.
+		hip.y += .07
+		spine = hip+Vector3(0,1,.10).normalized()*hips_length
+		neck = spine+Vector3(0,1,.06).normalized()*spine_length
+		head = neck+Vector3(0,.12,-.015)
 	if bool(state.fallen):
 		# Down and out onto the hip with the trunk still up, then over onto the forearm.
 		hip = Vector3(fall_side*.16,.13-.02*sin(PI*clampf((fall_clock-FALL_HIT)/.2,0,1)),.02)
@@ -908,8 +911,13 @@ func _process(dt: float) -> void:
 			elbow = Vector3(side*.10,-.05,-.24)
 			hand = Vector3(side*.08,-.09,-.46)
 		if pose_low:
-			elbow = Vector3(side*.24,.02,.03)
-			hand = Vector3(side*.44,-.02,.05)
+			# Fourth en haut: one arm curved overhead, the other open to the side and a little forward.
+			if side > 0:
+				elbow = Vector3(side*.16,.24,-.05)
+				hand = Vector3(side*.05,.50,-.09)
+			else:
+				elbow = Vector3(side*.26,-.04,-.06)
+				hand = Vector3(side*.50,.02,-.14)
 		if under:
 			# Out and ready, then taking what is left of the fall on the forearm, after the hip.
 			elbow = Vector3(fall_side*.22,-.10,.02).lerp(Vector3(fall_side*.20,-shoulder.y*.5,.12),fall_roll)

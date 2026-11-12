@@ -89,3 +89,14 @@ test('studio shelves keep programs and dances; a bad one is refused',()=>{
  const back=new IceEngine(null,null,e.studio.serialize());
  assert.equal(back.studio.dances[1].name,'Waltz');
 });
+
+test('a showcase sends the computer\'s pad and what it is doing, for the on-screen controller; other runs send none',()=>{
+ const e=new IceEngine();
+ let f=e.start({mode:'showcase',character:'career',program:['glide','crossover','edge','pose']});
+ let pressed=0,leaned=0,said=new Set();
+ for(let k=0;k<600&&!e.finished;k++){f=e.advance(idle(),2);const p=f.pilotPad;assert.ok(p);
+  if(p.buttons.some(b=>b>0))pressed++;if(Math.abs(p.axes[0])>.05)leaned++;said.add(p.doing);}
+ assert.ok(pressed>0&&leaned>0,`buttons ${pressed}, sticks ${leaned}`);
+ assert.ok([...said].some(d=>/tap A/.test(d)),[...said].join(' | '));
+ assert.equal(e.start({mode:'free'}).pilotPad,null);
+});
