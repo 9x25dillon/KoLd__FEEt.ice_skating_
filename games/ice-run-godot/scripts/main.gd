@@ -7,6 +7,7 @@ const SimSpace = preload("res://scripts/sim_space.gd")
 const Shot = preload("res://scripts/shot.gd")
 const Ribbon = preload("res://scripts/ribbon.gd")
 const Broadcast = preload("res://scripts/broadcast.gd")
+const PadOverlay = preload("res://scripts/pad_overlay.gd")
 # Purely a local presentation choice: skater.gd poses whichever glb this
 # points at by bone name, so any entry here just needs to answer to the same
 # eleven bones (see tools/build_skater.py and tools/build_berserker.py).
@@ -45,6 +46,8 @@ var hud_move: Label
 var hud_technical: Label
 var notice: Label
 var ribbon: Control
+## The demonstration's on-screen controller (scripts/pad_overlay.gd): the computer's hands in a showcase.
+var pad_overlay: Control
 var broadcast: Control
 var presentation_clock := 0.0
 var last_landing_tick := -1
@@ -321,6 +324,14 @@ func build_ui() -> void:
 	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(ribbon)
 	ribbon.hide()
+	# Bottom right, opaque, above the ice and under the menus.
+	pad_overlay = PadOverlay.new()
+	pad_overlay.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	pad_overlay.offset_left = -560
+	pad_overlay.offset_top = -400
+	pad_overlay.offset_right = -24
+	pad_overlay.offset_bottom = -24
+	root.add_child(pad_overlay)
 	notice = label("",13,Color("e6c8a3"))
 	notice.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	notice.position = Vector2(-620,-55)
@@ -417,6 +428,8 @@ func focus_menu() -> void:
 			return
 
 func show_page(page: String) -> void:
+	# The demonstration's controller belongs to the ice, never over a menu.
+	if pad_overlay: pad_overlay.update_pad(null)
 	if page != "result" and podium and podium.visible:
 		podium.clear()
 		skater.visible = true
@@ -440,6 +453,7 @@ func show_page(page: String) -> void:
 			var id := str(m.id)
 			var target := "career" if id == "career" else id
 			menu.add_child(button("%s   /   %s →" % [str(m.title),str(m.get("tagline",""))],func():show_page(target),id == "career"))
+		menu.add_child(button("Watch a demonstration   /   the computer skates, the controls on screen",func():start_game("showcase",0,false,{"character":"career","program":["glide","crossover","edge","jump","spin","pose"]})))
 		menu.add_child(button("Learn your controls   /   A course for each setup",func():show_page("learn")))
 		menu.add_child(button("The skaters   /   Where they come from",func():show_page("cast")))
 		menu.add_child(button("Pairs   /   Skate with a partner",func():start_game("pairs")))
@@ -1551,6 +1565,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		if rumble_enabled and not pads.is_empty():
 			Input.start_joy_vibration(pads[0],.18 if clean else .48,.30 if clean else .7,.16 if clean else .28)
 	update_hud()
+	pad_overlay.update_pad(null if overlay.visible else frame.get("pilotPad"))
 	if frame.finished and last_result_tick != int(frame.state.tick):
 		last_result_tick = int(frame.state.tick)
 		show_page("result")
@@ -2050,6 +2065,22 @@ func capture() -> void:
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-warmup-high.png")
 		print("GODOT_WARMUP_CAPTURE: %d in the group" % warmup_skaters.size())
+		print("GODOT_CAPTURE_PASS")
+		get_tree().quit()
+		return
+	if "--capture-pose" in OS.get_cmdline_user_args():
+		# The closing pose as the demonstration skates it: the computer glides, then holds the pose; stills from three cameras.
+		start_game("showcase",0,false,{"character":"career","program":["glide","pose"]})
+		for k in 14:
+			await get_tree().create_timer(1.0).timeout
+			if frame.get("low",false): break
+		await get_tree().create_timer(1.2).timeout
+		for view in [0,1,3]:
+			camera_mode = view
+			await get_tree().create_timer(.8).timeout
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-pose-%d.png" % view)
+		print("GODOT_POSE_CAPTURE: low %s" % str(frame.get("low",false)))
 		print("GODOT_CAPTURE_PASS")
 		get_tree().quit()
 		return

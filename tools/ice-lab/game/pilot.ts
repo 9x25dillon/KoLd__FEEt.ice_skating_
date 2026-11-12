@@ -54,6 +54,8 @@ export class ProgramPilot {
   private prev: string | undefined;
   private readyAt: number | undefined;
   private free = false;
+  /** What the pilot is doing this tick, in words a player can copy: the demonstration's caption. */
+  doing = "";
   readonly radius: number;
   readonly entry: Readonly<Record<string, number>>;
   constructor(radius = PILOT_RADIUS, entry: Readonly<Record<string, number>> = PILOT_ENTRY) { this.radius = radius; this.entry = entry; }
@@ -76,11 +78,12 @@ export class ProgramPilot {
     const phi = Math.max(0, Math.min(most, Math.atan(v * v / (G * this.radius)) + 0.04 * (dist - this.radius) + 0.4 * out));
     h.axes[0] = h.axes[2] = stickFor(dir * (backwardOf(s) ? -1 : 1) * phi);
     if (v < push && tap(t, push > 3 ? 0.6 : 1.2)) h.buttons[A] = 1;
+    this.doing = v < push ? "Pushing up to speed: tap A, lean both sticks into the curve" : "Gliding round the curve: both sticks lean into it";
   }
 
   private drive(h: PilotPad, s: SkaterState, cur: string | undefined, t: number) {
     const v = Math.hypot(s.vel.x, s.vel.y);
-    if (s.fallen) { this.readyAt = undefined; this.dir = undefined; if (tap(t, 0.5)) h.buttons[A] = 1; return; }
+    if (s.fallen) { this.readyAt = undefined; this.dir = undefined; if (tap(t, 0.5)) h.buttons[A] = 1; this.doing = "Down: tap A to get up"; return; }
     if (cur === undefined) { if (!this.free) { this.free = true; this.dir = undefined; } this.orbit(h, s, t, 3); return; }
     if (this.cur !== cur) { this.prev = this.cur; this.cur = cur; this.readyAt = undefined; this.dir = undefined; }
     if (this.readyAt === undefined) {
@@ -90,11 +93,14 @@ export class ProgramPilot {
       if (v < need || (forward && backwardOf(s))) {
         this.orbit(h, s, t, need + 0.3);
         if (forward && backwardOf(s) && v >= 2 && tap(t, 1)) { h.buttons[A] = 0; h.buttons[B] = 1; }
+        if (forward && backwardOf(s)) this.doing = "Skating backward: tap B on the curve to three-turn forward";
         return;
       }
       this.readyAt = t;
     }
     const lt = t - this.readyAt;
+    this.doing = ({ glide: "Opening glide: tap A to keep above 3 m/s, sticks centred", edge: "Carving an edge: both sticks held halfway into the curve",
+      crossover: "Crossovers: sticks leaned in, tap A on each stroke", spin: "Spin: lean in, then press and hold Y", pose: "Closing pose: hold A and click L3" } as Record<string, string>)[cur] ?? "";
     if (cur === "glide") { if (v < 3.3 && tap(t, 4)) h.buttons[A] = 1; }
     if (cur === "edge") h.axes[0] = h.axes[2] = 0.5;
     if (cur === "crossover") { h.axes[0] = h.axes[2] = 0.6; if (tap(t, 1.5)) h.buttons[A] = 1; }
@@ -104,6 +110,7 @@ export class ProgramPilot {
       if (u >= 1 && u < 1.3) { h.buttons[L3] = 1; h.buttons[LT] = h.buttons[RT] = 1; }
       else if (u >= 1.4) h.buttons[LT] = h.buttons[RT] = 0.5;
       if (v < 3.5 && u > 3) h.buttons[A] = 1;
+      this.doing = u < 1 ? "Jump: lean into the curve to set the edge" : u < 1.3 ? "Jump: squeeze both triggers and click L3 to load" : u < 1.4 ? "Jump: let go of the triggers to take off" : "Landing: hold the triggers halfway for soft knees";
     }
     // A spin starts on a fresh press of Y: press until it starts, then hold it.
     if (cur === "spin") { h.axes[0] = h.axes[2] = 0.5; if (lt > 1 && (s.move === MOVE.Spin || lt % 1 < 0.5)) h.buttons[Y] = 1; }
