@@ -91,6 +91,16 @@ var costume := 3
 var preview: AudioStreamPlayer
 var design_slot := -1
 var design: Dictionary = {}
+# game/creator.ts and game/modes.ts pages (2026-11-11): who skates, which program, which dance, and the sheet's slot.
+var sheet_slot := -1
+var sheet_from := "stamina"
+var pick_character := "career"
+var pick_program := -1
+var pick_dance := -1
+var dance_draft: Dictionary = {}
+var dance_slot := -1
+var program_name := "My program"
+const MODE_PAGES := ["arcade","exhibition","creation","create","cast","showcase","dance","newcareer"]
 var focus_key := ""
 var cruise := false
 var push_pending := false
@@ -425,10 +435,13 @@ func show_page(page: String) -> void:
 				menu.add_child(button("Skip this step   /   earns no XP",func():link.send("skipStep")))
 			if frame.get("warmup") != null:
 				menu.add_child(button("Skip the warm-up   /   start the program",func():link.send("endWarmup");resume_game()))
-		menu.add_child(button("The Season   /   Career →",func():show_page("career"),true))
+		# game/modes.ts MODES: the career first, as the main game; then Arcade, Exhibition and Creation.
+		for m in catalog.get("modes",[{"id":"career","title":"The Season   /   Career","tagline":""}]):
+			var id := str(m.id)
+			var target := "career" if id == "career" else id
+			menu.add_child(button("%s   /   %s →" % [str(m.title),str(m.get("tagline",""))],func():show_page(target),id == "career"))
 		menu.add_child(button("Learn your controls   /   A course for each setup",func():show_page("learn")))
-		menu.add_child(button("The Composer   /   Author a program",func():show_page("composer")))
-		menu.add_child(button("Free Skate   /   Quiet ice",func():start_game("free")))
+		menu.add_child(button("The skaters   /   Where they come from",func():show_page("cast")))
 		menu.add_child(button("Pairs   /   Skate with a partner",func():start_game("pairs")))
 		menu.add_child(button("Pairs challenge   /   90 seconds",func():start_game("pairs",0,true)))
 		menu.add_child(button("Rookie course   /   Learn the line",func():start_game("rookie")))
@@ -441,6 +454,11 @@ func show_page(page: String) -> void:
 			menu.add_child(paragraph("Connecting to Ice Lab…"))
 		else:
 			menu.add_child(label("%d XP   ·   %d training weeks   ·   overall %.1f" % [int(frame.career.xp),int(frame.career.weeks),float(frame.career.overall)],16,Color("d5bd96")))
+			# game/creator.ts: whose career this is, and the way to begin another.
+			var me = frame.career.get("skater")
+			if me != null:
+				menu.add_child(label("%s   /   %s" % [str(me.name),origin_title(str(me.origin))],18))
+			menu.add_child(button("Create a skater for a new career →",func():sheet_slot=-1;link.send("sheet",{"options":{"action":"drop"}});show_page("create")))
 			# game/story.ts: each season's opening until a medal is won in it, then the coach's word on what is next.
 			var story: Dictionary = catalog.get("story",{})
 			var season_now := int(frame.career.get("seasonNumber",1))
@@ -482,6 +500,8 @@ func show_page(page: String) -> void:
 				menu.add_child(paragraph(str(tier.blurb),12))
 			var drill_tier := str(catalog.armFocus[int(frame.career.armFocus)].title)
 			menu.add_child(button("Drill %s   /   45 seconds" % drill_tier,func():start_game("armdrill")))
+			menu.add_child(HSeparator.new())
+			show_style_row()
 			menu.add_child(HSeparator.new())
 			menu.add_child(label("Training   /   %d weeks left" % int(frame.career.weeks),21))
 			menu.add_child(paragraph("Each costs a week. A jump family you don't drill between events goes rusty, and a rusty jump is harder to land. Drilling wins it back.",13))
@@ -631,7 +651,20 @@ func show_page(page: String) -> void:
 		var skate := button("Skate this program →",func():start_game("composer"),true)
 		skate.disabled = sequence.is_empty()
 		menu.add_child(skate)
+		# game/creator.ts: keep it on Creation's shelf, to watch the computer skate it or skate it in an exhibition.
+		var name_edit := LineEdit.new()
+		name_edit.text = program_name
+		name_edit.max_length = int(catalog.get("creator",{}).get("limits",{}).get("name",24))
+		name_edit.text_changed.connect(func(t: String):program_name=t)
+		menu.add_child(name_edit)
+		var keep := button("Keep it in Creation   /   %s" % ("a new slot" if first_empty("programs") >= 0 else "the shelf is full"),func():
+			link.send("studio",{"options":{"action":"program","slot":first_empty("programs"),"value":{"name":program_name,"elements":sequence}}}))
+		keep.disabled = sequence.is_empty() or first_empty("programs") < 0
+		menu.add_child(keep)
+		menu.add_child(button("← Creation",func():show_page("creation")))
 		menu.add_child(button("← Back",func():show_page("home")))
+	elif page in MODE_PAGES:
+		show_mode_page(page)
 	elif page == "music":
 		show_music_page()
 	elif page == "atelier":
@@ -787,6 +820,19 @@ func show_page(page: String) -> void:
 			menu.add_child(label("Time ran out on: "+str(frame.result.stopped.element),17))
 			menu.add_child(paragraph(str(frame.result.stopped.how),14))
 		menu.add_child(paragraph("Your lines remain on the ice. Take another run, or carry what you learned into the next program."))
+		# game/modes.ts: an arcade round, an exhibition and a showcase go back to their own pages.
+		var arcade = frame.get("arcade")
+		if active_mode == "arcade" and arcade != null:
+			if not bool(arcade.over):
+				menu.add_child(button("Round %d of %d   /   %s →" % [int(arcade.round)+1,arcade.rounds.size(),str(arcade.rounds[int(arcade.round)].rival)],func():start_game("arcade"),true))
+			menu.add_child(button("The arcade",func():show_page("arcade"),bool(arcade.over)))
+			menu.add_child(button("Return to the rink menu",func():show_page("home")))
+			return
+		if active_mode in ["exhibition","showcase"]:
+			menu.add_child(button("Again",func():start_mode_run(active_mode),true))
+			menu.add_child(button("← Creation" if active_mode == "showcase" else "← Exhibition",func():show_page("creation" if active_mode == "showcase" else "exhibition")))
+			menu.add_child(button("Return to the rink menu",func():show_page("home")))
+			return
 		if frame.result.get("lesson",false):
 			menu.add_child(button("More lessons →",func():show_page("learn"),true))
 		menu.add_child(button("Continue your career →",func():show_page("career"),not frame.result.get("lesson",false)))
@@ -1038,6 +1084,316 @@ func show_design_page() -> void:
 		skater.apply_skin(current_skin())
 		show_page("atelier")))
 
+# ---- Modes, created skaters and Creation (game/modes.ts, game/creator.ts, game/backstories.ts) ----
+
+func origin_title(id: String) -> String:
+	for o in catalog.get("creator",{}).get("origins",[]):
+		if str(o.id) == id: return str(o.origin)
+	return ""
+
+func first_empty(shelf: String) -> int:
+	if frame.is_empty() or not frame.has("studio"): return -1
+	var list: Array = frame.studio[shelf]
+	for i in list.size():
+		if list[i] == null: return i
+	return -1
+
+func stat_line(stats: Dictionary) -> String:
+	var titles: Dictionary = catalog.get("story",{}).get("statTitles",{})
+	var parts := PackedStringArray()
+	for n in ["strength","spring","edgeControl","balance","stamina"]:
+		parts.append("%s %d" % [str(titles.get(n,n)),int(stats[n])])
+	return "   ·   ".join(parts)
+
+func style_title(i: int) -> String:
+	var styles: Array = catalog.get("styles",[])
+	return str(styles[i].title) if i >= 0 and i < styles.size() else "No style"
+
+func dance_name(id: String) -> String:
+	for st in catalog.get("motion",{}).get("styles",[]):
+		if str(st.id) == id: return str(st.name)
+	return "None"
+
+func character_name(id: String) -> String:
+	for c in frame.get("characters",[]):
+		if str(c.id) == id: return str(c.name)
+	return "Your career skater"
+
+## Cycle one id through a list of ids, by `by`.
+func cycled(list: Array, now, by: int = 1):
+	var at := list.find(now)
+	return list[(at+by+list.size()) % list.size()] if not list.is_empty() else now
+
+## The skater on the ice wears whoever skates: a rival's model and costume, or a created skater's costume.
+func apply_who() -> void:
+	var who = frame.get("who")
+	if who == null or who.get("costume") == null: return
+	var c := str(who.costume)
+	if c.begins_with("rival:"):
+		for entry in catalog.get("story",{}).get("cast",[]):
+			if str(entry.name) == c.substr(6) and entry.get("look") != null:
+				var model = entry.look.get("model")
+				var path := "res://assets/generated/%s.glb" % model if model != null else ""
+				if not path.is_empty() and ResourceLoader.exists(path): skater.load_model(path)
+				skater.apply_skin(entry.look.costume)
+	elif c.begins_with("preset:"):
+		for k in catalog.skins:
+			if str(k.id) == c.substr(7): skater.apply_skin(k)
+	elif c.begins_with("design:"):
+		var slot := int(c.substr(7))
+		var skins: Array = frame.wardrobe.skins
+		if slot < skins.size() and skins[slot] != null: skater.apply_skin(skins[slot])
+
+## A created skater's costume choices: the presets, then the atelier's kept designs.
+func costume_ids() -> Array:
+	var ids: Array = []
+	for k in catalog.skins: ids.append("preset:"+str(k.id))
+	for i in frame.wardrobe.skins.size():
+		if frame.wardrobe.skins[i] != null: ids.append("design:%d" % i)
+	return ids
+
+func costume_title(id: String) -> String:
+	if id.begins_with("preset:"):
+		for k in catalog.skins:
+			if "preset:"+str(k.id) == id: return str(k.name)
+	elif id.begins_with("design:"):
+		var slot := int(id.substr(7))
+		var d = frame.wardrobe.designs[slot] if slot < frame.wardrobe.designs.size() else null
+		if d != null: return str(d.name)
+	return id
+
+func show_style_row() -> void:
+	menu.add_child(label("Your style",21))
+	var now := int(frame.career.get("style",-1))
+	var mastery: Array = frame.career.get("styleMastery",[])
+	menu.add_child(paragraph("How you skate: each style gives and costs (game/styles.ts). Choosing is free; a week of drills brings more of its benefit. A style you put down keeps what you drilled, but rusts.",13))
+	for i in range(-1,catalog.get("styles",[]).size()):
+		var chosen := i == now
+		var m := "" if i < 0 else "   /   drilled %d%%" % roundi(float(mastery[i] if i < mastery.size() else 0)*100)
+		menu.add_child(keyed(button("%s%s%s" % ["● " if chosen else "",style_title(i),m],func():link.send("careerStyle",{"options":{"style":i}}),chosen),"style-%d" % i))
+		if i >= 0: menu.add_child(paragraph(str(catalog.styles[i].blurb),12))
+	if now >= 0 and now < catalog.get("styles",[]).size():
+		var drill := button("Drill %s   /   1 week" % style_title(now),func():link.send("careerStyle",{"options":{"drill":true}}))
+		drill.disabled = int(frame.career.weeks) < 1 or float(mastery[now]) >= 1.0
+		menu.add_child(drill)
+
+## A run in a mode that has a skater, a program and a dance to pick.
+func start_mode_run(mode: String) -> void:
+	var extra := {"character":pick_character}
+	if pick_program >= 0 and frame.studio.programs[pick_program] != null:
+		extra.program = frame.studio.programs[pick_program].elements
+	elif mode == "showcase":
+		extra.program = sequence
+	if pick_dance >= 0 and frame.studio.dances[pick_dance] != null:
+		var d: Dictionary = frame.studio.dances[pick_dance]
+		extra.dance = {"style":d.style,"track":int(d.track),"seed":int(d.seed)}
+	start_game(mode,0,false,extra)
+
+## The three pickers Exhibition and the showcase share.
+func show_pickers(default_program: String) -> void:
+	var ids: Array = []
+	for c in frame.get("characters",[]): ids.append(str(c.id))
+	menu.add_child(button("Skater: %s" % character_name(pick_character),func():pick_character=cycled(ids,pick_character);show_page(current_page)))
+	var programs: Array = [-1]
+	for i in frame.studio.programs.size():
+		if frame.studio.programs[i] != null: programs.append(i)
+	var ptitle: String = default_program if pick_program < 0 or frame.studio.programs[pick_program] == null else str(frame.studio.programs[pick_program].name)
+	menu.add_child(button("Program: %s" % ptitle,func():pick_program=cycled(programs,pick_program);show_page(current_page)))
+	var dances: Array = [-1]
+	for i in frame.studio.dances.size():
+		if frame.studio.dances[i] != null: dances.append(i)
+	var dtitle: String = "The skater's own" if pick_dance < 0 or frame.studio.dances[pick_dance] == null else str(frame.studio.dances[pick_dance].name)
+	menu.add_child(button("Dance: %s" % dtitle,func():pick_dance=cycled(dances,pick_dance);show_page(current_page)))
+
+func show_mode_page(page: String) -> void:
+	if catalog.is_empty() or frame.is_empty() or not frame.has("studio"):
+		clear_menu("One moment","Connecting to Ice Lab…")
+		menu.add_child(button("← Back",func():show_page("home")))
+		return
+	var creator: Dictionary = catalog.creator
+	if page == "arcade":
+		clear_menu("Arcade","Six programs from the career, a rival to beat at each, three lives. Beat their score with the program skated to the end. No XP, no wear: just the ladder.")
+		var a = frame.get("arcade")
+		if a != null and not bool(a.over):
+			menu.add_child(label("%s   /   round %d of %d   /   %d lives   /   %d points" % [character_name(str(a.character)),int(a.round)+1,a.rounds.size(),int(a.lives),int(a.points)],16,Color("d5bd96")))
+			menu.add_child(button("Continue: %s →" % str(a.rounds[int(a.round)].rival),func():start_game("arcade"),true))
+		menu.add_child(label("Pick your skater",21))
+		for c in frame.characters:
+			var id := str(c.id)
+			menu.add_child(button("%s   /   %s" % [str(c.name),str(c.origin)],func():start_game("arcade",0,false,{"character":id}),id == "career" and (a == null or bool(a.over))))
+		menu.add_child(HSeparator.new())
+		menu.add_child(label("The ladder",21))
+		for r in catalog.arcade.ladder:
+			menu.add_child(paragraph("%s   /   %s   /   beat %.2f" % [str(r.title),str(r.rival),float(r.target)],13))
+		menu.add_child(label("High scores",21))
+		if frame.board.is_empty(): menu.add_child(paragraph("Nobody yet.",13))
+		for i in frame.board.size():
+			var e: Dictionary = frame.board[i]
+			menu.add_child(paragraph("%d.   %s   /   %d points   /   %s" % [i+1,str(e.name),int(e.points),"the whole ladder" if bool(e.cleared) else "%d rounds" % int(e.rounds)],14))
+	elif page == "exhibition":
+		clear_menu("Exhibition & Free skate","A gala under the lights: no required elements, a crowd that stayed, a protocol nobody counts. Or quiet ice with nothing on it but you.")
+		menu.add_child(button("Free skate   /   Quiet ice",func():start_game("free"),true))
+		menu.add_child(HSeparator.new())
+		menu.add_child(label("Exhibition",21))
+		show_pickers("The gala's own")
+		menu.add_child(button("Take the spotlight →",func():start_mode_run("exhibition")))
+	elif page == "creation":
+		clear_menu("Creation","Make skaters, costumes, programs and dance sequences. Then watch the computer skate them, through the same pad and physics you skate with.")
+		menu.add_child(button("Watch it skated   /   the showcase →",func():show_page("showcase"),true))
+		menu.add_child(label("Skaters",21))
+		for i in frame.studio.skaters.size():
+			var k = frame.studio.skaters[i]
+			if k == null: continue
+			menu.add_child(button("%s   /   %s   /   edit" % [str(k.name),origin_title(str(k.origin))],func():sheet_slot=i;link.send("sheet",{"options":{"action":"load","slot":i}})))
+		var add_skater := button("+ Create a skater",func():sheet_slot=-1;link.send("sheet",{"options":{"action":"drop"}});show_page("create"))
+		add_skater.disabled = first_empty("skaters") < 0
+		menu.add_child(add_skater)
+		menu.add_child(label("Costumes",21))
+		menu.add_child(button("Atelier   /   make your own costume →",func():show_page("atelier")))
+		menu.add_child(label("Programs",21))
+		for i in frame.studio.programs.size():
+			var pr = frame.studio.programs[i]
+			if pr == null: continue
+			var row := HBoxContainer.new()
+			var l := label("%s   /   %s" % [str(pr.name),routine_names(pr.elements)],14)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			row.add_child(l)
+			row.add_child(button("Edit",func():sequence=pr.elements.duplicate();program_name=str(pr.name);show_page("composer")))
+			row.add_child(button("×",func():link.send("studio",{"options":{"action":"clear","shelf":"programs","slot":i}})))
+			menu.add_child(row)
+		menu.add_child(button("+ Compose a program →",func():show_page("composer")))
+		menu.add_child(label("Dance sequences",21))
+		for i in frame.studio.dances.size():
+			var d = frame.studio.dances[i]
+			if d == null: continue
+			menu.add_child(button("%s   /   %s   /   %s   /   edit" % [str(d.name),dance_name(str(d.style)),str(catalog.tracks[int(d.track)].title)],func():dance_slot=i;dance_draft=d.duplicate();show_page("dance")))
+		var add_dance := button("+ A dance sequence",func():
+			dance_slot=-1
+			var first: Array = catalog.get("motion",{}).get("styles",[])
+			dance_draft={"name":"My dance","style":str(first[0].id) if not first.is_empty() else "","track":track,"seed":1}
+			show_page("dance"))
+		add_dance.disabled = first_empty("dances") < 0
+		menu.add_child(add_dance)
+	elif page == "dance":
+		clear_menu("A dance sequence","A dance style laid over a track's bars: the arms and upper body it dances while hers are free. Roll it again for another arrangement of the same style.")
+		var styles: Array = catalog.get("motion",{}).get("styles",[])
+		var ids: Array = []
+		for st in styles: ids.append(str(st.id))
+		var name_edit := LineEdit.new()
+		name_edit.text = str(dance_draft.get("name","My dance"))
+		name_edit.text_changed.connect(func(t: String):dance_draft.name=t)
+		menu.add_child(name_edit)
+		menu.add_child(button("Style: %s" % dance_name(str(dance_draft.style)),func():dance_draft.style=cycled(ids,str(dance_draft.style));show_page("dance")))
+		for st in styles:
+			if str(st.id) == str(dance_draft.style):
+				menu.add_child(paragraph("%s  ·  %d–%d bpm  ·  %s" % [str(st.blurb),int(st.tempo.min),int(st.tempo.max),str(st.music)],12))
+		var tracks_n: int = catalog.tracks.size()
+		menu.add_child(button("Music: %s" % str(catalog.tracks[int(dance_draft.track)].title),func():dance_draft.track=(int(dance_draft.track)+1)%tracks_n;show_page("dance")))
+		menu.add_child(button("Arrangement %d   /   roll again" % int(dance_draft.seed),func():dance_draft.seed=int(dance_draft.seed)%999+1;show_page("dance")))
+		var slot := dance_slot if dance_slot >= 0 else first_empty("dances")
+		var keep := button("Keep it",func():link.send("studio",{"options":{"action":"dance","slot":slot,"value":dance_draft}}),true)
+		keep.disabled = slot < 0
+		menu.add_child(keep)
+		if dance_slot >= 0:
+			menu.add_child(button("Take it off the shelf",func():link.send("studio",{"options":{"action":"clear","shelf":"dances","slot":dance_slot}});dance_slot=-1))
+		menu.add_child(button("← Creation",func():show_page("creation")))
+		return
+	elif page == "showcase":
+		clear_menu("The showcase","The computer skates your program, through Simulation's pad and the same physics you skate with. It falls when the physics says so. It can skate glides, edges, crossovers, jumps, spins and poses; anything else in the program it leaves out and tells you.")
+		show_pickers("The Composer's (%s)" % routine_names(sequence))
+		menu.add_child(button("Watch →",func():start_mode_run("showcase"),true))
+		menu.add_child(button("← Creation",func():show_page("creation")))
+		return
+	elif page == "cast":
+		clear_menu("The skaters","Where everyone in the field comes from, and what it made of them. A rival's stats are who they are when you pick them in Arcade, Exhibition or a showcase. Their scores in your career are measured, not these.")
+		for name in catalog.get("backstories",{}):
+			var b: Dictionary = catalog.backstories[name]
+			menu.add_child(label("%s   /   %s" % [str(name),str(b.origin)],19))
+			menu.add_child(paragraph(str(b.story),14))
+			menu.add_child(paragraph("%s   %s   ·   Dance: %s" % [str(b.shaped),"Style: "+str(b.style).capitalize() if b.style != null else "",dance_name(str(b.dance))],13))
+			menu.add_child(paragraph(stat_line(b.stats),12))
+	elif page == "create":
+		var sh = frame.get("sheet")
+		if sh == null:
+			clear_menu("Create a skater","Where do they come from? An origin shapes the five stats (it trades points, never adds them), a style and a dance. Everything after that, the season gives.")
+			for o in creator.origins:
+				var id := str(o.id)
+				menu.add_child(button(str(o.origin),func():link.send("sheet",{"options":{"action":"new","origin":id}})))
+				menu.add_child(paragraph(str(o.shaped),12))
+			menu.add_child(button("← Back",func():show_page("creation")))
+			return
+		clear_menu(str(sh.name),"%s. Overall %.2f, the same ask as every new skater." % [str(sh.originTitle),float(sh.overall)])
+		var name_edit := LineEdit.new()
+		name_edit.text = str(sh.name)
+		name_edit.max_length = int(creator.limits.name)
+		name_edit.text_submitted.connect(func(t: String):link.send("sheet",{"options":{"action":"set","field":"name","value":t}}))
+		var sheet_name := str(sh.name)
+		name_edit.focus_exited.connect(func():
+			if name_edit.text != sheet_name:
+				link.send("sheet",{"options":{"action":"set","field":"name","value":name_edit.text}}))
+		menu.add_child(name_edit)
+		menu.add_child(paragraph(str(sh.story),14))
+		menu.add_child(paragraph("Mara: "+str(sh.coach),13))
+		var origin_ids: Array = []
+		for o in creator.origins: origin_ids.append(str(o.id))
+		menu.add_child(button("Origin: %s   /   change" % str(sh.originTitle),func():link.send("sheet",{"options":{"action":"new","origin":cycled(origin_ids,str(sh.origin))}})))
+		menu.add_child(label("Stats",21))
+		var titles: Dictionary = catalog.story.statTitles
+		menu.add_child(button("Points come from: %s" % str(titles[sheet_from]),func():sheet_from=cycled(["strength","spring","edgeControl","balance","stamina"],sheet_from);show_page("create")))
+		for n in ["strength","spring","edgeControl","balance","stamina"]:
+			var row := HBoxContainer.new()
+			var l := label("%s   %d" % [str(titles[n]),int(sh.stats[n])],16)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(l)
+			if n != sheet_from:
+				var why := str(sh.blocks.get("%s>%s" % [sheet_from,n],""))
+				var plus := button("+1 from %s" % str(titles[sheet_from]),func():link.send("sheet",{"options":{"action":"trade","from":sheet_from,"to":n}}))
+				plus.disabled = not why.is_empty()
+				plus.tooltip_text = why
+				row.add_child(plus)
+			menu.add_child(row)
+		menu.add_child(paragraph(str(sh.shaped),12))
+		menu.add_child(label("Body",21))
+		var h_label := label("Height %.2f m" % float(sh.heightM),15)
+		menu.add_child(h_label)
+		var h := HSlider.new()
+		h.min_value = float(creator.height.min); h.max_value = float(creator.height.max); h.step = float(creator.height.step); h.value = float(sh.heightM)
+		h.value_changed.connect(func(v: float):h_label.text = "Height %.2f m" % v)
+		h.drag_ended.connect(func(_changed: bool):link.send("sheet",{"options":{"action":"set","field":"heightM","value":h.value}}))
+		menu.add_child(h)
+		var builds: Array = []
+		for b in creator.builds: builds.append(str(b.id))
+		for b in creator.builds:
+			if str(b.id) == str(sh.build):
+				menu.add_child(button("Build: %s   /   %s" % [str(b.name),str(b.blurb)],func():link.send("sheet",{"options":{"action":"set","field":"build","value":cycled(builds,str(sh.build))}})))
+		menu.add_child(label("Look and style",21))
+		var style_ids: Array = range(-1,catalog.styles.size())
+		menu.add_child(button("Skating style: %s" % style_title(int(sh.style)),func():link.send("sheet",{"options":{"action":"set","field":"style","value":cycled(style_ids,int(sh.style))}})))
+		var dance_ids: Array = [""]
+		for st in catalog.get("motion",{}).get("styles",[]): dance_ids.append(str(st.id))
+		menu.add_child(button("Dance: %s" % dance_name(str(sh.dance)),func():link.send("sheet",{"options":{"action":"set","field":"dance","value":cycled(dance_ids,str(sh.dance))}})))
+		menu.add_child(button("Costume: %s" % costume_title(str(sh.costume)),func():link.send("sheet",{"options":{"action":"set","field":"costume","value":cycled(costume_ids(),str(sh.costume))}})))
+		menu.add_child(HSeparator.new())
+		var slot := sheet_slot if sheet_slot >= 0 else first_empty("skaters")
+		var keep := button("Keep %s" % str(sh.name),func():sheet_slot=slot;link.send("sheet",{"options":{"action":"save","slot":slot}}),true)
+		keep.disabled = slot < 0
+		menu.add_child(keep)
+		if sheet_slot >= 0:
+			menu.add_child(button("Begin a new career as %s →" % str(sh.name),func():show_page("newcareer")))
+		menu.add_child(button("← Creation",func():show_page("creation")))
+		return
+	elif page == "newcareer":
+		var k = frame.studio.skaters[sheet_slot] if sheet_slot >= 0 else null
+		if k == null:
+			show_page("create")
+			return
+		clear_menu("A new career","%s starts at the community rink with a new coach's notebook: medals, XP, weeks and wear all begin again. Your current career is not lost: it is kept beside the save in a dated file." % str(k.name))
+		menu.add_child(button("Begin as %s →" % str(k.name),func():link.send("newCareer",{"slot":sheet_slot}),true))
+		menu.add_child(button("← Not yet",func():show_page("create")))
+		return
+	menu.add_child(button("← Back",func():show_page("home")))
+
 func routine_names(ids: Array) -> String:
 	var names := PackedStringArray()
 	for id in ids:
@@ -1055,7 +1411,7 @@ func start_lesson(course: String, setup: String) -> void:
 	lesson_course = course
 	start_game("lesson")
 
-func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
+func start_game(mode: String, index: int = 0, challenge: bool = false, extra: Dictionary = {}) -> void:
 	focus_key = ""
 	if not link.operational:
 		on_error("The skating engine is still starting.")
@@ -1066,11 +1422,17 @@ func start_game(mode: String, index: int = 0, challenge: bool = false) -> void:
 	podium.clear()
 	skater.visible = true
 	skater.load_model(CHARACTERS[character].path)
+	skater.apply_skin(current_skin())
 	partner.visible = false
 	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile,"steady":steady_choice if not steady_choice.is_empty() else null,"danceStyle":dance_style if not dance_style.is_empty() else null}})
 	# A career program opens with its warm-up group (game/warmup.ts); the tests skate straight in.
 	var warm := mode == "career" and not boot_test and (not screenshot_test or "--capture-warmup" in OS.get_cmdline_user_args())
-	link.send("start",{"options":{"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null,"warmup":warm}})
+	var options := {"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null,"warmup":warm}
+	options.merge(extra,true)
+	if mode == "arcade" and extra.has("character"):
+		link.send("arcade",{"character":extra.character})
+	else:
+		link.send("start",{"options":options})
 
 func on_engine(op: String, data: Dictionary) -> void:
 	if op == "hello":
@@ -1126,13 +1488,29 @@ func on_engine(op: String, data: Dictionary) -> void:
 		return
 	if op == "configure":
 		return
-	if op == "start" or op == "replay" or op == "endWarmup":
+	# game/creator.ts and game/modes.ts menus: back to the page that asked.
+	if op == "sheet":
+		show_page("create")
+		return
+	if op == "studio":
+		notice.text = "Kept."
+		show_page(current_page if current_page in MODE_PAGES or current_page == "composer" else "creation")
+		return
+	if op == "careerStyle":
+		show_page("career")
+		return
+	if op == "newCareer":
+		notice.text = "A new career begins. Your last one is kept beside the save, dated."
+		show_page("career")
+		return
+	if op == "start" or op == "replay" or op == "endWarmup" or op == "arcade":
 		push_pending = false
 		toe_pending = false
 		trick_pending = false
 		tick_debt = 0.0
 		arena.clear_traces()
 		arena.set_course(str(frame.mode),catalog)
+		apply_who()
 		skater.apply_frame(frame,true)
 		apply_partner(true)
 		apply_warmup(true)

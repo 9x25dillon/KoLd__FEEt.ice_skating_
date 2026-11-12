@@ -99,6 +99,15 @@ namespace
 
 	int32 Wrap(int32 V, int32 N) { return N <= 0 ? 0 : ((V % N) + N) % N; }
 
+	/** Each mode's colour (IceRunModes.cpp has the same): career champagne, arcade coral, exhibition spotlight violet, creation teal. */
+	FLinearColor ModeAccent(const FString& Mode)
+	{
+		if (Mode == TEXT("arcade")) return FLinearColor::FromSRGBColor(FColor(0xf0, 0x74, 0x62));
+		if (Mode == TEXT("exhibition")) return FLinearColor::FromSRGBColor(FColor(0xae, 0x96, 0xf0));
+		if (Mode == TEXT("creation")) return FLinearColor::FromSRGBColor(FColor(0x66, 0xd0, 0xc4));
+		return FLinearColor::FromSRGBColor(FColor(0xdb, 0xc2, 0x94));
+	}
+
 	/** The skater models tools/build_content.py imports, in main.gd's CHARACTERS order. */
 	struct FCharacter { const TCHAR* Key; const TCHAR* Name; };
 	const FCharacter Characters[] = {
@@ -231,6 +240,15 @@ void AIceRunGameMode::BuildPage(const FString& Id, FMenuPage& P)
 	else if (Id == TEXT("result")) BuildResult(P);
 	else if (Id == TEXT("music")) BuildMusic(P);
 	else if (Id == TEXT("controller")) BuildController(P);
+	else if (Id == TEXT("arcade")) BuildArcade(P);
+	else if (Id == TEXT("exhibition")) BuildExhibition(P);
+	else if (Id == TEXT("creation")) BuildCreation(P);
+	else if (Id == TEXT("create")) BuildCreate(P);
+	else if (Id == TEXT("cast")) BuildCast(P);
+	else if (Id == TEXT("showcase")) BuildShowcase(P);
+	else if (Id == TEXT("dance")) BuildDance(P);
+	else if (Id == TEXT("newcareer")) BuildNewCareer(P);
+	else if (Id == TEXT("careerstyle")) BuildCareerStyle(P);
 	else BuildHome(P);
 	if (!PageNotice.IsEmpty())
 	{
@@ -409,20 +427,35 @@ void AIceRunGameMode::BuildHome(FMenuPage& P)
 	const TSharedPtr<FJsonObject> Career = CareerObject();
 	const int32 Unlocked = int32(Num(Career, TEXT("unlocked")));
 	const TSharedPtr<FJsonObject> Next = At(CatalogList(TEXT("events")), Unlocked);
-	P.Items.Add(Line(TEXT("The Season"), Str(Next, TEXT("title")), Num(Career, TEXT("seasonNumber")) >= 2 ? TEXT("The Nationals season: sectionals, two internationals, Nationals at the Coliseum and its gala.") : TEXT("Your first season: five events, a coach, and the skaters you'll be measured against. Train between them."), [this] { PushPage(TEXT("season")); }));
-	P.Items.Add(Line(TEXT("Lessons"), TEXT(""), TEXT("Trust the ice, the tutorial: balance, edges, getting where you mean to go, stops, the air. And a course for each setup's pad."), [this] { PushPage(TEXT("lessons")); }));
-	P.Items.Add(Line(TEXT("The Composer"), FString::Printf(TEXT("%d phrases"), Sequence.Num()), TEXT("Build your own program, phrase by phrase, and skate it."), [this] { PushPage(TEXT("composer")); }));
-	P.Items.Add(Line(RunLive() && Latest.Mode == TEXT("free") ? TEXT("Skate freely") : TEXT("Free skate"), TEXT(""), TEXT("Quiet ice. No judges, no clock; the practice list follows along."), [this]
+	// game/modes.ts MODES: the career first, as the main game; each mode in its own colour.
+	P.Items.Add(Header(TEXT("Play")));
+	FMenuItem Season = Line(TEXT("The Season   ·   Career"), Str(Next, TEXT("title")), Num(Career, TEXT("seasonNumber")) >= 2 ? TEXT("The main game. The Nationals season: sectionals, two internationals, Nationals at the Coliseum and its gala.") : TEXT("The main game. Your first season: five events, a coach, and the skaters you'll be measured against. Train between them."), [this] { PushPage(TEXT("season")); });
+	Season.Chip = ModeAccent(TEXT("career"));
+	P.Items.Add(Season);
+	for (const TSharedPtr<FJsonValue>& V : CatalogList(TEXT("modes")))
 	{
-		if (RunLive() && Latest.Mode == TEXT("free")) CloseMenu();
-		else StartMode(TEXT("free"));
-	}));
+		const TSharedPtr<FJsonObject> M = V->AsObject();
+		const FString Id = Str(M, TEXT("id"));
+		if (Id == TEXT("career")) continue;
+		FMenuItem Item = Line(Str(M, TEXT("title")), Str(M, TEXT("tagline")), Str(M, TEXT("blurb")), [this, Id] { PushPage(Id); });
+		Item.Chip = ModeAccent(Id);
+		P.Items.Add(Item);
+	}
+	P.Items.Add(Line(TEXT("The skaters"), TEXT("their stories"), TEXT("Where everyone in the field comes from, and what it made of them."), [this] { PushPage(TEXT("cast")); }));
+	P.Items.Add(Header(TEXT("More ice")));
+	P.Items.Add(Line(TEXT("Lessons"), TEXT(""), TEXT("Trust the ice, the tutorial: balance, edges, getting where you mean to go, stops, the air. And a course for each setup's pad."), [this] { PushPage(TEXT("lessons")); }));
+	P.Items.Add(Line(TEXT("The Composer"), FString::Printf(TEXT("%d phrases"), Sequence.Num()), TEXT("Build your own program, phrase by phrase, and skate it. Keep it in Creation to watch the computer skate it."), [this] { PushPage(TEXT("composer")); }));
+	if (RunLive() && Latest.Mode == TEXT("free"))
+	{
+		P.Items.Add(Line(TEXT("Skate freely"), TEXT(""), TEXT("Quiet ice. No judges, no clock; the practice list follows along."), [this] { CloseMenu(); }));
+	}
 	P.Items.Add(Line(TEXT("Pairs"), TEXT("with a partner"), TEXT("Skate with a partner the sim skates too: matching edges, hand in hand, a side-by-side spin, a supported lift, a final line together."),
 		[this] { bPairsChallenge = false; StartMode(TEXT("pairs")); }));
 	P.Items.Add(Line(TEXT("Pairs challenge"), TEXT("90 s"), TEXT("The pairs phrases against the clock."), [this] { bPairsChallenge = true; StartMode(TEXT("pairs")); }));
 	P.Items.Add(Line(TEXT("Rookie gates"), TEXT(""), TEXT("A curved lane of eight gates and two foam bars to jump."), [this] { StartMode(TEXT("rookie")); }));
 	P.Items.Add(Line(TEXT("Light course"), TEXT("90 s"), TEXT("Carve from light to light against the clock."), [this] { StartMode(TEXT("timed")); }));
 	const TArray<TSharedPtr<FJsonObject>> Worn = Costumes();
+	P.Items.Add(Header(TEXT("You")));
 	P.Items.Add(Line(TEXT("Wardrobe"), Worn.IsValidIndex(CostumeIndex) ? Str(Worn[CostumeIndex], TEXT("name")) : FString(), TEXT("Your skater, your costume, and an atelier for three of your own."), [this] { PushPage(TEXT("wardrobe")); }));
 	P.Items.Add(Line(TEXT("Settings"), TEXT(""), TEXT("Setup, steadying hand, assistance, skater level, camera, display."), [this] { PushPage(TEXT("settings")); }));
 	P.Items.Add(Line(TEXT("Quit"), TEXT(""), TEXT("The career saves as you skate."), [this]
@@ -493,7 +526,20 @@ void AIceRunGameMode::BuildSeason(FMenuPage& P)
 	P.Items.Add(Header(TEXT("Between events")));
 	P.Items.Add(Line(TEXT("Training"), FString::Printf(TEXT("%d weeks"), Weeks), TEXT("Raise your stats with XP, drill the jumps that have gone rusty, rest what the falls have worn. Each costs a week; a better medal buys two."), [this] { PushPage(TEXT("training")); }));
 	const TSharedPtr<FJsonObject> Focus = At(CatalogList(TEXT("armFocus")), int32(Num(Career, TEXT("armFocus"))));
-	P.Items.Add(Line(TEXT("Skating style"), Str(Focus, TEXT("title")), TEXT("What your arms do most in competition: Function, Shared or Expression. Drills shrink the trade-off for the style you drill."), [this] { PushPage(TEXT("style")); }));
+	P.Items.Add(Line(TEXT("Arm focus"), Str(Focus, TEXT("title")), TEXT("What your arms do most in competition: Function, Shared or Expression. Drills shrink the trade-off for the style you drill."), [this] { PushPage(TEXT("style")); }));
+	{
+		const int32 StyleNow = int32(Num(Career, TEXT("style"), -1));
+		const TSharedPtr<FJsonObject> St = At(CatalogList(TEXT("styles")), StyleNow);
+		P.Items.Add(Line(TEXT("Skating style"), St.IsValid() ? Str(St, TEXT("title")) : TEXT("none"), TEXT("Power, Finesse, Technician or Endurance (game/styles.ts): each gives and costs. A week of drills brings more of its benefit."), [this] { PushPage(TEXT("careerstyle")); }));
+	}
+	P.Items.Add(Line(TEXT("Create a skater for a new career →"), TEXT(""), TEXT("An origin, a body, a style, a costume. Your current career is kept in a dated file, never lost."), [this]
+	{
+		SheetSlot = -1;
+		TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("action"), TEXT("drop"));
+		SheetOp(O);
+		PushPage(TEXT("create"));
+	}));
 	P.Items.Add(Line(TEXT("Lessons"), FString::Printf(TEXT("+%d XP a step"), int32(Num(Catalog, TEXT("lessonXp")))), TEXT("Each new lesson step you pass pays XP toward training."), [this] { PushPage(TEXT("lessons")); }));
 	P.RowsTitle = FString::Printf(TEXT("Season %d standings"), SeasonNow);
 	for (const TSharedPtr<FJsonValue>& V : Arr(Career, TEXT("season")))
@@ -1029,6 +1075,30 @@ void AIceRunGameMode::BuildResult(FMenuPage& P)
 	else if (Mode == TEXT("lesson"))
 	{
 		P.Items.Add(Line(TEXT("More lessons →"), TEXT(""), TEXT("Another course, or the tutorial again."), [this] { OpenMenu(TEXT("lessons")); }));
+	}
+	else if (Mode == TEXT("arcade"))
+	{
+		// game/modes.ts: the next round, or this one again while lives last; the board when it's over.
+		P.Kicker = TEXT("ARCADE");
+		P.Accent = ModeAccent(TEXT("arcade"));
+		const TSharedPtr<FJsonObject> A = Obj(Latest.Raw, TEXT("arcade"));
+		bool bOver = true;
+		if (A.IsValid()) A->TryGetBoolField(TEXT("over"), bOver);
+		if (!bOver)
+		{
+			const TSharedPtr<FJsonObject> R2 = At(Arr(A, TEXT("rounds")), int32(Num(A, TEXT("round"))));
+			P.Items.Add(Line(FString::Printf(TEXT("Round %d   ·   %s →"), int32(Num(A, TEXT("round"))) + 1, *Str(R2, TEXT("rival"))), FString::Printf(TEXT("beat %.2f"), Num(R2, TEXT("target"))), Str(R2, TEXT("title")), [this] { RunMode = TEXT("arcade"); RunExtra.Reset(); StartRun(); CloseMenu(); }));
+		}
+		P.Items.Add(Line(TEXT("The arcade"), TEXT(""), TEXT("The ladder and the high scores."), [this] { OpenMenu(TEXT("arcade")); }));
+		P.Items.Add(Line(TEXT("Home"), TEXT(""), TEXT(""), [this] { OpenMenu(TEXT("home")); }));
+		return;
+	}
+	else if (Mode == TEXT("exhibition") || Mode == TEXT("showcase"))
+	{
+		const bool bShow = Mode == TEXT("showcase");
+		P.Kicker = bShow ? TEXT("CREATION  ·  SHOWCASE") : TEXT("EXHIBITION");
+		P.Accent = ModeAccent(bShow ? TEXT("creation") : TEXT("exhibition"));
+		P.Items.Add(Line(bShow ? TEXT("Back to Creation →") : TEXT("Back to Exhibition →"), TEXT(""), TEXT("Pick another skater, program or dance."), [this, bShow] { OpenMenu(bShow ? TEXT("creation") : TEXT("exhibition")); }));
 	}
 	P.Items.Add(Line(TEXT("Skate it again"), TEXT(""), TEXT("From the first push."), [this] { StartRun(); CloseMenu(); }));
 	P.Items.Add(Line(TEXT("Watch the replay"), TEXT(""), TEXT("The run again, played back from its own inputs through the same solver."), [this]

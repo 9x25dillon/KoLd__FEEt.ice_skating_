@@ -125,9 +125,26 @@ void AIceRunHUD::DrawPage(const AIceRunGameMode* Mode, float U)
 	const float LeftX = W * .035f, LeftW = W * .36f, RightX = W * .62f, RightW = W * .345f;
 	Panel(0.f, 0.f, LeftX + LeftW + 24.f * U, H, FLinearColor(.01f, .02f, .04f, .72f));
 	Panel(RightX - 24.f * U, 0.f, W - RightX + 24.f * U, H, FLinearColor(.01f, .02f, .04f, .55f));
+	// The page's mode colour (game/modes.ts): an edge down the list, a rule under the title, the focus and the headings.
+	const FLinearColor Tint = Page.Accent.A > 0.f ? FLinearColor(Page.Accent.R, Page.Accent.G, Page.Accent.B, 1.f) : Champagne;
+	if (Page.Accent.A > 0.f)
+	{
+		Panel(0.f, 0.f, 5.f * U, H, FLinearColor(Tint.R, Tint.G, Tint.B, .9f));
+		Panel(RightX - 24.f * U, 0.f, 2.f * U, H, FLinearColor(Tint.R, Tint.G, Tint.B, .35f));
+	}
 	float Y = H * .07f;
+	if (!Page.Kicker.IsEmpty())
+	{
+		// Small capitals, spaced, over the title.
+		FString Spaced;
+		for (const TCHAR C : Page.Kicker) { Spaced.AppendChar(C); Spaced.AppendChar(TEXT(' ')); }
+		Line(Spaced.TrimEnd(), LeftX, Y, Tint, .72f * U, Medium);
+		Y += 2.f * U;
+	}
 	Line(Page.Title, LeftX, Y, Ink, 1.7f * U, Large);
-	Paragraph(Page.Subtitle, LeftX, Y, LeftW, Champagne, .95f * U, Medium);
+	Panel(LeftX, Y + 2.f * U, 64.f * U, 2.f * U, Tint);
+	Y += 10.f * U;
+	Paragraph(Page.Subtitle, LeftX, Y, LeftW, Tint, .95f * U, Medium);
 	Y += 14.f * U;
 	// The list scrolls to keep the focus in view.
 	const float RowH = 31.f * U;
@@ -142,13 +159,15 @@ void AIceRunHUD::DrawPage(const AIceRunGameMode* Mode, float U)
 		if (Item.bHeader)
 		{
 			float HY = RY + 8.f * U;
-			Line(Item.Label.ToUpper(), LeftX, HY, Champagne, .8f * U, Medium);
+			Line(Item.Label.ToUpper(), LeftX, HY, Tint, .8f * U, Medium);
+			Panel(LeftX, RY + RowH - 6.f * U, LeftW, 1.f * U, FLinearColor(Tint.R, Tint.G, Tint.B, .25f));
 			continue;
 		}
 		const bool bAt = I == Focus;
 		if (bAt)
 		{
-			Panel(LeftX - 12.f * U, RY - 3.f * U, LeftW + 24.f * U, RowH - 2.f * U, FLinearColor(.86f, .76f, .58f, .22f));
+			Panel(LeftX - 12.f * U, RY - 3.f * U, LeftW + 24.f * U, RowH - 2.f * U, FLinearColor(Tint.R, Tint.G, Tint.B, .22f));
+			Panel(LeftX - 12.f * U, RY - 3.f * U, 3.f * U, RowH - 2.f * U, Tint);
 		}
 		float X = LeftX;
 		if (Item.Chip.A > 0.f)
@@ -159,6 +178,14 @@ void AIceRunHUD::DrawPage(const AIceRunGameMode* Mode, float U)
 		const FLinearColor Colour = !Item.bEnabled ? FLinearColor(.5f, .55f, .6f, 1.f) : bAt ? Ink : Soft;
 		float LY = RY;
 		Line(Item.Label, X, LY, Colour, 1.02f * U, Medium);
+		if (Item.Meter >= 0.f)
+		{
+			// A stat bar across the middle of the row: 50 is the reference skater, marked.
+			const float BX = LeftX + LeftW * .42f, BW = LeftW * .42f, BY = RY + RowH * .42f;
+			Panel(BX, BY, BW, 5.f * U, FLinearColor(.19f, .26f, .31f, .9f));
+			Panel(BX, BY, BW * FMath::Clamp(Item.Meter, 0.f, 1.f), 5.f * U, FLinearColor(Tint.R, Tint.G, Tint.B, bAt ? 1.f : .8f));
+			Panel(BX + BW * .5f - .5f * U, BY - 3.f * U, 1.f * U, 11.f * U, FLinearColor(1.f, 1.f, 1.f, .45f));
+		}
 		if (!Item.Value.IsEmpty())
 		{
 			float VW = 0.f, VH = 0.f;
@@ -206,7 +233,7 @@ void AIceRunHUD::DrawPage(const AIceRunGameMode* Mode, float U)
 	if (!Page.RowsTitle.IsEmpty() && Page.Rows.Num() > 0)
 	{
 		SY += 14.f * U;
-		Line(Page.RowsTitle.ToUpper(), RightX, SY, Champagne, .8f * U, Medium);
+		Line(Page.RowsTitle.ToUpper(), RightX, SY, Tint, .8f * U, Medium);
 		for (const AIceRunGameMode::FMenuRow& Row : Page.Rows)
 		{
 			if (SY > H - 60.f * U)

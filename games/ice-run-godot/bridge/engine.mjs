@@ -40,6 +40,11 @@ import {ComboTracker} from '../runtime/sim/combo.js';
 import {Playground,SNOWFLAKES,TARGETS} from '../runtime/game/playground.js';
 import {resolveRinkCollision,RINK} from '../runtime/game/rink.js';
 import {PairsSession,PAIRS_PHRASES} from '../runtime/game/pairs.js';
+import {STYLES,styleParams} from '../runtime/game/styles.js';
+import {RIVAL_BACKSTORIES,ORIGINS,originById,leanOf} from '../runtime/game/backstories.js';
+import {Studio,sheetFrom,tradePoint,tradeBlock,parseSheet,sheetOverall,creatorCatalog} from '../runtime/game/creator.js';
+import {MODES,ArcadeRun,ArcadeBoard,arcadeRounds,ARCADE_LIVES,rivalCharacter,createdCharacter,characterParams,exhibitionEvent} from '../runtime/game/modes.js';
+import {ProgramPilot,showcaseProgram,PILOT_ELEMENTS} from '../runtime/game/pilot.js';
 import {readFileSync} from 'node:fs';
 
 const tables=loadTables(readFileSync(new URL('../runtime/data/scale-of-values.csv',import.meta.url),'utf8'),readFileSync(new URL('../runtime/data/calls-and-deductions.csv',import.meta.url),'utf8'));
@@ -49,10 +54,13 @@ const segmentRules=loadSegmentRules(readFileSync(new URL('../runtime/data/segmen
 export const tracks=JSON.parse(readFileSync(new URL('../runtime/tracks.json',import.meta.url),'utf8'));
 /** Measured 2026-11-01: Simulation's words land from 3 to 5.5 m/s and Experimental's near 4.5, but Blade Explorer's best clean landing in 4,320 takeoffs was 0.03 rev. */
 const UNPROVEN_AIR='This one may not land on this setup yet: no scripted takeoff has. Pause and skip it if it will not come.';
+const PILOT_PROFILE=defaultControllerProfile();
 export const emptyControls=()=>({lx:0,ly:0,rx:0,ry:0,lean:0,pitch:0,kx:0,ky:0,kPrimaryX:0,kAltX:0,knee:.35,weight:.5,carriage:0,windup:0,push:false,brake:false,toe:false,turn:false,bracket:false,twizzle:false,spin:false,inaBauer:false,reset:false,pause:false,cyclePreset:false,cycleScheme:false,cycleJump:false,cycleView:false,zoom:0,dpadStep:0,tilt:0,toggleGame:false,cycleGhost:false,pickJump:-1,cycleProfile:false,cycleMoves:false,cycleRink:false});
 export class IceEngine {
- constructor(save=null,wardrobe=null) {
+ constructor(save=null,wardrobe=null,studio=null,board=null) {
   this.wardrobe=Wardrobe.restore(wardrobe);this.draft=null;
+  // game/creator.ts and game/modes.ts: Creation's shelves, the sheet being made, the arcade's climb and board.
+  this.studio=Studio.restore(studio,tracks.length);this.sheet=null;this.board=ArcadeBoard.restore(board);this.arcade=null;this.pilot=null;this.showcase=null;
   this.controllerProfile=defaultControllerProfile();this.setup=null;this.assistance=.75;
   this.career=CareerState.restore(save); this.track=0; this.scheme=1; this.beginner=true;
   this.profile=0; this.cruise=true; this.sequence=['glide','edge','jump','spin','pose'];
@@ -60,10 +68,17 @@ export class IceEngine {
   this.steadyChoice=null; this.hand=new SteadyHand(steadyStrength(this.steadyLevel()));
   this.start({mode:'free'});
  }
- catalog() {return {motion:libraryIndex(),story:{coach:COACH,season:SEASON,seasons:SEASONS_STORY,chapters:CHAPTERS,cast:cast(SEASONS.length).map(c=>({...c,look:rivalLook(c.name)})),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS};}
+ catalog() {return {motion:libraryIndex(),story:{coach:COACH,season:SEASON,seasons:SEASONS_STORY,chapters:CHAPTERS,cast:cast(SEASONS.length).map(c=>({...c,look:rivalLook(c.name)})),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS,modes:MODES,backstories:RIVAL_BACKSTORIES,creator:creatorCatalog(),styles:STYLES.map(s=>({id:s.id,title:s.title,blurb:s.blurb})),arcade:{lives:ARCADE_LIVES,ladder:arcadeRounds('career').map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title,seconds:r.program.seconds}))},pilot:{elements:PILOT_ELEMENTS}};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
-  if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson'].includes(mode)) throw Error('Unknown skating mode');
+  if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson','arcade','exhibition','showcase'].includes(mode)) throw Error('Unknown skating mode');
+  if(mode==='arcade'&&(!this.arcade||this.arcade.over))throw Error('Start an arcade climb first');
+  // game/modes.ts: who skates an arcade round, an exhibition or a showcase. The career skater by default.
+  const who=['arcade','exhibition','showcase'].includes(mode)?this.character(mode==='arcade'?this.arcade.character:options.character??'career'):null;
+  const program=options.program===undefined||options.program===null?null:options.program;
+  if(program!==null&&(!Array.isArray(program)||program.length<1||program.length>16||program.some(id=>!Object.hasOwn(ELEMENTS,id))))throw Error('A program needs 1–16 valid elements');
+  const dance=options.dance??null;
+  if(dance!==null&&(!dance||!styleById(dance.style)||!tracks[dance.track]||!Number.isInteger(dance.seed)))throw Error('Unknown dance sequence');
   if(options.pairsChallenge!==undefined&&typeof options.pairsChallenge!=='boolean')throw Error('Invalid pairs challenge');
   if(options.warmup!==undefined&&typeof options.warmup!=='boolean')throw Error('Invalid warm-up choice');
   if(options.warmupSeconds!==undefined&&(!Number.isFinite(options.warmupSeconds)||options.warmupSeconds<1||options.warmupSeconds>360))throw Error('A warm-up runs 1–360 seconds');
@@ -82,7 +97,12 @@ export class IceEngine {
   }
   this.course=course;
   this.mode=mode;this.event=index;
-  this.state=createState(this.params=applyProfile(this.setup?setupParams(this.setup,this.assistance):this.beginner?BEGINNER_PARAMS:GAME_PARAMS,mode==='career'?this.career.bodyProfile:SAMPLE_PROFILES[this.profile]),4.5);
+  // A showcase is the computer's run: the pilot skates Simulation (game/pilot.ts), whatever the player's setup.
+  const base=mode==='showcase'?setupParams('simulation'):this.setup?setupParams(this.setup,this.assistance):this.beginner?BEGINNER_PARAMS:GAME_PARAMS;
+  this.state=createState(this.params=who?characterParams(base,who):applyProfile(base,mode==='career'?this.career.bodyProfile:SAMPLE_PROFILES[this.profile]),4.5);
+  // game/styles.ts in the native career: the style skated, at its mastery. None chosen (every native save before 2026-11-11) changes nothing.
+  if(mode==='career'&&this.career.activeStyle)this.params=styleParams(this.params,this.career.activeStyle,this.career.styleMastery[this.career.style]??0);
+  this.who=who;
   // Only career trades balance for line; every other mode has both at once.
   const armed=mode==='career'||mode==='armdrill',focus=this.career.armFocus;
   this.fallWatch=armed?new FallWatch():null;this.newInjuries=[];this.wearStart={...this.career.wear};
@@ -90,7 +110,7 @@ export class IceEngine {
   this.drill=mode==='armdrill'?new ArmDrill(focus):null;this.armStyle=armed?ARM_FOCUS[focus].style:1;
   // A career program laid on its music skates to that music, whatever the soundtrack setting.
   const laid=mode==='career'?this.career.timelines[index]:null,timeline=laid&&tracks[laid.track]?laid:null;
-  this.runTrack=timeline?timeline.track:this.track;this.draft=null;
+  this.runTrack=timeline?timeline.track:dance&&mode!=='arcade'?dance.track:this.track;this.draft=null;
   const t=tracks[this.runTrack]; Object.assign(this.params,{musicBpm:t.bpm,musicOffset:t.offset,musicBeatsPerBar:t.beatsPerBar,musicBarsPerPhrase:t.barsPerPhrase});
   this.state=createState(this.params,4.5);
   this.pairs=mode==='pairs'?new PairsSession(this.state,this.params,options.pairsChallenge??false):null;
@@ -99,6 +119,16 @@ export class IceEngine {
   this.steering=newSchemeState();this.coach=new BeginnerCoach();this.practice=new Practice();this.run=new IceRun();this.rookie=new RookieCourse();this.playground=new Playground();
   this.rusty=mode==='career'?new RustGate(this.career.rust):null;
   this.routine=mode==='career'?new Choreography(this.career.planned(index),tables,spinThresholds,stepThresholds,segmentRules,this.ice):mode==='composer'?new Choreography({id:'authored',title:'Your signature program',venue:'Composer rehearsal',seconds:180,routine:this.sequence,discipline:'women',segment:'free'},tables,spinThresholds,stepThresholds,segmentRules,this.ice):null;
+  // game/modes.ts: an arcade round is its career event at full time, so its score compares with the rival's measured one.
+  this.pilot=null;this.showcase=null;
+  if(mode==='arcade'){this.routine=new Choreography(this.arcade.current.program,tables,spinThresholds,stepThresholds,segmentRules,this.ice);this.routine.fullTime=true;}
+  if(mode==='exhibition')this.routine=new Choreography(exhibitionEvent(program,options.title??'Exhibition'),tables,spinThresholds,stepThresholds,segmentRules,this.ice);
+  if(mode==='showcase'){
+   const plan=showcaseProgram(program??this.sequence);
+   if(!plan.skated.length)throw Error('The computer can skate glides, edges, crossovers, jumps, spins and poses; this program has none');
+   this.showcase={left:plan.left,name:who.name};this.pilot=new ProgramPilot();
+   this.routine=new Choreography({id:'showcase',title:`${who.name} skates it`,venue:'Creation · the computer skates',seconds:180,routine:plan.skated,discipline:'women',segment:'free'},tables,spinThresholds,stepThresholds,segmentRules,this.ice);
+  }
   if(mode==='career'){this.routine.fullTime=true;this.routine.rust={...this.career.rust};}
   if(mode==='career')this.routine.armExpression=armExpression(focus,this.career.armBest[focus]);
   if(timeline&&!this.routine.setCues(cueTimes(tracks[timeline.track],timeline)))throw Error('This program no longer matches its music');
@@ -116,7 +146,10 @@ export class IceEngine {
   // fresh, so the program, its replay and its ice see nothing of the warm-up. Off unless asked.
   // game/motion/player.ts: what the client draws from the motion library this run.
   const runTrack=tracks[this.runTrack];
-  this.motion=new MotionPlayer(this.danceStyle??null,runTrack?{bpm:runTrack.bpm,beatsPerBar:runTrack.beatsPerBar,offset:runTrack.offset}:null,this.routine?.event.seconds??180,index+1);
+  // A dance sequence (game/creator.ts) dresses its run with its own style and seed; a character brings their own style otherwise.
+  const danceStyle=dance?dance.style:who&&!this.danceStyle?who.dance||null:this.danceStyle??null;
+  this.runDance=danceStyle;
+  this.motion=new MotionPlayer(danceStyle,runTrack?{bpm:runTrack.bpm,beatsPerBar:runTrack.beatsPerBar,offset:runTrack.offset}:null,this.routine?.event.seconds??180,dance?dance.seed:index+1);
   this.warmup=null;
   if(mode==='career'&&options.warmup){
    const field=standings(index,null).map(r=>r.name);
@@ -145,6 +178,68 @@ export class IceEngine {
   if(!this.warmup)throw Error('No warm-up is running');
   return this.start({mode:'career',event:this.event});
  }
+ /** game/modes.ts: a skater by id: "career", "created:<slot>" or "rival:<name>". */
+ character(id){
+  if(id==='career'){const c=this.career,sheet=c.skater;
+   return {id:'career',name:sheet?.name??'Your career skater',origin:originById(sheet?.origin)?.origin??'',profile:c.profile,style:c.activeStyle&&c.style<STYLES.length?c.style:-1,mastery:c.styleMastery[c.style]??0,dance:sheet?.dance??'',costume:sheet?.costume??null};}
+  if(typeof id==='string'&&id.startsWith('created:')){const slot=Number(id.slice(8)),sheet=this.studio.skaters[slot];if(sheet){const c=createdCharacter(slot,sheet);if(c)return c;}}
+  if(typeof id==='string'&&id.startsWith('rival:')){const c=rivalCharacter(id.slice(6));if(c)return c;}
+  throw Error('Unknown skater');
+ }
+ /** Every skater a mode can pick, for a menu. */
+ characters(){
+  const out=[{id:'career',name:this.career.skater?.name??'Your career skater',origin:originById(this.career.skater?.origin)?.origin??'The career'}];
+  this.studio.skaters.forEach((s,i)=>{if(s)out.push({id:`created:${i}`,name:s.name,origin:originById(s.origin)?.origin??''});});
+  for(const name of Object.keys(RIVAL_BACKSTORIES))out.push({id:`rival:${name}`,name,origin:RIVAL_BACKSTORIES[name].origin});
+  return out;
+ }
+ /** Starts a climb up the arcade ladder (game/modes.ts) as `character`, and its first round. */
+ arcadeStart(character='career'){this.character(character);this.arcade=new ArcadeRun(character);return this.start({mode:'arcade'});}
+ arcadeResult(r){
+  const run=this.arcade,round=run.current,target=round?.target??0,rec=run.record(r.segmentScore,r.complete);
+  let place=0;if(rec.over)place=this.board.add(run,this.who?.name??'Skater');
+  return {...rec,target,score:r.segmentScore,rival:round?.rival??'',lives:run.lives,total:run.points,round:run.round,rounds:run.rounds.length,place};
+ }
+ /**
+  * game/creator.ts: the sheet being made. new (origin), trade (from, to), set (field, value),
+  * save (slot), load (slot), drop. Returns the snapshot.
+  */
+ sheetEdit(o={}){
+  switch(o.action){
+   // A new origin keeps the name, height and costume already chosen; its stats, build, style and dance are the origin's.
+   case 'new':{const origin=originById(o.origin);if(!origin)throw Error('Unknown origin');const was=this.sheet;this.sheet=sheetFrom(origin,was?.name??'New skater');if(was)Object.assign(this.sheet,{heightM:was.heightM,costume:was.costume});break;}
+   case 'trade':{if(!this.sheet)throw Error('Start a skater first');const why=tradeBlock(this.sheet,o.from,o.to);if(why)throw Error(why);this.sheet=tradePoint(this.sheet,o.from,o.to);break;}
+   case 'set':{if(!this.sheet)throw Error('Start a skater first');if(!['name','heightM','build','style','dance','costume'].includes(o.field))throw Error('Unknown field');
+    const next=parseSheet({...this.sheet,[o.field]:o.value});if(!next)throw Error('That is off the lists');this.sheet=next;break;}
+   case 'save':{if(!this.sheet||!this.studio.setSkater(o.slot,this.sheet))throw Error('That skater could not be kept');break;}
+   case 'load':{const s=this.studio.skaters[o.slot];if(!s)throw Error('Nothing in that slot');this.sheet={...s,stats:{...s.stats}};break;}
+   case 'drop':this.sheet=null;break;
+   default:throw Error('Unknown sheet action');
+  }
+  return this.snapshot();
+ }
+ sheetView(){
+  const s=this.sheet;if(!s)return null;
+  const names=STAT_NAMES,blocks={};
+  for(const a of names)for(const b of names)if(a!==b)blocks[`${a}>${b}`]=tradeBlock(s,a,b);
+  const origin=originById(s.origin);
+  return {...s,overall:sheetOverall(s),lean:leanOf(s.stats),blocks,originTitle:origin?.origin??'',story:origin?.story??'',shaped:origin?.shaped??'',coach:origin?.coach??''};
+ }
+ /** Creation's shelves: program (slot, value) or dance (slot, value), or clear (shelf, slot). */
+ studioEdit(o={}){
+  if(o.action==='program'){if(!this.studio.setProgram(o.slot,o.value))throw Error('That program could not be kept');}
+  else if(o.action==='dance'){if(!this.studio.setDance(o.slot,o.value))throw Error('That dance could not be kept');}
+  else if(o.action==='clear'){if(!['skaters','programs','dances'].includes(o.shelf)||!this.studio.clear(o.shelf,o.slot))throw Error('Nothing to clear there');}
+  else throw Error('Unknown studio action');
+  return this.snapshot();
+ }
+ /**
+  * A new career for a created skater. The host keeps the career it replaces in its own
+  * archive file first (bridge/host.mjs); this only swaps the one in memory.
+  */
+ newCareer(slot){const s=this.studio.skaters[slot];if(!s)throw Error('Create and keep a skater first');this.career=CareerState.fromSheet(s);this.start({mode:'free'});return this.snapshot();}
+ /** game/styles.ts in the native career: take up a style (-1 none), or drill the one skated. */
+ careerStyle(o={}){if(o.drill)this.career.drillStyle();else{if(!Number.isInteger(o.style))throw Error('Unknown style');this.career.chooseStyle(o.style);}}
  configure(o) {
   if(o.setup!==undefined&&o.setup!==null&&!isSetup(o.setup))throw Error('Unknown skating setup');
   if(o.assistance!==undefined&&(!Number.isFinite(o.assistance)||o.assistance<.5||o.assistance>1))throw Error('Assistance must be 0.5–1');
@@ -192,11 +287,14 @@ export class IceEngine {
     // No cruise in a lesson: a step asks for the player's own pushes and glides.
     const repeat=canPush&&s.tick%90===0&&(controls.pushHeld||(this.cruise&&this.mode!=='lesson'&&Math.hypot(s.vel.x,s.vel.y)<5.5));
     const live={...c,push:(i===0&&c.push)||repeat,autoPush:repeat,toe:i===0&&c.toe};
-    const mapped=this.setup?setupInput(live,s,this.setup,this.steering,this.params,this.controllerProfile,this.assistance)
+    // game/pilot.ts: in a showcase the computer's pad replaces the player's, through Simulation's own mapping, unaided.
+    const pad=this.pilot?{...emptyControls(),hardware:this.pilot.pad(s,this.routine?.current,SIM_DT)}:null;
+    const mapped=pad?setupInput(pad,s,'simulation',this.steering,this.params,PILOT_PROFILE)
+      :this.setup?setupInput(live,s,this.setup,this.steering,this.params,this.controllerProfile,this.assistance)
       :gameInput(live,s,this.scheme,this.steering,low,this.params,this.controllerProfile);
-    const coached=this.beginner?this.coach.apply(mapped.input,s,this.params,this.scheme!==3&&i===0&&c.cycleJump,SIM_DT):mapped.input;
+    const coached=!pad&&this.beginner?this.coach.apply(mapped.input,s,this.params,this.scheme!==3&&i===0&&c.cycleJump,SIM_DT):mapped.input;
     // The steadying hand (game/steady.ts) on what the player asked; the recorder keeps what it handed on.
-    const input=this.hand.apply(coached,s,this.params);
+    const input=pad?coached:this.hand.apply(coached,s,this.params);
     this.low=mapped.cantilever;
     this.tick(this.rusty?this.rusty.apply(input,s):input,(c.pairHold?1:0)|(c.pairLift?2:0));
    }
@@ -258,6 +356,11 @@ export class IceEngine {
    this.finished=true;this.result={story,finale:last?finale(place,season):'',title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls${r.cues?` · ${r.cueResults.filter(x=>x==='on').length}/${r.cues.length} on the music`:''}`,protocol,xp,complete:r.complete,stopped,body:this.bodyNote(),standings:this.mode==='career'&&r.complete&&!CAREER_EVENTS[this.event].exhibition?standings(this.event,r.segmentScore):null};
    // game/podium.ts: the top three as standing sim states, for a client to pose like any skater.
    this.result.podium=this.result.standings?podium(this.result.standings,this.params):null;
+   if(this.mode==='arcade'){const a=this.result.arcade=this.arcadeResult(r);
+    this.result.title=a.won?`You beat ${a.rival}`:`${a.rival} holds`;
+    this.result.story=a.cleared?`The whole ladder, ${a.total} points.${a.place?` Number ${a.place} on the board.`:''}`:a.over?`Out of lives on round ${a.round+1}: ${a.total} points.${a.place?` Number ${a.place} on the board.`:''}`:a.won?`${a.score.toFixed(2)} against ${a.target.toFixed(2)}: +${a.points} points. Next: round ${a.round+1}.`:`${a.score.toFixed(2)} against ${a.target.toFixed(2)}${r.complete?'':', the program unfinished'}. ${a.lives} ${a.lives===1?'life':'lives'} left.`;}
+   if(this.mode==='exhibition'){this.result.title=r.complete?'Skated for the crowd':'The music ran out first';this.result.story='Nobody judged it. The protocol below is what a panel would have seen.';}
+   if(this.mode==='showcase'){this.result.title=`${this.showcase.name} skated it`;this.result.story=this.showcase.left.length?`Left out: ${this.showcase.left.map(id=>ELEMENTS[id].title).join(', ')}. The computer has no measured way to skate those yet.`:'Every element was the computer\'s, through the same pad and physics you skate with.';}
   } else if(this.drill?.done&&!this.finished){const gained=this.career.recordDrill(this.drill.focus,this.drill.score);this.finished=true;this.result={title:`${ARM_FOCUS[this.drill.focus].title} drill: ${this.drill.score} / 100`,body:this.bodyNote(),detail:gained>0?`A new best, up ${gained}. Your arms give up less for ${ARM_FOCUS[this.drill.focus].title} now.`:`Your best stays ${this.career.armBest[this.drill.focus]}.`,complete:true};
   } else if(this.mode==='timed'&&this.run.done){this.finished=true;this.result={title:'Your lines, recorded',detail:`${this.run.score} points · ${this.run.collected} lights · ${this.run.falls} falls`,complete:true};}
  }
@@ -340,7 +443,10 @@ export class IceEngine {
    :s.turn.kind===TURN_KIND.Loop?'Loop':s.turn.kind===TURN_KIND.Rocker?'Rocker'
    :'Three-turn';
   const move=s.fallen?`Recover · ${recoverHow(words)}`:s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
-  return {motion:this.motion?this.motion.frame(this.state,this.elapsed):null,danceStyle:this.danceStyle??null,warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+  return {sheet:this.sheetView(),studio:{skaters:this.studio.skaters,programs:this.studio.programs,dances:this.studio.dances},characters:this.characters(),
+   arcade:this.arcade?{character:this.arcade.character,round:this.arcade.round,rounds:this.arcade.rounds.map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title})),lives:this.arcade.lives,points:this.arcade.points,over:this.arcade.over,cleared:this.arcade.cleared}:null,board:this.board.entries,
+   showcase:this.showcase,who:this.who?{id:this.who.id,name:this.who.name,costume:this.who.costume}:null,
+   motion:this.motion?this.motion.frame(this.state,this.elapsed):null,danceStyle:this.danceStyle??null,runDance:this.runDance??null,warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    recover:recoverHow(words),
    tutorial:l?{unproven:l.step?.id==='spin'&&this.setup==='explorer'?UNPROVEN_AIR:'',course:this.course,index:l.index,total:l.steps.length,title:l.step?.title??'',
@@ -355,6 +461,6 @@ export class IceEngine {
    armStyle:this.armStyle,drill:this.drill?{title:this.drill.title,hint:this.drill.hint,seconds:this.drill.seconds,score:this.drill.score,focus:this.drill.focus}:null,
    rookie:{index:this.rookie.index,cleared:this.rookie.cleared,title:this.rookie.title,hint:this.rookie.hint,target:this.rookie.target},
    run:{seconds:this.run.seconds,score:this.run.score,collected:this.run.collected,target:this.run.target},
-   career:{advice:coachAdvice({xp:this.career.profile.xp,weeks:this.career.weeks,unlocked:this.career.unlocked,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)])),rust:this.career.rust,wear:this.career.wear,injured:this.career.injured}),wear:this.career.wear,injured:this.career.injured,weeks:this.career.weeks,rust:this.career.rust,plans:this.career.plans,timelines:this.career.timelines,best:this.career.best,field:CAREER_EVENTS.map((_,i)=>standings(i,this.career.best[i])),season:seasonTable(this.career.best,seasonOf(this.career.unlocked)),seasonNumber:seasonOf(this.career.unlocked),overall:overall(this.career.profile),floors:EVENT_FLOORS,locks:CAREER_EVENTS.map((_,i)=>this.career.lockReason(i)),lessons:this.career.lessons,armFocus:this.career.armFocus,armBest:this.career.armBest,medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
+   career:{skater:this.career.skater,style:this.career.style,styleMastery:this.career.styleMastery,advice:coachAdvice({xp:this.career.profile.xp,weeks:this.career.weeks,unlocked:this.career.unlocked,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)])),rust:this.career.rust,wear:this.career.wear,injured:this.career.injured}),wear:this.career.wear,injured:this.career.injured,weeks:this.career.weeks,rust:this.career.rust,plans:this.career.plans,timelines:this.career.timelines,best:this.career.best,field:CAREER_EVENTS.map((_,i)=>standings(i,this.career.best[i])),season:seasonTable(this.career.best,seasonOf(this.career.unlocked)),seasonNumber:seasonOf(this.career.unlocked),overall:overall(this.career.profile),floors:EVENT_FLOORS,locks:CAREER_EVENTS.map((_,i)=>this.career.lockReason(i)),lessons:this.career.lessons,armFocus:this.career.armFocus,armBest:this.career.armBest,medals:this.career.medals,unlocked:this.career.unlocked,xp:this.career.profile.xp,stats:this.career.profile.stats,costs:Object.fromEntries(Object.entries(this.career.profile.stats).map(([k,v])=>[k,xpToRaise(v)]))}};
  }
 }

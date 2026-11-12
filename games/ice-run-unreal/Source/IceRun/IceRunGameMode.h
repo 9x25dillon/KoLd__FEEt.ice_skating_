@@ -52,6 +52,8 @@ public:
 		bool bHeader = false;
 		/** A colour swatch before the label, when it has any alpha. */
 		FLinearColor Chip = FLinearColor(0, 0, 0, 0);
+		/** A stat bar under the label, 0..1, when not negative (create-a-skater, the skaters' stories). */
+		float Meter = -1.f;
 	};
 	/** A table line: standings, a protocol. */
 	struct FMenuRow
@@ -95,6 +97,10 @@ public:
 		FString RowsTitle;
 		TArray<FMenuRow> Rows;
 		FMenuStrip Strip;
+		/** The mode this page belongs to, in small capitals over the title (game/modes.ts). */
+		FString Kicker;
+		/** The page's accent: its edge, focus and headings. None (zero alpha) is the champagne every page had. */
+		FLinearColor Accent = FLinearColor(0, 0, 0, 0);
 	};
 
 	bool Paused() const { return bPaused; }
@@ -167,6 +173,27 @@ private:
 	void BuildMusic(FMenuPage& P);
 	/** main.gd's controller page: tuning, the feet layout, the bindings, defaults. */
 	void BuildController(FMenuPage& P);
+	// game/modes.ts, game/creator.ts, game/backstories.ts (2026-11-11): IceRunModes.cpp.
+	void BuildArcade(FMenuPage& P);
+	void BuildExhibition(FMenuPage& P);
+	void BuildCreation(FMenuPage& P);
+	void BuildCreate(FMenuPage& P);
+	void BuildCast(FMenuPage& P);
+	void BuildShowcase(FMenuPage& P);
+	void BuildDance(FMenuPage& P);
+	void BuildNewCareer(FMenuPage& P);
+	void BuildCareerStyle(FMenuPage& P);
+	/** The skater, program and dance pickers Exhibition and the showcase share. */
+	void AddPickers(FMenuPage& P, const FString& DefaultProgram);
+	/** A run with a skater, a program or a dance: the arcade's first round, an exhibition, a showcase. */
+	void StartWith(const FString& Mode, const TSharedRef<FJsonObject>& Extra);
+	void StartPicked(const FString& Mode);
+	void SheetOp(const TSharedRef<FJsonObject>& Options);
+	void StudioOp(const TSharedRef<FJsonObject>& Options);
+	/** Dress the skater as whoever skates this run: a rival's model and costume, or a created skater's costume. */
+	void WearWho();
+	/** The first empty slot on a Creation shelf (skaters, programs, dances), or -1. */
+	int32 FirstEmpty(const TCHAR* Shelf) const;
 	void TimelineOp(const TSharedRef<FJsonObject>& Options);
 	/** A few seconds of a track from a point in it, to hear where a bar falls. */
 	void PreviewMusic(int32 Track, double At);
@@ -186,6 +213,17 @@ private:
 	/** A lesson needs its setup in force first: the course and its words are that pad's (main.gd start_lesson). */
 	void StartLesson(const FString& Course, const FString& NeededSetup);
 	void StartMode(const FString& Mode, int32 Event = 0);
+	/** Options a picked run adds to start (character, program, dance); kept for "Skate it again". */
+	TSharedPtr<FJsonObject> RunExtra;
+	FString PickCharacter = TEXT("career");
+	int32 PickProgram = -1;
+	int32 PickDance = -1;
+	int32 SheetSlot = -1;
+	FString SheetFrom = TEXT("stamina");
+	int32 DanceSlot = -1;
+	TSharedPtr<FJsonObject> DanceDraft;
+	/** The last run dressed the skater as someone else (WearWho); the next run puts your own model back. */
+	bool bWearingWho = false;
 	void ChangeSetup(int32 By);
 	bool RunLive() const { return Latest.bValid && !Latest.bFinished; }
 	FString SetupName(const FString& Id) const;
