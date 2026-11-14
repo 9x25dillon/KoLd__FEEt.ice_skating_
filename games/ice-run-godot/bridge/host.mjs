@@ -38,6 +38,7 @@ lines.on('line',line=>{
    case 'design':engine.saveDesign(req.slot,req.design);data=engine.snapshot();break;
    case 'skipStep':data=engine.skipStep();break;
    case 'motionClip':data=engine.motionClip(req.id);break;
+   case 'motionTrack':data=engine.motionTrack(req.options);break;
    case 'choreograph':data=engine.choreograph(req.options);break;
    case 'endWarmup':data=engine.endWarmup();break;
    case 'sheet':data=engine.sheetEdit(req.options);break;

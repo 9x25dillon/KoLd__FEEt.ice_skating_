@@ -817,6 +817,9 @@ func show_page(page: String) -> void:
 				if c.get("look") != null: looks[str(c.name)] = c.look
 			if podium.present(frame.result.standings,looks,CHARACTERS[character].path,current_skin()) > 0:
 				skater.visible = false
+				# game/podium.ts: each place's clip, baked once by the bridge (motionTrack).
+				for id in podium.wanted(frame.result.get("podium",[])):
+					link.send("motionTrack",{"options":{"id":id}})
 		# game/story.ts: the chapter's ending for a career run, and the season's after the championship.
 		if not str(frame.result.get("story","")).is_empty():
 			menu.add_child(paragraph(str(frame.result.story),16))
@@ -1506,6 +1509,10 @@ func on_engine(op: String, data: Dictionary) -> void:
 		if overlay.visible and current_page == "controller":
 			show_page("controller")
 		return
+	# game/motion/track.ts: a baked clip, for the podium. Not a frame.
+	if op == "motionTrack":
+		podium.play_track(data)
+		return
 	if op == "dress":
 		skater.apply_skin(data.skin)
 		return
@@ -2078,6 +2085,9 @@ func capture_podium() -> void:
 		if c.get("look") != null: looks[str(c.name)] = c.look
 	var rows := [{"place":1,"name":"Teodora Wynn","you":false},{"place":2,"name":"Remi Castellan","you":false},{"place":3,"name":"You","you":true}]
 	podium.present(rows,looks,CHARACTERS[character].path,current_skin())
+	# game/podium.ts PODIUM_CLIPS, as a result's podium names them.
+	for id in podium.wanted([{"place":1,"clip":"podium.wave"},{"place":2,"clip":"podium.flowers.mirror"},{"place":3,"clip":"podium.medal"}]):
+		link.send("motionTrack",{"options":{"id":id}})
 	skater.visible = false
 	overlay.visible = false
 	await get_tree().create_timer(3.0).timeout

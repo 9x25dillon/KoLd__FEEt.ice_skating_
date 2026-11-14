@@ -3,6 +3,13 @@ const SimSpace = preload("res://scripts/sim_space.gd")
 var skeleton: Skeleton3D
 var bone_ids: Dictionary = {}
 var state: Dictionary = {}
+# game/motion/track.ts: a clip baked into poses, played where there is no sim state (the podium).
+var track: Dictionary = {}
+var track_t := 0.0
+
+func play_track(t: Dictionary) -> void:
+	track = t
+	track_t = 0.0
 var pose_low := false
 var model: Node3D
 var initialized := false
@@ -646,6 +653,16 @@ func pose_face(gaze: Vector2, lid: float) -> void:
 		lid_mesh.set_blend_shape_value(lid_shape,lid)
 
 func _process(dt: float) -> void:
+	# game/motion/track.ts: a baked clip and no sim state under it (the podium): the clip is the whole body.
+	if state.is_empty() and skeleton != null and not track.is_empty():
+		track_t += dt
+		var poses: Array = track.poses
+		var i := int(track_t*float(track.fps))
+		motion_pose = poses[i % poses.size()] if bool(track.loop) else poses[mini(i,poses.size()-1)]
+		motion = {"layer":"full"}
+		motion_layer = "full"
+		apply_motion(dt)
+		return
 	if state.is_empty() or skeleton == null:
 		return
 	var motion := clampf(Vector2(state.vel.x,state.vel.y).length()*.12+absf(float(state.yawRate))*.08,0,1)
