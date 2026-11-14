@@ -1,7 +1,9 @@
 import { PRESETS } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import type { Controls } from "../app/pad.ts";
-import type { SkaterState } from "../sim/types.ts";
+import type { SkaterState, SkatingInput } from "../sim/types.ts";
+import { MOVE } from "../sim/types.ts";
+import { JUMP_PHASE } from "../sim/jump.ts";
 import { GAME_PARAMS } from "./controls.ts";
 import { fullInput } from "./full-controls.ts";
 import type { ControllerProfile, GameControlState } from "./full-controls.ts";
@@ -54,9 +56,39 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   p.jumpDirMode = 1;
   return p;
 }
+/**
+ * Blade Explorer: the knee a push bends to when RT asks for less (the owner's
+ * pick, 2026-11-14: a cue and a default bend, "both"). A push's power is the
+ * knee, and on a pad the knee is RT: the owner's first First ice on Explorer
+ * (replay of 2026-11-11 17:55) pushed 120 times with RT at zero, averaged
+ * 0.64 m/s, and never reached the event's 3 m/s. Only the floor moves: RT
+ * deeper than it bends deeper and pushes harder, exactly as before.
+ *
+ * MEASURED, from a standstill on Explorer with RT released, tapping A every
+ * 50 ticks (the owner's median gap in that replay): no floor reaches 2.69 m/s
+ * in 8 s and never 3; 0.5 reaches 3 m/s at 5.7 s, 0.6 at 4.7 s, 0.65 at 4.2 s.
+ * At 0.7 and above the skater hops at a standstill and falls: 0.7 is
+ * jumpLoadKnee, so the push loads a jump and the stroke's end releases it.
+ * 0.6 keeps a tenth clear of that, and RT full over it still reaches 3 m/s in
+ * 2.3 s. Pinned in test/explorer-knee.test.ts.
+ */
+export const EXPLORER_PUSH_KNEE = 0.6;
+/**
+ * The default bend, on the ice and gliding only: while a push is asked for or
+ * still under way (the same window the solver floors the knee at 0.35 in), never
+ * in a jump's load or the air, a move, or a fall.
+ */
+export function explorerPushKnee(input: SkatingInput, s: SkaterState, p: Params, floor = EXPLORER_PUSH_KNEE): SkatingInput {
+  if (s.fallen || s.jump.phase !== JUMP_PHASE.None || s.move !== MOVE.None || !(input.push || s.strokeTime > 0)) return input;
+  // Never as deep as a jump's load: a push must not become a hop.
+  const bend = Math.min(floor, p.jumpLoadKnee - 0.05);
+  if ((input.knee ?? 0) >= bend) return input;
+  input.knee = bend;
+  return input;
+}
 export function setupInput(c: Controls, s: SkaterState, setup: Setup, st: GameControlState, p: Params, profile: ControllerProfile, assistance = 0.75) {
   const exp = setup === "experimental" || setup === "diggate";
-  return fullInput(c, s, st, p, profile, {
+  const mapped = fullInput(c, s, st, p, profile, {
     manual: setup !== "repertoire", twoFoot: setup === "simulation" || exp,
     feet: setup === "simulation" || exp, pumps: exp, experimental: exp,
     leanAssist: setup === "explorer" ? assistance : 0,
@@ -66,4 +98,6 @@ export function setupInput(c: Controls, s: SkaterState, setup: Setup, st: GameCo
     // The Elite paddles: Experimental and Simulation only, the operator's choice.
     paddles: setup === "experimental" || setup === "simulation" ? setup : undefined,
   });
+  if (setup === "explorer") explorerPushKnee(mapped.input, s, p);
+  return mapped;
 }

@@ -257,8 +257,9 @@ test("from a standstill, A pushes from the standing leg and the weight goes acro
   // every other push came off an unloaded blade and the skater fell (0.44
   // m/s, down at 2 s in Simulation and Explorer). Now, knees straight: 1.09
   // m/s at 4 s (Repertoire 1.12); knees at 0.65: 2.53 (2.54); pushes
-  // alternating right, left…; standing; never a jump.
-  for (const setup of ["simulation", "explorer", "repertoire"] as const) for (const [knee, at4] of [[0, setup === "repertoire" ? 1.121 : setup === "explorer" ? 1.089 : 1.094], [0.65, setup === "simulation" ? 2.53 : 2.54]] as const) {
+  // alternating right, left…; standing; never a jump. Explorer, knees straight,
+  // since its default push knee (EXPLORER_PUSH_KNEE, 2026-11-14): 1.749, was 1.089.
+  for (const setup of ["simulation", "explorer", "repertoire"] as const) for (const [knee, at4] of [[0, setup === "repertoire" ? 1.121 : setup === "explorer" ? 1.749 : 1.094], [0.65, setup === "simulation" ? 2.53 : 2.54]] as const) {
     const r = rig(setup, 0); const feet: string[] = [];
     for (let i = 0; i < 480 && !r.s.fallen; i++) {
       r.h.buttons.fill(0); r.h.axes = [0, 0, 0, 0]; r.h.buttons[7] = knee; if (setup === "simulation") r.h.buttons[6] = knee;
