@@ -8,27 +8,73 @@
 //    program's clock, only while the arms are hers to use: on the ice, out of any jump, spin or
 //    formal move. In the air, a load or a spin, the sim's arm carriage (armsL) is physics and the
 //    client draws that, as it always has.
+//  - a SPIN POSITION or a MOVE IN THE FIELD (2026-11-14, the owner: "a great suggestion"): while
+//    the sim spins, the reference pose data/spin-positions.json names for the position and the
+//    free leg's variation the sim has (game/motion/spins.ts); in a spiral or an Ina Bauer, that
+//    move's clip (game/motion/transitions.ts). The "body" layer: pelvis, trunk, head and legs.
+//    The arms stay the sim's, because in a spin or a formal move they are physics (their reach is
+//    the spin's inertia). The skating leg is always the sim's support foot: the clip is mirrored
+//    to match it. Where the free leg's raise is physics (freeLegMode, Experimental), a spiral's
+//    leg is the sim's and no clip plays; a spin's variation is read off that same leg.
 // The client eases between "no clip" and a clip with `weight`, so nothing pops. Presentation only.
 
 import type { SkaterState } from "../../sim/types.ts";
-import { MOVE } from "../../sim/types.ts";
+import { MOVE, FOOT, SPIN_POSITION, SPIN_VARIATION } from "../../sim/types.ts";
 import { JUMP_PHASE } from "../../sim/jump.ts";
 import { chooseFall } from "./falls.ts";
 import { fallSide } from "../wear.ts";
 import { choreograph, styleById } from "./dance.ts";
 import type { ChoreoCue } from "./dance.ts";
 import { CLIP_BY_ID } from "./library.ts";
-import { sample } from "./types.ts";
+import { sample, mirrorPose } from "./types.ts";
 import type { Clip, Pose } from "./types.ts";
 
 export interface MotionFrame {
-  layer: "full" | "arms";
+  /** full: the whole body (a fall); body: all but the arms (a spin, a spiral, an Ina Bauer); arms: arms and head (a dance style). */
+  layer: "full" | "body" | "arms";
   clip: string;
   /** Seconds into the clip. */
   t: number;
   pose: Pose;
 }
 export interface Music { bpm: number; beatsPerBar: number; offset: number }
+
+/** The spin's reference pose: data/spin-positions.json's, by the sim's position and, upright, its variation. */
+export function spinPoseId(position: number, variation = 0): string {
+  if (position === SPIN_POSITION.Sit) return "SP_Sit_Basic";
+  if (position === SPIN_POSITION.Camel) return "SP_Camel_Basic";
+  return variation === SPIN_VARIATION.Attitude ? "SP_Upright_Attitude" : variation === SPIN_VARIATION.Split ? "SP_Upright_IPosition" : "SP_Upright_Basic";
+}
+
+/**
+ * The move in the field this moment, as a library clip and whether to mirror it so its skating
+ * leg is the sim's: every clip is written on her left foot (an Ina Bauer: her left foot leading).
+ * Null when the sim's own pose should stand.
+ */
+export function movePose(s: SkaterState): { id: string; mirror: boolean } | null {
+  if (s.fallen || s.jump.phase !== JUMP_PHASE.None) return null;
+  if (s.move === MOVE.Spin) {
+    // The clockwise twins (spins.ts) are the mirror: the right foot skating.
+    const id = spinPoseId(s.spin.position, s.spin.variation ?? 0);
+    return s.spin.foot === FOOT.Right ? { id: `${id}.cw`, mirror: false } : { id, mirror: false };
+  }
+  if (s.move === MOVE.Spiral) {
+    // The free leg's raise in play: the leg is physics, and the client draws the sim's.
+    if (s.spiral.peakRaise !== undefined) return null;
+    const back = s.blade[s.spiral.foot].longSpeed < 0;
+    const id = back ? "move.spiral.back" : "move.spiral.forward";
+    return s.spiral.foot === FOOT.Right ? { id: `${id}.mirror`, mirror: false } : { id, mirror: false };
+  }
+  if (s.move === MOVE.InaBauer) return { id: "move.ina-bauer", mirror: s.inaBauer.lead === FOOT.Right };
+  return null;
+}
+
+/** All but the arms: in a spin or a formal move they are physics, and the client draws the sim's. */
+function withoutArms(p: Pose): Pose {
+  const { upperArmL, forearmL, upperArmR, forearmR, ...seg } = p.seg ?? {};
+  void upperArmL; void forearmL; void upperArmR; void forearmR;
+  return { ...p, seg };
+}
 
 /** Seconds a landing or a spin still counts as the cause of a fall that follows it. AUTHORED. */
 const CAUSE_WINDOW = 0.6;
@@ -39,6 +85,9 @@ export class MotionPlayer {
   private lastLanding = -1;
   private lastLandingAt = -Infinity;
   private lastSpinAt = -Infinity;
+  /** The move clip playing, and when it began. */
+  private moveClip: string | null = null;
+  private moveAt = 0;
   readonly cues: ChoreoCue[];
   private armCues: ChoreoCue[];
 
@@ -69,6 +118,16 @@ export class MotionPlayer {
       return { layer: "full", clip: this.fall.clip.id, t, pose: sample(this.fall.clip, t) };
     }
     this.fall = null;
+    const move = movePose(s);
+    if (move) {
+      const clip = CLIP_BY_ID.get(move.id);
+      if (clip) {
+        if (this.moveClip !== clip.id) { this.moveClip = clip.id; this.moveAt = elapsed; }
+        const t = elapsed - this.moveAt, pose = sample(clip, t);
+        return { layer: "body", clip: move.mirror ? `${clip.id}.mirror` : clip.id, t, pose: withoutArms(move.mirror ? mirrorPose(pose) : pose) };
+      }
+    }
+    this.moveClip = null;
     const free = s.jump.phase === JUMP_PHASE.None && s.move === MOVE.None;
     if (!free || this.armCues.length === 0) return null;
     let cue: ChoreoCue | undefined;

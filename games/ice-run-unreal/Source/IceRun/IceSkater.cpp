@@ -913,8 +913,19 @@ void AIceSkater::ApplyMotion(float Dt, FVector& Hip, FVector& Spine)
 		return Mid;
 	};
 	double PelvisHeight = 0.0;
-	if (MotionLayer == TEXT("full") && MotionPose->TryGetNumberField(TEXT("pelvis"), PelvisHeight))
+	if ((MotionLayer == TEXT("full") || MotionLayer == TEXT("body")) && MotionPose->TryGetNumberField(TEXT("pelvis"), PelvisHeight))
 	{
+		// "body" (a spin's position, a spiral, an Ina Bauer): all but the arms, which are physics there
+		// (their reach is the spin's inertia). They keep the sim's shape, carried round with the trunk.
+		const bool bBodyOnly = MotionLayer == TEXT("body");
+		const FVector SimTrunk = (BoneHead(TEXT("Head")) - BoneHead(TEXT("Spine"))).GetSafeNormal();
+		FVector SimUpper[2], SimFore[2];
+		for (int32 I = 0; I < 2; ++I)
+		{
+			const FString Sfx = I == 0 ? TEXT("L") : TEXT("R");
+			SimUpper[I] = (BoneHead(FName(TEXT("Forearm") + Sfx)) - BoneHead(FName(TEXT("Arm") + Sfx))).GetSafeNormal();
+			SimFore[I] = (BoneHead(FName(TEXT("Hand") + Sfx)) - BoneHead(FName(TEXT("Forearm") + Sfx))).GetSafeNormal();
+		}
 		FVector PelvisRight(1.0, 0.0, 0.0);
 		const TArray<TSharedPtr<FJsonValue>>* R = nullptr;
 		if (MotionPose->TryGetArrayField(TEXT("pelvisRight"), R) && R->Num() >= 3) PelvisRight = FVector((*R)[0]->AsNumber(), (*R)[1]->AsNumber(), (*R)[2]->AsNumber()).GetSafeNormal();
@@ -923,6 +934,10 @@ void AIceSkater::ApplyMotion(float Dt, FVector& Hip, FVector& Spine)
 		const double Twist = FMath::DegreesToRadians(FMath::Clamp(TwistDeg, -60.0, 60.0)) * W;
 		const FVector Pelvis = Mix(TEXT("Hips"), FVector(0.0, PelvisHeight, 0.0));
 		const FVector Trunk = SegDir(TEXT("trunk"), FVector(0.0, 1.0, 0.0));
+		// The turn that takes the sim's trunk onto the clip's, about their common normal.
+		const FVector CarryAxis = FVector::CrossProduct(SimTrunk, Trunk);
+		const double CarryAngle = FMath::Atan2(CarryAxis.Size(), FVector::DotProduct(SimTrunk, Trunk));
+		auto Carry = [&](const FVector& V) { return CarryAxis.SizeSquared() > 1e-12 ? TurnAbout(V, CarryAxis.GetSafeNormal(), CarryAngle) : V; };
 		const FVector SpineAt = Pelvis + Trunk * HipsLength;
 		const FVector Neck = SpineAt + Trunk * SpineLength;
 		AimBone(TEXT("Hips"), Pelvis, SpineAt);
@@ -939,8 +954,9 @@ void AIceSkater::ApplyMotion(float Dt, FVector& Hip, FVector& Spine)
 				SegDir(*(TEXT("thigh") + Sfx), FVector(0, -1, 0)), Thigh, SegDir(*(TEXT("shin") + Sfx), FVector(0, -1, 0)), Shin, Ankle);
 			AimBone(FName(TEXT("Foot") + Sfx), Ankle, Ankle + SegDir(*(TEXT("foot") + Sfx), FVector(0, -.34, -.94)) * .2);
 			const FVector Shoulder = Neck - Trunk * ShoulderRest.Y + Across * ShoulderRest.X * Side;
-			const FVector Elbow = Limb(TEXT("Arm") + Sfx, TEXT("Forearm") + Sfx, TEXT("Hand") + Sfx, Shoulder,
-				SegDir(*(TEXT("upperArm") + Sfx), FVector(0, -1, 0)), UpperArm, SegDir(*(TEXT("forearm") + Sfx), FVector(0, -1, 0)), Forearm, Wrist);
+			const FVector UpperDir = bBodyOnly ? Carry(SimUpper[I]) : SegDir(*(TEXT("upperArm") + Sfx), FVector(0, -1, 0));
+			const FVector ForeDir = bBodyOnly ? Carry(SimFore[I]) : SegDir(*(TEXT("forearm") + Sfx), FVector(0, -1, 0));
+			const FVector Elbow = Limb(TEXT("Arm") + Sfx, TEXT("Forearm") + Sfx, TEXT("Hand") + Sfx, Shoulder, UpperDir, UpperArm, ForeDir, Forearm, Wrist);
 			AimBone(FName(TEXT("Hand") + Sfx), Wrist, Wrist + (Wrist - Elbow).GetSafeNormal() * .1);
 		}
 		Hip = Pelvis;
