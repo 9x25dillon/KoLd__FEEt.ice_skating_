@@ -188,6 +188,14 @@ void AIceRunGameMode::WearWho()
 		}
 		return;
 	}
+	// game/creator.ts buildModel: a created skater's build wears its own body; Athletic (none) is the
+	// athlete, so the player's own model, not whatever body the last skater wore.
+	{
+		FString Built, Path;
+		if (Who.IsValid() && Who->TryGetStringField(TEXT("model"), Built)) Path = SkaterAsset(Built);
+		if (Path.IsEmpty()) Path = OwnSkaterAsset();
+		if (!Path.IsEmpty()) Skater->LoadModel(Path);
+	}
 	// A preset by its id, or an atelier design (its skin's id is design-<slot>).
 	const FString Id = Costume.StartsWith(TEXT("preset:")) ? Costume.Mid(7) : TEXT("design-") + Costume.Mid(7);
 	for (const TSharedPtr<FJsonObject>& Skin : Costumes())

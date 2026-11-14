@@ -42,7 +42,7 @@ import {resolveRinkCollision,RINK} from '../runtime/game/rink.js';
 import {PairsSession,PAIRS_PHRASES} from '../runtime/game/pairs.js';
 import {STYLES,styleParams} from '../runtime/game/styles.js';
 import {RIVAL_BACKSTORIES,ORIGINS,originById,leanOf} from '../runtime/game/backstories.js';
-import {Studio,sheetFrom,tradePoint,tradeBlock,parseSheet,sheetOverall,creatorCatalog} from '../runtime/game/creator.js';
+import {Studio,buildModel,sheetFrom,tradePoint,tradeBlock,parseSheet,sheetOverall,creatorCatalog} from '../runtime/game/creator.js';
 import {MODES,ArcadeRun,ArcadeBoard,arcadeRounds,ARCADE_LIVES,rivalCharacter,createdCharacter,characterParams,exhibitionEvent} from '../runtime/game/modes.js';
 import {ProgramPilot,showcaseProgram,PILOT_ELEMENTS} from '../runtime/game/pilot.js';
 import {readFileSync} from 'node:fs';
@@ -183,7 +183,7 @@ export class IceEngine {
  /** game/modes.ts: a skater by id: "career", "created:<slot>" or "rival:<name>". */
  character(id){
   if(id==='career'){const c=this.career,sheet=c.skater;
-   return {id:'career',name:sheet?.name??'Your career skater',origin:originById(sheet?.origin)?.origin??'',profile:c.profile,style:c.activeStyle&&c.style<STYLES.length?c.style:-1,mastery:c.styleMastery[c.style]??0,dance:sheet?.dance??'',costume:sheet?.costume??null};}
+   return {id:'career',name:sheet?.name??'Your career skater',origin:originById(sheet?.origin)?.origin??'',profile:c.profile,style:c.activeStyle&&c.style<STYLES.length?c.style:-1,mastery:c.styleMastery[c.style]??0,dance:sheet?.dance??'',costume:sheet?.costume??null,model:sheet?buildModel(sheet.build):null};}
   if(typeof id==='string'&&id.startsWith('created:')){const slot=Number(id.slice(8)),sheet=this.studio.skaters[slot];if(sheet){const c=createdCharacter(slot,sheet);if(c)return c;}}
   if(typeof id==='string'&&id.startsWith('rival:')){const c=rivalCharacter(id.slice(6));if(c)return c;}
   throw Error('Unknown skater');
@@ -453,7 +453,7 @@ export class IceEngine {
   const move=s.fallen?`Recover · ${recoverHow(words)}`:s.jump.phase===JUMP_PHASE.Air?'Jump · in flight':s.jump.phase===JUMP_PHASE.Load?'Gather · release to take off':s.move===MOVE.Spin?'Spin':s.move===MOVE.Twizzle?'Twizzle':s.move===MOVE.InaBauer?'Ina Bauer':s.move===MOVE.Spiral?'Spiral':s.move===MOVE.Turn?turnLabel:this.low?'Cantilever':s.crossover&&s.strokeTime>0?'Crossover':'Glide';
   return {sheet:this.sheetView(),studio:{skaters:this.studio.skaters,programs:this.studio.programs,dances:this.studio.dances},characters:this.characters(),
    arcade:this.arcade?{character:this.arcade.character,round:this.arcade.round,rounds:this.arcade.rounds.map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title})),lives:this.arcade.lives,points:this.arcade.points,over:this.arcade.over,cleared:this.arcade.cleared}:null,board:this.board.entries,
-   showcase:this.showcase,pilotPad:this.pilot?this.pilotShown:null,who:this.who?{id:this.who.id,name:this.who.name,costume:this.who.costume}:null,
+   showcase:this.showcase,pilotPad:this.pilot?this.pilotShown:null,who:this.who?{id:this.who.id,name:this.who.name,costume:this.who.costume,model:this.who.model??null}:null,
    motion:this.motion?this.motion.frame(this.state,this.elapsed):null,danceStyle:this.danceStyle??null,runDance:this.runDance??null,warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    recover:recoverHow(words),

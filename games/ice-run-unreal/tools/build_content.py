@@ -32,6 +32,9 @@ SKATERS = [
     ("skater-rival-noor.glb", "skater-rival-noor"),
     ("skater-rival-remi.glb", "skater-rival-remi"),
     ("skater-rival-teodora.glb", "skater-rival-teodora"),
+    # Create-a-skater's builds (game/creator.ts buildModel), folder named by model; Athletic is the athlete.
+    ("skater-build-light.glb", "skater-build-light"),
+    ("skater-build-strong.glb", "skater-build-strong"),
 ]
 
 tools = unreal.AssetToolsHelpers.get_asset_tools()

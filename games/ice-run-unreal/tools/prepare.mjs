@@ -58,7 +58,7 @@ if (!args.has('--no-build') && (!existsSync(library) || newest(join(root, 'Sourc
 
 // 3. Content: the skaters through Interchange, and the materials, when missing or asked for.
 const manifest = join(root, 'Content/Generated/music.json');
-const sources = [join(root, 'tools/build_content.py'), ...['skater-athlete', 'skater-competition', 'skater-berserker', 'skater', 'spectator', 'skater-rival-ansa', 'skater-rival-katya', 'skater-rival-noor', 'skater-rival-remi', 'skater-rival-teodora'].map(n => join(godot, `assets/generated/${n}.glb`))];
+const sources = [join(root, 'tools/build_content.py'), ...['skater-athlete', 'skater-competition', 'skater-berserker', 'skater', 'spectator', 'skater-rival-ansa', 'skater-rival-katya', 'skater-rival-noor', 'skater-rival-remi', 'skater-rival-teodora', 'skater-build-light', 'skater-build-strong'].map(n => join(godot, `assets/generated/${n}.glb`))];
 const stale = !existsSync(manifest) || sources.some(s => existsSync(s) && statSync(s).mtimeMs > statSync(manifest).mtimeMs);
 if (args.has('--content') || stale) {
   execFileSync(editorCmd, [project, '-run=pythonscript', `-script=${join(root, 'tools/build_content.py')}`, '-unattended', '-nosplash', '-nullrhi'], {stdio: 'inherit'});

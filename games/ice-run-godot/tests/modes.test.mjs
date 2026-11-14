@@ -100,3 +100,20 @@ test('a showcase sends the computer\'s pad and what it is doing, for the on-scre
  assert.ok([...said].some(d=>/tap A/.test(d)),[...said].join(' | '));
  assert.equal(e.start({mode:'free'}).pilotPad,null);
 });
+
+test('a created skater wears their build: Light and Strong their own bodies, Athletic the athlete',()=>{
+ const e=new IceEngine();
+ const keep=(slot,build)=>{e.sheetEdit({action:'new',origin:'ballet'});e.sheetEdit({action:'set',field:'build',value:build});e.sheetEdit({action:'save',slot});};
+ keep(0,'light');keep(1,'strong');keep(2,'athletic');
+ assert.equal(e.character('created:0').model,'skater-build-light');
+ assert.equal(e.character('created:1').model,'skater-build-strong');
+ assert.equal(e.character('created:2').model,null);
+ // The snapshot carries it to the client in a mode a created skater skates.
+ const f=e.start({mode:'exhibition',character:'created:1',program:['glide','pose']});
+ assert.equal(f.who.model,'skater-build-strong');
+ // A career begun from the sheet wears it where the career skater is picked.
+ e.newCareer(0);
+ assert.equal(e.character('career').model,'skater-build-light');
+ // A rival's body is their look's, not a build's.
+ assert.equal(e.start({mode:'exhibition',character:'rival:Remi Castellan',program:['glide','pose']}).who.model,null);
+});

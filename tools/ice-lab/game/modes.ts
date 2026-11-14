@@ -23,7 +23,7 @@ import { RIVAL_BACKSTORIES, rivalProfile } from "./backstories.ts";
 import { STYLES, styleParams } from "./styles.ts";
 import { applyProfile, type SkaterProfile } from "../sim/profile.ts";
 import type { Params } from "../sim/params.ts";
-import { parseSheet, sheetProfile, type SkaterSheet } from "./creator.ts";
+import { buildModel, parseSheet, sheetProfile, type SkaterSheet } from "./creator.ts";
 
 export const MODES = [
   { id: "career", title: "Career", tagline: "The main game", blurb: "Your skater, your coach, two seasons from a community rink to the Nationals Coliseum. Train, drill, rest, and earn every medal." },
@@ -46,6 +46,8 @@ export interface Character {
   mastery: number;
   dance: string;
   costume: string | null;
+  /** The body to wear (game/creator.ts buildModel): a created skater's build; null for the athlete. A rival wears their look's own. */
+  model?: string | null;
 }
 
 /** Rivals skate their style fully drilled: they have had years. AUTHORED. */
@@ -61,7 +63,7 @@ export function rivalCharacter(name: string): Character | null {
 export function createdCharacter(slot: number, sheet: SkaterSheet): Character | null {
   const s = parseSheet(sheet);
   if (!s) return null;
-  return { id: `created:${slot}`, name: s.name, origin: s.origin, profile: sheetProfile(s), style: s.style, mastery: 0.25, dance: s.dance, costume: s.costume };
+  return { id: `created:${slot}`, name: s.name, origin: s.origin, profile: sheetProfile(s), style: s.style, mastery: 0.25, dance: s.dance, costume: s.costume, model: buildModel(s.build) };
 }
 /** A character's params on a base set: profile baked, then style, as a career run's are. */
 export function characterParams(base: Params, c: Character): Params {
