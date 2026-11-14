@@ -85,6 +85,9 @@ its ops, so the career, the plans and the wardrobe live where they always have (
 - **Wardrobe**: four skaters, the costumes, and the atelier: a design in a slot (bodice, skirt,
   sleeves, trim and crystals, tights, hair colour, skin tone, then the fabric and how many
   crystals), previewed on the skater and worn when kept.
+  Wardrobe → Skates picks boot colour and finish, blade, laces and heel (`game/skates.ts`; looks
+  only). The choice is the optional `skates` field of `preferences.json`; the colours come from the
+  bridge's `skates` op and land on the model's boot, blade, laces and heel materials.
 - **Settings**: setup, steadying hand, Explorer assistance, skater level, music track and on or
   off, controller vibration, Elite paddles, camera, display. Kept in `Saved/IceRun/preferences.json`.
 - **Controller tuning** (Settings →): `game/controller.ts`'s profile through the bridge's

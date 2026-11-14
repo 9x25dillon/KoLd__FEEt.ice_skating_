@@ -82,6 +82,7 @@ AIceSkater* AIceRunGameMode::SpawnFieldSkater(const FString& Name, bool bYou)
 	if (Path.IsEmpty()) Path = SkaterAsset(TEXT("Athlete"));
 	S->LoadModel(Path);
 	if (Costume.IsValid()) S->ApplyCostume(Costume);
+	if (bYou) S->ApplySkates(SkatesLook);
 	return S;
 }
 

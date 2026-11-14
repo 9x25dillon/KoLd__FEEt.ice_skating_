@@ -524,6 +524,7 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 				if (Skins[I]->AsObject()->GetStringField(TEXT("id")) == TEXT("northlight")) CostumeIndex = I;
 			}
 		}
+		if (SkatesChoice.IsValid()) PickSkates(SkatesChoice);
 		WearCostume();
 	}
 	else if (Reply.Op == TEXT("start") || Reply.Op == TEXT("endWarmup") || Reply.Op == TEXT("arcade"))
@@ -677,6 +678,13 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 			PendingWearSlot = -1;
 			WearCostume();
 			SavePreferences();
+		}
+		if (Reply.Op == TEXT("skates"))
+		{
+			// game/skates.ts: the look the bridge resolved from the choice.
+			const TSharedPtr<FJsonObject>* Look = nullptr;
+			if (Reply.Data->TryGetObjectField(TEXT("skates"), Look)) SkatesLook = *Look;
+			WearSkates();
 		}
 		if (bPaused)
 		{

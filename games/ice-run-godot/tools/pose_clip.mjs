@@ -8,10 +8,14 @@ import {createState} from '../runtime/sim/solver.js';
 import {NEUTRAL_INPUT} from '../runtime/sim/types.js';
 import {supportSignal} from '../runtime/sim/support.js';
 import {SKINS} from '../runtime/game/appearance.js';
+import {lookOf} from '../runtime/game/skates.js';
 import {MotionPlayer} from '../runtime/game/motion/player.js';
 // --motion: each frame carries game/motion/player.ts's clip (a fall's, or --style=<id>'s arms), as the bridge sends it.
 const motionArg=process.argv.includes('--motion'),styleArg=process.argv.find(a=>a.startsWith('--style='))?.slice(8)??null;
 const player=motionArg?new MotionPlayer(styleArg,{bpm:120,beatsPerBar:4,offset:0},120):null;
+// --skates=<preset id>: the clip carries game/skates.ts's look for pose_lab to wear. Cosmetic: the frames are the same.
+const skatesArg=process.argv.find(a=>a.startsWith('--skates='))?.slice(9);
+const skatesField=skatesArg?{skates:lookOf(skatesArg)}:{};
 const e=new IceEngine();
 e.start({mode:'free'});
 // --transfer: the legs move the load between the blades over time (weightTransferMode 1).
@@ -31,7 +35,7 @@ if(process.argv.includes('--falls')){
   run(name+': up',120,i=>({lean:0,weight:.5,knee:.4,push:i===0}));
  }
  const fallAt=frames.flatMap((f,i)=>f.state.fallen&&!frames[i-1]?.state.fallen?[i]:[]);
- writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,fallAt,frames}));
+ writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],...skatesField,marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,fallAt,frames}));
  console.log(JSON.stringify({ticks:frames.length,fallAt,leans:fallAt.map(i=>frames[i].state.lean),marks}));
  process.exit(0);
 }
@@ -42,7 +46,7 @@ if(process.argv.includes('--strokes')){
  for(let k=0;k<6;k++){const foot=k%2,other=1-foot;run(`push off the ${foot?'right':'left'}, glide on the ${other?'right':'left'}`,72,i=>({lean:0,weight:i<24?.5:other,knee:.55,push:i===0,pushFoot:foot}));}
  run('two-foot glide',60,()=>({lean:0,weight:.5,knee:.4}));
  const s=e.state;
- writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,frames}));
+ writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],...skatesField,marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,frames}));
  console.log(JSON.stringify({ticks:frames.length,marks,fallen:frames.filter(f=>f.state.fallen).length,speed:Math.hypot(s.vel.x,s.vel.y)}));
  process.exit(0);
 }
@@ -67,6 +71,6 @@ run('spin, arms in',330,()=>({weight:0,lean:0,knee:.45,spin:true,carriage:0}));
 run('spin exit',240,()=>({weight:exitWeight,lean:0,knee:.45}));
 const s=e.state;
 // The costume new sessions wear, so the lab shows what the game shows.
-const out={skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],marks,landed:s.landed.tick!==first?{tick:s.landed.tick,...Object.fromEntries(Object.entries(s.landed).filter(([,v])=>typeof v!=='object'))}:null,fallen:frames.filter(f=>f.state.fallen).length,frames};
+const out={skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],...skatesField,marks,landed:s.landed.tick!==first?{tick:s.landed.tick,...Object.fromEntries(Object.entries(s.landed).filter(([,v])=>typeof v!=='object'))}:null,fallen:frames.filter(f=>f.state.fallen).length,frames};
 writeFileSync(process.argv[2],JSON.stringify(out));
 console.log(JSON.stringify({ticks:frames.length,marks,fallen:out.fallen,landed:out.landed,end:{pos:s.pos,move:s.move,speed:Math.hypot(s.vel.x,s.vel.y)},leanPeak:Math.max(...frames.map(f=>Math.abs(f.state.lean))),tiltPeak:Math.max(...frames.map(f=>Math.max(Math.abs(f.state.blade[0].tilt),Math.abs(f.state.blade[1].tilt))))}));

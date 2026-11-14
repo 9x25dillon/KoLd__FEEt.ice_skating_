@@ -36,6 +36,7 @@ import {Practice,LESSONS} from '../runtime/game/practice.js';
 import {IceRun,LIGHTS} from '../runtime/game/run.js';
 import {RookieCourse,ROOKIE_GATES} from '../runtime/game/rookie.js';
 import {SKINS} from '../runtime/game/appearance.js';
+import {SKATES_CATALOG,lookOf,parseSkates} from '../runtime/game/skates.js';
 import {Wardrobe,PARTS,FABRICS,CRYSTALS,MAX_DESIGNS,NAME_LIMIT,designFromPreset,designSkin,parseDesign} from '../runtime/game/atelier.js';
 import {checkTimeline,cueTimes,spreadTimeline,retime,nudge,addCue,removeCue,requiredCues,sortedCues,barCount,barSeconds,barStart,parseTimeline,MIN_GAP_BARS,CUE_EARLY_BARS,CUE_LATE_BARS} from '../runtime/game/composer.js';
 import {ComboTracker} from '../runtime/sim/combo.js';
@@ -60,7 +61,7 @@ const PILOT_PROFILE=defaultControllerProfile();
 export const emptyControls=()=>({lx:0,ly:0,rx:0,ry:0,lean:0,pitch:0,kx:0,ky:0,kPrimaryX:0,kAltX:0,knee:.35,weight:.5,carriage:0,windup:0,push:false,brake:false,toe:false,turn:false,bracket:false,twizzle:false,spin:false,inaBauer:false,reset:false,pause:false,cyclePreset:false,cycleScheme:false,cycleJump:false,cycleView:false,zoom:0,dpadStep:0,tilt:0,toggleGame:false,cycleGhost:false,pickJump:-1,cycleProfile:false,cycleMoves:false,cycleRink:false});
 export class IceEngine {
  constructor(save=null,wardrobe=null,studio=null,board=null) {
-  this.wardrobe=Wardrobe.restore(wardrobe);this.draft=null;
+  this.wardrobe=Wardrobe.restore(wardrobe);this.draft=null;this.skates=parseSkates(null);
   // game/creator.ts and game/modes.ts: Creation's shelves, the sheet being made, the arcade's climb and board.
   this.studio=Studio.restore(studio,tracks.length);this.sheet=null;this.board=ArcadeBoard.restore(board);this.arcade=null;this.pilot=null;this.showcase=null;
   this.controllerProfile=defaultControllerProfile();this.setup=null;this.assistance=.75;
@@ -70,7 +71,7 @@ export class IceEngine {
   this.steadyChoice=null; this.hand=new SteadyHand(steadyStrength(this.steadyLevel()));
   this.start({mode:'free'});
  }
- catalog() {return {motion:libraryIndex(),story:{coach:COACH,season:SEASON,seasons:SEASONS_STORY,chapters:CHAPTERS,cast:cast(SEASONS.length).map(c=>({...c,look:rivalLook(c.name)})),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,danceFits:tracks.map(t=>suggestStyles(t.bpm,t.beatsPerBar).map(x=>({id:x.style.id,fit:x.fit}))),medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS,modes:MODES,backstories:RIVAL_BACKSTORIES,creator:creatorCatalog(),styles:STYLES.map(s=>({id:s.id,title:s.title,blurb:s.blurb})),arcade:{lives:ARCADE_LIVES,ladder:arcadeRounds('career').map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title,seconds:r.program.seconds}))},pilot:{elements:PILOT_ELEMENTS}};}
+ catalog() {return {motion:libraryIndex(),story:{coach:COACH,season:SEASON,seasons:SEASONS_STORY,chapters:CHAPTERS,cast:cast(SEASONS.length).map(c=>({...c,look:rivalLook(c.name)})),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,danceFits:tracks.map(t=>suggestStyles(t.bpm,t.beatsPerBar).map(x=>({id:x.style.id,fit:x.fit}))),medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,skates:SKATES_CATALOG,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS,modes:MODES,backstories:RIVAL_BACKSTORIES,creator:creatorCatalog(),styles:STYLES.map(s=>({id:s.id,title:s.title,blurb:s.blurb})),arcade:{lives:ARCADE_LIVES,ladder:arcadeRounds('career').map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title,seconds:r.program.seconds}))},pilot:{elements:PILOT_ELEMENTS}};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson','arcade','exhibition','showcase'].includes(mode)) throw Error('Unknown skating mode');
@@ -444,6 +445,8 @@ export class IceEngine {
  }
  /** The atelier: a design dressed for a preview, never saved. */
  dress(design){const d=parseDesign(design);if(!d)throw Error('That design uses something off the lists');return designSkin(d,-1);}
+ /** game/skates.ts: the skates worn. Cosmetic only; the client keeps the choice in its preferences, as it does the costume. */
+ setSkates(choice){this.skates=parseSkates(choice);}
  saveDesign(slot,design){if(!this.wardrobe.set(slot,design))throw Error('That design could not be kept');}
  train(stat){if(!STAT_NAMES.includes(stat))throw Error('Unknown training skill');this.career.train(stat);}
  snapshot() {
@@ -465,7 +468,7 @@ export class IceEngine {
     stage:TRUST_STAGES[l.stage]?.name??'',targets:l.targets,target:l.target,
     offer:l.falls>=2&&this.hand.strength===0?'Falling a lot? The steadying hand keeps your lean to what your speed can carry: turn it on in the menu.':'',prose:l.step?.prose??'',how:l.step?l.step.how(words):'',keys:l.step?.keys?.(words)??'',hold:l.step?.hold??0,progress:l.progress,fraction:l.fraction,status:l.status,message:l.toast>0?l.message:'',falls:l.falls}:null,
    routine:r?{how:r.current?elementHow(r.current,words)+this.rustNote(r):'',title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal,pcsScore:r.pcsScore,elapsed:r.elapsed,cues:r.cues?r.cues.map((c,k)=>({id:c.id,bar:c.bar,at:c.at,early:c.early,late:c.late,result:r.cueResults[k]})):null}:null,
-   draft:this.draftView(),wardrobe:{designs:this.wardrobe.designs,skins:this.wardrobe.skins()},
+   skates:lookOf(this.skates),draft:this.draftView(),wardrobe:{designs:this.wardrobe.designs,skins:this.wardrobe.skins()},
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},
    steady:{level:this.steadyLevel(),choice:this.steadyChoice,name:steadyName(this.steadyLevel()),held:this.hand.held},
    // For a meter: the lean now, the lean this speed's edge can hold, the hand's limit when it is on, and where she falls.

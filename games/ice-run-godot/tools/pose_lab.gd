@@ -108,6 +108,8 @@ func _process(_delta: float) -> bool:
 		skater.face_rng.seed = 1 # the same blinks each run, so runs compare
 		skeleton = skater.skeleton
 		if clip.has("skin") and not args.has("no-costume"): skater.apply_skin(clip.skin)
+		# pose_clip.mjs --skates=<id>: the clip's skates (game/skates.ts), cosmetic only.
+		if clip.has("skates") and not args.has("no-skates"): skater.apply_skates(clip.skates)
 		skater.apply_frame(clip.frames[0],true)
 	var ideal := render*2
 	if ideal >= clip.frames.size():
