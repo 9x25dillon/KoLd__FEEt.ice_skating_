@@ -17,6 +17,9 @@ const BLOCKS := [
 const ARM_OUT := 14.0 # degrees from hanging straight down, as tools/render_cast.py poses them
 var standing: Array[Node3D] = []
 var places: Array = []
+# game/podium.ts PODIUM_CLIPS: each place's clip, from the bridge's result.podium. The tracks
+# themselves arrive baked (the bridge's motionTrack) and play over the standing pose.
+var clips := {}
 
 func _ready() -> void:
 	for i in BLOCKS.size():
@@ -82,6 +85,22 @@ func present(rows: Array, looks: Dictionary, you_model: String, you_costume: Dic
 		places.append({"place":int(row.place),"name":str(row.name),"you":bool(row.get("you",false)),"model":s.model_path})
 	visible = not standing.is_empty()
 	return standing.size()
+
+# The clips `rows` (result.podium: place, clip) ask for, each once: the ids to request.
+func wanted(rows: Array) -> Array:
+	clips.clear()
+	for r in rows:
+		clips[int(r.place)] = str(r.get("clip",""))
+	var ids: Array = []
+	for c in clips.values():
+		if not str(c).is_empty() and not ids.has(c): ids.append(c)
+	return ids
+
+# A baked track arrived: every place that asked for it plays it.
+func play_track(track: Dictionary) -> void:
+	for i in standing.size():
+		if str(clips.get(int(places[i].place),"")) == str(track.get("id","")):
+			standing[i].play_track(track)
 
 func clear() -> void:
 	for s in standing:

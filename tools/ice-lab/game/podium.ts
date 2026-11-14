@@ -6,6 +6,10 @@
 // not an authored one. Gold in the middle, facing sim -y (toward the long side's
 // camera); `height` is the block's top, for a client to lift the skater by.
 // Presentation only: the places are the standings', nothing here scores.
+//
+// Each place plays a clip from the motion library (game/motion/ceremony.ts, 2026-11-14): gold
+// waves, silver holds the flowers (mirrored, the bouquet on the outside), bronze looks at the
+// medal. A client bakes it with the bridge's motionTrack and plays it over the standing pose.
 
 import { createState, step } from "../sim/solver.ts";
 import { SIM_DT } from "../sim/params.ts";
@@ -25,7 +29,10 @@ export const PODIUM_AT = { x: 0, y: 18 } as const;
 /** Ticks a podium skater settles on neutral input before it is shown. */
 export const SETTLE_TICKS = 30;
 
-export interface PodiumPlace { place: number; name: string; you: boolean; height: number; state: SkaterState; low: false }
+export interface PodiumPlace { place: number; name: string; you: boolean; height: number; state: SkaterState; low: false; clip: string }
+
+/** The clip each place plays (game/motion/ceremony.ts). AUTHORED. */
+export const PODIUM_CLIPS = ["podium.wave", "podium.flowers.mirror", "podium.medal"] as const;
 
 export function podium(rows: readonly Standing[], params: Params): PodiumPlace[] {
   return rows.filter(r => r.place <= 3).map(r => {
@@ -44,6 +51,6 @@ export function podium(rows: readonly Standing[], params: Params): PodiumPlace[]
       b.tangent = turn(b.tangent);
     }
     s.pos = at;
-    return { place: r.place, name: r.name, you: r.you, height: block.height, state: s, low: false };
+    return { place: r.place, name: r.name, you: r.you, height: block.height, state: s, low: false, clip: PODIUM_CLIPS[r.place - 1] };
   });
 }

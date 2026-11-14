@@ -34,6 +34,8 @@ public:
 
 	/** A new snapshot from the bridge. Snap puts the body there at once (a new run). */
 	void ApplyFrame(const FIceFrame& Frame, bool bSnap);
+	/** game/motion/track.ts: a clip baked into poses (the bridge's motionTrack), played over the last state (the podium). */
+	void PlayTrack(const TSharedPtr<FJsonObject>& Baked);
 	/** Loads a skeletal mesh by object path. False, with a stand-in shown, when it is missing. */
 	bool LoadModel(const FString& ObjectPath);
 	/**
@@ -76,6 +78,8 @@ private:
 	FString MotionLayer;
 	bool bMotionLive = false;
 	double MotionWeight = 0.0;
+	TSharedPtr<FJsonObject> Track;
+	double TrackT = 0.0;
 
 private:
 	void MeasureRig();

@@ -634,6 +634,15 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 			RebuildPage();
 		}
 	}
+	else if (Reply.Op == TEXT("motionTrack") && Reply.Data.IsValid())
+	{
+		// A baked podium clip: every podium skater that asked for it plays it.
+		const FString Id = Reply.Data->GetStringField(TEXT("id"));
+		for (int32 I = 0; I < PodiumSkaters.Num(); ++I)
+		{
+			if (PodiumSkaters[I] && PodiumClips.IsValidIndex(I) && PodiumClips[I] == Id) PodiumSkaters[I]->PlayTrack(Reply.Data);
+		}
+	}
 	else if (Reply.Op == TEXT("dress"))
 	{
 		// The atelier's preview: the design as a skin, worn but not kept.

@@ -358,6 +358,8 @@ private:
 	/** game/podium.ts: the three skaters and their blocks. */
 	UPROPERTY()
 	TArray<TObjectPtr<AIceSkater>> PodiumSkaters;
+	/** game/podium.ts: each podium skater's clip, by index; its baked track arrives by motionTrack. */
+	TArray<FString> PodiumClips;
 	UPROPERTY()
 	TArray<TObjectPtr<AActor>> PodiumBlocks;
 	FVector PodiumCentre = FVector::ZeroVector;

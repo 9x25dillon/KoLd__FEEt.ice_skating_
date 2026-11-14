@@ -330,12 +330,32 @@ void AIceSkater::ApplyFrame(const FIceFrame& Frame, bool bSnap)
 	}
 }
 
+void AIceSkater::PlayTrack(const TSharedPtr<FJsonObject>& Baked)
+{
+	Track = Baked;
+	TrackT = 0.0;
+}
+
 void AIceSkater::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (!bHaveState)
 	{
 		return;
+	}
+	// game/motion/track.ts: step through the baked poses by time, looping or held on the last.
+	const TArray<TSharedPtr<FJsonValue>>* Poses = nullptr;
+	if (Track.IsValid() && Track->TryGetArrayField(TEXT("poses"), Poses) && Poses->Num() > 0)
+	{
+		TrackT += FMath::Min(DeltaSeconds, .1f);
+		bool bLoop = false;
+		double Fps = 30.0;
+		Track->TryGetBoolField(TEXT("loop"), bLoop);
+		Track->TryGetNumberField(TEXT("fps"), Fps);
+		const int32 I = FMath::FloorToInt32(TrackT * Fps);
+		MotionPose = (*Poses)[bLoop ? I % Poses->Num() : FMath::Min(I, Poses->Num() - 1)]->AsObject();
+		MotionLayer = TEXT("full");
+		bMotionLive = MotionPose.IsValid();
 	}
 	Pose(FMath::Min(DeltaSeconds, .1f));
 	Spray->Step(FMath::Min(DeltaSeconds, .1f));

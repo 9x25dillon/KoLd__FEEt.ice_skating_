@@ -26,6 +26,7 @@ import {rivalLook} from '../runtime/game/cast.js';
 import {libraryIndex,CLIP_BY_ID} from '../runtime/game/motion/library.js';
 import {styleById,choreograph,suggestStyles} from '../runtime/game/motion/dance.js';
 import {MotionPlayer} from '../runtime/game/motion/player.js';
+import {bakeTrack,TRACK_FPS} from '../runtime/game/motion/track.js';
 import {WarmupGroup,WARMUP_SECONDS} from '../runtime/game/warmup.js';
 import {podium} from '../runtime/game/podium.js';
 import {COURSES,courseById,courseSteps,howContext,elementHow,recoverHow} from '../runtime/game/padcourse.js';
@@ -159,6 +160,8 @@ export class IceEngine {
   }
   return this.snapshot();
  }
+ /** game/motion/track.ts: a clip baked into poses at `fps`, for a client to play with no sim state under it (the podium). */
+ motionTrack(o={}){const c=CLIP_BY_ID.get(o.id);if(!c)throw Error('Unknown motion clip');const fps=Number.isFinite(o.fps)?Math.max(5,Math.min(60,o.fps)):TRACK_FPS;return bakeTrack(c,fps);}
  /** game/motion: one clip of the motion library, keys and all, by id. */
  motionClip(id){const c=CLIP_BY_ID.get(id);if(!c)throw Error('Unknown motion clip');return c;}
  /** game/motion/dance.ts: a style laid over a track's bars (the program's length by default), and the styles that suit it. */

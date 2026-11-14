@@ -541,3 +541,14 @@ test('career dances: refused when unknown, saved with the career, ranked for eac
  assert.equal(snap.eventTracks.length,snap.dances.length);
  e.configure({track:1});assert.ok(e.snapshot().career.eventTracks.every(t=>t===1));
 });
+
+test('the podium names a clip for each place, and the bridge bakes it for the client',()=>{
+ const e=new IceEngine();
+ const p=e.podiumPreview(0,30).podium;
+ assert.deepEqual(p.map(x=>x.clip),['podium.wave','podium.flowers.mirror','podium.medal']);
+ const t=e.motionTrack({id:p[0].clip});
+ assert.equal(t.id,'podium.wave');assert.equal(t.loop,true);assert.equal(t.fps,30);
+ assert.ok(t.poses.length>=30&&t.poses.every(x=>x.pelvis>0.8&&x.seg.upperArmR));
+ assert.throws(()=>e.motionTrack({id:'nope'}),/Unknown motion clip/);
+ assert.equal(e.motionTrack({id:'podium.wave',fps:500}).fps,60,'clamped');
+});

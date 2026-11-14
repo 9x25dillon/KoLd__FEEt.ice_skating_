@@ -175,6 +175,19 @@ void AIceRunGameMode::BuildPodiumFrom(const TArray<TSharedPtr<FJsonValue>>& InRo
 		S->SetEffects(false);
 		S->ApplyFrame(Theirs, true);
 		PodiumSkaters.Add(S);
+		PodiumClips.Add(Row->HasTypedField<EJson::String>(TEXT("clip")) ? Row->GetStringField(TEXT("clip")) : FString());
+	}
+	// game/podium.ts: each place's clip, baked once by the bridge.
+	TArray<FString> Asked;
+	for (const FString& Clip : PodiumClips)
+	{
+		if (Clip.IsEmpty() || Asked.Contains(Clip)) continue;
+		Asked.Add(Clip);
+		TSharedRef<FJsonObject> Options = MakeShared<FJsonObject>();
+		Options->SetStringField(TEXT("id"), Clip);
+		TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetObjectField(TEXT("options"), Options);
+		SendOp(TEXT("motionTrack"), Payload);
 	}
 	if (PodiumSkaters.Num() > 0 && Skater) Skater->SetActorHiddenInGame(true);
 	UE_LOG(LogIceRun, Log, TEXT("Podium: %d skaters."), PodiumSkaters.Num());
@@ -185,6 +198,7 @@ void AIceRunGameMode::ClearPodium()
 	for (AIceSkater* S : PodiumSkaters) if (S) S->Destroy();
 	for (AActor* B : PodiumBlocks) if (B) B->Destroy();
 	PodiumSkaters.Empty();
+	PodiumClips.Empty();
 	PodiumBlocks.Empty();
 	bPodiumBuilt = false;
 	if (Skater) Skater->SetActorHiddenInGame(false);
