@@ -218,12 +218,15 @@ export function elementHow(id: ElementId, c: HowContext): string {
   const push = exp(c) ? "Snap LT and RT in turn to push" : `Tap ${c.push} to push`;
   const lean = both(c) ? "both sticks a little to one side" : "the left stick a little to one side";
   const one = exp(c) ? "RB + Y" : `${c.modifier} + Y`;
+  // Blade Explorer: a push's power is the knee, and the knee is RT. The owner's pick, 2026-11-14, with
+  // game/setups.ts EXPLORER_PUSH_KNEE: their first First ice pushed 120 times with RT at zero.
+  const knee = c.setup === "explorer" ? " RT bends the knee as you push: the deeper, the stronger the push." : "";
   switch (id) {
-    case "glide": return `${push}, then stand tall and glide above 3 m/s for 3 seconds.`;
+    case "glide": return `${push}, then stand tall and glide above 3 m/s for 3 seconds.${knee}`;
     case "edge": return `Skating above 2 m/s, hold ${lean} for 2 seconds.`;
     case "crossover": return exp(c)
       ? `On a curve (${lean}), tap A to turn backward. Then lean a little deeper with soft knees, LT and RT about halfway: the crossovers come by themselves, on the beat.`
-      : `Carve with ${lean} above 2 m/s and tap ${c.push} through the curve.`;
+      : `Carve with ${lean} above 2 m/s and tap ${c.push} through the curve.${knee}`;
     // Half a turn, landed clean: career's JUMP_TURN since 2026-11-02, so these are the tutorial's
     // measured "Turn in the air" words (game/tutorial.ts), which start on an edge.
     case "jump": return c.setup === "simulation"

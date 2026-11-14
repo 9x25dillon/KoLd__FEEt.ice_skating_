@@ -144,7 +144,10 @@ test("the defaults are the owner's pick: off where the setup promises minimal as
 // falls come at a standstill, where no lean limit reaches, and it barely moves them.
 const FALLS: Record<string, { jerky: number[]; calm: number[] }> = {
   simulation: { jerky: [19, 5, 3], calm: [10, 4, 1] },
-  explorer: { jerky: [7, 4, 2], calm: [6, 2, 0] },
+  // Re-measured 2026-11-14 with Explorer's default push knee (game/setups.ts EXPLORER_PUSH_KNEE),
+  // the owner's pick: [7, 4, 2] and [6, 2, 0] before. Harder pushes, more falls past the lean
+  // limit; 0.5 measured no better ([11, 9, 6], [6, 4, 3]).
+  explorer: { jerky: [10, 8, 5], calm: [11, 6, 6] },
   repertoire: { jerky: [16, 5, 3], calm: [14, 4, 3] },
   experimental: { jerky: [29, 21, 14], calm: [24, 24, 16] },
 };

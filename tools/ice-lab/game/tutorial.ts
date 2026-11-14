@@ -229,7 +229,7 @@ export const STEPS: readonly TutorialStep[] = [
     prose: "Speed is only worth what your balance can carry. Push — and between pushes, come back to that same quiet glide.",
     how: c => exp(c)
       ? "B puts you on the right foot. Snap LT, then RT, then LT — pull and let go quickly; each snap pushes from the leg you stand on and the weight goes across. Three pushes, then X + B — both feet under you — and glide 2 s."
-      : `Tap ${c.push} three times: each push comes from the leg you stand on, then the weight goes across. Then glide 2 s without pushing.`,
+      : `Tap ${c.push} three times: each push comes from the leg you stand on, then the weight goes across. Then glide 2 s without pushing.${c.setup === "explorer" ? " Your push is your knee, and RT bends it: squeeze RT as you push, and the deeper it is, the harder you go." : ""}`,
     keys: () => "Keyboard: Space pushes.",
     trust: "Push and settle, push and settle. That rhythm is your balance.",
     check: (s, m) => {

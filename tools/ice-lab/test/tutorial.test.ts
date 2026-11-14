@@ -512,7 +512,8 @@ function playOne(setup: OneStick, id: string, T = 40) {
 }
 
 const ONE_STICK_PASS: Record<OneStick, Record<string, number>> = {
-  explorer: { marker: 4.233, cone: 8.3, cross: 12.842, lap: 13.2, spot: 4.383 },
+  // Explorer's default push knee (game/setups.ts EXPLORER_PUSH_KNEE, 2026-11-14): cross 12.842 -> 12.742, lap 13.2 -> 13.075.
+  explorer: { marker: 4.233, cone: 8.3, cross: 12.742, lap: 13.075, spot: 4.383 },
   repertoire: { marker: 3.825, cone: 11.942, cross: 17.967, lap: 14.067, spot: 4.383 },
 };
 for (const setup of ["explorer", "repertoire"] as const) for (const id of TRAVEL) test(`${setup}: "${STEPS.find(x => x.id === id)!.title}" passes on the pad`, () => {
