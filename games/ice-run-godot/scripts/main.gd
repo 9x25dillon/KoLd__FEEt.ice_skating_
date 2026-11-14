@@ -595,6 +595,7 @@ func show_page(page: String) -> void:
 		if laid != null:
 			menu.add_child(paragraph("On its music: %s. It runs the full %d s, and each element has its bar. Changing the order above takes it off the music." % [str(catalog.tracks[int(laid.track)].title),int(event.seconds)],13))
 		menu.add_child(button("♪  Edit it on the music →" if laid != null else "♪  Lay it on the music →",func():timeline_edit({"action":"open"},focus_event)))
+		show_event_dance()
 		var lock := str(frame.career.locks[focus_event])
 		if not lock.is_empty():
 			menu.add_child(paragraph(lock,14))
@@ -1123,6 +1124,28 @@ func style_title(i: int) -> String:
 	var styles: Array = catalog.get("styles",[])
 	return str(styles[i].title) if i >= 0 and i < styles.size() else "No style"
 
+## The briefing's dance row (CareerState.dances): this event's style, cycled best fit for its music first.
+## Presentation only, like the Settings style it overrides.
+func show_event_dance() -> void:
+	var dances: Array = frame.career.get("dances",[])
+	var tracks_of: Array = frame.career.get("eventTracks",[])
+	var fits: Array = catalog.get("danceFits",[])
+	if focus_event >= dances.size() or focus_event >= tracks_of.size() or int(tracks_of[focus_event]) >= fits.size(): return
+	var ranked: Array = fits[int(tracks_of[focus_event])]
+	var ids: Array = [""]
+	for x in ranked: ids.append(str(x.id))
+	var now := "" if dances[focus_event] == null else str(dances[focus_event])
+	var shown := "Settings (%s)" % dance_name(dance_style) if now.is_empty() else dance_name(now)
+	var fit := ""
+	for x in ranked:
+		if str(x.id) == (dance_style if now.is_empty() else now): fit = "   ·   suits the music %d%%" % roundi(float(x.fit)*100)
+	menu.add_child(keyed(button("Dance: %s%s" % [shown,fit],func():
+		var next = cycled(ids,now)
+		link.send("careerDance",{"event":focus_event,"style":null if str(next).is_empty() else next})),"event-dance"))
+	var best: Array = []
+	for x in ranked.slice(0,3): best.append("%s %d%%" % [dance_name(str(x.id)),roundi(float(x.fit)*100)])
+	menu.add_child(paragraph("The arms between elements; never in the air or a spin. Shown, not scored. Best for %s: %s." % [str(catalog.tracks[int(tracks_of[focus_event])].title),", ".join(best)],12))
+
 func dance_name(id: String) -> String:
 	for st in catalog.get("motion",{}).get("styles",[]):
 		if str(st.id) == id: return str(st.name)
@@ -1512,6 +1535,10 @@ func on_engine(op: String, data: Dictionary) -> void:
 		return
 	if op == "careerStyle":
 		show_page("career")
+		return
+	if op == "careerDance":
+		focus_key = "event-dance"
+		show_page("event")
 		return
 	if op == "newCareer":
 		notice.text = "A new career begins. Your last one is kept beside the save, dated."

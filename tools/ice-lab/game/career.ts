@@ -30,6 +30,7 @@ import { parseSheet, sheetProfile } from "./creator.ts";
 import type { SkaterSheet } from "./creator.ts";
 import { ORIGIN_STAT, ORIGIN_STYLE_MASTERY } from "./backstories.ts";
 import { checkTimeline, cueResult, parseTimeline, timelineOrder } from "./composer.ts";
+import { styleById } from "./motion/dance.ts";
 import type { BeatGrid, CueResult, CueTime, Timeline } from "./composer.ts";
 
 export const ELEMENTS = {
@@ -408,6 +409,11 @@ export class CareerState {
   plans: (ElementId[] | null)[] = CAREER_EVENTS.map(() => null);
   /** game/composer.ts: each event's program on its music, or null. Its order is plans[i]. */
   timelines: (Timeline | null)[] = CAREER_EVENTS.map(() => null);
+  /**
+   * game/motion/dance.ts: the dance style that dresses each event's program, by id, or null for
+   * the one in Settings. Presentation only: it moves no physics and no score.
+   */
+  dances: (string | null)[] = CAREER_EVENTS.map(() => null);
   /** Best segment score at each event, for the standings; null until skated. */
   best: (number | null)[] = CAREER_EVENTS.map(() => null);
   /** game/wear.ts: what falling has done to the body, 0 fresh upward, by region. */
@@ -587,12 +593,18 @@ export class CareerState {
   }
   /** Takes event `i`'s program off its music; the order stays. */
   clearTimeline(i: number) { if (CAREER_EVENTS[i]) this.timelines[i] = null; }
+  /** Dresses event `i` in dance style `id`, or null for the Settings one. Returns whether it was allowed. */
+  setDance(i: number, id: string | null): boolean {
+    if (!CAREER_EVENTS[i] || (id !== null && !styleById(id))) return false;
+    this.dances[i] = id;
+    return true;
+  }
   /** Event `i` as this skater will skate it. */
   planned(i: number): CareerEvent {
     const plan = this.plans[i];
     return plan ? { ...CAREER_EVENTS[i], routine: plan } : CAREER_EVENTS[i];
   }
-  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, timelines: this.timelines, best: this.best, wear: this.wear, injured: this.injured, style: this.style, styleMastery: this.styleMastery, journal: this.journal, customLeanings: this.customLeanings, customNudge: this.customNudge, skater: this.skater }); }
+  serialize() { return JSON.stringify({ version: 1, medals: this.medals, xp: this.profile.xp, stats: this.profile.stats, armFocus: this.armFocus, armBest: this.armBest, lessons: this.lessons, weeks: this.weeks, rust: this.rust, drilled: this.drilled, plans: this.plans, timelines: this.timelines, dances: this.dances, best: this.best, wear: this.wear, injured: this.injured, style: this.style, styleMastery: this.styleMastery, journal: this.journal, customLeanings: this.customLeanings, customNudge: this.customNudge, skater: this.skater }); }
   static restore(json: string | null): CareerState {
     const career = new CareerState();
     try {
@@ -603,7 +615,7 @@ export class CareerState {
         Array.isArray(a) && a.length === n ? a : Array.isArray(a) && a.length === one ? [...a, ...Array(n - one).fill(fill)] : null;
       if (saved && typeof saved === "object") {
         saved.medals = fit(saved.medals, 0) ?? saved.medals;
-        for (const k of ["plans", "timelines", "best"]) if (saved[k] !== undefined) saved[k] = fit(saved[k], null) ?? saved[k];
+        for (const k of ["plans", "timelines", "dances", "best"]) if (saved[k] !== undefined) saved[k] = fit(saved[k], null) ?? saved[k];
       }
       // A created skater (game/creator.ts) may start under 50 in a stat; the original never did.
       const sheet = saved?.skater == null ? null : parseSheet(saved.skater);
@@ -634,6 +646,9 @@ export class CareerState {
           const t = value === null ? null : parseTimeline(value), plan = career.plans[i];
           return t && plan && timelineOrder(t).join() === plan.join() ? t : null;
         });
+      // Saves from before per-event dances dress every event in the Settings style. An unknown id does too.
+      if (Array.isArray(saved.dances) && saved.dances.length === CAREER_EVENTS.length)
+        career.dances = saved.dances.map((d: unknown) => typeof d === "string" && styleById(d) ? d : null);
       if (Array.isArray(saved.best) && saved.best.length === CAREER_EVENTS.length && saved.best.every((b: unknown) => b === null || Number.isFinite(b))) career.best = [...saved.best];
       // Saves from before wear keep a fresh body. A bad field keeps the default.
       const regions = BODY_REGIONS.map(r => r.id);
