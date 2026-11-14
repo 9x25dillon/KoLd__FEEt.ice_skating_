@@ -923,6 +923,30 @@ export interface Params {
    */
   pitchAnkleTau: number;
 
+  // ── the weight transfer ───────────────────────────────────────────────────
+  /**
+   * 0: each blade's share of the body's load is the weight input's, from one
+   * tick to the next — a pad's 0 / 0.5 / 1 moves the whole body from one
+   * blade to the other in 1/120 s, and the stance jumps under it (measured
+   * 2026-11-14: 100/0 to 50/50 in one tick, the left contact 12 cm sideways
+   * in the same tick). 1: the legs move the load between the blades over
+   * time. The share follows the asked one as a critically damped second-order
+   * response (no overshoot, its rate continuous), and the stance moves with
+   * it: the blade taking the load comes under the pendulum's base, the one
+   * giving it up goes out a stance's width, and it leaves the ice when its
+   * share reaches zero, not when the input changes. A pivot, a spin and an Ina
+   * Bauer still own their foot outright, and a landing comes down on the
+   * foot it lands on — those set the share at once.
+   */
+  weightTransferMode: number;
+  /**
+   * s. weightTransferMode: how long the legs take to move the whole body from
+   * one blade to the other (to within 0.5 %). AUTHORED, not measured: chosen
+   * inside the double-support times of a stride; to be measured against
+   * reference skating.
+   */
+  weightTransferTime: number;
+
   // ── the toe pick ──────────────────────────────────────────────────────────
   /**
    * 0: nothing raises FALL.ToePickTrip. 1: a loaded blade whose contact sits
@@ -1231,6 +1255,8 @@ export const DEFAULT_PARAMS: Params = {
   pitchGain: 1,
   pitchInternalMode: 0,
   pitchAnkleTau: 0.16,
+  weightTransferMode: 0,
+  weightTransferTime: 0.25,
 
   toePickMode: 0,
   toePickEngage: 0.11,
@@ -1433,6 +1459,8 @@ export function validate(p: Params): string[] {
   if (!(p.pitchGain > 0)) errs.push("pitchGain must be positive");
   if (![0, 1].includes(p.pitchInternalMode)) errs.push("pitchInternalMode is 0 (the ankle alone) or 1 (the arms and trunk as well)");
   if (!(p.pitchAnkleTau >= 0)) errs.push("pitchAnkleTau is a time constant in seconds, or 0 (the ankle takes the whole demand)");
+  if (![0, 1].includes(p.weightTransferMode)) errs.push("weightTransferMode is 0 (the weight input sets each blade's load at once) or 1 (the legs move the load over time)");
+  if (!(p.weightTransferTime >= 0.05 && p.weightTransferTime <= 1)) errs.push("weightTransferTime is s for a whole transfer, 0.05 to 1");
   if (![0, 1].includes(p.toePickMode)) errs.push("toePickMode is 0 (the pick never trips) or 1 (a pick that bites going forward trips)");
   if (!(p.toePickEngage > 0 && p.toePickEngage < 0.5 * p.bladeLength)) errs.push("toePickEngage must lie between the blade's centre and its toe (0 .. bladeLength / 2)");
   if (!(p.toePickTripSpeed > 0)) errs.push("toePickTripSpeed must be positive");

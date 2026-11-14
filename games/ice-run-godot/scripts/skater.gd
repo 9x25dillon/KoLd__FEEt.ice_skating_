@@ -3,6 +3,9 @@ const SimSpace = preload("res://scripts/sim_space.gd")
 var skeleton: Skeleton3D
 var bone_ids: Dictionary = {}
 var state: Dictionary = {}
+# sim/support.ts, sent beside the state: who carries the skater, where the
+# pressure is, how the load is moving. Empty for a clip recorded before it.
+var support_signal: Dictionary = {}
 # game/motion/track.ts: a clip baked into poses, played where there is no sim state (the podium).
 var track: Dictionary = {}
 var track_t := 0.0
@@ -507,6 +510,8 @@ func find_skeleton(node: Node) -> Skeleton3D:
 
 func apply_frame(frame: Dictionary, snap: bool = false) -> void:
 	state = frame.state
+	var sent = frame.get("support")
+	support_signal = sent if sent is Dictionary else {}
 	pose_low = frame.low
 	var next_motion = frame.get("motion")
 	motion = next_motion if next_motion is Dictionary else {}
@@ -697,9 +702,13 @@ func _process(dt: float) -> void:
 	for blade in state.blade:
 		var offset: Vector3 = to_body*SimSpace.direction(float(blade.contact.x)-float(state.pos.x),float(blade.contact.y)-float(state.pos.y))
 		contacts.append(offset)
-		if bool(blade.inContact):
+		if support_signal.is_empty() and bool(blade.inContact):
 			base += offset*float(blade.weight)
 			support += float(blade.weight)
+	# The support signal's pressure and shares, the one reading Unreal poses from too.
+	if not support_signal.is_empty():
+		support = float(support_signal.share[0])+float(support_signal.share[1])
+		base = to_body*SimSpace.direction(float(support_signal.cop.x)-float(state.pos.x),float(support_signal.cop.y)-float(state.pos.y))*support
 	var grounded := support>0 and not air and not bool(state.fallen)
 	track_fall(dt,to_body)
 	var fall_roll := smoothstep(FALL_ROLL_FROM,FALL_ROLL_TO,fall_clock)
@@ -817,9 +826,11 @@ func _process(dt: float) -> void:
 		var suffix := "L" if i == 0 else "R"
 		var side := -1.0 if i == 0 else 1.0
 		var blade: Dictionary = state.blade[i]
-		var on_ice := bool(blade.inContact) and not air and not bool(state.fallen) and not (finish>.01 and i!=spin_foot)
+		var share := float(support_signal.share[i]) if not support_signal.is_empty() else float(blade.weight)
+		var carries := share>0.0 if not support_signal.is_empty() else bool(blade.inContact)
+		var on_ice := carries and not air and not bool(state.fallen) and not (finish>.01 and i!=spin_foot)
 		# The loaded hip rides higher than the unloaded one.
-		var h := hip+trunk_tilt*Vector3(side*hip_half_width,(float(blade.weight)-.5)*.05 if grounded else 0.0,0)
+		var h := hip+trunk_tilt*Vector3(side*hip_half_width,(share-.5)*.05 if grounded else 0.0,0)
 		var under := bool(state.fallen) and side==fall_side
 		if bool(state.fallen):
 			h.y += -.035 if under else .05

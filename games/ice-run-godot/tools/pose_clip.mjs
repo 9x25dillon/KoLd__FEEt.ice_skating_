@@ -6,6 +6,7 @@ import {writeFileSync} from 'node:fs';
 import {IceEngine} from '../bridge/engine.mjs';
 import {createState} from '../runtime/sim/solver.js';
 import {NEUTRAL_INPUT} from '../runtime/sim/types.js';
+import {supportSignal} from '../runtime/sim/support.js';
 import {SKINS} from '../runtime/game/appearance.js';
 import {MotionPlayer} from '../runtime/game/motion/player.js';
 // --motion: each frame carries game/motion/player.ts's clip (a fall's, or --style=<id>'s arms), as the bridge sends it.
@@ -13,11 +14,13 @@ const motionArg=process.argv.includes('--motion'),styleArg=process.argv.find(a=>
 const player=motionArg?new MotionPlayer(styleArg,{bpm:120,beatsPerBar:4,offset:0},120):null;
 const e=new IceEngine();
 e.start({mode:'free'});
+// --transfer: the legs move the load between the blades over time (weightTransferMode 1).
+if(process.argv.includes('--transfer'))e.params={...e.params,weightTransferMode:1};
 e.state=createState(e.params,6);
 e.state.pos.y=18;
 const pick=b=>({contact:b.contact,tangent:b.tangent,tilt:b.tilt,weight:b.weight,normalLoad:b.normalLoad,inContact:b.inContact,latSlipAccel:b.latSlipAccel,longSpeed:b.longSpeed,demandRatio:b.demandRatio});
 const frames=[],marks=[];
-const record=()=>{const s=e.state;const motion=player?player.frame(s,s.tick/120):null;frames.push({low:false,motion,state:{tick:s.tick,pos:s.pos,vel:s.vel,heading:s.heading,yawRate:s.yawRate,lean:s.lean,comZ:s.comZ,knee:s.knee,intAccel:s.intAccel,balanceError:s.balanceError,latAccel:s.latAccel,armsL:s.armsL,strokeTime:s.strokeTime,strokeFoot:s.strokeFoot,twist:s.twist,freeSwing:s.freeSwing,fallen:s.fallen,move:s.move,supportMode:s.supportMode,supportFoot:s.supportFoot,jump:{phase:s.jump.phase,z:s.jump.z,vz:s.jump.vz,rotation:s.jump.rotation,inertia:s.jump.inertia},spin:{position:s.spin.position,inertia:s.spin.inertia,omega:s.spin.omega},blade:s.blade.map(pick)}});};
+const record=()=>{const s=e.state;const motion=player?player.frame(s,s.tick/120):null;frames.push({low:false,motion,support:supportSignal(s),state:{tick:s.tick,pos:s.pos,vel:s.vel,heading:s.heading,yawRate:s.yawRate,lean:s.lean,comZ:s.comZ,knee:s.knee,intAccel:s.intAccel,balanceError:s.balanceError,latAccel:s.latAccel,armsL:s.armsL,strokeTime:s.strokeTime,strokeFoot:s.strokeFoot,twist:s.twist,freeSwing:s.freeSwing,fallen:s.fallen,move:s.move,supportMode:s.supportMode,supportFoot:s.supportFoot,jump:{phase:s.jump.phase,z:s.jump.z,vz:s.jump.vz,rotation:s.jump.rotation,inertia:s.jump.inertia},spin:{position:s.spin.position,inertia:s.spin.inertia,omega:s.spin.omega},blade:s.blade.map(pick)}});};
 const run=(name,ticks,input)=>{marks.push({name,tick:frames.length});for(let i=0;i<ticks;i++){e.tick({...NEUTRAL_INPUT,...input(i)});record();}};
 // --falls: a real fall each way and getting up, instead of the passage below.
 if(process.argv.includes('--falls')){
@@ -30,6 +33,17 @@ if(process.argv.includes('--falls')){
  const fallAt=frames.flatMap((f,i)=>f.state.fallen&&!frames[i-1]?.state.fallen?[i]:[]);
  writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,fallAt,frames}));
  console.log(JSON.stringify({ticks:frames.length,fallAt,leans:fallAt.map(i=>frames[i].state.lean),marks}));
+ process.exit(0);
+}
+// --strokes: forward stroking. Each beat pushes off one blade with both on the ice, then glides on the other alone.
+if(process.argv.includes('--strokes')){
+ e.state.pos.x=-26; // the passage covers about 30 m: start it near one end, clear of the boards at the other.
+ run('two-foot glide',60,()=>({lean:0,weight:.5,knee:.4}));
+ for(let k=0;k<6;k++){const foot=k%2,other=1-foot;run(`push off the ${foot?'right':'left'}, glide on the ${other?'right':'left'}`,72,i=>({lean:0,weight:i<24?.5:other,knee:.55,push:i===0,pushFoot:foot}));}
+ run('two-foot glide',60,()=>({lean:0,weight:.5,knee:.4}));
+ const s=e.state;
+ writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,frames}));
+ console.log(JSON.stringify({ticks:frames.length,marks,fallen:frames.filter(f=>f.state.fallen).length,speed:Math.hypot(s.vel.x,s.vel.y)}));
  process.exit(0);
 }
 run('two-foot glide',120,()=>({lean:0,weight:.5,knee:.35}));

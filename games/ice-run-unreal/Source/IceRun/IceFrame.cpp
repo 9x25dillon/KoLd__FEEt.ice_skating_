@@ -39,6 +39,34 @@ namespace
 		Blade.bInContact = Flag(B, TEXT("inContact"), true);
 		return Blade;
 	}
+
+	FIceSupport ParseSupport(const TSharedPtr<FJsonObject>& O)
+	{
+		FIceSupport Support;
+		if (!O.IsValid()) return Support;
+		const TArray<TSharedPtr<FJsonValue>>* Share = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* Rate = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* Role = nullptr;
+		if (!O->TryGetArrayField(TEXT("share"), Share) || Share->Num() < 2) return Support;
+		Support.bValid = true;
+		O->TryGetStringField(TEXT("phase"), Support.Phase);
+		Support.Foot = int32(Number(O, TEXT("foot")));
+		Support.Toward = int32(Number(O, TEXT("toward"), -1.0));
+		const bool bRate = O->TryGetArrayField(TEXT("rate"), Rate) && Rate->Num() >= 2;
+		const bool bRole = O->TryGetArrayField(TEXT("role"), Role) && Role->Num() >= 2;
+		for (int32 I = 0; I < 2; ++I)
+		{
+			Support.Share[I] = (*Share)[I]->AsNumber();
+			Support.Rate[I] = bRate ? (*Rate)[I]->AsNumber() : 0.0;
+			Support.Role[I] = bRole ? (*Role)[I]->AsString() : FString();
+		}
+		Support.Cop = Vec(O, TEXT("cop"));
+		const TSharedPtr<FJsonObject> Over = Child(O, TEXT("comOver"));
+		Support.ComOverAcross = Number(Over, TEXT("across"));
+		Support.ComOverAlong = Number(Over, TEXT("along"));
+		Support.ComHeight = Number(O, TEXT("comHeight"), 0.95);
+		return Support;
+	}
 }
 
 FIceFrame FIceFrame::Parse(const TSharedPtr<FJsonObject>& Snapshot)
@@ -87,6 +115,7 @@ FIceFrame FIceFrame::Parse(const TSharedPtr<FJsonObject>& Snapshot)
 			State.Blade[I] = ParseBlade((*Blades)[I]->AsObject());
 		}
 	}
+	State.Support = ParseSupport(Child(Snapshot, TEXT("support")));
 
 	Snapshot->TryGetStringField(TEXT("mode"), Frame.Mode);
 	Snapshot->TryGetStringField(TEXT("move"), Frame.MoveLabel);
