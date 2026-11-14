@@ -25,7 +25,10 @@ const H = 0.89; // standing pelvis
 
 export const SPIN_POSES: readonly Clip[] = [
   // Upright
-  hold("SP_Upright_Basic", "Upright", H, { trunk: UP, head: UP, ...STAND_L, thighR: dir(15, -55), shinR: dir(15, -90), footR: dir(0, -40), ...armsIn }, ["upright", "catalogued"], "Free leg crossed in front at the knee, arms drawn in."),
+  // 2026-11-14: the free knee raised forward and the shin folded back so the blade rests at the skating
+  // knee. As first written (thighR dir(15, -55), shin straight down) the free boot hung a hand's width
+  // off the ice and the spin read as two-footed in the clients (PR #97's stills).
+  hold("SP_Upright_Basic", "Upright", H, { trunk: UP, head: UP, ...STAND_L, thighR: dir(-5, -45), shinR: dir(-151, -41), footR: dir(-150, -70), ...armsIn }, ["upright", "catalogued"], "Free knee raised in front, its blade drawn in to the skating knee, arms drawn in."),
   hold("SP_Upright_Crossfoot", "Crossfoot", H, { trunk: UP, head: UP, ...STAND_L, thighR: dir(-10, -88), shinR: dir(-15, -88), footR: dir(-10, -30), upperArmL: dir(-20, -50), forearmL: dir(70, 0), upperArmR: dir(20, -50), forearmR: dir(-70, 0) }, ["upright", "catalogued"], "The scratch: both blades crossed, arms folded tight; the fastest spin there is."),
   hold("SP_Upright_Layback", "Layback", H - 0.03, { trunk: dir(180, 45), head: dir(180, 20), ...STAND_L, thighR: dir(160, -45), shinR: dir(100, -80), footR: dir(150, -10), upperArmL: dir(-150, 30), forearmL: dir(-170, 30), upperArmR: dir(150, 30), forearmR: dir(170, 30) }, ["upright", "catalogued", "back"], "The back arched over the free leg, arms trailing behind."),
   hold("SP_Upright_Biellmann", "Biellmann", H - 0.02, { trunk: dir(180, 75), head: dir(0, 85), ...STAND_L, thighR: dir(180, 20), shinR: dir(180, 75), footR: dir(0, 80), upperArmL: dir(-20, 85), forearmL: dir(160, 60), upperArmR: dir(20, 85), forearmR: dir(-160, 60) }, ["upright", "catalogued", "flexibility"], "The free blade pulled up from behind, over the head, both hands holding it."),

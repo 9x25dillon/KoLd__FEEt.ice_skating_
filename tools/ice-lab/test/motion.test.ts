@@ -165,3 +165,37 @@ test("the shoulders twist against the hips: a three-turn winds, turns and checks
   const m = CLIP_BY_ID.get("move.three-turn.mirror")!;
   assert.deepEqual(m.keys.map(k => k.pose.twist), tw.map(t => -t), "the mirror twists the other way");
 });
+
+// ── Around the program, and the step sequence's vocabulary (2026-11-14) ──────
+import { CEREMONY, IDLES } from "../game/motion/ceremony.ts";
+import { FOOTWORK } from "../game/motion/footwork.ts";
+
+test("the library has the minutes around a program: the kiss-and-cry, bows, the podium, the warm-up, and footwork", () => {
+  assert.ok(clipsIn("ceremony").length >= 25, `${clipsIn("ceremony").length} ceremony clips`);
+  assert.ok(clipsIn("idle").length >= 15, `${clipsIn("idle").length} idles`);
+  assert.ok(clipsIn("step").length >= 15, `${clipsIn("step").length} footwork clips`);
+  for (const id of ["kc.wait", "kc.joy", "kc.disappointed", "bow.reverence", "podium.wave", "podium.medal", "idle.breathe", "idle.visualize", "step.toe-run", "step.chasse", "step.cross-roll"]) assert.ok(CLIP_BY_ID.has(id), id);
+  assert.deepEqual(Object.keys(libraryIndex().counts).filter(k => ["step", "ceremony", "idle"].includes(k)), ["step", "ceremony", "idle"]);
+});
+
+test("every one-sided clip around the program has its mirror, and the mirror is the other side", () => {
+  for (const set of [CEREMONY, IDLES, FOOTWORK]) for (const c of set.filter(x => x.id.endsWith(".mirror"))) {
+    const src = CLIP_BY_ID.get(c.id.slice(0, -".mirror".length))!;
+    assert.ok(src, c.id);
+    const a = sample(src, 0), b = sample(c, 0);
+    if (a.seg?.upperArmR && b.seg?.upperArmL) assert.ok(Math.abs(a.seg.upperArmR[0] + b.seg.upperArmL[0]) < 1e-9, `${c.id}: the right arm's line is the left's`);
+  }
+  assert.ok(CLIP_BY_ID.has("kc.wave.mirror") && CLIP_BY_ID.has("step.kick.mirror") && CLIP_BY_ID.has("idle.quad-stretch.mirror"));
+});
+
+test("the kiss-and-cry is seated and the podium stands; a bow ends upright", () => {
+  for (const c of clipsIn("ceremony").filter(x => x.tags.includes("seated"))) assert.ok(sample(c, 0).pelvis! < 0.55, `${c.id} sits`);
+  for (const id of ["podium.wave", "podium.medal", "podium.flowers"]) assert.ok(sample(CLIP_BY_ID.get(id)!, 0).pelvis! > 0.85, `${id} stands`);
+  for (const id of ["bow.reverence", "bow.deep"]) { const c = CLIP_BY_ID.get(id)!; assert.ok(sample(c, c.duration).pelvis! > 0.85, `${id} ends up`); }
+});
+
+test("the upright spin's free blade is drawn in to the skating knee, off the ice", () => {
+  const j = joints(sample(CLIP_BY_ID.get("SP_Upright_Basic")!, 0));
+  assert.ok(j.ankleR[1] > j.kneeL[1] - 0.15, `free ankle ${j.ankleR[1].toFixed(2)} m, skating knee ${j.kneeL[1].toFixed(2)} m`);
+  assert.ok(Math.hypot(j.ankleR[0] - j.kneeL[0], j.ankleR[2] - j.kneeL[2]) < 0.2, "beside the skating knee");
+});

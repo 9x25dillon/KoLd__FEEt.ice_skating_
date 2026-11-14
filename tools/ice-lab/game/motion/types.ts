@@ -47,7 +47,7 @@ export const TWIST_LIMIT = 60;
 export type Ease = "linear" | "in" | "out" | "inOut" | "hold";
 export interface Key { t: number; pose: Pose; ease?: Ease }
 
-export type Category = "fall" | "expression" | "spin" | "transition" | "leg" | "recovery";
+export type Category = "fall" | "expression" | "spin" | "transition" | "leg" | "recovery" | "step" | "ceremony" | "idle";
 
 export interface Clip {
   id: string;
