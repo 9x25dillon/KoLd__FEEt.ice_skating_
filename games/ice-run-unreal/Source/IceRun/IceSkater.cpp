@@ -557,11 +557,17 @@ void AIceSkater::Pose(float Dt)
 	{
 		const FIceBlade& B = S.Blade[I];
 		Contacts[I] = BodyFromSim(B.Contact.X - S.Pos.X, B.Contact.Y - S.Pos.Y);
-		if (B.bInContact)
+		if (!S.Support.bValid && B.bInContact)
 		{
 			Base += Contacts[I] * B.Weight;
 			Support += B.Weight;
 		}
+	}
+	// The support signal's pressure and shares, the one reading scripts/skater.gd poses from too.
+	if (S.Support.bValid)
+	{
+		Support = S.Support.Share[0] + S.Support.Share[1];
+		Base = BodyFromSim(S.Support.Cop.X - S.Pos.X, S.Support.Cop.Y - S.Pos.Y) * Support;
 	}
 	const bool bGrounded = Support > 0.0 && !bAir && !S.bFallen;
 	TrackFall(Dt);
@@ -684,9 +690,11 @@ void AIceSkater::Pose(float Dt)
 		const FString Suffix = I == 0 ? TEXT("L") : TEXT("R");
 		const double Side = I == 0 ? -1.0 : 1.0;
 		const FIceBlade& Blade = S.Blade[I];
-		const bool bOnIce = Blade.bInContact && !bAir && !S.bFallen && !(Finish > .01 && I != SpinFoot);
+		const double Share = S.Support.bValid ? S.Support.Share[I] : Blade.Weight;
+		const bool bCarries = S.Support.bValid ? Share > 0.0 : Blade.bInContact;
+		const bool bOnIce = bCarries && !bAir && !S.bFallen && !(Finish > .01 && I != SpinFoot);
 		// The loaded hip rides higher than the unloaded one.
-		FVector H = Hip + TrunkTilt.RotateVector(FVector(Side * HipHalfWidth, bGrounded ? (Blade.Weight - .5) * .05 : 0.0, 0.0));
+		FVector H = Hip + TrunkTilt.RotateVector(FVector(Side * HipHalfWidth, bGrounded ? (Share - .5) * .05 : 0.0, 0.0));
 		const bool bUnder = S.bFallen && Side == FallSide;
 		if (S.bFallen)
 		{

@@ -1063,3 +1063,25 @@ except where noted; inert at `flowMode` 0, every preset.
 
 Fixed by, for the whole group: nothing yet, the same as hype — a fresh mechanic with no reference
 implementation or footage case behind its specific numbers, only the bible's own qualitative table.
+
+## 16 · The weight transfer
+
+`sim/solver.ts`'s `weightTransferMode` (`transferLoad`, `stanceOffset`). Inert at 0, which every
+preset and every setup still is (2026-11-14): on in Simulation, Experimental and Dig Gate it moves 51
+pinned tests, the searched double loop's takeoff among them. See [support-signal.md](support-signal.md).
+
+- **`weightTransferTime`** — seconds the legs take to move the whole load from one blade to the other,
+  to within 0.5 %
+  - Value: `0.25` s
+  - Used: `solver.ts`'s `transferLoad`, as the critically damped response's natural frequency
+    `7.43 / weightTransferTime`
+  - Level: **L2** — chosen, not measured
+  - Range: `[0.05, 1]` s (`validate`)
+  - Fixed by: the time from the new blade's first load to the old blade leaving the ice, measured on
+    reference stroking from the side (double-support time), at more than one speed
+
+- **The response's shape** — critically damped second order, no overshoot from rest, its rate
+  continuous; snapped to the asked share within 0.5 % (`TRANSFER_EPS`)
+  - Used: `solver.ts`'s `transferLoad`
+  - Level: **L3** — a smooth actuator, not a model of the legs; the real shape is unknown
+  - Fixed by: the same footage, the share's time course read from the hip's sideways travel

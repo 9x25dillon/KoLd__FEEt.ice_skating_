@@ -100,6 +100,43 @@ const legKnees = (input: SkatingInput, floor = 0): [number, number] => {
 const supportKnee = ([l, r]: [number, number], weightR: number): number => l + weightR * (r - l);
 
 /**
+ * THE WEIGHT TRANSFER (weightTransferMode). The right blade's share of the
+ * load, moved toward the asked share as a critically damped second-order
+ * response: it starts and finishes at rate zero, never overshoots from rest,
+ * and is snapped to the ask within TRANSFER_EPS (which is where a blade that
+ * is giving up the load leaves the ice). TRANSFER_SETTLE is the x at which
+ * (1 + x) e^-x = TRANSFER_EPS, so a whole transfer, 0 to 1, takes
+ * weightTransferTime. A move that owns its foot, or the first tick on the ice
+ * after the air, sets the share outright.
+ */
+const TRANSFER_EPS = 0.005, TRANSFER_SETTLE = 7.43;
+function transferLoad(s: SkaterState, p: Params, dt: number, asked: number, owned: boolean): number {
+  s.loadAsked = asked;
+  if (owned || s.loadR === undefined) { s.loadR = asked; s.loadRate = 0; return asked; }
+  const w = TRANSFER_SETTLE / p.weightTransferTime;
+  let rate = (s.loadRate ?? 0) + (w * w * (asked - s.loadR) - 2 * w * (s.loadRate ?? 0)) * dt;
+  let load = s.loadR + rate * dt;
+  if (load <= 0 || load >= 1) { load = clamp(load, 0, 1); rate = 0; }
+  if (Math.abs(asked - load) < TRANSFER_EPS && Math.abs(rate) < TRANSFER_EPS * w) { load = asked; rate = 0; }
+  s.loadR = load; s.loadRate = rate;
+  return load;
+}
+
+/**
+ * m from the pendulum's base (the centre of pressure) to blade i, toward
+ * perpLeft of the stance's frame. weightTransferMode 0: half a stance either
+ * side on two feet, both under the base on one. 1: the stance moves with the
+ * load and the base stays the centre of pressure, so the loaded blade is under
+ * it and the other is out by the stance's width: share-weighted, the offsets
+ * sum to zero at every share.
+ */
+function stanceOffset(s: SkaterState, p: Params, i: number): number {
+  if (p.weightTransferMode === 1 && s.loadR !== undefined)
+    return i === FOOT.Left ? 2 * p.stanceHalfWidth * s.loadR : -2 * p.stanceHalfWidth * (1 - s.loadR);
+  return s.supportMode === 2 ? (i === FOOT.Left ? p.stanceHalfWidth : -p.stanceHalfWidth) : 0;
+}
+
+/**
  * kg: the body this blade carries round a curve and stops sliding sideways.
  * normalLoadMode 0 reads it off the load, normalLoad / g, which is the mass
  * only while nothing moves vertically: a knee bending took mass off the
@@ -180,7 +217,7 @@ function slipSolveFeet(
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
     if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
-    const side = s.supportMode === 2 ? (i === FOOT.Left ? p.stanceHalfWidth : -p.stanceHalfWidth) : 0;
+    const side = stanceOffset(s, p, i);
     const r = add(mul(b.tangent, (digS(s, p, i) - 0.5) * p.bladeLength), mul(bodyLeft, side));
     const n = perpLeft(b.tangent);
     const vLat = dot(add(s.vel, mul(perpLeft(r), spin)), n), into = -sign(vLat);
@@ -619,6 +656,8 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     ...(p.pivotGrooveMode === 1 ? { pivotSlip: 0 } : {}),
     ...(p.pitchMode === 1 ? { pitch: 0, pitchRate: 0, pitchContact: 0, pitchOffTime: 0, contactAsked: [0.5, 0.5] as [number, number], digL: 0 } : {}),
     ...(p.pitchMode === 1 && p.pitchInternalMode === 1 ? { pitchAnkle: 0, pitchIntAccel: 0 } : {}),
+    // Two feet, an even share: what supportMode 2 above already says.
+    ...(p.weightTransferMode === 1 ? { loadR: 0.5, loadRate: 0, loadAsked: 0.5 } : {}),
   };
 }
 
@@ -720,6 +759,8 @@ export function step(
   // bite, no stroke, no balance loop to fall out of. sim/jump.ts flies the
   // body and lands it. Unreachable while jumpMode is 0.
   if (s.jump.phase === JUMP_PHASE.Air) {
+    // No blade carries anything in the air; the landing foot takes the load whole.
+    if (p.weightTransferMode === 1) s.loadR = s.loadRate = undefined;
     jumpAir(s, legInput(input), pFatigue, dt, events);
     // A landing resolves INSIDE jumpAir, on this early-return path — the only
     // one there is, every landing goes through it — so this is the one place
@@ -841,8 +882,11 @@ export function step(
   // A move is made on one foot: the pivot or spinning foot, and after a mohawk's cusp the other.
   const loadFoot = !turning ? -1 : s.move === MOVE.Spin ? s.spin.foot : turnLoadFoot(s);
   // An Ina Bauer is on both feet, whatever the weight input says.
+  // weightTransferMode: the legs move the load over time toward the share asked.
+  const shareR = p.weightTransferMode !== 1 ? weightR
+    : transferLoad(s, p, dt, loadFoot >= 0 ? loadFoot : ina ? 0.5 : weightR, loadFoot >= 0 || ina);
   const weights = loadFoot === FOOT.Right ? [0, 1] : loadFoot === FOOT.Left ? [1, 0]
-    : ina ? [0.5, 0.5] : [1 - weightR, weightR];
+    : ina ? [0.5, 0.5] : [1 - shareR, shareR];
   let loaded = 0;
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
@@ -1443,9 +1487,7 @@ export function step(
   // Pitched toward the toe, the boots are behind the centre of mass.
   if (pitchOn) base = add(base, mul(s.blade[s.supportFoot].tangent, -L * sin(s.pitch ?? 0)));
   for (let i = 0; i < 2; i++) {
-    const off = s.supportMode === 2 ? p.stanceHalfWidth : 0;
-    s.blade[i].contact = add(base,
-      mul(perpLeft(frameH), i === FOOT.Left ? off : -off));
+    s.blade[i].contact = add(base, mul(perpLeft(frameH), stanceOffset(s, p, i)));
   }
   // An Ina Bauer's feet are a stride apart along the track: the lead ahead.
   if (ina) {

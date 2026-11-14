@@ -28,6 +28,29 @@ struct FIceBlade
 	bool bInContact = true;
 };
 
+/**
+ * sim/support.ts SupportSignal, sent beside the state: who carries the skater,
+ * where the pressure is, how the load is moving. scripts/skater.gd reads the
+ * same one. Invalid for a frame that carries none.
+ */
+struct FIceSupport
+{
+	bool bValid = false;
+	/** one, both, shift, air or down. */
+	FString Phase;
+	int32 Foot = 0;
+	/** The blade gaining load during a shift, or -1. */
+	int32 Toward = -1;
+	double Share[2] = {0.0, 0.0};
+	double Rate[2] = {0.0, 0.0};
+	/** carrying, sharing, taking, giving or free. */
+	FString Role[2];
+	FVector2D Cop = FVector2D::ZeroVector;
+	double ComOverAcross = 0.0;
+	double ComOverAlong = 0.0;
+	double ComHeight = 0.95;
+};
+
 /** The solver's SkaterState, the fields scripts/skater.gd poses from. */
 struct FIceState
 {
@@ -57,6 +80,7 @@ struct FIceState
 	int32 SpinPosition = 0;
 	double SpinInertia = 0.0;
 	FIceBlade Blade[2];
+	FIceSupport Support;
 };
 
 /** A trace sample: both blades' contacts, every fourth tick (bridge/engine.mjs advance). */

@@ -689,6 +689,15 @@ export interface SkaterState {
   pitchAnkle?: number;
   pitchIntAccel?: number;
   /**
+   * weightTransferMode 1 only: the right blade's share of the body's load as
+   * the legs have actually moved it, 0..1, and its rate, 1/s. Absent in the
+   * air: a landing sets it from the foot it comes down on.
+   */
+  loadR?: number;
+  loadRate?: number;
+  /** weightTransferMode 1 only: the share the skater is asking for, 0..1. */
+  loadAsked?: number;
+  /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
    * Tracked and replay-safe; not yet spent by sim/score.ts.
