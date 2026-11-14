@@ -993,11 +993,20 @@ func apply_motion(dt: float) -> Array:
 		aim_bone(upper,from,mid)
 		aim_bone(lower,mid,tip)
 		return [mid,tip]
-	if motion_layer == "full" and motion_pose.has("pelvis"):
+	if (motion_layer == "full" or motion_layer == "body") and motion_pose.has("pelvis"):
+		# "body" (a spin's position, a spiral, an Ina Bauer): all but the arms, which are physics there
+		# (their reach is the spin's inertia). They keep the sim's shape, carried round with the trunk.
+		var body_only := motion_layer == "body"
+		var sim_trunk := (bone_head("Head")-bone_head("Spine")).normalized()
+		var sim_arms := {}
+		if body_only:
+			for s in ["L","R"]:
+				sim_arms[s] = [(bone_head("Forearm"+s)-bone_head("Arm"+s)).normalized(),(bone_head("Hand"+s)-bone_head("Forearm"+s)).normalized()]
 		var right_v: Array = motion_pose.get("pelvisRight",[1,0,0])
 		var right := Vector3(float(right_v[0]),float(right_v[1]),float(right_v[2])).normalized()
 		var pelvis: Vector3 = mix.call("Hips",Vector3(0,float(motion_pose.pelvis),0))
 		var trunk := seg_dir("trunk",Vector3.UP)
+		var carry := Quaternion(sim_trunk,trunk) if body_only and sim_trunk.dot(trunk) > -.999 else Quaternion.IDENTITY
 		var spine_at := pelvis+trunk*hips_length
 		var neck := spine_at+trunk*spine_length
 		aim_bone("Hips",pelvis,spine_at)
@@ -1015,7 +1024,9 @@ func apply_motion(dt: float) -> Array:
 			aim_bone("Foot"+s,leg[1],leg[1]+seg_dir("foot"+s,Vector3(0,-.34,-.94))*.2)
 			var across := (right-trunk*right.dot(trunk)).normalized().rotated(trunk,-twist)
 			var shoulder: Vector3 = neck-trunk*shoulder_rest.y+across*shoulder_rest.x*float(side[1])
-			var arm: Array = limb.call("Arm"+s,"Forearm"+s,"Hand"+s,shoulder,seg_dir("upperArm"+s,Vector3.DOWN),upper_arm,seg_dir("forearm"+s,Vector3.DOWN),forearm)
+			var upper_d: Vector3 = carry*sim_arms[s][0] if body_only else seg_dir("upperArm"+s,Vector3.DOWN)
+			var fore_d: Vector3 = carry*sim_arms[s][1] if body_only else seg_dir("forearm"+s,Vector3.DOWN)
+			var arm: Array = limb.call("Arm"+s,"Forearm"+s,"Hand"+s,shoulder,upper_d,upper_arm,fore_d,forearm)
 			aim_bone("Hand"+s,arm[1],arm[1]+(arm[1]-arm[0]).normalized()*.1)
 		return [pelvis,spine_at]
 	else:
