@@ -38,6 +38,11 @@ FString AIceRunGameMode::SkaterAsset(const FString& Folder) const
 	return Path;
 }
 
+FString AIceRunGameMode::OwnSkaterAsset() const
+{
+	return SkaterAsset(CharacterKeys[FMath::Clamp(CharacterIndex, 0, int32(UE_ARRAY_COUNT(CharacterKeys)) - 1)]);
+}
+
 TSharedPtr<FJsonObject> AIceRunGameMode::RivalLook(const FString& Name) const
 {
 	const TSharedPtr<FJsonObject>* Story = nullptr;

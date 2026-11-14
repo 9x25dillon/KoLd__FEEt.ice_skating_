@@ -146,6 +146,8 @@ private:
 	TSharedPtr<FJsonObject> RivalLook(const FString& Name) const;
 	/** Content/Generated/skaters.json: a skeletal mesh path by folder, or empty. */
 	FString SkaterAsset(const FString& Folder) const;
+	/** The player's own skater model (Settings), for when a run's skater wears no body of their own. */
+	FString OwnSkaterAsset() const;
 	/** A skater for the warm-up or the podium, in a rival's model and costume (or yours). */
 	AIceSkater* SpawnFieldSkater(const FString& Name, bool bYou);
 	void HandleMenus();

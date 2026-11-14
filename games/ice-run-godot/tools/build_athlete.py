@@ -40,8 +40,22 @@ RIVALS={
  'teodora':{'targets':[('african-female-young',.6),('caucasian-female-young',.4),('universal-female-young-maxmuscle-averageweight',.55),('universal-female-young-averagemuscle-minweight',.3)],'height':1.68,
   'skin':'young_darkskinned_female_diffuse.png','hair':'short04','hair_png':'short04_Brown.png','seed':20261115},
 }
-RIVAL=next((a.split('=',1)[1] for a in sys.argv[sys.argv.index('--')+1:] if a.startswith('--rival=')),None) if '--' in sys.argv else None
-LOOK=RIVALS[RIVAL] if RIVAL else None
+# Create-a-skater's builds (game/backstories.ts BUILDS; owner, 2026-11-14: "build more character
+# models"): the athlete's skin, hair and height, only the body's shape changed. Athletic is the
+# athlete herself. AUTHORED shape weights, judged on the studio renders (render_cast.py).
+BUILD_LOOKS={
+ # Little to carry into the air: narrow, long-limbed, the least muscle.
+ 'light':{'targets':[('caucasian-female-young',1),('universal-female-young-minmuscle-minweight',.6),('universal-female-young-averagemuscle-minweight',.25),('female-young-averagemuscle-averageweight-idealproportions',.5)],
+  'skin':'young_lightskinned_female_diffuse.png','hair':'ponytail01','hair_png':'ponytail01_diffuse.png','seed':20261116},
+ # The same legs lift more kilograms: the most muscle, a fuller frame.
+ 'strong':{'targets':[('caucasian-female-young',1),('universal-female-young-maxmuscle-averageweight',.6),('universal-female-young-averagemuscle-averageweight',.3),('female-young-averagemuscle-averageweight-idealproportions',.5)],
+  'skin':'young_lightskinned_female_diffuse.png','hair':'ponytail01','hair_png':'ponytail01_diffuse.png','seed':20261117},
+}
+ARGS=sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else []
+RIVAL=next((a.split('=',1)[1] for a in ARGS if a.startswith('--rival=')),None)
+BUILD=next((a.split('=',1)[1] for a in ARGS if a.startswith('--build=')),None)
+LOOK=RIVALS[RIVAL] if RIVAL else BUILD_LOOKS[BUILD] if BUILD else None
+NAME=f'skater-rival-{RIVAL}' if RIVAL else f'skater-build-{BUILD}' if BUILD else 'skater-athlete'
 random.seed(LOOK['seed'] if LOOK else 20261101)
 
 # ---- MakeHuman data ----
@@ -796,5 +810,5 @@ source=ROOT/'assets/source';source.mkdir(parents=True,exist_ok=True)
 if not LOOK:
  bpy.ops.file.pack_all()
  bpy.ops.wm.save_as_mainfile(filepath=str(source/'skater-athlete.blend'))
-bpy.ops.export_scene.gltf(filepath=str(OUT/(f'skater-rival-{RIVAL}.glb' if LOOK else 'skater-athlete.glb')),export_format='GLB',use_selection=True,export_animations=False,export_apply=False,export_image_format='AUTO')
+bpy.ops.export_scene.gltf(filepath=str(OUT/f'{NAME}.glb'),export_format='GLB',use_selection=True,export_animations=False,export_apply=False,export_image_format='AUTO')
 print('ATHLETE: %d polygons, height %.3f m'%(len(bpy.context.view_layer.objects['Athlete'].data.polygons) if 'Athlete' in bpy.context.view_layer.objects else -1,top_of_head))

@@ -22,6 +22,14 @@ import { SKINS } from "./appearance.ts";
 import { MAX_DESIGNS } from "./atelier.ts";
 
 export const NAME_LIMIT = 24;
+/**
+ * The body a build wears (games/ice-run-godot/assets/generated/<model>.glb, built by
+ * tools/build_athlete.py --build=<id>), or null for the athlete herself: Athletic is her.
+ * Presentation only: the sim's mass and height come from the sheet (massFor, heightM), not this.
+ */
+export function buildModel(build: BuildId): string | null {
+  return build === "light" ? "skater-build-light" : build === "strong" ? "skater-build-strong" : null;
+}
 /** Heights a created skater may have, metres. AUTHORED: the cast's own span (1.50-1.68) and a little more. */
 export const HEIGHT = { min: 1.48, max: 1.78, step: 0.01 } as const;
 /** Shelf sizes. AUTHORED. */

@@ -111,3 +111,17 @@ test("the studio keeps skaters, programs and dances, and drops only what is brok
   assert.deepEqual(Studio.restore("not json").skaters, Array(MAX_SKATERS).fill(null));
   assert.equal(creatorCatalog().origins.length, ORIGINS.length);
 });
+
+// ── A build's body (2026-11-14) ────────────────────────────────────────────────
+import { buildModel } from "../game/creator.ts";
+import { BUILDS as BUILD_LIST } from "../game/backstories.ts";
+import { existsSync } from "node:fs";
+
+test("every build names a body that is built, or the athlete", () => {
+  assert.equal(buildModel("athletic"), null, "Athletic is the athlete herself");
+  for (const b of BUILD_LIST) {
+    const m = buildModel(b.id);
+    if (m) assert.ok(existsSync(new URL(`../../../games/ice-run-godot/assets/generated/${m}.glb`, import.meta.url)), `${b.id}: ${m}.glb`);
+  }
+  assert.notEqual(buildModel("light"), buildModel("strong"));
+});

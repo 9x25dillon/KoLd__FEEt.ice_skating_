@@ -1173,7 +1173,13 @@ func apply_who() -> void:
 				var path := "res://assets/generated/%s.glb" % model if model != null else ""
 				if not path.is_empty() and ResourceLoader.exists(path): skater.load_model(path)
 				skater.apply_skin(entry.look.costume)
-	elif c.begins_with("preset:"):
+	else:
+		# game/creator.ts buildModel: a created skater's build wears its own body; Athletic (none)
+		# is the athlete, so the player's own model, not whatever body the last skater wore.
+		var built = who.get("model")
+		var body := "res://assets/generated/%s.glb" % built if built != null else str(CHARACTERS[character].path)
+		if ResourceLoader.exists(body): skater.load_model(body)
+	if c.begins_with("preset:"):
 		for k in catalog.skins:
 			if str(k.id) == c.substr(7): skater.apply_skin(k)
 	elif c.begins_with("design:"):
