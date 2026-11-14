@@ -512,3 +512,32 @@ test('a career result carries its podium: the top three as standing sim states o
  assert.deepEqual(p.map(x=>x.name),e.snapshot().result.standings.slice(0,3).map(x=>x.name));
  assert.ok(p.every(x=>x.height>0&&!x.state.fallen&&x.state.pos.y===18));
 });
+
+test('a career event wears its own dance style over the Settings one, and moves nothing in the sim',()=>{
+ const run=(dance)=>{const e=new IceEngine();e.configure({setup:null,scheme:1,beginner:true,cruise:true,danceStyle:'waltz'});
+  if(dance!==undefined)e.careerDance(0,dance);
+  e.start({mode:'career',event:0});
+  for(let i=0;i<60;i++)e.advance({...emptyControls(),ly:-1,knee:.6,push:i%10<5},2,false);
+  return e;};
+ const settings=run(),own=run('tango'),back=run(null);
+ assert.equal(settings.snapshot().runDance,'waltz');
+ assert.equal(own.snapshot().runDance,'tango');
+ assert.equal(back.snapshot().runDance,'waltz');
+ assert.deepEqual(own.state,settings.state);assert.ok(Math.hypot(own.state.vel.x,own.state.vel.y)>0.3,'the skater moved');
+ assert.deepEqual(own.snapshot().career.dances.slice(0,2),['tango',null]);
+ // Only its own event: a free skate and the next event keep the Settings style.
+ own.start({mode:'free'});assert.equal(own.snapshot().runDance,'waltz');
+});
+
+test('career dances: refused when unknown, saved with the career, ranked for each event\'s music',()=>{
+ const e=new IceEngine();
+ assert.throws(()=>e.careerDance(0,'moonwalk'),/Unknown career event or dance style/);
+ assert.throws(()=>e.careerDance(99,'tango'),/Unknown career event or dance style/);
+ e.careerDance(1,'swing');
+ assert.equal(CareerState.restore(e.career.serialize()).dances[1],'swing');
+ const c=e.catalog(),snap=e.snapshot().career;
+ assert.equal(c.danceFits.length,c.tracks.length);
+ assert.ok(c.danceFits.every(r=>r.length===c.motion.styles.length&&r.every((x,i)=>i===0||r[i-1].fit>=x.fit)));
+ assert.equal(snap.eventTracks.length,snap.dances.length);
+ e.configure({track:1});assert.ok(e.snapshot().career.eventTracks.every(t=>t===1));
+});

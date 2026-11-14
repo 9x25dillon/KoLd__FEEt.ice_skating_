@@ -630,6 +630,50 @@ void AIceRunGameMode::BuildEvent(FMenuPage& P)
 		TimelineOp(Open);
 		PushPage(TEXT("music"));
 	}));
+	// CareerState.dances: this event's dance style, cycled best fit for its music first. Presentation only.
+	{
+		const TArray<TSharedPtr<FJsonValue>>& Dances = Arr(Career, TEXT("dances"));
+		const TArray<TSharedPtr<FJsonValue>>& EventTracks = Arr(Career, TEXT("eventTracks"));
+		const TArray<TSharedPtr<FJsonValue>>& Fits = CatalogList(TEXT("danceFits"));
+		const int32 TrackAt = EventTracks.IsValidIndex(FocusEvent) ? int32(EventTracks[FocusEvent]->AsNumber()) : -1;
+		if (Dances.IsValidIndex(FocusEvent) && Fits.IsValidIndex(TrackAt))
+		{
+			const TArray<TSharedPtr<FJsonValue>> Ranked = Fits[TrackAt]->AsArray();
+			const TArray<TSharedPtr<FJsonValue>>& Styles = Arr(Obj(Catalog, TEXT("motion")), TEXT("styles"));
+			auto StyleName = [&Styles](const FString& Id) -> FString
+			{
+				for (const TSharedPtr<FJsonValue>& S : Styles) if (Str(S->AsObject(), TEXT("id")) == Id) return Str(S->AsObject(), TEXT("name"));
+				return TEXT("None");
+			};
+			const FString Own = Dances[FocusEvent]->Type == EJson::String ? Dances[FocusEvent]->AsString() : FString();
+			const FString Worn = Own.IsEmpty() ? DanceStyle : Own;
+			int32 Now = 0;
+			FString Fit;
+			TArray<FString> Best;
+			for (int32 I = 0; I < Ranked.Num(); ++I)
+			{
+				const FString Id = Str(Ranked[I]->AsObject(), TEXT("id"));
+				const int32 Pct = FMath::RoundToInt(Num(Ranked[I]->AsObject(), TEXT("fit")) * 100);
+				if (Id == Own) Now = I + 1;
+				if (Id == Worn) Fit = FString::Printf(TEXT("   ·   suits %d%%"), Pct);
+				if (I < 3) Best.Add(FString::Printf(TEXT("%s %d%%"), *StyleName(Id), Pct));
+			}
+			const FString Shown = Own.IsEmpty() ? FString::Printf(TEXT("Settings (%s)"), *StyleName(DanceStyle)) : StyleName(Own);
+			const FString TrackTitle = Str(At(CatalogList(TEXT("tracks")), TrackAt), TEXT("title"));
+			auto StepDance = [this, Ranked, Now](int32 By)
+			{
+				const int32 Next = Wrap(Now + By, Ranked.Num() + 1);
+				TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
+				Payload->SetNumberField(TEXT("event"), FocusEvent);
+				if (Next == 0) Payload->SetField(TEXT("style"), MakeShared<FJsonValueNull>());
+				else Payload->SetStringField(TEXT("style"), Str(Ranked[Next - 1]->AsObject(), TEXT("id")));
+				SendOp(TEXT("careerDance"), Payload);
+			};
+			P.Items.Add(Line(FString::Printf(TEXT("Dance   ◀  %s%s  ▶"), *Shown, *Fit), TEXT(""),
+				FString::Printf(TEXT("The arms between elements; never in the air or a spin. Shown, not scored. Best for %s: %s."), *TrackTitle, *FString::Join(Best, TEXT(", "))),
+				[StepDance] { StepDance(1); }, [StepDance](int32 By) { StepDance(By); }));
+		}
+	}
 	P.Items.Add(Line(TEXT("Skate this program →"), TEXT(""), Lock.IsEmpty() ? TEXT("Every career program runs its full time. Gold: no falls. Silver: at most two. Bronze: finish.") : Lock,
 		[this] { StartMode(TEXT("career"), FocusEvent); }, nullptr, Lock.IsEmpty()));
 	P.RowsTitle = TEXT("The field  ·  they don't decide your medal");

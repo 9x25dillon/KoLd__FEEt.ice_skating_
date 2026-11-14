@@ -43,6 +43,7 @@ lines.on('line',line=>{
    case 'sheet':data=engine.sheetEdit(req.options);break;
    case 'studio':data=engine.studioEdit(req.options);break;
    case 'careerStyle':engine.careerStyle(req.options);data=engine.snapshot();break;
+   case 'careerDance':engine.careerDance(req.event,req.style);data=engine.snapshot();break;
    case 'arcade':data=engine.arcadeStart(req.character);break;
    // A new career never overwrites the old one: it is kept beside the save, dated, before the swap.
    case 'newCareer':{const old=engine.career.serialize();if(existsSync(savePath)){const stamp=new Date().toISOString().replace(/[:.]/g,'-');keep(join(saveDir,`career-v1-before-${stamp}.json`),old);}data=engine.newCareer(req.slot);break;}
