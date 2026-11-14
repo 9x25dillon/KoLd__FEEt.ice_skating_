@@ -27,6 +27,7 @@ import {libraryIndex,CLIP_BY_ID} from '../runtime/game/motion/library.js';
 import {styleById,choreograph,suggestStyles} from '../runtime/game/motion/dance.js';
 import {MotionPlayer} from '../runtime/game/motion/player.js';
 import {bakeTrack,TRACK_FPS} from '../runtime/game/motion/track.js';
+import {kissAndCry} from '../runtime/game/kisscry.js';
 import {WarmupGroup,WARMUP_SECONDS} from '../runtime/game/warmup.js';
 import {podium} from '../runtime/game/podium.js';
 import {COURSES,courseById,courseSteps,howContext,elementHow,recoverHow} from '../runtime/game/padcourse.js';
@@ -354,7 +355,7 @@ export class IceEngine {
   this.wasSpinning=spinning;
   if(this.routine)this.routine.sample(this.state,this.low,SIM_DT,events);
   if(this.routine?.done) {
-   const r=this.routine,xp=this.mode==='career'?this.career.award(r):0;
+   const r=this.routine,bestBefore=this.mode==='career'?this.career.best[this.event]??null:null,xp=this.mode==='career'?this.career.award(r):0;
    // Forward the existing sheet and totals; Godot formats them without parsing
    // prose or recalculating scores. Null PCS remains distinguishable from zero.
    const protocol=r.sheet?{lines:r.sheet.lines,tes:r.technicalScore,pcs:r.pcsScore?.total??null,deductions:r.deductions,total:r.segmentScore}:null;
@@ -367,6 +368,8 @@ export class IceEngine {
    this.finished=true;this.result={story,finale:last?finale(place,season):'',title:r.complete?`${MEDALS[r.medal]} on ice`:'One more rehearsal',detail:`${r.index}/${r.event.routine.length} elements · ${r.falls} falls${r.cues?` · ${r.cueResults.filter(x=>x==='on').length}/${r.cues.length} on the music`:''}`,protocol,xp,complete:r.complete,stopped,body:this.bodyNote(),standings:this.mode==='career'&&r.complete&&!CAREER_EVENTS[this.event].exhibition?standings(this.event,r.segmentScore):null};
    // game/podium.ts: the top three as standing sim states, for a client to pose like any skater.
    this.result.podium=this.result.standings?podium(this.result.standings,this.params):null;
+   // game/kisscry.ts: the bench, the marks and her reaction, before the podium. Career events only.
+   if(this.mode==='career'&&!CAREER_EVENTS[this.event].exhibition)this.result.kissAndCry=kissAndCry({complete:r.complete,place:this.result.standings?.find(x=>x.you)?.place??null,score:r.segmentScore,bestBefore},this.params);
    if(this.mode==='arcade'){const a=this.result.arcade=this.arcadeResult(r);
     this.result.title=a.won?`You beat ${a.rival}`:`${a.rival} holds`;
     this.result.story=a.cleared?`The whole ladder, ${a.total} points.${a.place?` Number ${a.place} on the board.`:''}`:a.over?`Out of lives on round ${a.round+1}: ${a.total} points.${a.place?` Number ${a.place} on the board.`:''}`:a.won?`${a.score.toFixed(2)} against ${a.target.toFixed(2)}: +${a.points} points. Next: round ${a.round+1}.`:`${a.score.toFixed(2)} against ${a.target.toFixed(2)}${r.complete?'':', the program unfinished'}. ${a.lives} ${a.lives===1?'life':'lives'} left.`;}

@@ -3,6 +3,7 @@ const EngineLink = preload("res://scripts/engine_link.gd")
 const Arena = preload("res://scripts/arena.gd")
 const Skater = preload("res://scripts/skater.gd")
 const Podium = preload("res://scripts/podium.gd")
+const KissCry = preload("res://scripts/kiss_cry.gd")
 const SimSpace = preload("res://scripts/sim_space.gd")
 const Shot = preload("res://scripts/shot.gd")
 const Ribbon = preload("res://scripts/ribbon.gd")
@@ -22,6 +23,9 @@ var arena: Node3D
 var skater: Node3D
 # scripts/podium.gd: the top three after a career result.
 var podium: Node3D
+# scripts/kiss_cry.gd: the bench after a career program, before the podium (game/kisscry.ts).
+var kiss_cry: Node3D
+var kiss_cry_done := false
 # game/warmup.ts: the event's field on the ice before a career program, by name.
 var warmup_skaters := {}
 var partner: Node3D
@@ -163,6 +167,8 @@ func _ready() -> void:
 	add_child(skater)
 	podium = Podium.new()
 	add_child(podium)
+	kiss_cry = KissCry.new()
+	add_child(kiss_cry)
 	partner = Skater.new()
 	partner.model_path = CHARACTERS[2].path
 	partner.visible = false
@@ -432,6 +438,9 @@ func show_page(page: String) -> void:
 	if pad_overlay: pad_overlay.update_pad(null)
 	if page != "result" and podium and podium.visible:
 		podium.clear()
+		skater.visible = true
+	if page != "result" and kiss_cry and kiss_cry.visible:
+		kiss_cry.clear()
 		skater.visible = true
 	current_page = page
 	if page != "music" and preview: preview.stop()
@@ -810,16 +819,14 @@ func show_page(page: String) -> void:
 		menu.add_child(button("← Settings",func():show_page("settings")))
 	elif page == "result":
 		clear_menu(str(frame.result.title),str(frame.result.detail))
-		# The event's top three on the podium, while the result is up: game/rivals.ts standings.
-		if frame.result.get("standings") != null and podium.places.is_empty():
-			var looks := {}
-			for c in catalog.get("story",{}).get("cast",[]):
-				if c.get("look") != null: looks[str(c.name)] = c.look
-			if podium.present(frame.result.standings,looks,CHARACTERS[character].path,current_skin()) > 0:
-				skater.visible = false
-				# game/podium.ts: each place's clip, baked once by the bridge (motionTrack).
-				for id in podium.wanted(frame.result.get("podium",[])):
+		# game/kisscry.ts: the bench and the marks first, then (present_podium, when it has run) the podium.
+		if frame.result.get("kissAndCry") != null and not kiss_cry_done:
+			if not kiss_cry.running:
+				for id in kiss_cry.present(CHARACTERS[character].path,current_skin(),frame.result.kissAndCry):
 					link.send("motionTrack",{"options":{"id":id}})
+				skater.visible = false
+		else:
+			present_podium()
 		# game/story.ts: the chapter's ending for a career run, and the season's after the championship.
 		if not str(frame.result.get("story","")).is_empty():
 			menu.add_child(paragraph(str(frame.result.story),16))
@@ -1466,6 +1473,8 @@ func start_game(mode: String, index: int = 0, challenge: bool = false, extra: Di
 	event_index = index
 	playing = false
 	podium.clear()
+	kiss_cry.clear()
+	kiss_cry_done = false
 	skater.visible = true
 	skater.load_model(CHARACTERS[character].path)
 	skater.apply_skin(current_skin())
@@ -1512,6 +1521,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 	# game/motion/track.ts: a baked clip, for the podium. Not a frame.
 	if op == "motionTrack":
 		podium.play_track(data)
+		kiss_cry.play_track(data)
 		return
 	if op == "dress":
 		skater.apply_skin(data.skin)
@@ -1945,6 +1955,11 @@ func _physics_process(dt: float) -> void:
 
 func _process(dt: float) -> void:
 	presentation_clock += dt
+	# The kiss-and-cry has run its sequence: off the bench, onto the podium.
+	if kiss_cry.finished:
+		kiss_cry.clear()
+		kiss_cry_done = true
+		present_podium()
 	skater.effects_active = playing
 	if not frame.is_empty():
 		update_camera(dt)
@@ -1962,6 +1977,21 @@ func _process(dt: float) -> void:
 					get_tree().quit(1)
 					return
 				print("GODOT_SMOKE_PASS: live Ice Lab completed the three-element career routine; traces=",arena.trace_count)
+				# scripts/kiss_cry.gd: the bench first, its sequence played through, then the podium.
+				if not kiss_cry.running or not kiss_cry.visible or skater.visible:
+					push_error("Kiss-and-cry smoke test: running %s, visible %s" % [kiss_cry.running,kiss_cry.visible])
+					get_tree().quit(1)
+					return
+				var reaction := str(frame.result.kissAndCry.reaction)
+				var waited := 0.0
+				while not kiss_cry_done and waited < 30.0:
+					await get_tree().create_timer(.25).timeout
+					waited += .25
+				if not kiss_cry_done or kiss_cry.tracks.size() > 0:
+					push_error("Kiss-and-cry smoke test: done %s after %.1f s" % [kiss_cry_done,waited])
+					get_tree().quit(1)
+					return
+				print("GODOT_KISSCRY_PASS: on the bench, %s, then off after %.1f s" % [reaction,waited])
 				# scripts/podium.gd: the event's top three, each in a model that loaded.
 				if podium.places.size() != 3 or not podium.visible or skater.visible:
 					push_error("Podium smoke test: %d on the podium, visible %s" % [podium.places.size(),podium.visible])
@@ -2077,6 +2107,19 @@ func smoke_protocol_ui() -> bool:
 	show_page("result")
 	print("GODOT_PROTOCOL_PASS: empty sheet, 32 numbered elements, calls, and focus scrolling")
 	return true
+
+## The event's top three on the podium, while the result is up: game/rivals.ts standings.
+func present_podium() -> void:
+	if frame.is_empty() or frame.get("result") == null or frame.result.get("standings") == null or not podium.places.is_empty():
+		return
+	var looks := {}
+	for c in catalog.get("story",{}).get("cast",[]):
+		if c.get("look") != null: looks[str(c.name)] = c.look
+	if podium.present(frame.result.standings,looks,CHARACTERS[character].path,current_skin()) > 0:
+		skater.visible = false
+		# game/podium.ts: each place's clip, baked once by the bridge (motionTrack).
+		for id in podium.wanted(frame.result.get("podium",[])):
+			link.send("motionTrack",{"options":{"id":id}})
 
 # scripts/podium.gd, with the menu out of the way: the champion, Remi, and you in third.
 func capture_podium() -> void:
