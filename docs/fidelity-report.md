@@ -8,7 +8,7 @@ Preset under test **`responsive`** (the public build's boot preset); reference *
 
 ## Gate
 
-**Gate not met.** 8 pass, 0 fail, 25 unsourced, 0 unmodelled, of 33 cases.
+**Gate not met.** 8 pass, 0 fail, 25 unsourced, 2 unmodelled, of 35 cases.
 
 | §6.3 | Condition | State |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 
 | Class | Cases | Pass | Fail | Unsourced | Unmodelled | External passing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| O1 carve relation | 6 | 4 | 0 | 2 | 0 | 0 / 3 |
+| O1 carve relation | 8 | 4 | 0 | 2 | 2 | 0 / 3 |
 | O2 tracing curvature | 2 | 0 | 0 | 2 | 0 | 0 / 3 |
 | O3 edge transitions | 7 | 0 | 0 | 7 | 0 | 0 / 3 |
 | O4 speed decay | 5 | 1 | 0 | 4 | 0 | 1 / 3 |
@@ -38,7 +38,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 | `air_time_height_residual_m` | 2 | 2 | 0 | 0 | 0 |
 | `air_time_s` | 2 | 1 | 0 | 1 | 0 |
 | `carve_held` | 1 | 0 | 0 | 1 | 0 |
-| `carve_lean_deg` | 1 | 0 | 0 | 1 | 0 |
+| `carve_lean_deg` | 3 | 0 | 0 | 1 | 2 |
 | `carve_lean_residual_deg` | 4 | 4 | 0 | 0 | 0 |
 | `crossover_gain_ms` | 1 | 0 | 0 | 1 | 0 |
 | `glide_decel_ms2` | 4 | 1 | 0 | 3 | 0 |
@@ -105,5 +105,7 @@ Stubs waiting for a measurement. A null expectation is correct; an invented numb
 - `trace-radius-overhead-footage` — footage, `trace_radius_m`
 - `twizzle-rate-footage` — footage, `twizzle_rate_rps`
 
-## Unmodelled (0)
+## Unmodelled (2)
 
+- `carve-lean-speedskate-curve-left-kimura2024` — needs speed-skate
+- `carve-lean-speedskate-curve-right-kimura2024` — needs speed-skate

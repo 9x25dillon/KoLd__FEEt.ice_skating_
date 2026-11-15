@@ -109,11 +109,11 @@ them at a fixed commit, with the command for each, see
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Ice Lab suite | `cd tools/ice-lab && node --test test/*.test.ts` | 1091 tests: 1090 pass, 0 fail, 1 todo |
+| Ice Lab suite | `cd tools/ice-lab && node --test test/*.test.ts` | 1094 tests: 1093 pass, 0 fail, 1 todo |
 | Godot bridge tests | `node --test games/ice-run-godot/tests/*.test.mjs` | 68 tests: 68 pass, 0 fail |
 | Unreal contract tests | `node --test games/ice-run-unreal/tests/*.test.mjs` | 8 tests: 6 pass, 0 fail, 2 skipped |
 | Replay fixture | `cd tools/ice-lab && node replay/verify.ts test/fixtures/replay-v1.json` | verified, 240 ticks |
-| Fidelity validator | `cd tools/ice-lab && node validate.mjs` | 33 cases: 8 pass, 0 fail, 25 unsourced, 0 unmodelled |
+| Fidelity validator | `cd tools/ice-lab && node validate.mjs` | 35 cases: 8 pass, 0 fail, 25 unsourced, 2 unmodelled |
 | Fidelity gate ([§6.3](docs/fidelity-gate.md#63--the-gate-is-met)) | | **not met** |
 
 Fidelity coverage, external passing cases per class (three are needed in each):

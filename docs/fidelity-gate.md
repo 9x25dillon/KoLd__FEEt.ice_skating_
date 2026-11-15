@@ -536,6 +536,8 @@ Structures most exposed today, in order:
 | [`data/validation/cases/`](../data/validation/cases/) | Derived cases for S1 and S6, and stubs for everything needing measurement | written |
 | `tools/ice-lab/validate.mjs` | Implements §3–§6, zero dependencies, `--json`, `--report`, `--clips` | written; run in CI on every push |
 | [`docs/fidelity-report.md`](fidelity-report.md) | Generated. Per-observable pass state, deviations, unsourced list, gate state against §6.3 | generated; CI fails if stale |
+| [`docs/divergences/`](divergences/) | One report per case or measurement that disagrees with an expectation: expected, actual, deviation, tolerance, hypothesis, proposed test, status | [numerical floor against the review's figures](divergences/numerical-floor-vs-review.md) (open); [a long-track curve is outside the envelope](divergences/speedskate-curve-out-of-envelope.md) (open) |
+| [`docs/tick-indexed-logic.md`](tick-indexed-logic.md) | Where the code counts ticks instead of seconds, classed, and which runs can be re-run at another step | written |
 
 When an implementation disagrees with this document, one of them is wrong, and the disagreement is
 fixed in the open. Neither is quietly edited to match the other.
