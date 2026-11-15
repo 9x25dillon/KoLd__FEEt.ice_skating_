@@ -14,7 +14,7 @@
 **Corrects the previous hand-off:** the morning hand-off (`5770ba3`, session `50f7edd7`) was never pushed; it's archived as `docs/handoff-before-weight-transfer-2026-11-14.md`. Its kiss-and-cry diagnosis ("large replies time out") was wrong. Session `fcd73900` found the real causes (see Decisions).
 **Decision needed:** fix the costume test: `hello.skins.slice(0,4)` at `engine.test.mjs:150`. Say yes and it's a one-line PR.
 **Start with:**
-1. `git fetch origin; git log --oneline -5 origin/main; gh pr list`: expect `dc51b4b` or later, and PRs for `venues` and `kiss-and-cry-wip` from session `fcd73900`.
+1. `git fetch origin; git log --oneline -5 origin/main; gh pr list`: expect `b3e0f8f` or later, and PRs #108 (`venues`) and #109 (`kiss-and-cry-wip`) open or merged.
 2. The costume test fix (one line), then check that CI is green.
 3. Then the owner's answers to Open questions 1–3.
 
@@ -29,12 +29,16 @@
 | earlier | — | — | `docs/handoff-before-*.md` |
 
 ## In flight
-- **Venues**, branch `venues` in `.delivery/venues`, by session `fcd73900`, being pushed with a PR at this close:
+- **Venues**: PR #108 (`venues`, head `c2d869c`, MERGEABLE at 19:10), by session `fcd73900`:
   - six rinks, each with its own look around the same ice: `game/venues.ts`, `arena.gd`, Unreal `AIceRink::ApplyVenue`, stills in `docs/presentation/venues/`;
   - I merged main into it as `8eddd7e`, keeping the skates and venues catalogue entries side by side;
   - checked: Ice Lab 1082/1082, Unreal builds and passes 8/8, Godot 66/67 (the costume test);
   - not yet seen: the Unreal TextRender banners in a running game (yaw = bank + 180).
-- **Kiss-and-cry** fix `f3a7557` on `kiss-and-cry-wip` (`.delivery/scenes`), by session `fcd73900`, being pushed with a PR. It merges cleanly with main and with venues.
+- **Watch, unverified:** a new engine starts a free skate, so the hello frame's venue is the outdoor night rink. The Godot title backdrop will probably show the lakeside rink, not Northlight. The owner should say if that's wanted.
+- **Kiss-and-cry**: PR #109 (`kiss-and-cry-wip`, head `f3a7557`), by session `fcd73900`.
+  - The smoke failure was the smoke check's fake-idle trick racing in-flight `motionTrack` requests, not the link.
+  - #108 and #109 carry the same drain fix, so either can merge second.
+- **The Codex session `01a1dc33`** never received a task (its brief was cancelled). It is idle.
 - Carried: the jump lesson, uncommitted in `.delivery/jumplesson`; the Unreal director camera `b230393` on `unreal-choreo`, local only.
 
 ## Decisions (why things are the way they are)
@@ -81,7 +85,7 @@
 ## State (verified 19:05–19:15 PST)
 - `main` `dc51b4b`.
 - CI: Ice Lab ✓, Native replay ✓, Ice Lab checks ✗ (the costume test only; green at `915b79b` and earlier).
-- Session `fcd73900` was LIVE at this close, pushing `venues` and `kiss-and-cry-wip`. Let it finish; don't push them twice.
+- Session `fcd73900` was LIVE at this close; it opened #108 and #109 and writes only `~/Hand_off.md`.
 - Unpushed and superseded: `5770ba3` on `handoff-2026-11-14`; its content is archived here.
 - Worktrees left (no deletes): `.delivery/weight`, `transfer-on`, `skates`, `telemetry`, `outfits` (all merged), `main-1114`, `handoff-1114`, `handoff-1114c`. Scratch merge worktree: `/tmp/claude-1000/…/scratchpad/combo`.
 
@@ -98,7 +102,7 @@
 
 ## Next steps, in order
 1. The costume test fix, then green CI.
-2. Review and merge the `venues` and `kiss-and-cry-wip` PRs from session `fcd73900`. Look at the Unreal banners in a running game.
+2. Merge #108 and #109 (`! gh pr merge 108 --merge`, then 109). Look at the Unreal banners and the Godot title backdrop in a running game.
 3. **The owner plays** (timestamped notes): a stroke and a crossover on Simulation (the transfer); the 2Lo on Experimental; the skates and outfits pages; the cards after a jump; each venue.
 4. The owner's answers to Open questions 2–4, then build them.
 5. The directive's next phase: edges, crossovers and three-turns read the support signal (roles `taking`/`giving`) for free-foot preparation. The COM swaying over a planted blade is the known limit (`docs/support-signal.md`).
