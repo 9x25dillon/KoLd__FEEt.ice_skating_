@@ -2036,6 +2036,7 @@ func _process(dt: float) -> void:
 	presentation_clock += dt
 	skater.effects_active = playing
 	if not frame.is_empty():
+		wear_venue()
 		update_camera(dt)
 		fill_audio()
 		coach_title.visible = not overlay.visible
@@ -2092,6 +2093,16 @@ func smoke_planning_ui() -> bool:
 	var result: Dictionary = frame.result
 	focus_event = 0
 	show_page("event")
+	# A menu with requests still in flight is not idle. The kiss-and-cry and podium clips are baked on
+	# request (motionTrack), and winding the clock back while they are out made THEM 20 s late, so the
+	# link failed on the spot. That was this check, not the link: the host answers in ~90 ms. Let them land.
+	var settle := Time.get_ticks_msec()
+	while link.busy() and not link.faulted and Time.get_ticks_msec() - settle < 5000:
+		OS.delay_msec(10)
+		link._process(0.0)
+	if link.busy():
+		push_error("Link: replies still outstanding after 5 s: %s" % str(link.pending.values()))
+		return false
 	# As if the player read this page for a while, then a request whose reply has not had time to arrive:
 	# a quiet spell in a menu is not a late reply.
 	link.last_reply -= 20000
@@ -2186,7 +2197,40 @@ func capture_podium() -> void:
 	skater.visible = true
 	overlay.visible = true
 
+# tools/ice-lab/game/venues.ts: the arena wears the run's venue (the bridge's snapshot.venue).
+# A string compare a frame; the room is rebuilt only when the venue changes.
+var venue_hold := false   # set while the stills are taken, so live frames don't re-dress the arena
+func wear_venue() -> void:
+	if venue_hold:
+		return
+	var id := str(frame.get("venue","grand-prix"))
+	if id == arena.venue_id:
+		return
+	for v in catalog.get("venues",[]):
+		if str(v.id) == id:
+			arena.apply_venue(v)
+			return
+
 func capture() -> void:
+	if "--capture-venues" in OS.get_cmdline_user_args():
+		# Every venue from the high camera and from the ice: docs/presentation/venues/.
+		var dir := ProjectSettings.globalize_path("res://").path_join("../../docs/presentation/venues")
+		DirAccess.make_dir_recursive_absolute(dir)
+		overlay.visible = false
+		ui.visible = false        # a clean still: no HUD
+		playing = false           # and the skater held where she is, still gliding upright
+		venue_hold = true
+		for v in catalog.get("venues",[]):
+			arena.apply_venue(v)
+			for view in [1,3]:
+				camera_mode = view
+				await get_tree().create_timer(1.6).timeout
+				await RenderingServer.frame_post_draw
+				get_viewport().get_texture().get_image().save_png(dir.path_join("%s-%s.png" % [v.id,"high" if view == 1 else "ice"]))
+			print("GODOT_VENUE_CAPTURE: ",v.id)
+		print("GODOT_CAPTURE_PASS")
+		get_tree().quit()
+		return
 	if "--capture-warmup" in OS.get_cmdline_user_args():
 		# The group a few seconds in, from the follow camera and from the high one.
 		await get_tree().create_timer(6.0).timeout

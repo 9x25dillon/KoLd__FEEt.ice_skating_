@@ -12,6 +12,8 @@
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
@@ -118,6 +120,7 @@ void AIceRink::Build(double MinX, double MaxX, double MinY, double MaxY, double 
 		}
 	}
 	const FVector Middle = IceSimSpace::Point((MinX + MaxX) * .5, (MinY + MaxY) * .5);
+	RinkOutline = Outline;
 
 	// The sheet: a fan from the middle; the rounded square is convex.
 	{
@@ -185,6 +188,8 @@ void AIceRink::Build(double MinX, double MaxX, double MinY, double MaxY, double 
 	// The hall, after arena.gd: concrete under everything, four raked banks, a dark roof.
 	// arena.gd's colours, lifted: under physically scaled light its display tones read nearly black.
 	UMaterialInstanceDynamic* Concrete = Surface(Hex(TEXT("6c7c8c")), .88f);
+	ConcreteMaterial = Concrete;
+	HallMiddle = Middle;
 	UMaterialInstanceDynamic* Dark = Surface(Hex(TEXT("2a3646")), .6f, .25f);
 	UMaterialInstanceDynamic* Seats = Surface(Hex(TEXT("34557d")), .85f);
 	UMaterialInstanceDynamic* Steel = Surface(Hex(TEXT("173b51")), .23f, .65f);
@@ -199,12 +204,12 @@ void AIceRink::Build(double MinX, double MaxX, double MinY, double MaxY, double 
 		{
 			const double Depth = 3150 + Row * 135;
 			const double Height = 50 + Row * 72;
-			Box(FVector(135, 6900, 60), Middle + Turn.RotateVector(FVector(Depth, 0, Height - 30)), Yaw, Concrete);
-			Box(FVector(46, 6900, 36), Middle + Turn.RotateVector(FVector(Depth + 30, 0, Height + 18)), Yaw, Seats);
+			HallParts.Add(Box(FVector(135, 6900, 60), Middle + Turn.RotateVector(FVector(Depth, 0, Height - 30)), Yaw, Concrete));
+			HallParts.Add(Box(FVector(46, 6900, 36), Middle + Turn.RotateVector(FVector(Depth + 30, 0, Height + 18)), Yaw, Seats));
 		}
-		Box(FVector(50, 9100, 1200), Middle + Turn.RotateVector(FVector(4500, 0, 800)), Yaw, Dark);
-		Box(FVector(30, 7200, 140), Middle + Turn.RotateVector(FVector(4300, 0, 820)), Yaw, Steel);
-		Box(FVector(12, 7200, 4.5), Middle + Turn.RotateVector(FVector(4280, 0, 745)), Yaw, Surface(Hex(TEXT("daedff")), .24f, 0.f, 2000.f), false);
+		HallParts.Add(Box(FVector(50, 9100, 1200), Middle + Turn.RotateVector(FVector(4500, 0, 800)), Yaw, Dark));
+		HallParts.Add(Box(FVector(30, 7200, 140), Middle + Turn.RotateVector(FVector(4300, 0, 820)), Yaw, Steel));
+		HallParts.Add(Box(FVector(12, 7200, 4.5), Middle + Turn.RotateVector(FVector(4280, 0, 745)), Yaw, Surface(Hex(TEXT("daedff")), .24f, 0.f, 2000.f), false));
 	}
 	// Roof trusses and the fixtures' housings.
 	for (int32 Z = -2; Z <= 2; ++Z)
@@ -265,8 +270,11 @@ void AIceRink::SeatCrowd(const FVector& Middle)
 	const FLinearColor Coats[] = {RawColour(TEXT("35475e")), RawColour(TEXT("5f5064")), RawColour(TEXT("939495")), RawColour(TEXT("9e7465")), RawColour(TEXT("233342")), RawColour(TEXT("4d6670"))};
 	const FLinearColor Fair = RawColour(TEXT("a07a62")), Deep = RawColour(TEXT("47332a"));
 	FRandomStream Random(0xA0D1);
-	TArray<FTransform> Bodies;
-	TArray<float> Data;
+	// game/venues.ts: a fuller house than today's needs the empty seats filled too. They draw from
+	// their own stream and go after today's audience, so the Grand Prix is the same people as ever.
+	FRandomStream Spare(0x5E47);
+	TArray<FTransform> Bodies, Extra;
+	TArray<float> Data, ExtraData, Fill, ExtraFill;
 	for (int32 Side = 0; Side < 4; ++Side)
 	{
 		const double Yaw = Side * 90.0;
@@ -277,27 +285,38 @@ void AIceRink::SeatCrowd(const FVector& Middle)
 			const double Height = 50 + Row * 72;
 			for (int32 Seat = 0; Seat < 113; ++Seat)
 			{
-				if (Seat % 28 < 3 || Random.FRand() <= .14f)
+				if (Seat % 28 < 3)
 				{
 					continue;
 				}
+				const float Draw = Random.FRand();
+				const bool bToday = Draw > .14f;
+				FRandomStream& R = bToday ? Random : Spare;
 				const double Along = (-33.8 + Seat * .6) * 100.0;
-				const float Size = Random.FRandRange(.94f, 1.06f);
-				const double Settled = FMath::RadiansToDegrees(Random.FRandRange(-.14f, .14f));
-				const FLinearColor Coat = Coats[Random.RandHelper(UE_ARRAY_COUNT(Coats))] * .5f;
-				const FLinearColor Skin = FMath::Lerp(Fair, Deep, FMath::Pow(Random.FRand(), 1.5f));
-				Bodies.Add(FTransform(FRotator(0, Yaw + 90.0 + Settled, 0), Middle + Turn.RotateVector(FVector(Depth + 30, Along, Height)), FVector(Size)));
-				Data.Append({Coat.R, Coat.G, Coat.B, Skin.R, Skin.G, Skin.B, Random.FRand()});
+				const float Size = R.FRandRange(.94f, 1.06f);
+				const double Settled = FMath::RadiansToDegrees(R.FRandRange(-.14f, .14f));
+				const FLinearColor Coat = Coats[R.RandHelper(UE_ARRAY_COUNT(Coats))] * .5f;
+				const FLinearColor Skin = FMath::Lerp(Fair, Deep, FMath::Pow(R.FRand(), 1.5f));
+				const FTransform At(FRotator(0, Yaw + 90.0 + Settled, 0), Middle + Turn.RotateVector(FVector(Depth + 30, Along, Height)), FVector(Size));
+				(bToday ? Bodies : Extra).Add(At);
+				(bToday ? Data : ExtraData).Append({Coat.R, Coat.G, Coat.B, Skin.R, Skin.G, Skin.B, R.FRand()});
+				(bToday ? Fill : ExtraFill).Add(Draw);
 			}
 		}
 	}
+	Bodies.Append(Extra);
+	Data.Append(ExtraData);
+	Fill.Append(ExtraFill);
+	CrowdTransforms = Bodies;
+	CrowdFill = Fill;
 	Crowd->AddInstances(Bodies, false, true, false);
 	for (int32 I = 0; I < Bodies.Num(); ++I)
 	{
 		Crowd->SetCustomData(I, TArrayView<const float>(Data.GetData() + I * 7, 7), false);
 	}
 	Crowd->MarkRenderStateDirty();
-	UE_LOG(LogIceRun, Log, TEXT("Audience seated: %d."), Bodies.Num());
+	SetCrowd(.86);
+	UE_LOG(LogIceRun, Log, TEXT("Audience seated: %d places, %d shown at the Grand Prix."), Bodies.Num(), Bodies.Num() - Extra.Num());
 }
 
 void AIceRink::CrowdReact(double Amount)
@@ -355,6 +374,7 @@ void AIceRink::Lights()
 			Spot->SetCastShadows(FMath::Abs(Row) <= 1 && FMath::Abs(Column) <= 1);
 			Spot->SetMobility(EComponentMobility::Movable);
 			Spot->RegisterComponent();
+			RoofSpots.Add(Spot);
 		}
 	}
 	// arena.gd's soft directional fill, no shadows; Lumen carries the bounce its other two stood in for.
@@ -366,6 +386,7 @@ void AIceRink::Lights()
 	Fill->SetCastShadows(false);
 	Fill->SetMobility(EComponentMobility::Movable);
 	Fill->RegisterComponent();
+	KeyLight = Fill;
 	// House lights: the banks are lit for the audience, more softly than the ice (arena.gd's
 	// ambient stood in for these). Three per side from the roof's edge, aimed out and down.
 	for (int32 Side = 0; Side < 4; ++Side)
@@ -385,6 +406,7 @@ void AIceRink::Lights()
 			House->SetCastShadows(false);
 			House->SetMobility(EComponentMobility::Movable);
 			House->RegisterComponent();
+			HouseSpots.Add(House);
 		}
 	}
 	// What the bright ice throws back up, and what little the roof gives: captured once the hall stands.
@@ -407,6 +429,7 @@ void AIceRink::Lights()
 	Fog->SetVolumetricFogScatteringDistribution(.35f);
 	Fog->SetVolumetricFogExtinctionScale(.6f);
 	Fog->RegisterComponent();
+	HallFog = Fog;
 
 	UPostProcessComponent* Grade = NewObject<UPostProcessComponent>(this);
 	Grade->SetupAttachment(RootComponent);
@@ -429,6 +452,7 @@ void AIceRink::Lights()
 	P.bOverride_VignetteIntensity = true;
 	P.VignetteIntensity = .25f;
 	Grade->RegisterComponent();
+	HallGrade = Grade;
 }
 
 void AIceRink::SetCourse(const FString& Mode, const TSharedPtr<FJsonObject>& Catalog)
@@ -728,4 +752,328 @@ void AIceRink::FlushGrooves()
 {
 	Grooves->CreateMeshSection_LinearColor(GrooveSection, GrooveVertices, GrooveTriangles, GrooveNormals, {}, {}, {}, false);
 	Grooves->SetMaterial(GrooveSection, GrooveMaterial);
+}
+
+// ── venues (tools/ice-lab/game/venues.ts) ───────────────────────────────────
+// Presentation only. Every venue stands round the same sheet and boards; the sim never hears of it.
+// Its light levels are multipliers on what Lights() set, so 1 everywhere is the Grand Prix as built.
+// Every number below is AUTHORED, as in arena.gd's apply_venue.
+
+void AIceRink::SetCrowd(double Fraction)
+{
+	if (!Crowd || CrowdTransforms.Num() != Crowd->GetInstanceCount())
+	{
+		return;
+	}
+	TArray<FTransform> Shown = CrowdTransforms;
+	for (int32 I = 0; I < Shown.Num(); ++I)
+	{
+		if (CrowdFill[I] <= 1.0 - Fraction)
+		{
+			// Not removed, only folded away, so a fuller house later is the same people back.
+			Shown[I].SetScale3D(FVector(1e-4));
+		}
+	}
+	Crowd->BatchUpdateInstancesTransforms(0, Shown, true, true, true);
+}
+
+void AIceRink::ClearDressing()
+{
+	for (const TWeakObjectPtr<USceneComponent>& Part : Dressing)
+	{
+		if (Part.IsValid())
+		{
+			Part->DestroyComponent();
+		}
+	}
+	Dressing.Reset();
+}
+
+UStaticMeshComponent* AIceRink::Dress(const FVector& Size, const FVector& Center, double YawDegrees, UMaterialInterface* Material, bool bShadow)
+{
+	UStaticMeshComponent* Part = Box(Size, Center, YawDegrees, Material, bShadow);
+	Dressing.Add(Part);
+	return Part;
+}
+
+UTextRenderComponent* AIceRink::Words(const FString& Text, const FVector& At, double YawDegrees, float WorldSize, const FLinearColor& Color)
+{
+	UTextRenderComponent* T = NewObject<UTextRenderComponent>(this);
+	T->SetupAttachment(RootComponent);
+	T->SetWorldLocationAndRotation(At, FRotator(0, YawDegrees, 0));
+	// A TextRender's own line break is <br>; the venue writes "\n".
+	T->SetText(FText::FromString(Text.Replace(TEXT("\n"), TEXT("<br>"))));
+	T->SetWorldSize(WorldSize);
+	T->SetHorizontalAlignment(EHTA_Center);
+	T->SetVerticalAlignment(EVRTA_TextCenter);
+	T->SetTextRenderColor(Color.ToFColor(true));
+	T->SetCastShadow(false);
+	T->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	T->RegisterComponent();
+	Dressing.Add(T);
+	return T;
+}
+
+USpotLightComponent* AIceRink::DressSpot(const FVector& At, const FVector& Aim, const FLinearColor& Color, float Candelas, float Cone, float Radius)
+{
+	USpotLightComponent* Spot = NewObject<USpotLightComponent>(this);
+	Spot->SetupAttachment(RootComponent);
+	Spot->SetWorldLocationAndRotation(At, (Aim - At).Rotation());
+	Spot->SetIntensityUnits(ELightUnits::Candelas);
+	Spot->SetIntensity(Candelas);
+	Spot->SetLightColor(Color);
+	Spot->SetInnerConeAngle(Cone * .6f);
+	Spot->SetOuterConeAngle(Cone);
+	Spot->SetAttenuationRadius(Radius);
+	Spot->SetCastShadows(false);
+	Spot->SetMobility(EComponentMobility::Movable);
+	Spot->RegisterComponent();
+	Dressing.Add(Spot);
+	return Spot;
+}
+
+void AIceRink::ApplyVenueById(const FString& Id, const TSharedPtr<FJsonObject>& Catalog)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Venues = nullptr;
+	TSharedPtr<FJsonObject> GrandPrix;
+	if (Catalog.IsValid() && Catalog->TryGetArrayField(TEXT("venues"), Venues))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Venues)
+		{
+			const TSharedPtr<FJsonObject> V = Value.IsValid() ? Value->AsObject() : nullptr;
+			FString Each;
+			if (!V.IsValid() || !V->TryGetStringField(TEXT("id"), Each))
+			{
+				continue;
+			}
+			if (Each == Id)
+			{
+				ApplyVenue(V);
+				return;
+			}
+			if (Each == TEXT("grand-prix"))
+			{
+				GrandPrix = V;
+			}
+		}
+	}
+	if (GrandPrix.IsValid())
+	{
+		ApplyVenue(GrandPrix);
+	}
+}
+
+void AIceRink::ApplyVenue(const TSharedPtr<FJsonObject>& Venue)
+{
+	if (!Venue.IsValid())
+	{
+		return;
+	}
+	Venue->TryGetStringField(TEXT("id"), CurrentVenue);
+	const TSharedPtr<FJsonObject>* Found = nullptr;
+	const TSharedPtr<FJsonObject> L = Venue->TryGetObjectField(TEXT("light"), Found) ? *Found : MakeShared<FJsonObject>();
+	auto Num = [&L](const TCHAR* Key, double Default) { double V = Default; L->TryGetNumberField(Key, V); return V; };
+	auto Col = [&L](const TCHAR* Key, const TCHAR* Default) { FString S = Default; L->TryGetStringField(Key, S); return Hex(*S); };
+	bool bOutdoor = false, bKissCry = false;
+	Venue->TryGetBoolField(TEXT("outdoor"), bOutdoor);
+	Venue->TryGetBoolField(TEXT("kissAndCry"), bKissCry);
+	double CrowdShare = .86;
+	Venue->TryGetNumberField(TEXT("crowd"), CrowdShare);
+	FString Banner, Fascia;
+	Venue->TryGetStringField(TEXT("banner"), Banner);
+	Venue->TryGetStringField(TEXT("fascia"), Fascia);
+
+	// Outdoors there is no roof, no stands and nobody seated. Visibility, not the camera's hidden
+	// list, so the Rink camera's roof cutaway cannot bring the roof back.
+	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : RoofParts)
+	{
+		if (Part.IsValid()) Part->SetVisibility(!bOutdoor);
+	}
+	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : HallParts)
+	{
+		if (Part.IsValid()) Part->SetVisibility(!bOutdoor);
+	}
+	if (Crowd)
+	{
+		Crowd->SetVisibility(!bOutdoor);
+	}
+	SetCrowd(bOutdoor ? 0.0 : CrowdShare);
+
+	// The roof grid: only a fraction lit, spread evenly (the 25 ranked by a stride of 7, as arena.gd).
+	const double Lit = Num(TEXT("fixtures"), 1.0);
+	for (int32 I = 0; I < RoofSpots.Num(); ++I)
+	{
+		if (!RoofSpots[I]) continue;
+		const bool bOn = !bOutdoor && (double((I * 7) % RoofSpots.Num()) + .5) / RoofSpots.Num() < Lit;
+		RoofSpots[I]->SetVisibility(bOn);
+		RoofSpots[I]->SetIntensity(110000.f * float(Num(TEXT("fixtureScale"), 1.0)));
+		RoofSpots[I]->SetLightColor(Col(TEXT("fixtureColor"), TEXT("eaf2ff")));
+	}
+	// The house lights stood in for arena.gd's ambient, so they follow the ambient.
+	for (USpotLightComponent* House : HouseSpots)
+	{
+		if (!House) continue;
+		House->SetVisibility(!bOutdoor);
+		House->SetIntensity(40000.f * float(Num(TEXT("ambientScale"), 1.0)));
+	}
+	if (KeyLight)
+	{
+		KeyLight->SetIntensity(80.f * float(Num(TEXT("keyScale"), 1.0)));
+		KeyLight->SetLightColor(Col(TEXT("key"), TEXT("e5efff")));
+	}
+	if (Sky)
+	{
+		Sky->SetIntensity(float(Num(TEXT("ambientScale"), 1.0)));
+		Sky->SetLightColor(Col(TEXT("ambient"), TEXT("bacddd")));
+	}
+	if (HallFog)
+	{
+		HallFog->SetFogDensity(.004f * float(Num(TEXT("fogScale"), 1.0)));
+		HallFog->SetFogInscatteringColor(Col(TEXT("fog"), TEXT("34465b")));
+	}
+	if (HallGrade)
+	{
+		// Manual exposure scales by 2^bias: the venue's exposure multiplier is a bias of log2 of it.
+		HallGrade->Settings.AutoExposureBias = -9.f + float(FMath::Log2(FMath::Max(.05, Num(TEXT("exposure"), 1.0))));
+	}
+	if (ConcreteMaterial)
+	{
+		ConcreteMaterial->SetVectorParameterValue(TEXT("Color"), bOutdoor ? Hex(TEXT("e8eef5")) : Hex(TEXT("6c7c8c")));
+	}
+
+	ClearDressing();
+	const FVector Middle = HallMiddle;
+	UMaterialInstanceDynamic* Cloth = Surface(Hex(TEXT("173b51")), .6f, .1f);
+	if (!bOutdoor)
+	{
+		for (int32 Side = 0; Side < 4; ++Side)
+		{
+			const double Yaw = Side * 90.0;
+			const FRotator Turn(0, Yaw, 0);
+			// Text faces back toward the ice, which is the bank's -X.
+			Words(Fascia, Middle + Turn.RotateVector(FVector(4282, 0, 820)), Yaw + 180.0, 90.f, Hex(TEXT("c9d9e7")));
+			if (Banner.IsEmpty()) continue;
+			for (const double Along : {-3400.0, -1700.0, 0.0, 1700.0, 3400.0})
+			{
+				Dress(FVector(8, 380, 500), Middle + Turn.RotateVector(FVector(4250, Along, 1280)), Yaw, Cloth);
+				Words(Banner, Middle + Turn.RotateVector(FVector(4244, Along, 1300)), Yaw + 180.0, 70.f, Hex(TEXT("d8c295")));
+			}
+		}
+	}
+
+	// Coloured washes from the roof onto the ice (the gala; the championship's blue accent).
+	const TArray<TSharedPtr<FJsonValue>>* Wash = nullptr;
+	if (L->TryGetArrayField(TEXT("wash"), Wash))
+	{
+		for (int32 K = 0; K < Wash->Num(); ++K)
+		{
+			const double A = 2.0 * UE_DOUBLE_PI * K / FMath::Max(1, Wash->Num()) + .4;
+			const FVector From = Middle + FVector(FMath::Cos(A) * 1600, FMath::Sin(A) * 1200, 1400);
+			const FVector To = Middle + FVector(FMath::Cos(A + 1.6) * 600, FMath::Sin(A + 1.6) * 500, 0);
+			DressSpot(From, To, Hex(*(*Wash)[K]->AsString()), 400000.f, 17.f, 3400.f);
+		}
+	}
+
+	if (bOutdoor)
+	{
+		// Posts round the boards, warm bulbs strung between them sagging a little, and pools of light.
+		const FLinearColor Bulb = Col(TEXT("fixtureColor"), TEXT("ffd9a0"));
+		const double Strength = Num(TEXT("stringLights"), 1.0);
+		UMaterialInstanceDynamic* Post = Surface(Hex(TEXT("1a1d24")), .6f, .3f);
+		UMaterialInstanceDynamic* Glow = Surface(Bulb, .4f, 0.f, float(4000.0 * Strength));
+		UInstancedStaticMeshComponent* Bulbs = NewObject<UInstancedStaticMeshComponent>(this);
+		Bulbs->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")));
+		Bulbs->SetupAttachment(RootComponent);
+		Bulbs->SetMaterial(0, Glow);
+		Bulbs->SetCastShadow(false);
+		Bulbs->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Bulbs->RegisterComponent();
+		Dressing.Add(Bulbs);
+		double Since = 0.0;
+		int32 Count = 0;
+		for (int32 I = 0; I < RinkOutline.Num(); ++I)
+		{
+			const FVector A = RinkOutline[I], B = RinkOutline[(I + 1) % RinkOutline.Num()];
+			const FVector Out = FVector(A - Middle).GetSafeNormal2D() * 100.0;
+			const int32 Steps = FMath::Max(1, FMath::CeilToInt(FVector::Dist(A, B) / 90.0));
+			for (int32 J = 0; J < Steps; ++J)
+			{
+				const FVector P = FMath::Lerp(A, B, double(J) / Steps) + Out;
+				const double S = FMath::Fmod(Since, 600.0) / 600.0;
+				Bulbs->AddInstance(FTransform(FRotator::ZeroRotator, FVector(P.X, P.Y, Middle.Z + 225 - 35 * FMath::Sin(UE_DOUBLE_PI * S)), FVector(.1)), true);
+				if (FMath::Fmod(Since, 600.0) < 90.0)
+				{
+					Dress(FVector(8, 8, 230), FVector(P.X, P.Y, Middle.Z + 115), 0, Post);
+				}
+				if (Count++ % 24 == 0)
+				{
+					UPointLightComponent* Pool = NewObject<UPointLightComponent>(this);
+					Pool->SetupAttachment(RootComponent);
+					Pool->SetWorldLocation(FVector(P.X, P.Y, Middle.Z + 200));
+					Pool->SetIntensityUnits(ELightUnits::Candelas);
+					Pool->SetIntensity(float(800.0 * Strength));
+					Pool->SetLightColor(Bulb);
+					Pool->SetAttenuationRadius(900.f);
+					Pool->SetCastShadows(false);
+					Pool->SetMobility(EComponentMobility::Movable);
+					Pool->RegisterComponent();
+					Dressing.Add(Pool);
+				}
+				Since += FVector::Dist(A, B) / Steps;
+			}
+		}
+		// A ring of pines past the snow, and stars: seeded, so the night is the same night every time.
+		FRandomStream Woods(1214);
+		UInstancedStaticMeshComponent* Pines = NewObject<UInstancedStaticMeshComponent>(this);
+		Pines->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cone.Cone")));
+		Pines->SetupAttachment(RootComponent);
+		Pines->SetMaterial(0, Surface(Hex(TEXT("1d3b30")), .9f));
+		Pines->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Pines->RegisterComponent();
+		Dressing.Add(Pines);
+		for (int32 I = 0; I < 90; ++I)
+		{
+			const double A = Woods.FRand() * 2.0 * UE_DOUBLE_PI, R = Woods.FRandRange(4000.f, 6200.f);
+			const double H = Woods.FRandRange(600.f, 1200.f), W = H * Woods.FRandRange(.28f, .36f);
+			// The engine cone is a metre tall and a metre across, its pivot at its middle.
+			Pines->AddInstance(FTransform(FRotator::ZeroRotator, Middle + FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, H * .5 - 10), FVector(W * 2 / 100.0, W * 2 / 100.0, H / 100.0)), true);
+		}
+		FRandomStream Night(1115);
+		UInstancedStaticMeshComponent* Stars = NewObject<UInstancedStaticMeshComponent>(this);
+		Stars->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")));
+		Stars->SetupAttachment(RootComponent);
+		Stars->SetMaterial(0, Surface(Hex(TEXT("dfe8ff")), 1.f, 0.f, 3000.f));
+		Stars->SetCastShadow(false);
+		Stars->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Stars->RegisterComponent();
+		Dressing.Add(Stars);
+		for (int32 I = 0; I < 320; ++I)
+		{
+			const double A = Night.FRand() * 2.0 * UE_DOUBLE_PI, Up = Night.FRandRange(.25f, 1.4f), D = 11000.0;
+			Stars->AddInstance(FTransform(FRotator::ZeroRotator, Middle + FVector(FMath::Cos(A) * D * FMath::Cos(Up), FMath::Sin(A) * D * FMath::Cos(Up), D * FMath::Sin(Up)), FVector(Night.FRandRange(.18f, .45f))), true);
+		}
+	}
+
+	if (bKissCry)
+	{
+		// The Kiss & Cry behind one long side's boards: a backdrop with its name, a bench, flowers, two lamps.
+		const FVector At = Middle + FVector(-2950, 1300, 0);
+		Dress(FVector(8, 340, 260), At + FVector(-90, 0, 130), 0, Surface(Hex(TEXT("2b3d5c")), .45f, .1f), true);
+		Dress(FVector(12, 360, 10), At + FVector(-88, 0, 262), 0, Surface(Hex(TEXT("bea775")), .35f, .6f));
+		Dress(FVector(50, 190, 45), At + FVector(0, 0, 22), 0, Surface(Hex(TEXT("1f2a3a")), .7f), true);
+		Words(TEXT("KISS & CRY"), At + FVector(-84, 0, 205), 0.0, 48.f, Hex(TEXT("e9eef6")));
+		const TCHAR* Petals[] = {TEXT("e8577a"), TEXT("f2c94c"), TEXT("f7f1e8")};
+		for (int32 K = 0; K < 7; ++K)
+		{
+			Dress(FVector(14, 14, 14), At + FVector(12 + K * 2, -75 + K * 4, 50), 0, Surface(Hex(Petals[K % 3]), .6f));
+		}
+		for (const double Side : {-1.0, 1.0})
+		{
+			DressSpot(At + FVector(120, Side * 190, 320), At + FVector(-30, 0, 80), Hex(TEXT("fff1dc")), 30000.f, 32.f, 700.f);
+		}
+	}
+
+	// The scene the sky light captured is a different room now.
+	GetWorldTimerManager().SetTimer(SkyTimer, this, &AIceRink::RecaptureSky, .5f, false);
+	UE_LOG(LogIceRun, Log, TEXT("Venue: %s (crowd %.2f%s%s)."), *CurrentVenue, bOutdoor ? 0.0 : CrowdShare, bOutdoor ? TEXT(", outdoors") : TEXT(""), bKissCry ? TEXT(", Kiss & Cry") : TEXT(""));
 }

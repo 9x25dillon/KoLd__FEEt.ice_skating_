@@ -53,6 +53,17 @@ public:
 	/** Each frame: where the skater is, for the audience's heads, and how roused the hall still is. */
 	void UpdateCrowd(const FVector& SkaterAt, float Dt);
 
+	/**
+	 * tools/ice-lab/game/venues.ts: rebuild the room around the same ice for a venue from the bridge
+	 * catalog's `venues`. Presentation only: the sheet, the boards and the sim never change. Light
+	 * levels arrive as multipliers on the values Build() and Lights() set, which ARE the Grand Prix,
+	 * so the Grand Prix leaves the hall as it was (plus its banners and fascia text, new here).
+	 */
+	void ApplyVenue(const TSharedPtr<FJsonObject>& Venue);
+	/** Finds `Id` in Catalog's `venues` and applies it, or the Grand Prix when it is not there. */
+	void ApplyVenueById(const FString& Id, const TSharedPtr<FJsonObject>& Catalog);
+	const FString& VenueId() const { return CurrentVenue; }
+
 	/** The roof and its fixtures: the high Rink camera looks down through them (main.gd's roof cutaway). */
 	const TArray<TWeakObjectPtr<UPrimitiveComponent>>& Roof() const { return RoofParts; }
 
@@ -82,6 +93,37 @@ private:
 	void RecaptureSky();
 	void Lights();
 	void FlushGrooves();
+
+	// ── venues ──
+	/** Shows the seats whose draw is over 1 - Fraction; at .86, exactly the audience SeatCrowd always seated. */
+	void SetCrowd(double Fraction);
+	void ClearDressing();
+	/** A box that belongs to the current venue and goes when it changes. */
+	UStaticMeshComponent* Dress(const FVector& Size, const FVector& Center, double YawDegrees, UMaterialInterface* Material, bool bShadow = false);
+	/** Text that belongs to the current venue, facing along Yaw (the ice, for the banks' signs). */
+	class UTextRenderComponent* Words(const FString& Text, const FVector& At, double YawDegrees, float WorldSize, const FLinearColor& Color);
+	class USpotLightComponent* DressSpot(const FVector& At, const FVector& Aim, const FLinearColor& Color, float Candelas, float Cone, float Radius);
+	/** Empty until the first venue is applied, so the first run always dresses the hall. */
+	FString CurrentVenue;
+	FVector HallMiddle = FVector::ZeroVector;
+	/** The boards' outline, for the outdoor rink's string lights. */
+	TArray<FVector> RinkOutline;
+	TArray<TWeakObjectPtr<UPrimitiveComponent>> HallParts;
+	TArray<TWeakObjectPtr<USceneComponent>> Dressing;
+	TArray<FTransform> CrowdTransforms;
+	TArray<float> CrowdFill;
+	UPROPERTY()
+	TArray<TObjectPtr<class USpotLightComponent>> RoofSpots;
+	UPROPERTY()
+	TArray<TObjectPtr<class USpotLightComponent>> HouseSpots;
+	UPROPERTY()
+	TObjectPtr<class UDirectionalLightComponent> KeyLight;
+	UPROPERTY()
+	TObjectPtr<class UExponentialHeightFogComponent> HallFog;
+	UPROPERTY()
+	TObjectPtr<class UPostProcessComponent> HallGrade;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> ConcreteMaterial;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> SurfaceBase;
