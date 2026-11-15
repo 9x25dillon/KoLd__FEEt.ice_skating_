@@ -2111,6 +2111,22 @@ func capture() -> void:
 		print("GODOT_CAPTURE_PASS")
 		get_tree().quit()
 		return
+	if "--capture-telemetry" in OS.get_cmdline_user_args():
+		# The computer skates a jump and a spin; a still when each element's card is up.
+		start_game("showcase",0,false,{"character":"career","program":["glide","spin","jump","pose"]})
+		var shown := {}
+		for k in 150:
+			await get_tree().create_timer(.5).timeout
+			var card = frame.get("elementCard")
+			if card != null and not shown.has(card.kind) and broadcast.card_time>1.0:
+				shown[card.kind] = true
+				await RenderingServer.frame_post_draw
+				get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-card-%s.png" % card.kind)
+				print("GODOT_CARD: %s %s" % [card.kind,card.name])
+			if shown.size()>=2: break
+		print("GODOT_CAPTURE_PASS")
+		get_tree().quit()
+		return
 	if "--capture-pose" in OS.get_cmdline_user_args():
 		# The closing pose as the demonstration skates it: the computer glides, then holds the pose; stills from three cameras.
 		start_game("showcase",0,false,{"character":"career","program":["glide","pose"]})

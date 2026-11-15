@@ -11,6 +11,13 @@ var announcement_detail := ""
 var announce_time := 0.0
 var rink_path := PackedVector2Array()
 var last_tick := -1
+# The element card (game/elementstats.ts): a broadcast graphic that slides in after a jump, spin or step.
+# Every number is read from the solver by the bridge; the style words are authored (STYLE_RULES).
+const CARD_SLIDE := .4
+const CARD_HOLD := 8.0
+var card: Dictionary = {}
+var card_key := ""
+var card_time := 99.0
 const INK := Color(.035,.065,.10,.9)
 const WHITE := Color("e5edf0")
 const MUTED := Color("9fb6c3")
@@ -35,6 +42,14 @@ func update_state(frame: Dictionary, setup: String, camera: String) -> void:
 		rink_path.append(plan(frame.state.pos))
 		if rink_path.size()>900: rink_path.remove_at(0)
 	last_tick = tick
+	var c = frame.get("elementCard")
+	if c == null:
+		card_key = ""
+		card = {}
+	elif card_key != "%s:%s" % [c.id,c.tick]:
+		card_key = "%s:%s" % [c.id,c.tick]
+		card = c
+		card_time = 0.0
 	queue_redraw()
 
 func announce(title: String, detail: String) -> void:
@@ -43,6 +58,9 @@ func announce(title: String, detail: String) -> void:
 	announce_time = 3.5
 
 func _process(dt: float) -> void:
+	if not card.is_empty() and card_time<CARD_HOLD+CARD_SLIDE*2:
+		card_time += dt
+		queue_redraw()
 	if announce_time>0:
 		announce_time = maxf(0,announce_time-dt)
 		queue_redraw()
@@ -120,3 +138,34 @@ func _draw() -> void:
 		plate(Rect2(x,105,380,77),true)
 		text(Vector2(x+20,135),announcement,22,GOLD)
 		text(Vector2(x+20,163),announcement_detail,13)
+	draw_element_card()
+
+# Slides in from the right edge, holds, slides out. Display only: it never touches a score.
+func draw_element_card() -> void:
+	if card.is_empty() or card_time>=CARD_HOLD+CARD_SLIDE*2: return
+	var rows: Array = card.rows
+	var words: Array = card.style
+	var w := 318.0
+	var h := 66.0+rows.size()*21.0+(30.0 if not words.is_empty() else 8.0)
+	var slide := clampf(card_time/CARD_SLIDE,0,1)
+	if card_time>CARD_HOLD+CARD_SLIDE: slide = clampf((CARD_HOLD+CARD_SLIDE*2-card_time)/CARD_SLIDE,0,1)
+	slide = 1.0-pow(1.0-slide,3)
+	var x := size.x-w-32.0+(1.0-slide)*(w+40.0)
+	var y := 96.0
+	plate(Rect2(x,y,w,h),true)
+	text(Vector2(x+16,y+26),str(card.name),19,GOLD)
+	draw_string(font,Vector2(x+16,y+26),str(card.call),HORIZONTAL_ALIGNMENT_RIGHT,w-32,13,WHITE)
+	draw_line(Vector2(x+16,y+36),Vector2(x+w-16,y+36),Color(.4,.6,.7,.35),1)
+	var ry := y+56.0
+	for row in rows:
+		text(Vector2(x+16,ry),str(row[0]),10,MUTED)
+		draw_string(font,Vector2(x+16,ry),str(row[1]),HORIZONTAL_ALIGNMENT_RIGHT,w-32,13,WHITE)
+		ry += 21.0
+	if not words.is_empty():
+		var wx := x+16.0
+		for word in words:
+			var tw := font.get_string_size(str(word),HORIZONTAL_ALIGNMENT_LEFT,-1,10).x
+			if wx+tw+14>x+w-12: break
+			draw_rect(Rect2(wx,ry-4,tw+12,18),Color(.85,.74,.52,.18))
+			text(Vector2(wx+6,ry+9),str(word),10,GOLD)
+			wx += tw+18.0

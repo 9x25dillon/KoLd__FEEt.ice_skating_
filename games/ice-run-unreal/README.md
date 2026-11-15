@@ -163,6 +163,7 @@ For stills without anyone at the machine: `-RenderOffscreen -IceShots=2,4,6 -Ice
 writes PNGs at those seconds of the run and quits. `-IceOpenMenu=<page>` stills a menu page
 (`season`, `training`, `wardrobe`, `music`, …), `-IceSkipSteps=N` a later lesson step, and
 `-IceOnMusic` (with `-IceMode=career`) a career program laid on its music.
+`-IceProgram=glide,spin,jump,pose` has the computer skate those elements (a showcase), for the element cards (docs/element-telemetry.md).
 
 ## How it is built
 
