@@ -77,7 +77,7 @@ stay at the neutral 50 ([open-constants §12](../../docs/open-constants.md#12--o
 **`venue`** — `null` for a simulated rink: flat, model air density. Otherwise the rink record below.
 
 **`inputs`**
-- `initial` — `speed_ms` (0–100) and `lean_rad` (±1.55).
+- `initial` — `speed_ms` (−100 to 100, negative skating backward: the replay format's own bound, `sim/replay.ts`) and `lean_rad` (±1.55).
 - `modes` — `jumpMode` (0–2) and `movesMode` (0–1). These are the only `Params` a case sets
   ([gate §3](../../docs/fidelity-gate.md#3--the-configuration-under-test)).
 - `script` — a list of segments. Each holds `input` for `seconds`, rounded to whole 120 Hz ticks.
