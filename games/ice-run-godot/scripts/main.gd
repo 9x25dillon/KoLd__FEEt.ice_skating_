@@ -1947,6 +1947,7 @@ func _process(dt: float) -> void:
 	presentation_clock += dt
 	skater.effects_active = playing
 	if not frame.is_empty():
+		wear_venue()
 		update_camera(dt)
 		fill_audio()
 		coach_title.visible = not overlay.visible
@@ -2097,7 +2098,40 @@ func capture_podium() -> void:
 	skater.visible = true
 	overlay.visible = true
 
+# tools/ice-lab/game/venues.ts: the arena wears the run's venue (the bridge's snapshot.venue).
+# A string compare a frame; the room is rebuilt only when the venue changes.
+var venue_hold := false   # set while the stills are taken, so live frames don't re-dress the arena
+func wear_venue() -> void:
+	if venue_hold:
+		return
+	var id := str(frame.get("venue","grand-prix"))
+	if id == arena.venue_id:
+		return
+	for v in catalog.get("venues",[]):
+		if str(v.id) == id:
+			arena.apply_venue(v)
+			return
+
 func capture() -> void:
+	if "--capture-venues" in OS.get_cmdline_user_args():
+		# Every venue from the high camera and from the ice: docs/presentation/venues/.
+		var dir := ProjectSettings.globalize_path("res://").path_join("../../docs/presentation/venues")
+		DirAccess.make_dir_recursive_absolute(dir)
+		overlay.visible = false
+		ui.visible = false        # a clean still: no HUD
+		playing = false           # and the skater held where she is, still gliding upright
+		venue_hold = true
+		for v in catalog.get("venues",[]):
+			arena.apply_venue(v)
+			for view in [1,3]:
+				camera_mode = view
+				await get_tree().create_timer(1.6).timeout
+				await RenderingServer.frame_post_draw
+				get_viewport().get_texture().get_image().save_png(dir.path_join("%s-%s.png" % [v.id,"high" if view == 1 else "ice"]))
+			print("GODOT_VENUE_CAPTURE: ",v.id)
+		print("GODOT_CAPTURE_PASS")
+		get_tree().quit()
+		return
 	if "--capture-warmup" in OS.get_cmdline_user_args():
 		# The group a few seconds in, from the follow camera and from the high one.
 		await get_tree().create_timer(6.0).timeout
