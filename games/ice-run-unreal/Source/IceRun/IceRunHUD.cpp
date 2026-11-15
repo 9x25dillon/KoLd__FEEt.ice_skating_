@@ -525,6 +525,7 @@ void AIceRunHUD::DrawHUD()
 		Line(Mode->AnnouncementTitle(), PX + 22.f * U, AY, FLinearColor(Champagne.R, Champagne.G, Champagne.B, Fade), 1.25f * U, Large);
 		Line(Mode->AnnouncementDetail(), PX + 22.f * U, AY, FLinearColor(Ink.R, Ink.G, Ink.B, Fade), .85f * U, Medium);
 	}
+	ElementCard(Raw, U);
 	float NY = Canvas->ClipY - Margin - 20.f * U;
 	if (!Mode->Notice().IsEmpty())
 	{
@@ -537,6 +538,94 @@ void AIceRunHUD::DrawHUD()
 	Line(Keys, Canvas->ClipX - Margin - W * .85f * U, NY, FLinearColor(.6f, .66f, .72f, 1.f), .85f * U, Medium);
 	BalanceMeter(Obj(Raw, TEXT("balance")), Obj(Raw, TEXT("steady")), U);
 	RinkMap(Mode, F, U);
+}
+
+void AIceRunHUD::ElementCard(const TSharedPtr<FJsonObject>& Raw, float U)
+{
+	// broadcast.gd's element card. Every number was read from the solver by the bridge; the style words are authored (game/elementstats.ts STYLE_RULES).
+	const TSharedPtr<FJsonObject> Card = Obj(Raw, TEXT("elementCard"));
+	if (!Card.IsValid())
+	{
+		CardKey.Empty();
+		return;
+	}
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const FString Key = FString::Printf(TEXT("%d:%d"), int32(Num(Card, TEXT("id"))), int32(Num(Card, TEXT("tick"))));
+	if (Key != CardKey)
+	{
+		CardKey = Key;
+		CardAt = Now;
+	}
+	const float Slide = .4f, Hold = 8.f;
+	const float Age = float(Now - CardAt);
+	if (Age >= Hold + 2.f * Slide)
+	{
+		return;
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Words = nullptr;
+	Card->TryGetArrayField(TEXT("rows"), Rows);
+	Card->TryGetArrayField(TEXT("style"), Words);
+	const int32 NRows = Rows ? Rows->Num() : 0;
+	const bool bWords = Words && Words->Num() > 0;
+	UFont* Large = GEngine->GetLargeFont();
+	UFont* Medium = GEngine->GetMediumFont();
+	float MW = 0.f, MH = 0.f;
+	Canvas->StrLen(Medium, TEXT("Ag"), MW, MH);
+	const float RowH = (MH * 1.15f + 4.f) * U;
+	const float W = 380.f * U, H = 56.f * U + NRows * RowH + (bWords ? MH * U * .85f * 1.15f + 20.f * U : 8.f * U);
+	float T = FMath::Clamp(Age / Slide, 0.f, 1.f);
+	if (Age > Hold + Slide)
+	{
+		T = FMath::Clamp((Hold + 2.f * Slide - Age) / Slide, 0.f, 1.f);
+	}
+	T = 1.f - FMath::Pow(1.f - T, 3.f);
+	const float X = Canvas->ClipX - W - 32.f * U + (1.f - T) * (W + 40.f * U);
+	const float Y0 = 96.f * U;
+	Panel(X, Y0, W, H, FLinearColor(.01f, .02f, .035f, .95f));
+	Panel(X, Y0, W, 2.f * U, Champagne);
+	float Y = Y0 + 8.f * U;
+	Line(Str(Card, TEXT("name")), X + 16.f * U, Y, Champagne, 1.f * U, Large);
+	const FString Call = Str(Card, TEXT("call"));
+	float CW = 0.f, CH = 0.f;
+	Canvas->StrLen(Medium, Call, CW, CH);
+	float CY = Y0 + 12.f * U;
+	Line(Call, X + W - 16.f * U - CW * 1.f * U, CY, Ink, 1.f * U, Medium);
+	Panel(X + 16.f * U, Y0 + 40.f * U, W - 32.f * U, 1.f * U, FLinearColor(.4f, .6f, .7f, .35f));
+	Y = Y0 + 48.f * U;
+	for (int32 I = 0; I < NRows; ++I)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
+		if (!(*Rows)[I]->TryGetArray(Pair) || Pair->Num() < 2)
+		{
+			continue;
+		}
+		const FString Label = (*Pair)[0]->AsString(), Value = (*Pair)[1]->AsString();
+		float VW = 0.f, VH = 0.f, RY = Y;
+		Canvas->StrLen(Medium, Value, VW, VH);
+		Line(Label, X + 16.f * U, RY, Soft, .75f * U, Medium);
+		Line(Value, X + W - 16.f * U - VW * 1.f * U, Y, Ink, 1.f * U, Medium);
+		Y += 4.f * U;
+	}
+	if (bWords)
+	{
+		float WX = X + 16.f * U;
+		for (const TSharedPtr<FJsonValue>& V : *Words)
+		{
+			const FString Word = V->AsString();
+			float TW = 0.f, TH = 0.f;
+			Canvas->StrLen(Medium, Word, TW, TH);
+			const float ChipW = TW * .85f * U + 14.f * U;
+			if (WX + ChipW > X + W - 12.f * U)
+			{
+				break;
+			}
+			Panel(WX, Y + 4.f * U, ChipW, MH * U * .85f * 1.15f + 6.f * U, FLinearColor(Champagne.R, Champagne.G, Champagne.B, .18f));
+			float WY = Y + 7.f * U;
+			Line(Word, WX + 7.f * U, WY, Champagne, .85f * U, Medium);
+			WX += ChipW + 6.f * U;
+		}
+	}
 }
 
 void AIceRunHUD::Bar(float X, float Y, float W, float Fill, const FLinearColor& Color, float U)
