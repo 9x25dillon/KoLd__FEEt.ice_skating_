@@ -12,6 +12,15 @@
 //     mastery. The window slides 3 ticks earlier as the style is drilled
 //     (53-56 chosen, 50-53 drilled), so one check tick, 53, lands at all five.
 //   - The neutral skater on that same entrance needs no check at all.
+//
+// RE-MEASURED 2026-11-14, the legs moving the load over time
+// (weightTransferMode, on in Experimental). At 7.5 m/s Power now falls in the
+// load: the script's half-pressed RT pushes twice, the weight is still shared
+// when the load begins, and the takeoff foot carries it alone only 5 ticks
+// before the release, on a deep edge at that speed. The entrance moves to
+// 7.25 m/s, where the same story holds: a 3-4 tick double window that slides 3
+// ticks earlier as Power is drilled (53-56 chosen, 50-52 drilled) — no single
+// tick is in all five now; tick 53 lands chosen to three-quarters drilled.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -28,8 +37,8 @@ import type { SearchPoint } from "../jpse/search.ts";
 const base = baselineParams();
 const power = (mastery: number): Params => styleParams(base, STYLES.findIndex((s) => s.id === "power"), mastery);
 const CANONICAL = { mirror: false, reverse: false };
-/** Power's entrance: 7.5 m/s backward, a 0.35 s load, the full stick. */
-const ENTRANCE: EntranceKnobs = { ...BASELINE_KNOBS, speed: -7.5, load: 0.35 };
+/** Power's entrance: 7.25 m/s backward, a 0.35 s load, the full stick (7.5 m/s until 2026-11-14). */
+const ENTRANCE: EntranceKnobs = { ...BASELINE_KNOBS, speed: -7.25, load: 0.35 };
 const checkTick = (tick: number): number => tick * SIM_DT + 1e-9;
 /** One entrance with one check, skated by `p` on a script recorded on `p`. */
 const skate = (p: Params, knobs: EntranceKnobs, checkAt: number): SearchPoint =>
@@ -37,36 +46,37 @@ const skate = (p: Params, knobs: EntranceKnobs, checkAt: number): SearchPoint =>
 
 test("the pad script is recorded on the skater who skates it; for the neutral skater that is the same script", () => {
   assert.deepEqual(loopBaselineProgram(BASELINE_KNOBS, baselineParams()), loopBaselineProgram());
-  // The first grid's #98: 7 m/s, a 0.4 s load, checked 0.4 s into the air.
-  const knobs: EntranceKnobs = { ...BASELINE_KNOBS, load: 0.4, checkAt: 0.4 }, p = power(1);
+  // 7.25 m/s, a 0.45 s load, checked 0.375 s into the air (the first grid's #98
+  // until 2026-11-14, which Power drilled no longer stands on either script).
+  const knobs: EntranceKnobs = { ...BASELINE_KNOBS, speed: -7.25, load: 0.45, checkAt: 0.375 }, p = power(1);
   const replayed = runCandidate("neutral-script", pinPushFeet(loopBaselineProgram(knobs), p), CANONICAL, p, BASELINE.jump, BASELINE.runOut).report;
   const own = runCandidate("own-script", pinPushFeet(loopBaselineProgram(knobs, p), p), CANONICAL, p, BASELINE.jump, BASELINE.runOut).report;
   // The neutral skater falls there, so its script has no run-out: Power lands
-  // it and the inputs end 30 ticks later. The 2026-11-09 "0 of 225".
+  // it and the inputs end 24 ticks later. The 2026-11-09 "0 of 225".
   assert.equal(replayed.rejected, true);
-  assert.deepEqual(replayed.reasons, ["landing:stood-30-of-144-ticks"]);
+  assert.deepEqual(replayed.reasons, ["landing:stood-24-of-144-ticks"]);
   assert.equal(own.rejected, false);
-  assert.ok(Math.abs(own.landing!.turned - 1.970) < 0.001, `${own.landing!.turned}`);
+  assert.ok(Math.abs(own.landing!.turned - 1.958) < 0.001, `${own.landing!.turned}`);
   // And the search now skates the skater's own script.
-  const pt = skate(p, knobs, 0.4);
+  const pt = skate(p, knobs, 0.375);
   assert.equal(pt.accepted, true);
   assert.equal(pt.digest, own.replay.digest);
 });
 
-test("Power's entrance: at 7.5 m/s off a 0.35 s load the double has a 4-tick window, drilled", () => {
+test("Power's entrance: at 7.25 m/s off a 0.35 s load the double has a 3-tick window, drilled", () => {
   const scan = checkWindows(ENTRANCE, power(1));
-  assert.equal(scan.airTicks, 76);
+  assert.equal(scan.airTicks, 75);
   // Unchecked, Power turns past the double and does not stand.
   assert.equal(scan.uncheckedAccepted, false);
   const doubles = scan.windows.filter((w) => w.revolutions === 2);
-  assert.deepEqual(doubles.map((w) => [w.from, w.to, w.open]), [[50, 53, false]]);
+  assert.deepEqual(doubles.map((w) => [w.from, w.to, w.open]), [[50, 52, false]]);
   // The gates take a single loop as a loop: an early check lands one. Not what a search for doubles counts.
   assert.ok(scan.windows.some((w) => w.revolutions === 1));
-  assert.equal(scan.evaluated, 76 - 24 + 1);
+  assert.equal(scan.evaluated, 75 - 24 + 1);
 });
 
-test("the window slides earlier as Power is drilled, and check tick 53 lands the double at every mastery", () => {
-  const turned = [0, 0.25, 0.5, 0.75, 1].map((m) => {
+test("the window slides earlier as Power is drilled: check tick 53 lands the double until three-quarters drilled, 52 after", () => {
+  const turned = [0, 0.25, 0.5, 0.75].map((m) => {
     const pt = skate(power(m), ENTRANCE, checkTick(53));
     assert.equal(pt.accepted, true, `mastery ${m}: ${pt.reasons.join("; ")}`);
     assert.equal(revolutionsOf(pt.turned), 2);
@@ -74,17 +84,21 @@ test("the window slides earlier as Power is drilled, and check tick 53 lands the
   });
   // More whip and a faster pull-in: the same check finds more rotation each quarter.
   for (let i = 1; i < turned.length; i++) assert.ok(turned[i] > turned[i - 1], `${turned}`);
-  // The edges of the window on the day the style is chosen (53-56) and drilled (50-53).
+  // The edges of the window on the day the style is chosen (53-56) and drilled (50-52).
   assert.equal(skate(power(0), ENTRANCE, checkTick(52)).accepted, false);
   assert.equal(skate(power(0), ENTRANCE, checkTick(56)).accepted, true);
   assert.equal(skate(power(0), ENTRANCE, checkTick(57)).accepted, false);
-  assert.equal(skate(power(1), ENTRANCE, checkTick(54)).accepted, false);
+  assert.equal(skate(power(1), ENTRANCE, checkTick(52)).accepted, true);
+  assert.equal(skate(power(1), ENTRANCE, checkTick(53)).accepted, false);
 });
 
 test("Power's forgiving entrance: off a 0.3 s load, a check half a second in lands the double at every mastery", () => {
   // MEASURED 2026-11-10: the double's window at 7.25 m/s is ticks 59-65 chosen,
   // 57-61 drilled; at 7.5 m/s 58-63 and 55-60. Ticks 59-61 and 58-60 are in all five.
-  for (const m of [0, 0.25, 0.5, 0.75, 1]) for (const [speed, tick] of [[-7.25, 59], [-7.25, 61], [-7.5, 59]]) {
+  // RE-MEASURED 2026-11-14 (the load moved over time): 7.5 m/s off 0.3 s no
+  // longer leaves the ice; at 7.25 m/s 60-65 chosen, 58-61 drilled, and at 7 m/s
+  // 61-67 and 60-62. Ticks 60-61 and 61-62 are in all five.
+  for (const m of [0, 0.25, 0.5, 0.75, 1]) for (const [speed, tick] of [[-7.25, 60], [-7.25, 61], [-7, 61], [-7, 62]]) {
     const pt = skate(power(m), { ...BASELINE_KNOBS, speed, load: 0.3 }, checkTick(tick));
     assert.equal(pt.accepted, true, `mastery ${m}, ${speed} m/s, tick ${tick}: ${pt.reasons.join("; ")}`);
     assert.equal(revolutionsOf(pt.turned), 2);
@@ -96,21 +110,22 @@ test("Power drilled lands the triple loop with no check; the neutral skater's mo
   const drilled = skate(power(1), knobs, 5);
   assert.equal(drilled.accepted, true, drilled.reasons.join("; "));
   assert.equal(revolutionsOf(drilled.turned), 3);
-  assert.ok(Math.abs(drilled.turned - 2.95) < 0.01, `${drilled.turned}`);
-  // On the day it is chosen Power turns 2.65 there and does not stand.
+  assert.ok(Math.abs(drilled.turned - 2.93) < 0.01, `${drilled.turned}`);
+  // On the day it is chosen Power turns 2.63 there and does not stand (2.65 before 2026-11-14).
   const chosen = skate(power(0), knobs, 5);
   assert.equal(chosen.accepted, false);
-  assert.ok(Math.abs(chosen.turned - 2.65) < 0.01, `${chosen.turned}`);
-  // The neutral skater's most unchecked rotation on Power's grid: 2.39, at 7 m/s off the same load.
+  assert.ok(Math.abs(chosen.turned - 2.63) < 0.01, `${chosen.turned}`);
+  // The neutral skater's most unchecked rotation on Power's grid: 2.27, at 7 m/s
+  // (2.39 before 2026-11-14); off this same load, 2.27 too.
   const neutral = skate(base, { ...knobs, speed: -7 }, 5);
-  assert.ok(Math.abs(neutral.turned - 2.39) < 0.01, `${neutral.turned}`);
+  assert.ok(Math.abs(neutral.turned - 2.27) < 0.01, `${neutral.turned}`);
   assert.equal(neutral.accepted, false);
 });
 
 test("the neutral skater lands the same entrance with no check in the air", () => {
   const pt = skate(base, ENTRANCE, 5);
   assert.equal(pt.accepted, true, pt.reasons.join("; "));
-  assert.ok(Math.abs(pt.turned - 2.12) < 0.01, `${pt.turned}`);
+  assert.ok(Math.abs(pt.turned - 2.09) < 0.01, `${pt.turned}`);
   // Where the first grid looked (a check 0.35 to 0.45 s in), it falls: the grid stopped short of the window.
   assert.equal(skate(base, ENTRANCE, 0.45).accepted, false);
 });

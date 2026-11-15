@@ -179,8 +179,9 @@ test("the more worn, the less her pushes give: fresh 5.035 m/s, injured 4.709 m/
   for (const [i, want] of [5.035, 4.963, 4.889, 4.709].entries()) assert.ok(near(at[i], want), `${i}: ${at[i].toFixed(3)}`);
 });
 
-test("the more worn, the fewer deep edges she holds: fresh 28 of 36, injured 24", () => {
-  assert.deepEqual([0, 0.5, 0.99, 1].map(level => edgesHeld(bodyParams("simulation", level ? "hip" : null, level))), [28, 27, 25, 24]);
+test("the more worn, the fewer deep edges she holds: fresh 29 of 36, injured 24", () => {
+  // 28, 27, 25, 24 until the legs moved the load over time (2026-11-14).
+  assert.deepEqual([0, 0.5, 0.99, 1].map(level => edgesHeld(bodyParams("simulation", level ? "hip" : null, level))), [29, 28, 27, 24]);
 });
 
 test("the result screen names the wear a run's falls cost, and nothing for a clean run", async () => {

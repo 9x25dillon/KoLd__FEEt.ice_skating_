@@ -352,7 +352,8 @@ test("experimental: thumb strokes get the skater going from a standstill as trig
     assert.equal(strokes.feet, "10101010", `${setup}: strokes alternate feet`);
     assert.ok(strokes.knees.every(k => k === 1), `${setup}: each from a full bend`);
     // 1.994 since a push at a crawl lands on both feet (ONE_FOOT_SPEED); 1.977 on one foot; 0.509 before the full bend.
-    assert.ok(near(strokes.v, 1.994), `${setup}: ${strokes.v.toFixed(3)} m/s at 4 s (was 1.977, and 0.509)`);
+    // 1.981 since the legs move the load over time (2026-11-14).
+    assert.ok(near(strokes.v, 1.981), `${setup}: ${strokes.v.toFixed(3)} m/s at 4 s (was 1.994, 1.977, and 0.509)`);
   }
   let n = 0;
   const snaps = standstill("diggate", (k, h) => { if (k === 0) n++; h.buttons[n % 2 ? 6 : 7] = k < 8 ? 1 : 0; });

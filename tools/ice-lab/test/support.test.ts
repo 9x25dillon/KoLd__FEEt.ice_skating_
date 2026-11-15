@@ -115,9 +115,23 @@ test("the signal is read-only: computing it changes no digest", () => {
   }
 });
 
-test("the setups: the transfer stays off in every one until the owner turns it on (it moves the calibrated jumps)", () => {
-  // MEASURED 2026-11-14: on in Simulation, Experimental and Dig Gate, 51 pinned
-  // tests move, the double loop's takeoff L among them (28.65 -> 19.90): its
-  // searched script flips the weight just before the load.
-  for (const setup of SETUPS) assert.equal(setupParams(setup.id).weightTransferMode, 0, setup.id);
+test("the setups: the transfer is on where the feet are (Simulation, Experimental, Dig Gate), off elsewhere", () => {
+  // The owner's word, 2026-11-14: "turn it on and re-tune them". On, 51 pinned
+  // tests moved and were re-measured or re-searched (docs/support-signal.md).
+  const on = new Set(["simulation", "experimental", "diggate"]);
+  for (const setup of SETUPS) assert.equal(setupParams(setup.id).weightTransferMode, on.has(setup.id) ? 1 : 0, setup.id);
+});
+
+test("the mirror is exact through a transfer: the bias about the even split negates exactly", () => {
+  const p: Params = { ...DEFAULT_PARAMS, weightTransferMode: 1 };
+  const a = createState(p, 3, 0), b = createState(p, 3, 0);
+  for (let i = 0; i < 192; i++) {
+    const w = asked(i * SIM_DT);
+    step(a, { ...NEUTRAL_INPUT, weight: w }, p, SIM_DT, []);
+    step(b, { ...NEUTRAL_INPUT, weight: 1 - w }, p, SIM_DT, []);
+    // === rather than Object.is: 0 and -0 are the same place.
+    assert.ok(a.loadBias === -b.loadBias!, `tick ${i}: bias ${a.loadBias} / ${b.loadBias}`);
+    assert.ok(a.blade[0].weight === b.blade[1].weight, `tick ${i}: shares`);
+    assert.ok(a.pos.y === -b.pos.y && a.pos.x === b.pos.x, `tick ${i}: position`);
+  }
 });

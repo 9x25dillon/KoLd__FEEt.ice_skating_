@@ -286,7 +286,7 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       optional variations/peakRaise/aboveHip — present only once the raise
 //       is asked. Fixture rebased, every digest unchanged.
 //       2026-11-14, also unbumped: Params weightTransferMode (0 everywhere)
-//       and weightTransferTime; SkaterState optional loadR/loadRate/
+//       and weightTransferTime; SkaterState optional loadBias/loadRate/
 //       loadAsked, present only at 1. Fixture rebased, every digest unchanged.
 export const REPLAY_SOLVER = "ice-lab-f64/39";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
