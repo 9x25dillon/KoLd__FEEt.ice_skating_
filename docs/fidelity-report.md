@@ -8,7 +8,7 @@ Preset under test **`responsive`** (the public build's boot preset); reference *
 
 ## Gate
 
-**Gate not met.** 8 pass, 0 fail, 25 unsourced, 0 unmodelled, of 33 cases.
+**Gate not met.** 11 pass, 0 fail, 25 unsourced, 0 unmodelled, of 36 cases.
 
 | §6.3 | Condition | State |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 | O2 tracing curvature | 2 | 0 | 0 | 2 | 0 | 0 / 3 |
 | O3 edge transitions | 7 | 0 | 0 | 7 | 0 | 0 / 3 |
 | O4 speed decay | 5 | 1 | 0 | 4 | 0 | 1 / 3 |
-| O5 jump rotation | 7 | 3 | 0 | 4 | 0 | 1 / 3 |
+| O5 jump rotation | 10 | 6 | 0 | 4 | 0 | 4 / 3 |
 | O6 moment of inertia | 3 | 0 | 0 | 3 | 0 | 0 / 3 |
 | O7 propulsion | 3 | 0 | 0 | 3 | 0 | 0 / 3 |
 
@@ -36,7 +36,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 | Observable | Cases | Pass | Fail | Unsourced | Unmodelled |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `air_time_height_residual_m` | 2 | 2 | 0 | 0 | 0 |
-| `air_time_s` | 2 | 1 | 0 | 1 | 0 |
+| `air_time_s` | 5 | 4 | 0 | 1 | 0 |
 | `carve_held` | 1 | 0 | 0 | 1 | 0 |
 | `carve_lean_deg` | 1 | 0 | 0 | 1 | 0 |
 | `carve_lean_residual_deg` | 4 | 4 | 0 | 0 | 0 |
@@ -61,7 +61,10 @@ External passing counts literature cases only once `primary_checked` is true (§
 
 | Case | Source | Observable | Expected | Tolerance | Actual | Deviation | Verdict | `spec` |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
+| `air-time-double-axel-koga2025` | literature | `air_time_s` | 0.5100 s | 0.0640 | 0.7250 | 0.2150 | pass | pass 0.7333 |
 | `air-time-isolated-jumps-bruening2018` | literature | `air_time_s` | 0.4400 s | 0.0781 | 0.5917 | 0.1517 | pass | pass 0.5917 |
+| `air-time-single-axel-koga2025` | literature | `air_time_s` | 0.4000 s | 0.0860 | 0.7250 | 0.3250 | pass | pass 0.7333 |
+| `air-time-waltz-jump-koga2025` | literature | `air_time_s` | 0.3600 s | 0.1118 | 0.7250 | 0.3650 | pass | pass 0.7333 |
 | `carve-residual-fast-deep` | derived | `carve_lean_residual_deg` | 0.0000 deg | 0.5000 | -0.0054 | -0.0054 | pass | fail 0.6109 |
 | `carve-residual-mid` | derived | `carve_lean_residual_deg` | 0.0000 deg | 0.5000 | 0.0032 | 0.0032 | pass | fail 0.5313 |
 | `carve-residual-slow-shallow` | derived | `carve_lean_residual_deg` | 0.0000 deg | 0.5000 | 0.0031 | 0.0031 | pass | fail (no steady window (fidelity-gate §4.4)) |
