@@ -552,3 +552,17 @@ test('the podium names a clip for each place, and the bridge bakes it for the cl
  assert.throws(()=>e.motionTrack({id:'nope'}),/Unknown motion clip/);
  assert.equal(e.motionTrack({id:'podium.wave',fps:500}).fps,60,'clamped');
 });
+
+test('a career result carries its kiss-and-cry: the wait, a reaction read off the result, and a state to sit from',()=>{
+ const e=new IceEngine();
+ e.configure({setup:null,scheme:1,beginner:true,cruise:true});e.start({mode:'career',event:0});
+ e.routine.index=e.routine.event.routine.length;e.routine.elapsed=e.routine.event.seconds;
+ e.advance(emptyControls(),1,false);
+ const r=e.snapshot().result,k=r.kissAndCry,you=r.standings.find(x=>x.you).place;
+ assert.equal(k.sequence[0].clip,'kc.wait');
+ assert.equal(k.reaction,you===1?'joy':you<=3?'relief':'disappointed','a first completion: the place decides');
+ assert.equal(k.sequence[1].clip,`kc.${k.reaction}`);
+ assert.ok(!k.state.fallen&&k.state.pos.y===18);
+ // A free skate has none.
+ e.start({mode:'free'});assert.equal(e.snapshot().result,null);
+});
