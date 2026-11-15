@@ -327,7 +327,7 @@ except in a commit that changes nothing else and cites a reason in the source ([
 | Observable | b | Level | Justification |
 | --- | --- | --- | --- |
 | `carve_lean_deg` | ±3° | L2 | About the resolution of a body line measured by eye on broadcast footage. A tighter band could not currently be checked against footage. |
-| `carve_lean_residual_deg` | ±0.5° | L2 | Derived only. Set above the expected settling ripple, and to be replaced by the numerical floor the first validator run measures. |
+| `carve_lean_residual_deg` | ±0.5° | L2 | Derived only. Set above the expected settling ripple, and to be replaced by the numerical floor the first validator run measures. That floor was measured on 2026-11-14 and the band is decomposed in [§5.3](#53--the-numerical-floor). Its value has not been changed. |
 | `angulation_deg` | ±5° | L3 | Boot angle is hard to read, so the band is exploratory. |
 | `trace_radius_m`, `trace_lobe_radius_m` | ±10% of expected | L2 | A skater watching their own figure would notice a lobe that is visibly larger or smaller. 10% is a starting claim, not a perception threshold. |
 | `turn_entry_angle_deg`, `turn_exit_angle_deg` | ±10° | L2 | A starting claim. Measuring angles from tracings is itself uncertain at this scale. |
@@ -358,6 +358,74 @@ footage measurement it is paired with.
 u<sub>m</sub> applied in the skater's favour. They fail when no input within the model's limits achieves
 it. The case supplies the input script that attempts it, so a failing case is reproducible by
 anyone.
+
+### 5.3 · The numerical floor
+
+§5.1 said the ±0.5° on `carve_lean_residual_deg` was "to be replaced by the numerical floor the first
+validator run measures". That measurement now exists. It is a test,
+`tools/ice-lab/test/discretisation.test.ts`, so anyone can reproduce it:
+
+```sh
+cd tools/ice-lab && node --test test/discretisation.test.ts
+```
+
+**The band is decomposed, not replaced.** Replacing 0.5° with the floor would put a property of the
+integrator where a claim about the model belongs. The band keeps its value. What it is made of is
+written down here, on 2026-11-14, before any external carve case has been added.
+
+Held edges on `responsive` at 4 and 6 m/s, 20° and 30°, run at 120, 240, 480 and 960 Hz, with 960 Hz
+standing in for the converged answer. Solver `ice-lab-f64/39`.
+
+| Part of the ±0.5° | Size | What it is | How measured |
+| --- | ---: | --- | --- |
+| **Numerical floor** | **4 × 10⁻³ °** | What the 120 Hz step alone adds to the residual. Worst standing case 3.8 × 10⁻³ °; the other two 2.7 × 10⁻³ °. | The validator's own extractor over the §4.4 window, 120 Hz against 960 Hz |
+| **Model settling ripple** | **1 × 10⁻³ °** peak to peak in the §4.4 window; **1.6 to 5.1 × 10⁻² °** two seconds in | How far the per-tick residual moves inside the window. It is the arms' authority still washing out (§4.4), not step size: it is the same at every rate. | The same extractor, at 120 Hz, after a 5 s and a 2 s settle |
+| **The model's own residual** | **5 × 10⁻⁴ °** | What is left at 960 Hz: how far the solver's lean sits from tan φ = v² / (g r<sub>c</sub>) once the step is taken out. | The 960 Hz run |
+| **External measurement uncertainty** | none | The observable is derived only (§4.3 O1). No external measurement enters it. For the external carve observables u<sub>m</sub> is per case, as §5 says. | — |
+| **Unallocated** | **about 0.49°** | The rest of the band. Nothing measured so far needs it. | 0.5° less the rows above |
+
+Three things follow, and none of them changes a number in §5.1.
+
+1. **The one-foot derived carve cases are reading the step, not the model.** Their residuals on
+   `responsive` are 0.003° to 0.005° ([fidelity-report.md](fidelity-report.md)). The edges measured
+   here give 0.003° to 0.004° at 120 Hz and 0.0001° to 0.0005° at 960 Hz. So most of what those cases
+   report is the numerical floor. They still do their job, which is to catch a sign error or a
+   regression. The two-foot case reads 0.052°, ten times the others; it was not run at other rates
+   here, so how much of that is step size is unmeasured.
+2. **The step size is not a gate risk.** The worst step-size error in a fitted radius is
+   2.4 × 10⁻⁴ relative, against the ±10% on `trace_radius_m`: a margin of about 400. Against ±0.5° the
+   residual's margin is about 130. The position error behind them is larger, 20 to 55 mm after three
+   seconds, but it is phase along the arc, and neither a fitted radius nor a lean balance sees phase.
+3. **The band is about 125 times the floor and has never been tested near its edge.** A tighter band
+   could be justified by these numbers. Tightening it is a change to §5.1, which is the owner's to
+   make, and it would be made in a commit that changes nothing else.
+
+**On `spec`**, which is reported and not gated, the step matters much more: 7 × 10⁻³ relative in
+radius and 0.03° to 0.09° in the residual, two seconds in. The lean there is still moving by 0.35° to
+0.69° across the measurement, so those figures are a transient's.
+
+**What did not reproduce.** The 2026-11-15 review quoted a floor of 4.7 × 10⁻⁴ ° and a radius error of
+4.3 × 10⁻⁵ from one case. Over the case set above, the radius figure holds at 4 m/s and not at 6 m/s,
+and the residual figure holds nowhere. The test that asserts the review's figures is left failing. See
+[divergences/numerical-floor-vs-review.md](divergences/numerical-floor-vs-review.md).
+
+**One case is not a held edge.** 4 m/s at 30° is over-leaned for its speed: the skater is still up
+during the measurement and down before the §4.4 window would close. It is printed in the test's table
+and left out of every figure here.
+
+### 5.4 · Known limitations of the measurement
+
+- **The model is not fully parameterised by the step.** `step()` takes `dt`, and the solver's own
+  timers advance by it. Some logic around it counts ticks instead: repeated pushes every 90 ticks and
+  tracing samples every 4 ticks in the game layers, and the music clock and the stamina noise inside
+  `sim/`. The held edges in §5.3 touch none of these, which is why they can be run at other rates. A
+  jump, a stroke or a program cannot be re-run at another rate by changing `dt` alone. The inventory,
+  with each occurrence classed as presentation timing or physics, is
+  [tick-indexed-logic.md](tick-indexed-logic.md).
+- **960 Hz is a stand-in, not a limit.** The observed order is 1.2 between 120 and 240 Hz and 1.6
+  between 240 and 480 Hz, so the error at 960 Hz is not zero. If the step were exactly first order, the true 120 Hz error
+  would be a seventh larger than the difference measured here.
+- **Three standing cases, one preset, one foot.** No two-foot glide, no skid, no transition.
 
 ---
 
