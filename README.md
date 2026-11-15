@@ -109,21 +109,21 @@ them at a fixed commit, with the command for each, see
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Ice Lab suite | `cd tools/ice-lab && node --test test/*.test.ts` | 1094 tests: 1093 pass, 0 fail, 1 todo |
+| Ice Lab suite | `cd tools/ice-lab && node --test test/*.test.ts` | 1095 tests: 1094 pass, 0 fail, 1 todo |
 | Godot bridge tests | `node --test games/ice-run-godot/tests/*.test.mjs` | 68 tests: 68 pass, 0 fail |
-| Unreal contract tests | `node --test games/ice-run-unreal/tests/*.test.mjs` | 8 tests: 6 pass, 0 fail, 2 skipped |
+| Unreal contract tests | `node --test games/ice-run-unreal/tests/*.test.mjs` | 9 tests: 7 pass, 0 fail, 2 skipped |
 | Replay fixture | `cd tools/ice-lab && node replay/verify.ts test/fixtures/replay-v1.json` | verified, 240 ticks |
-| Fidelity validator | `cd tools/ice-lab && node validate.mjs` | 35 cases: 8 pass, 0 fail, 25 unsourced, 2 unmodelled |
+| Fidelity validator | `cd tools/ice-lab && node validate.mjs` | 38 cases: 11 pass, 0 fail, 25 unsourced, 2 unmodelled |
 | Fidelity gate ([§6.3](docs/fidelity-gate.md#63--the-gate-is-met)) | | **not met** |
 
 Fidelity coverage, external passing cases per class (three are needed in each):
 
 | O1 carve relation | O2 tracing curvature | O3 edge transitions | O4 speed decay | O5 jump rotation | O6 moment of inertia | O7 propulsion |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 0 / 3 | 0 / 3 | 0 / 3 | 1 / 3 | 1 / 3 | 0 / 3 | 0 / 3 |
+| 0 / 3 | 0 / 3 | 0 / 3 | 1 / 3 | 4 / 3 | 0 / 3 | 0 / 3 |
 
-External evidence: 2 sourced cases measured outside the project, 2 passing, 0 failing.
-Content against corpus: 38 costumes, 6 venues and 12 skate presets (56) to 2 passing external cases.
+External evidence: 5 sourced cases measured outside the project, 5 passing, 0 failing.
+Content against corpus: 38 costumes, 6 venues and 12 skate presets (56) to 5 passing external cases.
 
 Tests recorded as failing and left failing (`todo`: they print on every run and do not close the build):
 - Ice Lab suite: the review's floor figures hold on every steady case

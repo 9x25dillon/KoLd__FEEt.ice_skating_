@@ -299,6 +299,16 @@ are **not** to be entered as `expected` until checked.
   corpus's existing jump script: a pass, and about 2.5 SD above this population's mean, which only
   footage of specific jumps can judge. The same paper's in-air peak rotation (1,273 deg/s doubles,
   1,465 triples, no spread) has no gate observable yet.
+- **`air-time-{waltz-jump,single-axel,double-axel}-koga2025`** — O5 `air_time_s`, *added 2026-11-15*. Koga et al.
+  2025 (Front Bioeng Biotechnol 13:1606817, PMC12434041, CC BY, read in full): 11 youth skaters, 37.02 kg,
+  1.47 m, 3D video at 100 Hz. Table 2 flight time 0.36 ± 0.10 s (waltz), 0.40 ± 0.07 (single axel), 0.51 ±
+  0.04 (double axel, n = 3, exploratory). One-sided, `at_least`, on the cohort's body. All three pass. The
+  same table's **take-off vertical velocity**, 1.77 ± 0.46, 2.24 ± 0.42 and 2.73 ± 0.31 m/s, is the finding:
+  on that body the model's clean takeoff leaves at 3.575 m/s and flies 0.725 s, because `jumpImpulse` scales
+  by √(55 / mass). Lighter skaters jump higher in the model, and these measurements show no such trend.
+  Bruening 2018 (0.44 s) and Yamaguchi & Sakurai 2025 (0.443 s, 46.9 kg) sit at the same flight time. Not
+  cased: the gate has no v<sub>z</sub> observable, and a one-sided air time cannot see a model that flies too
+  long. Both are gate decisions.
 - **`glide-curve-ratio-dekoning1992`** — curve against straight μ, about 1.28. An L2 directional check
   on `muEdgeGain`. Likely stays unsourced for figure skates.
 - **`rut-depth-hockey-lever2022`** — rut depth 0.18 ± 0.08 mm, width 4.16 ± 0.47 mm, primary
