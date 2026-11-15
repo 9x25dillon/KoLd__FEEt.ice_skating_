@@ -90,6 +90,8 @@ var track := 0
 var profile := 0
 var character := 0
 var costume := 3
+# game/skates.ts: the chosen skates (ids from the catalogue); empty is today's look. Cosmetic only.
+var skates: Dictionary = {}
 # The Composer's music preview and the atelier's design in hand (game/composer.ts, game/atelier.ts).
 var preview: AudioStreamPlayer
 var design_slot := -1
@@ -686,6 +688,8 @@ func show_page(page: String) -> void:
 		show_atelier_page()
 	elif page == "design":
 		show_design_page()
+	elif page == "skates":
+		show_skates_page()
 	elif page == "settings":
 		clear_menu("Your skating setup", "Changes apply to your next skate. Keyboard and analog controller are supported. Face buttons request moves; the physics decides what is possible.")
 		for entry in catalog.get("setups",[]):
@@ -739,15 +743,32 @@ func show_page(page: String) -> void:
 		menu.add_child(character_picker)
 		if not catalog.is_empty() and character != 1:
 			menu.add_child(label("Costume",16))
-			var costume_picker := OptionButton.new()
 			var worn := costume_skins()
+			# Presets are grouped by game/appearance.ts COLLECTIONS; the kept designs are "Yours".
+			var groups: Array = []
+			for w in worn:
+				if w != null and not groups.has(str(w.get("collection","Yours"))): groups.append(str(w.get("collection","Yours")))
+			var now_group := str(worn[costume].get("collection","Yours")) if costume >= 0 and costume < worn.size() and worn[costume] != null else str(groups[0])
+			var group_picker := OptionButton.new()
+			for g in groups: group_picker.add_item(g)
+			group_picker.selected = maxi(groups.find(now_group),0)
+			var costume_picker := OptionButton.new()
 			for i in worn.size():
-				if worn[i] != null:
+				if worn[i] != null and str(worn[i].get("collection","Yours")) == str(groups[group_picker.selected]):
 					costume_picker.add_item("%s — %s" % [worn[i].name, worn[i].description],i)
 			costume_picker.select(costume_picker.get_item_index(costume) if costume_picker.get_item_index(costume) >= 0 else 0)
+			group_picker.item_selected.connect(func(index: int):
+				for i in worn.size():
+					if worn[i] != null and str(worn[i].get("collection","Yours")) == str(groups[index]):
+						costume = i
+						break
+				skater.apply_skin(current_skin());save_preferences();show_page("settings"))
 			costume_picker.item_selected.connect(func(index: int):costume=costume_picker.get_item_id(index);skater.apply_skin(current_skin());save_preferences())
+			menu.add_child(group_picker)
 			menu.add_child(costume_picker)
 			menu.add_child(button("Atelier  /  make your own costume →",func():show_page("atelier")))
+		if not catalog.is_empty() and character != 1:
+			menu.add_child(button("Skates  /  boots, blades and laces →",func():show_page("skates")))
 		if not catalog.is_empty():
 			menu.add_child(label("Soundtrack",16))
 			var track_picker := OptionButton.new()
@@ -1053,6 +1074,65 @@ func show_atelier_page() -> void:
 			menu.add_child(row)
 		menu.add_child(HSeparator.new())
 	menu.add_child(button("← Back to settings",func():show_page("settings")))
+
+# ---- Skates (game/skates.ts, through the bridge) ----
+
+const SKATE_LISTS := {"boot":"boots","finish":"finishes","blade":"blades","laces":"laces","heel":"heels"}
+
+func current_skates() -> Dictionary:
+	return skates if not skates.is_empty() else catalog.skates.default
+
+func pick_skates(next: Dictionary) -> void:
+	skates = next
+	link.send("skates",{"choice":skates})
+
+func show_skates_page() -> void:
+	var cat: Dictionary = catalog.skates
+	var now := current_skates()
+	var look: Dictionary = frame.get("skates",{})
+	clear_menu("Skates","Boots, blade and laces from a list. They change how the skates look and nothing else: the physics, the scores and the replays are the same in any pair.")
+	menu.add_child(paragraph("Wearing: %s  /  %s" % [str(look.get("name","Competition white")),str(look.get("description",""))],14))
+	var named := OptionButton.new()
+	named.add_item("Named skates…")
+	for preset in cat.presets:
+		named.add_item("%s  /  %s" % [str(preset.name),str(preset.description)])
+	named.item_selected.connect(func(index: int):
+		if index > 0: pick_skates(cat.presets[index-1].choice.duplicate()))
+	menu.add_child(named)
+	for part in cat.parts:
+		var list: Array = cat[SKATE_LISTS[part.id]]
+		var at := 0
+		for i in list.size():
+			if list[i].id == now[part.id]: at = i
+		var row := HBoxContainer.new()
+		var title := label(str(part.title),15)
+		title.custom_minimum_size.x = 170
+		row.add_child(title)
+		row.add_child(keyed(button("◀",func():pick_skates(cycled_skates(now,part.id,list,-1))),"skates-%s-" % part.id))
+		var hex = list[at].get("hex")
+		if hex == null and part.id == "finish":
+			hex = cat.boots.filter(func(b):return b.id == now.boot)[0].hex
+		if hex != null:
+			var chip := ColorRect.new()
+			chip.color = Color.html(str(hex))
+			chip.custom_minimum_size = Vector2(36,36)
+			chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			row.add_child(chip)
+		var chosen := label("  %s" % str(list[at].name),15)
+		chosen.custom_minimum_size.x = 190
+		row.add_child(chosen)
+		row.add_child(keyed(button("▶",func():pick_skates(cycled_skates(now,part.id,list,1))),"skates-%s+" % part.id))
+		menu.add_child(row)
+	menu.add_child(paragraph("The athlete models draw laces and a separate heel; the first skater model has no laces of its own, and the Berserker keeps his own boots.",12))
+	menu.add_child(button("← Back to settings",func():save_preferences();show_page("settings")))
+
+func cycled_skates(now: Dictionary, part: String, list: Array, by: int) -> Dictionary:
+	var next := now.duplicate()
+	var at := 0
+	for i in list.size():
+		if list[i].id == now[part]: at = i
+	next[part] = list[(at+by+list.size())%list.size()].id
+	return next
 
 func cycle_design(key: String, list: Array, by: int, field: String = "id") -> void:
 	var at := 0
@@ -1484,6 +1564,8 @@ func on_engine(op: String, data: Dictionary) -> void:
 	if op == "hello":
 		catalog = data.catalog
 		frame = data.frame
+		if not skates.is_empty():
+			link.send("skates",{"choice":skates})
 		var worn: int = skater.apply_skin(current_skin())
 		if boot_test and worn < SKIN_SURFACES:
 			push_error("Costume reached %d of %d surfaces" % [worn, SKIN_SURFACES])
@@ -1495,7 +1577,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		skater.apply_frame(frame,true)
 		show_page(current_page)
 		if boot_test:
-			for page in ["career","composer","settings","atelier","controller","home"]:
+			for page in ["career","composer","settings","atelier","skates","controller","home"]:
 				show_page(page)
 		if boot_test:
 			start_game("career")
@@ -1515,6 +1597,13 @@ func on_engine(op: String, data: Dictionary) -> void:
 		return
 	if op == "dress":
 		skater.apply_skin(data.skin)
+		return
+	if op == "skates":
+		frame = data
+		skater.apply_skates(frame.skates)
+		save_preferences()
+		if overlay.visible and current_page == "skates":
+			show_page("skates")
 		return
 	if op == "export" or op == "metrics":
 		notice.text = "Saved: "+str(data.path)
@@ -1894,7 +1983,7 @@ func _input(event: InputEvent) -> void:
 				if current_page == "home": resume_game()
 				elif current_page == "music": timeline_edit({"action":"close"})
 				elif current_page == "design": skater.apply_skin(current_skin()); show_page("atelier")
-				elif current_page == "atelier": show_page("settings")
+				elif current_page == "atelier" or current_page == "skates": show_page("settings")
 				else: show_page("career" if current_page == "event" else "home")
 				get_viewport().set_input_as_handled()
 			elif event.button_index == JOY_BUTTON_START:
@@ -2145,6 +2234,22 @@ func capture() -> void:
 		print("GODOT_CAPTURE_PASS")
 		get_tree().quit()
 		return
+	if "--capture-telemetry" in OS.get_cmdline_user_args():
+		# The computer skates a jump and a spin; a still when each element's card is up.
+		start_game("showcase",0,false,{"character":"career","program":["glide","spin","jump","pose"]})
+		var shown := {}
+		for k in 150:
+			await get_tree().create_timer(.5).timeout
+			var card = frame.get("elementCard")
+			if card != null and not shown.has(card.kind) and broadcast.card_time>1.0:
+				shown[card.kind] = true
+				await RenderingServer.frame_post_draw
+				get_viewport().get_texture().get_image().save_png("/tmp/edgework-godot-card-%s.png" % card.kind)
+				print("GODOT_CARD: %s %s" % [card.kind,card.name])
+			if shown.size()>=2: break
+		print("GODOT_CAPTURE_PASS")
+		get_tree().quit()
+		return
 	if "--capture-pose" in OS.get_cmdline_user_args():
 		# The closing pose as the demonstration skates it: the computer glides, then holds the pose; stills from three cameras.
 		start_game("showcase",0,false,{"character":"career","program":["glide","pose"]})
@@ -2301,6 +2406,9 @@ func load_preferences() -> void:
 	profile = clampi(int(saved.get("profile",0)),0,3)
 	character = clampi(int(saved.get("character",0)),0,CHARACTERS.size()-1)
 	costume = maxi(int(saved.get("costume",0)),0)
+	# Optional: a save from before skates has none, and the engine reads anything off the lists as today's look.
+	if saved.get("skates") is Dictionary:
+		skates = saved.skates
 	cruise = bool(saved.get("cruise",true))
 	music_enabled = bool(saved.get("music",true))
 	rumble_enabled = bool(saved.get("rumble",true))
@@ -2318,6 +2426,6 @@ func save_preferences() -> void:
 		return
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"steady":steady_choice,"danceStyle":dance_style,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"cruise":cruise,"music":music_enabled,"rumble":rumble_enabled,"paddles":paddle_layout,"sequence":sequence}))
+		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"steady":steady_choice,"danceStyle":dance_style,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"skates":skates,"cruise":cruise,"music":music_enabled,"rumble":rumble_enabled,"paddles":paddle_layout,"sequence":sequence}))
 	else:
 		on_error("Preferences could not be saved.")

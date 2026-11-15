@@ -24,8 +24,8 @@ export interface RivalLook {
   costume: Costume;
 }
 
-const dress = (id: string, name: string, description: string, c: Omit<Costume, "id" | "name" | "description" | "bun">): Costume =>
-  ({ id, name, description, ...c, bun: false });
+const dress = (id: string, name: string, description: string, c: Omit<Costume, "id" | "name" | "description" | "bun" | "collection">): Costume =>
+  ({ id, name, description, collection: "Rivals", ...c, bun: false });
 
 export const RIVAL_LOOKS: Record<(typeof RIVALS)[number]["name"], RivalLook> = {
   "Ansa Merrow": { model: "skater-rival-ansa", height: 1.5, costume: dress("rival-ansa", "Ansa Merrow", "Electric cyan · white crystals · platinum ponytail", {
@@ -54,4 +54,4 @@ export function rivalLook(name: string): RivalLook | null {
 }
 
 /** The costume fields a Skin carries, for checking a look is complete. */
-export const SKIN_FIELDS = Object.keys(SKINS[0]) as (keyof Skin)[];
+export const SKIN_FIELDS = (Object.keys(SKINS[0]) as (keyof Skin)[]).filter(k => k !== "collection");

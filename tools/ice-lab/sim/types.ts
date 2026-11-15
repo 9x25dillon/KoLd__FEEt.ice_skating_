@@ -689,13 +689,15 @@ export interface SkaterState {
   pitchAnkle?: number;
   pitchIntAccel?: number;
   /**
-   * weightTransferMode 1 only: the right blade's share of the body's load as
-   * the legs have actually moved it, 0..1, and its rate, 1/s. Absent in the
-   * air: a landing sets it from the foot it comes down on.
+   * weightTransferMode 1 only: how far toward the right blade the legs have
+   * actually moved the body's load, as the right's share less one half
+   * (-0.5 all on the left .. 0.5 all on the right), and its rate, 1/s (the
+   * right share's rate too). Absent in the air: a landing sets it from the foot
+   * it comes down on.
    */
-  loadR?: number;
+  loadBias?: number;
   loadRate?: number;
-  /** weightTransferMode 1 only: the share the skater is asking for, 0..1. */
+  /** weightTransferMode 1 only: the bias the skater is asking for, -0.5..0.5. */
   loadAsked?: number;
   /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's

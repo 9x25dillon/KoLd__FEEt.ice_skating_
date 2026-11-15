@@ -4,6 +4,7 @@ import {SIM_DT,PRESETS} from '../runtime/sim/params.js';
 import {MOVE,TURN_KIND,NEUTRAL_INPUT,codeToString} from '../runtime/sim/types.js';
 import {JUMP_PHASE,JUMP_CODE} from '../runtime/sim/jump.js';
 import {supportSignal} from '../runtime/sim/support.js';
+import {ElementRecorder} from '../runtime/game/elementstats.js';
 import {ReplayRecorder,ReplayPlayer,parseReplay,replayDigest,MAX_REPLAY_BYTES} from '../runtime/sim/replay.js';
 import {SessionMeter} from '../runtime/sim/session.js';
 import {applyProfile,SAMPLE_PROFILES,xpToRaise,overall,STAT_NAMES} from '../runtime/sim/profile.js';
@@ -36,6 +37,7 @@ import {Practice,LESSONS} from '../runtime/game/practice.js';
 import {IceRun,LIGHTS} from '../runtime/game/run.js';
 import {RookieCourse,ROOKIE_GATES} from '../runtime/game/rookie.js';
 import {SKINS} from '../runtime/game/appearance.js';
+import {SKATES_CATALOG,lookOf,parseSkates} from '../runtime/game/skates.js';
 import {Wardrobe,PARTS,FABRICS,CRYSTALS,MAX_DESIGNS,NAME_LIMIT,designFromPreset,designSkin,parseDesign} from '../runtime/game/atelier.js';
 import {checkTimeline,cueTimes,spreadTimeline,retime,nudge,addCue,removeCue,requiredCues,sortedCues,barCount,barSeconds,barStart,parseTimeline,MIN_GAP_BARS,CUE_EARLY_BARS,CUE_LATE_BARS} from '../runtime/game/composer.js';
 import {ComboTracker} from '../runtime/sim/combo.js';
@@ -61,7 +63,7 @@ const PILOT_PROFILE=defaultControllerProfile();
 export const emptyControls=()=>({lx:0,ly:0,rx:0,ry:0,lean:0,pitch:0,kx:0,ky:0,kPrimaryX:0,kAltX:0,knee:.35,weight:.5,carriage:0,windup:0,push:false,brake:false,toe:false,turn:false,bracket:false,twizzle:false,spin:false,inaBauer:false,reset:false,pause:false,cyclePreset:false,cycleScheme:false,cycleJump:false,cycleView:false,zoom:0,dpadStep:0,tilt:0,toggleGame:false,cycleGhost:false,pickJump:-1,cycleProfile:false,cycleMoves:false,cycleRink:false});
 export class IceEngine {
  constructor(save=null,wardrobe=null,studio=null,board=null) {
-  this.wardrobe=Wardrobe.restore(wardrobe);this.draft=null;
+  this.wardrobe=Wardrobe.restore(wardrobe);this.draft=null;this.skates=parseSkates(null);
   // game/creator.ts and game/modes.ts: Creation's shelves, the sheet being made, the arcade's climb and board.
   this.studio=Studio.restore(studio,tracks.length);this.sheet=null;this.board=ArcadeBoard.restore(board);this.arcade=null;this.pilot=null;this.showcase=null;
   this.controllerProfile=defaultControllerProfile();this.setup=null;this.assistance=.75;
@@ -71,7 +73,7 @@ export class IceEngine {
   this.steadyChoice=null; this.hand=new SteadyHand(steadyStrength(this.steadyLevel()));
   this.start({mode:'free'});
  }
- catalog() {return {motion:libraryIndex(),story:{coach:COACH,season:SEASON,seasons:SEASONS_STORY,chapters:CHAPTERS,cast:cast(SEASONS.length).map(c=>({...c,look:rivalLook(c.name)})),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,danceFits:tracks.map(t=>suggestStyles(t.bpm,t.beatsPerBar).map(x=>({id:x.style.id,fit:x.fit}))),medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS,modes:MODES,backstories:RIVAL_BACKSTORIES,creator:creatorCatalog(),styles:STYLES.map(s=>({id:s.id,title:s.title,blurb:s.blurb})),arcade:{lives:ARCADE_LIVES,ladder:arcadeRounds('career').map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title,seconds:r.program.seconds}))},pilot:{elements:PILOT_ELEMENTS},venues:VENUES};}
+ catalog() {return {motion:libraryIndex(),story:{coach:COACH,season:SEASON,seasons:SEASONS_STORY,chapters:CHAPTERS,cast:cast(SEASONS.length).map(c=>({...c,look:rivalLook(c.name)})),statTitles:STAT_TITLES},steady:{levels:STEADY_LEVELS,defaults:Object.fromEntries(SETUPS.map(x=>[x.id,steadyDefault(x.id)]))},bodyRegions:BODY_REGIONS,families:JUMP_FAMILIES,planExtra:PLAN_EXTRA,rivals:RIVALS.map(r=>r.name),courses:COURSES.map(c=>({id:c.id,title:c.title,blurb:c.blurb,setups:c.setups})),trustSteps:TRUST_STEPS.length,lessonXp:LESSON_XP,armFocus:ARM_FOCUS,setups:SETUPS,controller:{profile:defaultControllerProfile(),actions:ACTIONS,buttons:BUTTON_NAMES,tuning:TUNING},events:CAREER_EVENTS,elements:ELEMENTS,tracks,danceFits:tracks.map(t=>suggestStyles(t.bpm,t.beatsPerBar).map(x=>({id:x.style.id,fit:x.fit}))),medals:MEDALS,profiles:SAMPLE_PROFILES.map(p=>p.name),presets:Object.keys(PRESETS),rink:RINK,lights:LIGHTS,gates:ROOKIE_GATES,skins:SKINS,skates:SKATES_CATALOG,atelier:{parts:PARTS,fabrics:FABRICS,crystals:CRYSTALS,maxDesigns:MAX_DESIGNS,nameLimit:NAME_LIMIT,starts:SKINS.map(s=>designFromPreset(s))},composer:{minGap:MIN_GAP_BARS,early:CUE_EARLY_BARS,late:CUE_LATE_BARS},flakes:SNOWFLAKES,targets:TARGETS,modes:MODES,backstories:RIVAL_BACKSTORIES,creator:creatorCatalog(),styles:STYLES.map(s=>({id:s.id,title:s.title,blurb:s.blurb})),arcade:{lives:ARCADE_LIVES,ladder:arcadeRounds('career').map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title,seconds:r.program.seconds}))},pilot:{elements:PILOT_ELEMENTS},venues:VENUES};}
  start(options={}) {
   const mode=options.mode??this.mode??'free';
   if(!['free','career','rookie','timed','composer','pairs','armdrill','lesson','arcade','exhibition','showcase'].includes(mode)) throw Error('Unknown skating mode');
@@ -138,7 +140,7 @@ export class IceEngine {
   if(mode==='career')this.routine.armExpression=armExpression(focus,this.career.armBest[focus]);
   if(timeline&&!this.routine.setCues(cueTimes(tracks[timeline.track],timeline)))throw Error('This program no longer matches its music');
   this.lesson=mode==='lesson'?(course==='trust'?new Tutorial(this.setup):new Tutorial(this.setup,0,courseSteps(courseById(course),this.setup))):null;this.lessonXp=0;
-  this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
+  this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elements=new ElementRecorder();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
   // The live free-skate readout game/main.ts already has (frame.technical above is its jump half) —
   // sample every tick a spin is live, score the moment it ends. -1 means no spin has finished yet;
   // scoreSpinLevel's own 0 is a real result, "level B", so it cannot double as that sentinel.
@@ -326,6 +328,7 @@ export class IceEngine {
   step(this.state,input,this.params,SIM_DT,events,this.ice);
   this.recorder.capture(input,this.params,this.state,events,['A','B','C','D'][this.scheme]);
   this.meter.sample(this.state,input,events,SIM_DT);
+  this.elements.sample(this.state,events,supportSignal(this.state),SIM_DT);
   resolveRinkCollision(this.state,events);this.events.push(...events);
   // Taken as it happens, so walking out of a program does not undo a fall.
   const hit=this.fallWatch?.sample(this.state);
@@ -447,6 +450,8 @@ export class IceEngine {
  }
  /** The atelier: a design dressed for a preview, never saved. */
  dress(design){const d=parseDesign(design);if(!d)throw Error('That design uses something off the lists');return designSkin(d,-1);}
+ /** game/skates.ts: the skates worn. Cosmetic only; the client keeps the choice in its preferences, as it does the costume. */
+ setSkates(choice){this.skates=parseSkates(choice);}
  saveDesign(slot,design){if(!this.wardrobe.set(slot,design))throw Error('That design could not be kept');}
  train(stat){if(!STAT_NAMES.includes(stat))throw Error('Unknown training skill');this.career.train(stat);}
  snapshot() {
@@ -461,14 +466,14 @@ export class IceEngine {
   return {venue:this.venue??'grand-prix',sheet:this.sheetView(),studio:{skaters:this.studio.skaters,programs:this.studio.programs,dances:this.studio.dances},characters:this.characters(),
    arcade:this.arcade?{character:this.arcade.character,round:this.arcade.round,rounds:this.arcade.rounds.map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title})),lives:this.arcade.lives,points:this.arcade.points,over:this.arcade.over,cleared:this.arcade.cleared}:null,board:this.board.entries,
    showcase:this.showcase,pilotPad:this.pilot?this.pilotShown:null,who:this.who?{id:this.who.id,name:this.who.name,costume:this.who.costume,model:this.who.model??null}:null,
-   motion:this.motion?this.motion.frame(this.state,this.elapsed):null,danceStyle:this.danceStyle??null,runDance:this.runDance??null,warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,support:supportSignal(s),events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+   motion:this.motion?this.motion.frame(this.state,this.elapsed):null,danceStyle:this.danceStyle??null,runDance:this.runDance??null,warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,support:supportSignal(s),elementCard:this.elements?.cards.at(-1)??null,elementCards:this.elements?.recent(8)??[],events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    recover:recoverHow(words),
    tutorial:l?{unproven:l.step?.id==='spin'&&this.setup==='explorer'?UNPROVEN_AIR:'',course:this.course,index:l.index,total:l.steps.length,title:l.step?.title??'',
     stage:TRUST_STAGES[l.stage]?.name??'',targets:l.targets,target:l.target,
     offer:l.falls>=2&&this.hand.strength===0?'Falling a lot? The steadying hand keeps your lean to what your speed can carry: turn it on in the menu.':'',prose:l.step?.prose??'',how:l.step?l.step.how(words):'',keys:l.step?.keys?.(words)??'',hold:l.step?.hold??0,progress:l.progress,fraction:l.fraction,status:l.status,message:l.toast>0?l.message:'',falls:l.falls}:null,
    routine:r?{how:r.current?elementHow(r.current,words)+this.rustNote(r):'',title:r.event.title,sequence:r.event.routine,index:r.index,seconds:r.seconds,held:r.held,falls:r.falls,medal:r.medal,pcsScore:r.pcsScore,elapsed:r.elapsed,cues:r.cues?r.cues.map((c,k)=>({id:c.id,bar:c.bar,at:c.at,early:c.early,late:c.late,result:r.cueResults[k]})):null}:null,
-   draft:this.draftView(),wardrobe:{designs:this.wardrobe.designs,skins:this.wardrobe.skins()},
+   skates:lookOf(this.skates),draft:this.draftView(),wardrobe:{designs:this.wardrobe.designs,skins:this.wardrobe.skins()},
    lesson:{index:this.practice.next,title:LESSONS[this.practice.next]?.[0]??'Make it your own',hint:LESSONS[this.practice.next]?.[1]??'Link the moves into your own program.',done:this.practice.done},
    steady:{level:this.steadyLevel(),choice:this.steadyChoice,name:steadyName(this.steadyLevel()),held:this.hand.held},
    // For a meter: the lean now, the lean this speed's edge can hold, the hand's limit when it is on, and where she falls.

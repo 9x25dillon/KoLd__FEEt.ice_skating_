@@ -74,7 +74,9 @@ test("the dig with the arms: leaned early, a little more spin into the lutz", ()
   // MEASURED (test/dig.test.ts's arrival, toe 0.75 leaned 1.5 s early): L
   // 5.30 with the arms, 5.09 the ankle alone; leaned late it still reverses,
   // and since jumpDirMode (2026-11-09) the reversal turns clockwise: L -1.06.
+  // Since the legs move the load over time (2026-11-14): 5.11 with the arms,
+  // 4.90 the ankle alone, -1.05 late.
   const arms = { ...DIG_BASE, pitchInternalMode: 1 };
-  assert.ok(Math.abs(digJump(arms, 0.75, 1.5, true)!.angMomentum - 5.30) < 0.01);
-  assert.ok(Math.abs(digJump(arms, 0.75)!.angMomentum + 1.06) < 0.01);
+  assert.ok(Math.abs(digJump(arms, 0.75, 1.5, true)!.angMomentum - 5.11) < 0.01);
+  assert.ok(Math.abs(digJump(arms, 0.75)!.angMomentum + 1.05) < 0.01);
 });

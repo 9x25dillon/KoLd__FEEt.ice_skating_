@@ -35,6 +35,8 @@ private:
 	void Meters(const FIceFrame& F, float X, float& Y, float U);
 	/** main.gd broadcast's YOUR LINE: the rink from above, the line skated since the run began, where she is and which way she faces; and a lesson's next target. */
 	void RinkMap(const class AIceRunGameMode* Mode, const FIceFrame& F, float U);
+	/** The element card (game/elementstats.ts via the bridge): a broadcast graphic that slides in from the right after a jump, spin or step. Display only. */
+	void ElementCard(const TSharedPtr<FJsonObject>& Raw, float U);
 	void Bar(float X, float Y, float W, float Fill, const FLinearColor& Color, float U);
 	void Stroke(const FVector2D& A, const FVector2D& B, const FLinearColor& Color, float Thickness);
 	/** True while laying a card out to measure it: Line and Paragraph only advance. */
@@ -42,4 +44,7 @@ private:
 	/** The line skated, in sim metres, thinned to one point every eight ticks; a new run starts it again. */
 	TArray<FVector2D> LinePath;
 	int32 LineTick = -1;
+	/** The card on screen: its id and tick, and when it appeared (seconds of world time). */
+	FString CardKey;
+	double CardAt = -1000.0;
 };

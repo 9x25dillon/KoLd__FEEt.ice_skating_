@@ -235,6 +235,7 @@ void AIceRunGameMode::BuildPage(const FString& Id, FMenuPage& P)
 	else if (Id == TEXT("composer")) BuildComposer(P);
 	else if (Id == TEXT("wardrobe")) BuildWardrobe(P);
 	else if (Id == TEXT("design")) BuildDesign(P);
+	else if (Id == TEXT("skates")) BuildSkates(P);
 	else if (Id == TEXT("lessons")) BuildLessons(P);
 	else if (Id == TEXT("settings")) BuildSettings(P);
 	else if (Id == TEXT("result")) BuildResult(P);
@@ -305,6 +306,65 @@ void AIceRunGameMode::WearCostume()
 	}
 	CostumeIndex = Wrap(CostumeIndex, List.Num());
 	Skater->ApplyCostume(List[CostumeIndex]);
+	Skater->ApplySkates(SkatesLook);
+}
+
+// ── skates (game/skates.ts, through the bridge) ──────────────────────────────
+
+void AIceRunGameMode::WearSkates()
+{
+	if (Skater)
+	{
+		Skater->ApplySkates(SkatesLook);
+	}
+}
+
+void AIceRunGameMode::PickSkates(const TSharedPtr<FJsonObject>& Choice)
+{
+	SkatesChoice = Choice;
+	TSharedRef<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetObjectField(TEXT("choice"), Choice);
+	SendOp(TEXT("skates"), Payload);
+	SavePreferences();
+}
+
+void AIceRunGameMode::BuildSkates(FMenuPage& P)
+{
+	const TSharedPtr<FJsonObject> Cat = Obj(Catalog, TEXT("skates"));
+	TSharedPtr<FJsonObject> Now = SkatesChoice.IsValid() ? MakeShared<FJsonObject>(*SkatesChoice) : MakeShared<FJsonObject>(*Obj(Cat, TEXT("default")));
+	P.Title = TEXT("Skates");
+	P.Subtitle = SkatesLook.IsValid() ? Str(SkatesLook, TEXT("name")) : FString(TEXT("Competition white"));
+	P.Story = TEXT("Boots, blade and laces from a list. They change how the skates look and nothing else: the physics, the scores and the replays are the same in any pair. The first skater model draws no laces of its own, and the Black Berserker keeps his own boots.");
+	const TArray<TSharedPtr<FJsonValue>>& Presets = Arr(Cat, TEXT("presets"));
+	P.Items.Add(Line(TEXT("Named skates   ◀  ▶"), TEXT(""), SkatesLook.IsValid() ? Str(SkatesLook, TEXT("description")) : FString(),
+		[this, Presets] { SkatesPreset++; if (Presets.Num() > 0) PickSkates(MakeShared<FJsonObject>(*Obj(At(Presets, Wrap(SkatesPreset, Presets.Num())), TEXT("choice")))); RebuildPage(); },
+		[this, Presets](int32 By) { SkatesPreset += By; if (Presets.Num() > 0) PickSkates(MakeShared<FJsonObject>(*Obj(At(Presets, Wrap(SkatesPreset, Presets.Num())), TEXT("choice")))); RebuildPage(); }));
+	static const TCHAR* PartKeys[5][2] = {{TEXT("boot"), TEXT("boots")}, {TEXT("finish"), TEXT("finishes")}, {TEXT("blade"), TEXT("blades")}, {TEXT("laces"), TEXT("laces")}, {TEXT("heel"), TEXT("heels")}};
+	for (int32 K = 0; K < 5; ++K)
+	{
+		const FString Part = PartKeys[K][0];
+		const TArray<TSharedPtr<FJsonValue>>& List = Arr(Cat, PartKeys[K][1]);
+		int32 At0 = 0;
+		for (int32 I = 0; I < List.Num(); ++I)
+		{
+			if (Str(List[I]->AsObject(), TEXT("id")) == Str(Now, *Part)) At0 = I;
+		}
+		const TSharedPtr<FJsonObject> Here = At(List, At0);
+		FString Title;
+		for (const TSharedPtr<FJsonValue>& V : Arr(Cat, TEXT("parts"))) if (Str(V->AsObject(), TEXT("id")) == Part) Title = Str(V->AsObject(), TEXT("title"));
+		auto Step = [this, Now, Part, List](int32 By)
+		{
+			if (List.Num() == 0) return;
+			int32 From = 0;
+			for (int32 I = 0; I < List.Num(); ++I) if (Str(List[I]->AsObject(), TEXT("id")) == Str(Now, *Part)) From = I;
+			TSharedRef<FJsonObject> Next = MakeShared<FJsonObject>(*Now);
+			Next->SetStringField(Part, Str(List[Wrap(From + By, List.Num())]->AsObject(), TEXT("id")));
+			PickSkates(Next);
+			RebuildPage();
+		};
+		P.Items.Add(Line(FString::Printf(TEXT("%s   ◀  %s  ▶"), *Title, *Str(Here, TEXT("name"))), TEXT(""),
+			Str(Here, TEXT("description")), [Step] { Step(1); }, Step));
+	}
 }
 
 void AIceRunGameMode::LoadSkaterModel()
@@ -351,6 +411,9 @@ void AIceRunGameMode::LoadPreferences()
 	if (P->TryGetNumberField(TEXT("profile"), V)) ProfileIndex = FMath::Clamp(int32(V), 0, 3);
 	if (P->TryGetNumberField(TEXT("character"), V)) CharacterIndex = Wrap(int32(V), UE_ARRAY_COUNT(Characters));
 	if (P->TryGetNumberField(TEXT("costume"), V)) CostumeIndex = FMath::Max(0, int32(V));
+	// Optional: a save from before skates has none, and the bridge reads anything off the lists as today's look.
+	const TSharedPtr<FJsonObject>* Skates = nullptr;
+	if (P->TryGetObjectField(TEXT("skates"), Skates)) SkatesChoice = *Skates;
 	if (P->TryGetNumberField(TEXT("track"), V)) TrackIndex = FMath::Max(0, int32(V));
 	P->TryGetBoolField(TEXT("music"), bMusicOn);
 	P->TryGetBoolField(TEXT("rumble"), bRumbleOn);
@@ -383,6 +446,7 @@ void AIceRunGameMode::SavePreferences() const
 	P->SetNumberField(TEXT("profile"), ProfileIndex);
 	P->SetNumberField(TEXT("character"), CharacterIndex);
 	P->SetNumberField(TEXT("costume"), CostumeIndex);
+	if (SkatesChoice.IsValid()) P->SetObjectField(TEXT("skates"), SkatesChoice);
 	P->SetNumberField(TEXT("track"), TrackIndex);
 	P->SetBoolField(TEXT("music"), bMusicOn);
 	P->SetBoolField(TEXT("rumble"), bRumbleOn);
@@ -812,10 +876,43 @@ void AIceRunGameMode::BuildWardrobe(FMenuPage& P)
 	P.Items.Add(Line(FString::Printf(TEXT("Skater   ◀  %s  ▶"), Characters[Wrap(CharacterIndex, UE_ARRAY_COUNT(Characters))].Name), TEXT(""), TEXT("Four models, one skeleton: every one is posed from the same physics."),
 		[this] { CharacterIndex++; LoadSkaterModel(); SavePreferences(); RebuildPage(); },
 		[this](int32 By) { CharacterIndex += By; LoadSkaterModel(); SavePreferences(); RebuildPage(); }));
+	// Presets are grouped by game/appearance.ts COLLECTIONS (a "collection" field); kept designs are "Yours".
+	auto GroupOf = [](const TSharedPtr<FJsonObject>& Skin)
+	{
+		FString Group;
+		return Skin.IsValid() && Skin->TryGetStringField(TEXT("collection"), Group) ? Group : FString(TEXT("Yours"));
+	};
+	const FString NowGroup = List.IsValidIndex(CostumeIndex) ? GroupOf(List[CostumeIndex]) : FString();
+	// Moves to the next costume inside the current collection, wrapping.
+	auto StepIn = [this, GroupOf](int32 By)
+	{
+		const TArray<TSharedPtr<FJsonObject>> All = Costumes();
+		if (All.Num() == 0) return;
+		const FString Group = GroupOf(All[Wrap(CostumeIndex, All.Num())]);
+		TArray<int32> Members;
+		for (int32 I = 0; I < All.Num(); ++I) if (GroupOf(All[I]) == Group) Members.Add(I);
+		const int32 At = Members.IndexOfByKey(Wrap(CostumeIndex, All.Num()));
+		CostumeIndex = Members[Wrap(At + By, Members.Num())];
+		WearCostume(); SavePreferences(); RebuildPage();
+	};
+	// Jumps to the first costume of the next collection, in the order the catalogue lists them.
+	auto StepGroup = [this, GroupOf](int32 By)
+	{
+		const TArray<TSharedPtr<FJsonObject>> All = Costumes();
+		if (All.Num() == 0) return;
+		TArray<FString> Groups;
+		for (const TSharedPtr<FJsonObject>& S : All) Groups.AddUnique(GroupOf(S));
+		const int32 At = Groups.IndexOfByKey(GroupOf(All[Wrap(CostumeIndex, All.Num())]));
+		const FString Next = Groups[Wrap(At + By, Groups.Num())];
+		for (int32 I = 0; I < All.Num(); ++I) if (GroupOf(All[I]) == Next) { CostumeIndex = I; break; }
+		WearCostume(); SavePreferences(); RebuildPage();
+	};
+	P.Items.Add(Line(FString::Printf(TEXT("Collection   ◀  %s  ▶"), *NowGroup), TEXT(""), TEXT("Costumes come in collections; the kept designs of your own are under Yours."),
+		[StepGroup] { StepGroup(1); }, [StepGroup](int32 By) { StepGroup(By); }));
 	P.Items.Add(Line(FString::Printf(TEXT("Costume   ◀  %s  ▶"), List.IsValidIndex(CostumeIndex) ? *Str(List[CostumeIndex], TEXT("name")) : TEXT("")), TEXT(""),
 		List.IsValidIndex(CostumeIndex) ? Str(List[CostumeIndex], TEXT("description")) : FString(),
-		[this] { CostumeIndex++; WearCostume(); SavePreferences(); RebuildPage(); },
-		[this](int32 By) { CostumeIndex += By; WearCostume(); SavePreferences(); RebuildPage(); }));
+		[StepIn] { StepIn(1); }, [StepIn](int32 By) { StepIn(By); }));
+	P.Items.Add(Line(TEXT("Skates   →"), SkatesLook.IsValid() ? Str(SkatesLook, TEXT("name")) : FString(), TEXT("Boot colour and finish, blade, laces and heel, from a list. Looks only."), [this] { PushPage(TEXT("skates")); }));
 	P.Items.Add(Header(TEXT("Atelier   ·   costumes of your own")));
 	const TArray<TSharedPtr<FJsonValue>>& Skins = Arr(Wardrobe, TEXT("skins"));
 	const TArray<TSharedPtr<FJsonValue>>& Designs = Arr(Wardrobe, TEXT("designs"));

@@ -21,24 +21,29 @@ export const CLOTH: readonly Swatch[] = [
   sw("blush", "Blush", "#e2b0b8"), sw("crimson", "Crimson", "#a3192f"), sw("garnet", "Garnet", "#7a2733"),
   sw("amber", "Amber", "#b5652a"), sw("sunflower", "Sunflower", "#d9a62e"), sw("champagne", "Champagne", "#d9c39a"),
   sw("ivory", "Ivory", "#efe6d6"), sw("mocha", "Mocha", "#97796f"), sw("silver", "Silver grey", "#9aa3ad"),
-  sw("jet", "Jet", "#16161c"),
+  sw("jet", "Jet", "#16161c"), sw("scarlet", "Scarlet", "#c4202b"), sw("coral", "Coral", "#d9644e"),
+  sw("orchid", "Orchid", "#8e4f98"), sw("indigo", "Indigo", "#20285a"), sw("cornflower", "Cornflower", "#4a78c8"),
+  sw("spring", "Spring green", "#48a24a"), sw("terracotta", "Terracotta", "#b5502a"), sw("slate", "Slate", "#3a3f48"),
 ];
 /** Trim and crystals. */
 export const TRIM: readonly Swatch[] = [
   sw("champagne", "Champagne", "#e8cca0"), sw("gold", "Gold", "#f5d998"), sw("rosegold", "Rose gold", "#e6b8a2"),
   sw("silver", "Silver", "#dfe4ea"), sw("pearl", "Pearl", "#f4efe6"), sw("aurora", "Aurora", "#cfe8f0"),
   sw("lavender", "Lavender", "#e4d5f3"), sw("jet", "Jet", "#2a2a33"),
+  sw("copper", "Copper", "#c98a5c"), sw("wine", "Wine", "#7a1325"), sw("steel", "Steel", "#7f8a98"), sw("ember", "Ember", "#f0a88a"),
 ];
 /** Tights: skin tones first, as most competition tights are, then dark. */
 export const TIGHTS: readonly Swatch[] = [
   sw("light", "Light", "#e9c3a6"), sw("fair", "Fair", "#d4a68b"), sw("tan", "Tan", "#b28c75"),
   sw("bronze", "Bronze", "#8e6248"), sw("deep", "Deep", "#5e3d2c"), sw("navy", "Navy", "#253859"),
   sw("black", "Black", "#1b1b22"),
+  sw("ivory", "Ivory", "#f1dcc6"), sw("rosebeige", "Rose beige", "#c9a08c"), sw("plum", "Plum", "#3a2a48"), sw("charcoal", "Charcoal", "#3a3f48"),
 ];
 export const HAIR: readonly Swatch[] = [
   sw("black", "Black", "#1b1716"), sw("espresso", "Espresso", "#241d1b"), sw("plumbrown", "Plum brown", "#342e46"),
   sw("chestnut", "Chestnut", "#4a2a1c"), sw("auburn", "Auburn", "#7a3a20"), sw("honey", "Honey", "#a87a45"),
   sw("blonde", "Blonde", "#c9a66b"), sw("platinum", "Platinum", "#ddd3c0"),
+  sw("copper", "Copper", "#a8522a"), sw("rose", "Rose gold", "#c98a70"), sw("ash", "Ash", "#8a8480"), sw("midnightblue", "Blue-black", "#141a2e"),
 ];
 export const SKIN_TONES: readonly Swatch[] = [
   sw("porcelain", "Porcelain", "#f0c7ab"), sw("light", "Light", "#e2b393"), sw("warm", "Warm", "#d4a68b"),
@@ -51,6 +56,7 @@ export const FABRICS = [
   { id: "velvet", name: "Velvet", description: "Matte face, bright at the edges" },
   { id: "lycra", name: "Lycra", description: "Tight and glossy" },
   { id: "mesh", name: "Mesh", description: "Open weave, no shine" },
+  { id: "sequin", name: "Sequin", description: "Small discs that catch the light" },
 ] as const;
 /** Crystal coverage, 0..1 of where the renderer can place them. Presets have none. */
 export const CRYSTALS = [
@@ -90,7 +96,7 @@ export interface DesignSkin {
   id: string; name: string; description: string;
   bodice: string; highlight: string; trim: string; sleeve: string; sleeveShade: string;
   skirt: string; skirtShade: string; tights: string; tightsShade: string; hair: string; skin: string;
-  bun: boolean; fabric: FabricId; crystals: number; custom: true;
+  bun: boolean; fabric: FabricId; crystals: number; custom: true; collection: "Yours";
 }
 
 const swatch = (list: readonly Swatch[], id: string) => list.find(s => s.id === id);
@@ -127,7 +133,7 @@ export function designSkin(d: Design, slot: number): DesignSkin {
   const c = (list: readonly Swatch[], id: string) => swatch(list, id)!.hex;
   const bodice = c(CLOTH, d.bodice), sleeve = c(CLOTH, d.sleeve), skirt = c(CLOTH, d.skirt), tights = c(TIGHTS, d.tights);
   return {
-    id: `design-${slot}`, name: d.name, description: describeDesign(d),
+    id: `design-${slot}`, name: d.name, collection: "Yours", description: describeDesign(d),
     bodice, highlight: lighter(bodice), trim: c(TRIM, d.trim), sleeve, sleeveShade: darker(sleeve),
     skirt, skirtShade: darker(skirt), tights, tightsShade: darker(tights),
     hair: c(HAIR, d.hair), skin: c(SKIN_TONES, d.skin), bun: d.bun,

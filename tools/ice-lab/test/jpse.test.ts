@@ -67,16 +67,16 @@ test("each candidate is held to the loop's own definition: the mirror swaps the 
   assert.deepEqual(requirementFor(JUMP.Loop, { mirror: false, reverse: true }).takeoff, "RBO");
 });
 
-test("the baseline is backjump.test.ts's measured double loop: 1.994 without a sheet, and clean with one", () => {
+test("the baseline is backjump.test.ts's measured double loop: 1.981 without a sheet, and clean with one", () => {
   // backjump.test.ts steps without an ice grid; the game and the replay player always pass one.
   const p = { ...baselineParams(), iceGridMode: 0 };
   const bare = runCandidate("canonical", loopBaselineProgram(), { mirror: false, reverse: false }, p, JUMP.Loop, BASELINE.runOut);
-  assert.ok(Math.abs(bare.report.landing!.turned - 1.994) < 0.001, `${bare.report.landing!.turned}`);
+  assert.ok(Math.abs(bare.report.landing!.turned - 1.981) < 0.001, `${bare.report.landing!.turned}`);
   const c = cand("canonical");
   assert.equal(c.rejected, false, c.reasons.join("; "));
   assert.equal(c.takeoff!.code, "RBO"); assert.equal(c.takeoff!.regime, "CARVE"); assert.equal(c.takeoff!.simCalls, "Lo");
   assert.equal(c.landing!.simCalls, "Lo"); assert.equal(c.landing!.rotationCall, "clean");
-  assert.ok(Math.abs(c.landing!.turned - 1.971) < 0.001, `${c.landing!.turned}`);
+  assert.ok(Math.abs(c.landing!.turned - 1.982) < 0.001, `${c.landing!.turned}`);
   assert.ok(c.landing!.stoodTicks >= BASELINE.runOut);
 });
 
@@ -116,8 +116,14 @@ test("the mirror on the ice is exact wherever the solver is symmetric", () => {
   const b = runCandidate("mirror", carve, { mirror: true, reverse: false }, p, JUMP.Loop, 144);
   const exact = checkMirror(a, b, p);
   assert.equal(exact.pass, true); assert.equal(exact.maxPositionError, 0); assert.equal(exact.ticks, 240);
-  // Each handedness source alone parts it.
-  for (const [over, cause] of [[{ iceGridMode: 1 }, "ice-grid"], [{ staminaMode: 1 }, "fatigue-noise"]] as const) {
+  // Each handedness source alone parts it. The sheet's shows on this carve only
+  // with the transfer off: there the unloaded blade stood at the loaded one's
+  // contact. With weightTransferMode it stands a stance out, and the carve on
+  // the sheet stays exact (measured 2026-11-14: 0 m over 240 ticks).
+  const sheet = { ...p, iceGridMode: 1 };
+  assert.equal(checkMirror(runCandidate("c", carve, { mirror: false, reverse: false }, sheet, JUMP.Loop, 144),
+    runCandidate("m", carve, { mirror: true, reverse: false }, sheet, JUMP.Loop, 144), sheet).maxPositionError, 0);
+  for (const [over, cause] of [[{ iceGridMode: 1, weightTransferMode: 0 }, "ice-grid"], [{ staminaMode: 1 }, "fatigue-noise"]] as const) {
     const q = { ...p, ...over };
     const k = checkMirror(runCandidate("c", carve, { mirror: false, reverse: false }, q, JUMP.Loop, 144),
       runCandidate("m", carve, { mirror: true, reverse: false }, q, JUMP.Loop, 144), q);
@@ -127,8 +133,11 @@ test("the mirror on the ice is exact wherever the solver is symmetric", () => {
   const ctl = report.invariants.mirrorControlled;
   assert.equal(ctl.pass, true); assert.equal(ctl.maxPositionError, 0); assert.equal(ctl.feetSwapped, true);
   assert.equal(report.invariants.reverseMirrorControlled.pass, true);
-  // At jumpDirMode 0 the two-foot tie went to the right foot and parted it at tick 119.
-  const old = { ...p, jumpDirMode: 0 }, prog = pinPushFeet(loopBaselineProgram(), old);
+  // At jumpDirMode 0 the two-foot tie went to the right foot and parted it at
+  // tick 119 — with the load switched in a tick (weightTransferMode 0). Moved
+  // over time, the share never rests on the exact tie in this program and the
+  // mirror holds (measured 2026-11-14), so the tie is shown where it bites.
+  const old = { ...p, jumpDirMode: 0, weightTransferMode: 0 }, prog = pinPushFeet(loopBaselineProgram(), old);
   const k0 = checkMirror(runCandidate("c", prog, { mirror: false, reverse: false }, old, JUMP.Loop, 144),
     runCandidate("m", prog, { mirror: true, reverse: false }, old, JUMP.Loop, 144), old);
   assert.equal(k0.divergesAtTick, 119); assert.equal(k0.cause, "two-foot-tie");

@@ -1066,9 +1066,9 @@ implementation or footage case behind its specific numbers, only the bible's own
 
 ## 16 · The weight transfer
 
-`sim/solver.ts`'s `weightTransferMode` (`transferLoad`, `stanceOffset`). Inert at 0, which every
-preset and every setup still is (2026-11-14): on in Simulation, Experimental and Dig Gate it moves 51
-pinned tests, the searched double loop's takeoff among them. See [support-signal.md](support-signal.md).
+`sim/solver.ts`'s `weightTransferMode` (`transferLoad`, `stanceOffset`). Inert at 0 in every preset;
+on in Simulation, Experimental and Dig Gate since 2026-11-14, by the owner's word. The 51 tests it moved
+were re-measured or re-searched. See [support-signal.md](support-signal.md).
 
 - **`weightTransferTime`** — seconds the legs take to move the whole load from one blade to the other,
   to within 0.5 %

@@ -15,9 +15,12 @@ import type { Fingerprint } from "./pitch-gain-sweep.ts";
 
 // MEASURED 2026-09-24, pitchGain 1 (the sweep's row). digLate 0 -> -0.144 on
 // 2026-11-09: with jumpDirMode the late dig's wrong-way winding turns clockwise.
+// 2026-11-14, the legs moving the load over time (weightTransferMode, on in
+// Simulation): the windings unchanged, the jumps digLate -0.144 -> -0.178 and
+// digEarly 5.085 -> 4.897.
 const PINNED: Fingerprint = {
-  counter: 0.126, arrive: 1.300, windLate: -0.207, digLate: -0.144,
-  windEarly: 1.005, digEarly: 5.085, plowLeanBack: -0.069, caughtDown: 0.392,
+  counter: 0.126, arrive: 1.300, windLate: -0.207, digLate: -0.178,
+  windEarly: 1.005, digEarly: 4.897, plowLeanBack: -0.069, caughtDown: 0.392,
 };
 const TOL = 0.005;
 const moved = (f: Fingerprint) => (Object.keys(PINNED) as (keyof Fingerprint)[])
