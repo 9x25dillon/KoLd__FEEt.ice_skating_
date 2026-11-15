@@ -812,10 +812,42 @@ void AIceRunGameMode::BuildWardrobe(FMenuPage& P)
 	P.Items.Add(Line(FString::Printf(TEXT("Skater   ◀  %s  ▶"), Characters[Wrap(CharacterIndex, UE_ARRAY_COUNT(Characters))].Name), TEXT(""), TEXT("Four models, one skeleton: every one is posed from the same physics."),
 		[this] { CharacterIndex++; LoadSkaterModel(); SavePreferences(); RebuildPage(); },
 		[this](int32 By) { CharacterIndex += By; LoadSkaterModel(); SavePreferences(); RebuildPage(); }));
+	// Presets are grouped by game/appearance.ts COLLECTIONS (a "collection" field); kept designs are "Yours".
+	auto GroupOf = [](const TSharedPtr<FJsonObject>& Skin)
+	{
+		FString Group;
+		return Skin.IsValid() && Skin->TryGetStringField(TEXT("collection"), Group) ? Group : FString(TEXT("Yours"));
+	};
+	const FString NowGroup = List.IsValidIndex(CostumeIndex) ? GroupOf(List[CostumeIndex]) : FString();
+	// Moves to the next costume inside the current collection, wrapping.
+	auto StepIn = [this, GroupOf](int32 By)
+	{
+		const TArray<TSharedPtr<FJsonObject>> All = Costumes();
+		if (All.Num() == 0) return;
+		const FString Group = GroupOf(All[Wrap(CostumeIndex, All.Num())]);
+		TArray<int32> Members;
+		for (int32 I = 0; I < All.Num(); ++I) if (GroupOf(All[I]) == Group) Members.Add(I);
+		const int32 At = Members.IndexOfByKey(Wrap(CostumeIndex, All.Num()));
+		CostumeIndex = Members[Wrap(At + By, Members.Num())];
+		WearCostume(); SavePreferences(); RebuildPage();
+	};
+	// Jumps to the first costume of the next collection, in the order the catalogue lists them.
+	auto StepGroup = [this, GroupOf](int32 By)
+	{
+		const TArray<TSharedPtr<FJsonObject>> All = Costumes();
+		if (All.Num() == 0) return;
+		TArray<FString> Groups;
+		for (const TSharedPtr<FJsonObject>& S : All) Groups.AddUnique(GroupOf(S));
+		const int32 At = Groups.IndexOfByKey(GroupOf(All[Wrap(CostumeIndex, All.Num())]));
+		const FString Next = Groups[Wrap(At + By, Groups.Num())];
+		for (int32 I = 0; I < All.Num(); ++I) if (GroupOf(All[I]) == Next) { CostumeIndex = I; break; }
+		WearCostume(); SavePreferences(); RebuildPage();
+	};
+	P.Items.Add(Line(FString::Printf(TEXT("Collection   ◀  %s  ▶"), *NowGroup), TEXT(""), TEXT("Costumes come in collections; the kept designs of your own are under Yours."),
+		[StepGroup] { StepGroup(1); }, [StepGroup](int32 By) { StepGroup(By); }));
 	P.Items.Add(Line(FString::Printf(TEXT("Costume   ◀  %s  ▶"), List.IsValidIndex(CostumeIndex) ? *Str(List[CostumeIndex], TEXT("name")) : TEXT("")), TEXT(""),
 		List.IsValidIndex(CostumeIndex) ? Str(List[CostumeIndex], TEXT("description")) : FString(),
-		[this] { CostumeIndex++; WearCostume(); SavePreferences(); RebuildPage(); },
-		[this](int32 By) { CostumeIndex += By; WearCostume(); SavePreferences(); RebuildPage(); }));
+		[StepIn] { StepIn(1); }, [StepIn](int32 By) { StepIn(By); }));
 	P.Items.Add(Header(TEXT("Atelier   ·   costumes of your own")));
 	const TArray<TSharedPtr<FJsonValue>>& Skins = Arr(Wardrobe, TEXT("skins"));
 	const TArray<TSharedPtr<FJsonValue>>& Designs = Arr(Wardrobe, TEXT("designs"));
