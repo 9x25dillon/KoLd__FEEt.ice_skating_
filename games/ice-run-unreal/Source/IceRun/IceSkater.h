@@ -44,6 +44,12 @@ public:
 	 * Returns how many slots took it; a model without those slots keeps its own look.
 	 */
 	int32 ApplyCostume(const TSharedPtr<FJsonObject>& Skin);
+	/**
+	 * Wears skates: game/skates.ts lookOf()'s colours on the boot, blade, laces and heel materials
+	 * (skater.gd SKATE_PARTS). A part marked native gets the model's own colour back. Returns how many
+	 * surfaces took it; a model without those names keeps its own. Cosmetic only.
+	 */
+	int32 ApplySkates(const TSharedPtr<FJsonObject>& Look);
 	/** The blade a spin's finish has lifted off the ice, or -1 (skater.gd lifted_blade). */
 	int32 LiftedBlade() const;
 	bool HasModel() const { return bHasModel; }
@@ -118,6 +124,8 @@ private:
 	double FrameAge = 0.0;
 	bool bInitialized = false;
 	bool bHasModel = false;
+	/** The model's own colour and surface of each skate material, read before the first repaint (slot -> colour, roughness, metallic). */
+	TMap<int32, TTuple<FLinearColor, float, float>> NativeSkates;
 
 	/** The rest pose in component space, by bone. */
 	TMap<FName, FTransform> Rest;

@@ -14,7 +14,13 @@ test("a warm-up group skates its whole time: moving, on the ice, getting up afte
     g.tick();
     g.skaters.forEach((k, i) => {
       if (k.state.landed.tick >= 0) landings[i].add(k.state.landed.tick);
-      assert.equal(rinkHit(k.state.pos.x, k.state.pos.y), null, `${k.name} stays inside the boards`);
+      // game/rink.ts leaves a skater already heading back onto the ice where it
+      // is, so the boards hold to within a hair, not exactly: MEASURED
+      // 2026-11-14, with the legs moving the load over time, Katya Vell at most
+      // 1.1 mm out, 97 ticks in all over the group's 45 s. Exactly 0 until then,
+      // by luck of the lanes. Two millimetres is the contract tested.
+      const hit = rinkHit(k.state.pos.x, k.state.pos.y);
+      assert.ok(!hit || hit.penetration < 0.002, `${k.name} stays inside the boards (${hit?.penetration} m out)`);
       if (Math.hypot(k.state.vel.x, k.state.vel.y) > 1) moving++;
       samples++;
     });

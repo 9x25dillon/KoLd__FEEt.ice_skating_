@@ -27,7 +27,11 @@ import type { GameControlState } from "../game/full-controls.ts";
 import { newSchemeState } from "../app/schemes.ts";
 import type { Controls, ControllerHardware } from "../app/pad.ts";
 
-const LOAD_AT = 1.5, LOAD = 0.5, SWING_AT = 0.1;
+// Re-searched 2026-11-14 when the legs began moving the load over time
+// (weightTransferMode, on in Experimental): the 0.5 s load no longer lands.
+// JPSE's grid round the old knobs (720 candidates) found 21 clean doubles; this
+// is the one nearest the old script (load 0.5 -> 0.425 s, check 0.40 -> 0.45 s).
+const LOAD_AT = 1.5, LOAD = 0.425, SWING_AT = 0.1;
 /** Ticks of run-out after the touchdown: "landed" means still standing after 1.2 s. */
 const RUN_OUT = 144;
 
@@ -68,35 +72,38 @@ function backJump(checkAt: number) {
 }
 
 test("from backward speed: load with the arms swung the jump's way, release, check — a clean double loop, standing after", () => {
-  // MEASURED 2026-11-02: takeoff L 28.65, checked 0.40 s into the air: 1.994
+  // MEASURED 2026-11-14: takeoff L 24.17, checked 0.45 s into the air: 1.981
   // revolutions, called clean, standing through a 1.2 s run-out.
-  const r = backJump(0.4);
-  assert.ok(Math.abs(r.L - 28.65) < 0.1, `L ${r.L.toFixed(2)}`);
+  const r = backJump(0.45);
+  assert.ok(Math.abs(r.L - 24.17) < 0.1, `L ${r.L.toFixed(2)}`);
   assert.equal(r.landed, true);
   assert.equal(r.s.fallen, false);
   assert.equal(r.s.landed.kind, JUMP.Loop);
   assert.equal(r.s.landed.revolutions, 2);
-  assert.ok(Math.abs(r.s.landed.turned - 1.994) < 0.01 && r.s.landed.rotationCall === 0, `turned ${r.s.landed.turned.toFixed(3)}`);
+  assert.ok(Math.abs(r.s.landed.turned - 1.981) < 0.01 && r.s.landed.rotationCall === 0, `turned ${r.s.landed.turned.toFixed(3)}`);
 });
 
 test("the check's timing is the skill: early is short and falls, late over-turns and falls", () => {
-  // MEASURED 2026-11-02: at 0.35 s, 1.66 revolutions; at 0.45 s, 2.20. Both
-  // fall. Only the 0.40 s check stands.
-  const early = backJump(0.35), late = backJump(0.45);
-  assert.ok(early.s.fallen && Math.abs(early.s.landed.turned - 1.66) < 0.01, `early ${early.s.landed.turned.toFixed(3)}`);
-  assert.ok(late.s.fallen && Math.abs(late.s.landed.turned - 2.20) < 0.01, `late ${late.s.landed.turned.toFixed(3)}`);
+  // MEASURED 2026-11-14: at 0.40 s, 1.710 revolutions; at 0.50 s, 2.167. Both
+  // fall. The 0.45 and 0.475 s checks stand (1.981, 2.081); every check from
+  // 0.30 to 0.425 falls short and every one from 0.50 over-turns.
+  const early = backJump(0.4), late = backJump(0.5);
+  assert.ok(early.s.fallen && Math.abs(early.s.landed.turned - 1.710) < 0.01, `early ${early.s.landed.turned.toFixed(3)}`);
+  assert.ok(late.s.fallen && Math.abs(late.s.landed.turned - 2.167) < 0.01, `late ${late.s.landed.turned.toFixed(3)}`);
+  assert.equal(backJump(0.475).s.fallen, false);
 });
 
 test("arms held wound against the jump all through the load turn it the other way, a little", () => {
   // The script these tests used until 2026-11-02, from play on 2026-09-23.
   // Negative control: L was 37.5 before armsWhipMode, then no spin at all.
   // Since jumpDirMode (2026-11-09) the arms' clockwise swing is not thrown
-  // away: MEASURED L -1.05, a faint clockwise turn.
+  // away: MEASURED L -1.05, a faint clockwise turn; -0.95 since the legs move
+  // the load over time (2026-11-14).
   const r = run((h, t, i, took) => {
     h.axes = [0, 0, -0.6, 0];
     if (i < 2) h.buttons[1] = 1;
     if (t >= 1 && t < 1.35) { h.buttons[7] = 1; h.axes[3] = 1; h.buttons[1] = 1; }
     if (took >= 0) { h.axes = [0, 0, 0, 0]; h.buttons[7] = 0.7; }
   });
-  assert.ok(Math.abs(r.L + 1.05) < 0.01, `L ${r.L.toFixed(2)}`);
+  assert.ok(Math.abs(r.L + 0.952) < 0.01, `L ${r.L.toFixed(2)}`);
 });

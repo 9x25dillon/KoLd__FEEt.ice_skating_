@@ -29,8 +29,8 @@ test("a run's journal: the double loop's entrance writes one landed jump, its he
   for (const input of prog.inputs) { step(s, input, p, SIM_DT, [], ice); rj.sample(s, SIM_DT); }
   const j = rj.finish();
   assert.equal(j.jumpsLanded, 1); assert.equal(j.falls, 0);
-  assert.ok(Math.abs(j.jumpTurned - 1.971) < 0.001, `${j.jumpTurned}`);
-  assert.ok(Math.abs(j.jumpL - 28.3) < 0.1, `${j.jumpL}`);
+  assert.ok(Math.abs(j.jumpTurned - 1.982) < 0.001, `${j.jumpTurned}`);
+  assert.ok(Math.abs(j.jumpL - 24.2) < 0.1, `${j.jumpL}`); // 28.3 before the 2026-11-14 re-search
   assert.ok(j.jumpHeight > 0.3 && j.topSpeed > 6.5 && j.legsLeft < 1);
 });
 

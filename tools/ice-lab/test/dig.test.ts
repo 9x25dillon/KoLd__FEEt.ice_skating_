@@ -36,16 +36,18 @@ test("leaned late, the dig winds the body the wrong way; leaned early, the right
   // late, the contact averages 0.38 over the dig and the winding is -0.207,
   // the jump's L 0 (since jumpDirMode, 2026-11-09, -0.144: the wrong way is
   // now clockwise); leaned 1.5 s early, 0.85 and +1.005, a lutz with L 5.09 —
-  // 85% of the same dig without the pendulum (1.075, L 5.93).
+  // 85% of the same dig without the pendulum (1.075, L 5.93). Since the legs
+  // move the load over time (2026-11-14) the windings are the same; the jumps:
+  // late L -0.178, the lutz 4.90, without the pendulum 5.68 (86%).
   const late = wind(DIG_BASE, 0.75), early = wind(DIG_BASE, 0.75, 1.5), off = wind(OFF, 0.75, 1.5);
   assert.ok(Math.abs(late.winding + 0.207) < 0.005 && late.contact < 0.5, `late ${late.winding.toFixed(3)} at ${late.contact.toFixed(2)}`);
   assert.ok(Math.abs(early.winding - 1.005) < 0.005 && early.contact > 0.8, `early ${early.winding.toFixed(3)} at ${early.contact.toFixed(2)}`);
   assert.ok(Math.abs(off.winding - 1.075) < 0.005, `off ${off.winding.toFixed(3)}`);
-  assert.ok(Math.abs(digJump(DIG_BASE, 0.75)!.angMomentum + 0.144) < 0.001);
+  assert.ok(Math.abs(digJump(DIG_BASE, 0.75)!.angMomentum + 0.178) < 0.001);
   const lutz = digJump(DIG_BASE, 0.75, 1.5, true)!;
   assert.equal(lutz.kind, JUMP.Lutz);
-  assert.ok(Math.abs(lutz.angMomentum - 5.09) < 0.01, `lutz L ${lutz.angMomentum.toFixed(2)}`);
-  assert.ok(Math.abs(digJump(OFF, 0.75, 1.5)!.angMomentum - 5.93) < 0.01);
+  assert.ok(Math.abs(lutz.angMomentum - 4.90) < 0.01, `lutz L ${lutz.angMomentum.toFixed(2)}`);
+  assert.ok(Math.abs(digJump(OFF, 0.75, 1.5)!.angMomentum - 5.68) < 0.01);
 });
 
 test("the dig pushes only through the contact the ankle has: the telemetry is the physics' own number", () => {
@@ -93,10 +95,10 @@ test("the oracle: pushed where the input asked, the old numbers come back — pu
   // MEASURED, toe 0.8 leaned late: the oracle winds +1.278 and gives the lutz
   // L 6.71 (without the pendulum, 1.276 and 6.52) while the contact the ankle
   // actually has averages 0.37 — the heel half. That is why the old dig's
-  // numbers cannot stand under the pendulum.
+  // numbers cannot stand under the pendulum. Since the transfer (2026-11-14) the lutz is L 6.50.
   const r = wind(ORACLE, 0.8);
   assert.ok(Math.abs(r.winding - 1.278) < 0.005, `oracle ${r.winding.toFixed(3)}`);
   assert.ok(r.contact < 0.4, `while the blade meets the ice at ${r.contact.toFixed(2)}`);
-  assert.ok(Math.abs(digJump(ORACLE, 0.8, 0, true)!.angMomentum - 6.71) < 0.01);
+  assert.ok(Math.abs(digJump(ORACLE, 0.8, 0, true)!.angMomentum - 6.50) < 0.01);
   assert.ok(Math.abs(wind(OFF, 0.8).winding - 1.276) < 0.005);
 });

@@ -72,6 +72,19 @@ void AIceRunGameMode::StartPlay()
 	FParse::Value(Line, TEXT("IceCourse="), Course);
 	FParse::Value(Line, TEXT("IceSteady="), SteadyChoice);
 	FParse::Value(Line, TEXT("IceDanceStyle="), DanceStyle);
+	FString Program;
+	if (FParse::Value(Line, TEXT("IceProgram="), Program, false))
+	{
+		// For stills: the computer skates these elements (a showcase), e.g. -IceProgram=glide,jump,spin,pose.
+		TArray<FString> Ids;
+		Program.ParseIntoArray(Ids, TEXT(","));
+		TArray<TSharedPtr<FJsonValue>> Values;
+		for (const FString& Id : Ids) Values.Add(MakeShared<FJsonValueString>(Id));
+		RunExtra = MakeShared<FJsonObject>();
+		RunExtra->SetStringField(TEXT("character"), TEXT("career"));
+		RunExtra->SetArrayField(TEXT("program"), Values);
+		RunMode = TEXT("showcase");
+	}
 	FParse::Value(Line, TEXT("IceSkater="), SkaterName);
 	FParse::Value(Line, TEXT("IceModel="), ModelPath);
 	if (ModelPath.IsEmpty())
@@ -524,6 +537,7 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 				if (Skins[I]->AsObject()->GetStringField(TEXT("id")) == TEXT("northlight")) CostumeIndex = I;
 			}
 		}
+		if (SkatesChoice.IsValid()) PickSkates(SkatesChoice);
 		WearCostume();
 	}
 	else if (Reply.Op == TEXT("start") || Reply.Op == TEXT("endWarmup") || Reply.Op == TEXT("arcade"))
@@ -677,6 +691,13 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 			PendingWearSlot = -1;
 			WearCostume();
 			SavePreferences();
+		}
+		if (Reply.Op == TEXT("skates"))
+		{
+			// game/skates.ts: the look the bridge resolved from the choice.
+			const TSharedPtr<FJsonObject>* Look = nullptr;
+			if (Reply.Data->TryGetObjectField(TEXT("skates"), Look)) SkatesLook = *Look;
+			WearSkates();
 		}
 		if (bPaused)
 		{

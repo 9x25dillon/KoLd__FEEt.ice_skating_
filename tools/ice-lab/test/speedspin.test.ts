@@ -38,12 +38,14 @@ test("the block turns the body against its curve: it eats a loop's rotation and 
   // MEASURED, no arms: loop off RBO at 5 m/s, L 3.01 -> 0.00 with the rule;
   // lutz off LBO with the pick at 8 m/s, 0.00 -> 1.20 (the pendulum with the
   // arms in Experimental; the ankle alone 1.08; without the pendulum, since /34, 2.26).
+  // Since the legs move the load over time (2026-11-14): loop 3.04 -> 0.00,
+  // lutz 0.00 -> 2.02.
   const loopOff = takeoff(0, -5, 1, -0.3, false), loopOn = takeoff(1, -5, 1, -0.3, false);
   assert.equal(loopOn.kind, JUMP.Loop);
-  assert.ok(Math.abs(loopOff.L - 3.01) < 0.01 && loopOn.L === 0, `loop ${loopOff.L.toFixed(2)} -> ${loopOn.L.toFixed(2)}`);
+  assert.ok(Math.abs(loopOff.L - 3.04) < 0.01 && loopOn.L === 0, `loop ${loopOff.L.toFixed(2)} -> ${loopOn.L.toFixed(2)}`);
   const lutzOff = takeoff(0, -8, 0, 0.3, true), lutzOn = takeoff(1, -8, 0, 0.3, true);
   assert.equal(lutzOn.kind, JUMP.Lutz);
-  assert.ok(lutzOff.L === 0 && Math.abs(lutzOn.L - 1.196) < 0.01, `lutz ${lutzOff.L.toFixed(2)} -> ${lutzOn.L.toFixed(2)}`);
+  assert.ok(lutzOff.L === 0 && Math.abs(lutzOn.L - 2.019) < 0.01, `lutz ${lutzOff.L.toFixed(2)} -> ${lutzOn.L.toFixed(2)}`);
 });
 
 test("with the direction free (jumpDirMode), a lutz entry with nothing to counter-rotate it turns with its curve", () => {

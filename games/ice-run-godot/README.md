@@ -35,6 +35,13 @@ information. These are actual game captures, not concept art.
   native Elite paddle presets, and F11 fullscreen.
 - **Wardrobe:** Northlight joins Violet, Aurora and Solstice in the shared costume
   catalog. Saved costume choices are preserved; new native sessions use Northlight.
+- **Skates:** Settings → Skates picks boot colour and finish, blade, laces and heel from the
+  catalogue in `game/skates.ts`, or a named pair (Competition white, Midnight black, Tan to
+  the tights, Gold-plated blade, Practice greys…). Looks only: the choice never reaches Params,
+  physics, scores or replays. Kept in `preferences.json` as the optional `skates` field. The
+  athlete models draw boots, blade, laces and heel as separate materials; the first skater
+  model has no laces material and the Berserker keeps his own. Stills: `docs/presentation/skates/`
+  (`pose_clip.mjs --skates=<id>`, then `pose_lab.gd --view=boots`).
 
 ![Native game menu](../../docs/presentation/grand-prix-menu.png)
 

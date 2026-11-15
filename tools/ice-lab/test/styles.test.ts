@@ -23,7 +23,7 @@ import { STYLES, STYLE_CHOSEN_SHARE, styleParams, styleStrength } from "../game/
 import { CareerState } from "../game/career.ts";
 import { validate } from "../sim/params.ts";
 import { JUMP } from "../sim/jump.ts";
-import { BASELINE, baselineParams, loopBaselineProgram } from "../jpse/baseline.ts";
+import { BASELINE, BASELINE_KNOBS, baselineParams, loopBaselineProgram } from "../jpse/baseline.ts";
 import { pinPushFeet, runCandidate } from "../jpse/engine.ts";
 import { SERPENTINE_TICKS, carveRun, serpentineRun, spiralRun, splitRow, strokeRun } from "../jpse/styles.ts";
 
@@ -78,10 +78,13 @@ test("career: take up a style, drill it a week at a time, and a style put down r
 test("the trade-offs are the physics': speed, legs, the hard carve and the serpentine", () => {
   const row = (p: typeof base) => ({ ...strokeRun(p), ...carveRun(p), ...serpentineRun(p) });
   const none = row(base), power = row(at("power")), finesse = row(at("finesse")), tech = row(at("technician")), endu = row(at("endurance"));
-  // Power is fastest and falls on the hard carve and first in the serpentine.
+  // Power is fastest and falls on the hard carve. It fell first in the
+  // serpentine too, until the legs moved the load over time (2026-11-14):
+  // MEASURED since, it skates the whole serpentine, where the neutral skater
+  // and Endurance still fall at 495 ticks.
   assert.ok(power.topSpeed > none.topSpeed && none.topSpeed > finesse.topSpeed);
   assert.equal(power.carveFell, true); assert.equal(none.carveFell, false);
-  assert.ok(power.serpentineTicks < none.serpentineTicks);
+  assert.equal(power.serpentineTicks, SERPENTINE_TICKS);
   // Finesse and Technician skate the whole serpentine; the neutral skater falls partway.
   assert.equal(finesse.serpentineTicks, SERPENTINE_TICKS);
   assert.equal(tech.serpentineTicks, SERPENTINE_TICKS);
@@ -89,7 +92,7 @@ test("the trade-offs are the physics': speed, legs, the hard carve and the serpe
   // Endurance has the most legs left.
   assert.ok(endu.legs > none.legs + 0.1, `${endu.legs} vs ${none.legs}`);
   // Pinned, so a re-tune says what it moved.
-  assert.deepEqual([none.serpentineTicks, power.serpentineTicks], [495, 438]);
+  assert.deepEqual([none.serpentineTicks, power.serpentineTicks, endu.serpentineTicks], [495, SERPENTINE_TICKS, 495]);
   assert.ok(Math.abs(power.topSpeed - 13.18) < 0.01 && Math.abs(finesse.topSpeed - 11.99) < 0.01);
 });
 
@@ -107,7 +110,11 @@ test("Finesse's free leg: the spiral highest and cheapest, and only drilled Fine
 });
 
 test("on the double loop's entrance Power leaves higher and spinning harder, Finesse lower", () => {
-  const off = (p: typeof base) => runCandidate("c", pinPushFeet(loopBaselineProgram(), p), { mirror: false, reverse: false }, p, JUMP.Loop, BASELINE.runOut).report;
+  // At 7.25 m/s, each skater on its own script: at 7 m/s Finesse falls in the
+  // load since the legs move the load over time (MEASURED 2026-11-14: 0.375 m
+  // neutral, 0.438 Power, 0.338 Finesse, the only one of the three that stands).
+  const k = { ...BASELINE_KNOBS, speed: -7.25 };
+  const off = (p: typeof base) => runCandidate("c", pinPushFeet(loopBaselineProgram(k, p), p), { mirror: false, reverse: false }, p, JUMP.Loop, BASELINE.runOut).report;
   const n = off(base), pw = off(at("power")), fi = off(at("finesse"));
   assert.ok(pw.flight!.height > n.flight!.height && n.flight!.height > fi.flight!.height,
     `${pw.flight!.height} / ${n.flight!.height} / ${fi.flight!.height}`);

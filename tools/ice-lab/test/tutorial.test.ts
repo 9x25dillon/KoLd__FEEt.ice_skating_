@@ -79,9 +79,11 @@ const SCRIPTS: Record<string, { speed: number; pad: Script }> = {
     h.axes = k < 144 ? [0.5, 0, 0.5, 0] : [0, 0, 0, 0];
     if (k >= 120 && k < 124) h.buttons[s === "simulation" ? B : A] = 1;
   } },
-  // Travel: steer for the target, keeping above 3 m/s.
+  // Travel: steer for the target, keeping above 3 m/s. Gain 1.2: at 1.4 the
+  // script weaved past the ring (closest 1.78 m of 1.8) once the legs moved the
+  // load over time (2026-11-14); every gain from 0.8 to 2.0 but 1.4 arrives.
   marker: { speed: 3.7, pad: (h, k, s, st, tut, memo) => {
-    const t = tut.target; if (t) steer(h, st, t.x, t.y);
+    const t = tut.target; if (t) steer(h, st, t.x, t.y, 1.2);
     keepSpeed(h, k, s, st, memo, 3);
   } },
   // Round the cone: hold the curve that keeps it inside (the side it lies on), and keep the speed.
@@ -272,17 +274,21 @@ test("settling needs steadiness: leaning or moving on resets the settle", () => 
 //   hop    3.933  a 0.35 s load: 0.41 m, landed clean.
 //   spin   Re-scripted 2026-11-01: these were written the day before armsWhipMode, and a straight
 //          glide gives the arms no edge to pull against (best 0.06 rev). Now from a curve; see SCRIPTS.spin.
+// Re-pinned 2026-11-14: the legs move the load over time in both setups
+// (weightTransferMode). Every step still passes without a fall; most a little
+// sooner (Simulation's push 5.217 -> 3.3 s), the lap in Experimental later
+// (15.383 -> 15.767). The marker's script steers at gain 1.2 (see SCRIPTS).
 const PASS: Record<string, Record<Pad, number>> = {
   glide: { simulation: 4.008, experimental: 4.008 },
-  push: { simulation: 5.217, experimental: 3.45 },
+  push: { simulation: 3.3, experimental: 3.45 },
   knees: { simulation: 3.092, experimental: 3.092 },
-  edge: { simulation: 3.542, experimental: 3.542 },
-  other: { simulation: 3.542, experimental: 3.542 },
+  edge: { simulation: 3.433, experimental: 3.433 },
+  other: { simulation: 3.433, experimental: 3.433 },
   turn: { simulation: 3.308, experimental: 3.308 },
-  marker: { simulation: 4.033, experimental: 4.033 },
-  cone: { simulation: 8.4, experimental: 8.375 },
-  cross: { simulation: 11.633, experimental: 11.4 },
-  lap: { simulation: 13.083, experimental: 15.383 },
+  marker: { simulation: 3.617, experimental: 3.617 },
+  cone: { simulation: 8.35, experimental: 8.317 },
+  cross: { simulation: 11.342, experimental: 11.183 },
+  lap: { simulation: 13.133, experimental: 15.767 },
   plow: { simulation: 5.933, experimental: 5.933 },
   spot: { simulation: 5.408, experimental: 5.408 },
   dig: { simulation: 2.967, experimental: 2.967 },

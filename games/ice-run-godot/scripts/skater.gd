@@ -25,6 +25,12 @@ const SKIN_SLOTS := {
 	"Champagne crystals": "trim", "Espresso hair": "hair", "Warm porcelain": "skin", "Skin-tone tights": "tights",
 }
 var skin: Dictionary = {}
+# game/skates.ts lookOf(): the skates' colours. Empty leaves the model's own boots. Cosmetic only.
+const SKATE_PARTS := {
+	"Ivory leather boots": "boot", "Polished steel": "blade", "Boot laces": "laces",
+	"Stacked leather heel": "heel", "Stacked leather heel L": "heel", "Stacked leather heel R": "heel",
+}
+var skates_look: Dictionary = {}
 # game/atelier.ts FABRICS, in its order; fabric.gdshader's `fabric` indexes it.
 const FABRICS := ["satin","velvet","lycra","mesh","sequin"]
 var sprays: Array[CPUParticles3D] = []
@@ -422,6 +428,10 @@ func apply_skin(next: Dictionary) -> int:
 	cloth_materials.clear()
 	return recolour(model) if model else 0
 
+func apply_skates(look: Dictionary) -> void:
+	skates_look = look
+	if model: recolour(model)
+
 # Returns how many surfaces now wear the costume, for the smoke test.
 func recolour(node: Node) -> int:
 	var count := 0
@@ -432,6 +442,22 @@ func recolour(node: Node) -> int:
 		for i in node.mesh.get_surface_count():
 			var base := node.mesh.surface_get_material(i) as BaseMaterial3D
 			var slot: String = SKIN_SLOTS.get(base.resource_name, "") if base else ""
+			var part: String = SKATE_PARTS.get(base.resource_name, "") if base else ""
+			if part != "" and skates_look.has(part):
+				var want: Dictionary = skates_look[part]
+				if bool(want.native):
+					node.set_surface_override_material(i, null)
+				else:
+					var shod := base.duplicate() as BaseMaterial3D
+					shod.albedo_color = Color.html(str(want.hex))
+					shod.roughness = float(want.roughness)
+					shod.metallic = float(want.metallic)
+					if float(want.clearcoat) > 0.0:
+						shod.clearcoat_enabled = true
+						shod.clearcoat = float(want.clearcoat)
+						shod.clearcoat_roughness = .05
+					node.set_surface_override_material(i, shod)
+				continue
 			# Painted skin and hair keep their paint; the cards among them cut out by alpha.
 			if base and base.albedo_texture:
 				if base.resource_name == "Eyes":

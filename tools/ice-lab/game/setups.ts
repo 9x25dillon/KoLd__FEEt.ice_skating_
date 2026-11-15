@@ -48,6 +48,10 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   // The arms and trunk with it (pitchInternalMode), 2026-09-24: the operator's queue item.
   if (setup === "simulation" || exp) { p.footMode = 1; p.pitchMode = 1; p.pitchInternalMode = 1; }
   if (exp) p.freeLegMode = 1;
+  // The legs move the load between the blades over time (weightTransferMode):
+  // the owner's word, 2026-11-14 — "turn it on and re-tune them". Dig Gate
+  // shares Experimental's athlete.
+  if (setup === "simulation" || exp) p.weightTransferMode = 1;
   // A landing pays for the energy the ice takes (staminaLandingMode): the operator's choice, 2026-10-31.
   if (exp) p.staminaLandingMode = 1;
   // A jump turns the way its entry turns it, clockwise or counter-clockwise
