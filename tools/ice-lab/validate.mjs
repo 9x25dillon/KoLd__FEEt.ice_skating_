@@ -367,6 +367,13 @@ function summarize(results) {
 
 // ── output ──────────────────────────────────────────────────────────────────
 
+/**
+ * How a case is judged, for a reader who will not open this file: two-sided,
+ * or one-sided and which side. Without it a one-sided pass whose deviation is
+ * larger than its tolerance reads as a validator bug.
+ */
+const COMPARISON = { within: "±", at_least: "≥", at_most: "≤", holds: "holds", call: "call" };
+
 function fmt(x, unit) {
   if (x === undefined || x === null) return "—";
   if (typeof x !== "number") return String(x);
@@ -378,9 +385,9 @@ function human(report) {
   out.push(`Fidelity gate — preset ${report.preset} (reference ${report.reference}), solver ${report.solver}`);
   out.push("");
   const rows = report.results.filter((r) => r.verdict === "pass" || r.verdict === "fail");
-  const head = ["case", "observable", "expected", "actual", "deviation", "tolerance", "verdict", report.reference];
+  const head = ["case", "observable", "cmp", "expected", "actual", "deviation", "tolerance", "verdict", report.reference];
   const table = [head, ...rows.map((r) => [
-    r.id, r.observable ?? "—", fmt(r.expected, r.unit), fmt(r.actual, r.unit), fmt(r.deviation), fmt(r.tolerance),
+    r.id, r.observable ?? "—", COMPARISON[r.comparison] ?? "—", fmt(r.expected, r.unit), fmt(r.actual, r.unit), fmt(r.deviation), fmt(r.tolerance),
     r.verdict.toUpperCase() + (r.reason ? ` (${r.reason})` : ""),
     r[report.reference] ? `${r[report.reference].verdict}${r[report.reference].actual !== null ? " " + fmt(r[report.reference].actual) : ""}` : "—",
   ])];
@@ -461,12 +468,16 @@ export function markdown(report) {
   const sourced = r.filter((x) => x.verdict === "pass" || x.verdict === "fail");
   if (sourced.length === 0) out.push("None.", "");
   else {
-    out.push(`| Case | Source | Observable | Expected | Tolerance | Actual | Deviation | Verdict | \`${report.reference}\` |`);
-    out.push("| --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |");
+    out.push("**Comparison** says how the case is judged. `±`: two-sided, passes when the deviation is within the tolerance");
+    out.push("either way. `≥`: one-sided, the model must reach at least the expected value less the tolerance, and any amount");
+    out.push("above it passes. `≤`: the mirror, at most the expected value plus the tolerance. So a `≥` or `≤` case can pass with");
+    out.push("a deviation larger than its tolerance, and such a pass says nothing about how far the model overshoots.", "");
+    out.push(`| Case | Source | Observable | Comparison | Expected | Tolerance | Actual | Deviation | Verdict | \`${report.reference}\` |`);
+    out.push("| --- | --- | --- | :---: | ---: | ---: | ---: | ---: | --- | --- |");
     for (const x of sourced) {
       const ref = x[report.reference];
       const refCell = ref ? `${ref.verdict}${ref.actual !== null ? " " + num(ref.actual) : ""}${ref.reason ? " (" + ref.reason + ")" : ""}` : "—";
-      out.push(`| \`${x.id}\` | ${x.source} | \`${x.observable}\` | ${num(x.expected)} ${x.unit ?? ""} | ${num(x.tolerance)} | ${num(x.actual)} | ${num(x.deviation)} | `
+      out.push(`| \`${x.id}\` | ${x.source} | \`${x.observable}\` | ${COMPARISON[x.comparison] ?? "—"} | ${num(x.expected)} ${x.unit ?? ""} | ${num(x.tolerance)} | ${num(x.actual)} | ${num(x.deviation)} | `
         + `${x.verdict === "pass" ? "pass" : "**FAIL**"}${x.reason ? " — " + x.reason : ""} | ${refCell} |`);
     }
     out.push("");
