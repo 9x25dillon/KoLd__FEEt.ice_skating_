@@ -535,6 +535,10 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		}
 		Rink->ClearTraces();
 		Rink->SetCourse(RunMode, Catalog);
+		// tools/ice-lab/game/venues.ts: the room this run is skated in, from the snapshot. Rebuilt only when it changes.
+		FString Venue = TEXT("grand-prix");
+		Reply.Data->TryGetStringField(TEXT("venue"), Venue);
+		if (Venue != Rink->VenueId()) Rink->ApplyVenueById(Venue, Catalog);
 		Present(FIceFrame::Parse(Reply.Data), true);
 		WearWho();
 		bPlaying = true;
