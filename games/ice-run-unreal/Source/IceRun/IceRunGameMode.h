@@ -168,6 +168,10 @@ private:
 	void BuildComposer(FMenuPage& P);
 	void BuildWardrobe(FMenuPage& P);
 	void BuildDesign(FMenuPage& P);
+	/** game/skates.ts: the Skates page, the choice sent to the bridge, and the look worn on the skater. Cosmetic only. */
+	void BuildSkates(FMenuPage& P);
+	void PickSkates(const TSharedPtr<FJsonObject>& Choice);
+	void WearSkates();
 	void BuildLessons(FMenuPage& P);
 	void BuildSettings(FMenuPage& P);
 	void BuildResult(FMenuPage& P);
@@ -276,6 +280,10 @@ private:
 	/** The wardrobe: which skater model, which costume (presets first, then your designs). */
 	int32 CharacterIndex = 0;
 	int32 CostumeIndex = 0;
+	int32 SkatesPreset = 0;
+	/** The skates chosen (catalog.skates ids, kept in preferences as an optional field) and the look the bridge resolved. */
+	TSharedPtr<FJsonObject> SkatesChoice;
+	TSharedPtr<FJsonObject> SkatesLook;
 	/** Free skate's skater level (sim/profile.ts SAMPLE_PROFILES), sent as configure's profile. */
 	int32 ProfileIndex = 0;
 	/** Free skate's music (catalog tracks), sent as configure's track; the career plays its own. */

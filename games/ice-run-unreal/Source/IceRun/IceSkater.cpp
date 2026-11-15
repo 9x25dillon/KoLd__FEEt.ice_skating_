@@ -170,6 +170,7 @@ bool AIceSkater::LoadModel(const FString& ObjectPath)
 	// A mesh change keeps the component's materials by slot index, and the models order their slots
 	// differently: what the last model wore would land on this one's other parts.
 	Body->EmptyOverrideMaterials();
+	NativeSkates.Empty();
 	Body->SetSkinnedAssetAndUpdate(Mesh);
 	bHasModel = true;
 	StandIn->SetVisibility(false);
@@ -234,6 +235,58 @@ int32 AIceSkater::ApplyCostume(const TSharedPtr<FJsonObject>& Skin)
 			Factor = Colour(**Slot, TEXT("ffffff"));
 		}
 		M->SetVectorParameterValue(TEXT("BaseColorFactor"), Factor);
+		++Worn;
+	}
+	return Worn;
+}
+
+int32 AIceSkater::ApplySkates(const TSharedPtr<FJsonObject>& Look)
+{
+	if (!Look.IsValid() || !bHasModel)
+	{
+		return 0;
+	}
+	// skater.gd SKATE_PARTS, by the same material names.
+	static const TMap<FString, FString> Parts = {
+		{TEXT("ivory leather boots"), TEXT("boot")}, {TEXT("polished steel"), TEXT("blade")}, {TEXT("boot laces"), TEXT("laces")},
+		{TEXT("stacked leather heel"), TEXT("heel")}, {TEXT("stacked leather heel l"), TEXT("heel")}, {TEXT("stacked leather heel r"), TEXT("heel")}};
+	int32 Worn = 0;
+	const TArray<FName> Names = Body->GetMaterialSlotNames();
+	for (int32 I = 0; I < Names.Num(); ++I)
+	{
+		const FString* Part = Parts.Find(Names[I].ToString().Replace(TEXT("_"), TEXT(" ")).ToLower());
+		const TSharedPtr<FJsonObject>* Want = nullptr;
+		if (!Part || !Look->TryGetObjectField(**Part, Want))
+		{
+			continue;
+		}
+		UMaterialInstanceDynamic* M = Body->CreateDynamicMaterialInstance(I);
+		if (!M)
+		{
+			continue;
+		}
+		// Read the model's own look once, before any repaint, so a native part can be put back.
+		if (!NativeSkates.Contains(I))
+		{
+			FLinearColor Colour = FLinearColor::White;
+			float Roughness = 1.f, Metallic = 0.f;
+			M->GetVectorParameterValue(FHashedMaterialParameterInfo(TEXT("BaseColorFactor")), Colour);
+			M->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("RoughnessFactor")), Roughness);
+			M->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("MetallicFactor")), Metallic);
+			NativeSkates.Add(I, MakeTuple(Colour, Roughness, Metallic));
+		}
+		bool bNative = false;
+		(*Want)->TryGetBoolField(TEXT("native"), bNative);
+		FString Hex;
+		double Roughness = 0.0, Metallic = 0.0;
+		(*Want)->TryGetStringField(TEXT("hex"), Hex);
+		(*Want)->TryGetNumberField(TEXT("roughness"), Roughness);
+		(*Want)->TryGetNumberField(TEXT("metallic"), Metallic);
+		const TTuple<FLinearColor, float, float>& Own = NativeSkates[I];
+		// The clearcoat of a patent finish has no parameter on the glTF material: it shows as the low roughness alone.
+		M->SetVectorParameterValue(TEXT("BaseColorFactor"), bNative || Hex.IsEmpty() ? Own.Get<0>() : FLinearColor::FromSRGBColor(FColor::FromHex(Hex)));
+		M->SetScalarParameterValue(TEXT("RoughnessFactor"), bNative ? Own.Get<1>() : float(Roughness));
+		M->SetScalarParameterValue(TEXT("MetallicFactor"), bNative ? Own.Get<2>() : float(Metallic));
 		++Worn;
 	}
 	return Worn;
