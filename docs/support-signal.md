@@ -92,8 +92,18 @@ moved:
   | sectionals | 15.5 | 15.2 |
   | gala | 16.4 | 16.8 |
 
-  Season two's three events had no clean run on the default settings. `BASELINE` is unchanged until
-  the owner decides.
+  Season two, on the wide grid (`--from=5 --wide`, as it was measured on 2026-11-11):
+
+  | Event | Was | Now |
+  |---|---|---|
+  | sectionals | 15.5 | 15.2 (45/45 clean) |
+  | autumn-trophy | 12.8 | 14.1 (2/45 clean) |
+  | northern-cup | 32.0 | 31.0 (7/45 clean) |
+  | nationals | 32.0 | no clean run in 45 |
+  | gala | 16.4 | 16.7 (6/9 clean) |
+
+  `BASELINE` is unchanged until the owner decides. Nationals has no measured value on today's
+  physics.
 
 **A stroke changes with it.** A push acts only while the pushing blade is on the ice
 (`if (push.inContact)`). With the transfer, the push keeps acting through the overlap while the
