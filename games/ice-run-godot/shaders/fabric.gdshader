@@ -13,7 +13,7 @@ void vertex() {
   VERTEX.x+=flutter; VERTEX.z+=flutter*.65;
  }
 }
-// game/atelier.ts: 0 satin (every preset, the values below unchanged), 1 velvet, 2 lycra, 3 mesh.
+// game/atelier.ts: 0 satin (every preset, the values below unchanged), 1 velvet, 2 lycra, 3 mesh, 4 sequin.
 uniform int fabric = 0;
 // 0..1 of the cells that carry a crystal. Presets have none.
 uniform float crystals = 0.0;
@@ -32,6 +32,14 @@ void fragment() {
  if(fabric==1) { albedo*=.86; rough=.9; spec=.1; rim=.6; rim_tint=.85; }
  else if(fabric==2) { rough=.28+weave*.02; spec=.5; rim=.06; }
  else if(fabric==3) { albedo*=.92; rough=.96; spec=.06; rim=.02; }
+ else if(fabric==4) {
+  // Discs about 3 mm across, each tipped its own way: they read as a bright, hard-edged grain.
+  vec3 disc=fabric_pos*330.0;
+  float tip=hash3(floor(disc));
+  float dot_=(1.0-smoothstep(.32,.45,length(fract(disc)-.5)))*(1.0-smoothstep(.002,.006,footprint));
+  albedo*=mix(.9,1.15,tip*dot_);
+  rough=.34; spec=.55+.3*tip*dot_; rim=.12;
+ }
  vec3 glow=vec3(0.0);
  if(crystals>0.0) {
   // One cut stone per ~4.5 mm cell, on a share of cells; each facet tilted its own way,

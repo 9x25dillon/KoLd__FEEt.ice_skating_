@@ -32,7 +32,7 @@ const SKATE_PARTS := {
 }
 var skates_look: Dictionary = {}
 # game/atelier.ts FABRICS, in its order; fabric.gdshader's `fabric` indexes it.
-const FABRICS := ["satin","velvet","lycra","mesh"]
+const FABRICS := ["satin","velvet","lycra","mesh","sequin"]
 var sprays: Array[CPUParticles3D] = []
 # Each model's own proportions, read from its skeleton (measure_rig); the
 # defaults are tools/build_skater.py's. The solver's comHeight is .95.

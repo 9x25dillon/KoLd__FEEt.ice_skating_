@@ -743,13 +743,28 @@ func show_page(page: String) -> void:
 		menu.add_child(character_picker)
 		if not catalog.is_empty() and character != 1:
 			menu.add_child(label("Costume",16))
-			var costume_picker := OptionButton.new()
 			var worn := costume_skins()
+			# Presets are grouped by game/appearance.ts COLLECTIONS; the kept designs are "Yours".
+			var groups: Array = []
+			for w in worn:
+				if w != null and not groups.has(str(w.get("collection","Yours"))): groups.append(str(w.get("collection","Yours")))
+			var now_group := str(worn[costume].get("collection","Yours")) if costume >= 0 and costume < worn.size() and worn[costume] != null else str(groups[0])
+			var group_picker := OptionButton.new()
+			for g in groups: group_picker.add_item(g)
+			group_picker.selected = maxi(groups.find(now_group),0)
+			var costume_picker := OptionButton.new()
 			for i in worn.size():
-				if worn[i] != null:
+				if worn[i] != null and str(worn[i].get("collection","Yours")) == str(groups[group_picker.selected]):
 					costume_picker.add_item("%s — %s" % [worn[i].name, worn[i].description],i)
 			costume_picker.select(costume_picker.get_item_index(costume) if costume_picker.get_item_index(costume) >= 0 else 0)
+			group_picker.item_selected.connect(func(index: int):
+				for i in worn.size():
+					if worn[i] != null and str(worn[i].get("collection","Yours")) == str(groups[index]):
+						costume = i
+						break
+				skater.apply_skin(current_skin());save_preferences();show_page("settings"))
 			costume_picker.item_selected.connect(func(index: int):costume=costume_picker.get_item_id(index);skater.apply_skin(current_skin());save_preferences())
+			menu.add_child(group_picker)
 			menu.add_child(costume_picker)
 			menu.add_child(button("Atelier  /  make your own costume →",func():show_page("atelier")))
 		if not catalog.is_empty() and character != 1:
