@@ -241,6 +241,14 @@ private:
 	TSharedPtr<FJsonObject> Catalog;
 	FIceFrame Latest;
 	double TickDebt = 0.0;
+	// The debt clamp, counted (main.gd count_debt): ticks owed past the 12-tick cap are discarded,
+	// so the program clock falls behind the wall clock. Per run.
+	double DebtDropped = 0.0;  // sim ticks the clamp discarded
+	int32 DebtFrames = 0;      // frames on which it discarded any
+	double DebtHigh = 0.0;     // the highest debt reached, in ticks
+	double DebtEpisode = 0.0;  // ticks discarded by the saturation still going on
+	void CountDebt(double Lost);
+	void ResetDebt();
 	bool bOperational = false;
 	bool bFaulted = false;
 	bool bPlaying = false;

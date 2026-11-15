@@ -52,6 +52,20 @@ test("the C++ skater keeps skater.gd's constants", () => {
   assert.ok(compared >= 25, `only ${compared} constants compared`);
 });
 
+test('both clients count the sim ticks the debt clamp drops, and say so in the same words', () => {
+  // The clamp (12 ticks, 100 ms) discards owed sim time when the bridge is late; unreported, that is
+  // the program clock falling behind the music with nothing in the log.
+  const gd = readFileSync(join(godot, 'scripts/main.gd'), 'utf8');
+  const cpp = read('Source/IceRun/IceRunGameMode.cpp');
+  assert.match(gd, /var owed := tick_debt\+dt\*120\.0\n\ttick_debt = minf\(12\.0,owed\)\n\tcount_debt\(owed-tick_debt\)/, 'main.gd counts what the clamp cut');
+  assert.match(cpp, /const double Owed = TickDebt \+ DeltaSeconds \* 120\.0;\s+TickDebt = FMath::Min\(12\.0, Owed\);\s+CountDebt\(Owed - TickDebt\);/, 'IceRunGameMode.cpp counts what the clamp cut');
+  const said = text => [...text.matchAll(/"(Tick debt: [^"]+)"/g)].map(m => m[1]);
+  assert.equal(said(gd).length, 2, 'main.gd logs a saturation and a run total');
+  assert.deepEqual(said(cpp), said(gd), 'the two clients log the same lines');
+  for (const reset of [/\ttick_debt = 0\.0\n\t\treset_debt\(\)/, ]) assert.match(gd, reset, 'main.gd starts each run with the counters at zero');
+  assert.match(cpp, /TickDebt = 0\.0;\s+ResetDebt\(\);/, 'IceRunGameMode.cpp starts each run with the counters at zero');
+});
+
 const engine = process.env.UE_ROOT ?? join(homedir(), 'UnrealEngine/Linux_Unreal_Engine_5.8.4');
 const editorCmd = join(engine, 'Engine/Binaries/Linux/UnrealEditor-Cmd');
 const built = existsSync(join(root, 'Binaries/Linux/libUnrealEditor-IceRun.so')) && existsSync(join(godot, 'runtime/sim/solver.js'));
