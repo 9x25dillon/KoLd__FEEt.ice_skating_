@@ -143,13 +143,15 @@ test("the defaults are the owner's pick: off where the setup promises minimal as
 // The hand cuts them where the cause is too much lean for the speed; Experimental's
 // falls come at a standstill, where no lean limit reaches, and it barely moves them.
 const FALLS: Record<string, { jerky: number[]; calm: number[] }> = {
-  simulation: { jerky: [19, 5, 3], calm: [10, 4, 1] },
+  // Re-measured 2026-11-14 with the legs moving the load over time (weightTransferMode),
+  // on in Simulation and Experimental: [19, 5, 3] / [10, 4, 1] and [29, 21, 14] / [24, 24, 16] before.
+  simulation: { jerky: [20, 4, 4], calm: [10, 3, 2] },
   // Re-measured 2026-11-14 with Explorer's default push knee (game/setups.ts EXPLORER_PUSH_KNEE),
   // the owner's pick: [7, 4, 2] and [6, 2, 0] before. Harder pushes, more falls past the lean
   // limit; 0.5 measured no better ([11, 9, 6], [6, 4, 3]).
   explorer: { jerky: [10, 8, 5], calm: [11, 6, 6] },
   repertoire: { jerky: [16, 5, 3], calm: [14, 4, 3] },
-  experimental: { jerky: [29, 21, 14], calm: [24, 24, 16] },
+  experimental: { jerky: [25, 20, 14], calm: [23, 16, 17] },
 };
 for (const setup of Object.keys(FALLS) as Setup[]) test(`${setup}: a novice falls less with the hand`, () => {
   for (const style of ["jerky", "calm"] as const) {

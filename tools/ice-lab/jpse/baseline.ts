@@ -32,12 +32,12 @@ export const BASELINE = {
   setup: "experimental",
   speed: -7,
   /** s: RT half, then the load. test/backjump.test.ts's LOAD_AT, LOAD, SWING_AT. */
-  loadAt: 1.5, load: 0.5, swingAt: 0.1,
-  /** s into the air when B checks the rotation: the only clean check measured. */
-  checkAt: 0.4,
+  loadAt: 1.5, load: 0.425, swingAt: 0.1,
+  /** s into the air when B checks the rotation: the first of the two clean checks measured (0.45, 0.475). */
+  checkAt: 0.45,
   /** Ticks of run-out after touchdown: backjump.test.ts's RUN_OUT, "still standing after 1.2 s". */
   runOut: 144,
-  source: "test/backjump.test.ts, measured 2026-11-02",
+  source: "test/backjump.test.ts, measured 2026-11-02; re-searched 2026-11-14 with weightTransferMode",
 } as const;
 
 export function baselineParams(): Params { return setupParams(BASELINE.setup); }

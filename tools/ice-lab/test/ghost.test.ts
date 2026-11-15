@@ -90,8 +90,9 @@ test("a trick without a stride entry still spawns at its entry state, pad releas
 test("strokes: from the player's speed, LT, RT… for 3 s, standing — every heading", () => {
   // MEASURED at 0.8, 2.4 and -2.3 rad alike: 1 (a glide from a standstill)
   // -> 2.447 m/s after 3 s of strokes; 3 -> 4.276; 5 -> 5.984; 7 -> 7.582.
-  // (2.475 and 4.280 before a push at a crawl landed on both feet.)
-  for (const angle of ANGLES) for (const [v0, v3] of [[0, 2.447], [3, 4.276], [5, 5.984], [7, 7.582]]) {
+  // (2.475 and 4.280 before a push at a crawl landed on both feet.) Since the
+  // legs move the load over time (2026-11-14): 2.465, 4.275, 5.984, 7.582.
+  for (const angle of ANGLES) for (const [v0, v3] of [[0, 2.465], [3, 4.275], [5, 5.984], [7, 7.582]]) {
     const r = perform("strokes", angle, v0);
     assert.equal(r.s.fallen, false);
     assert.equal(r.respawned, false);
@@ -103,8 +104,10 @@ test("dig: strokes, a three-turn to skate backward, then the gate's dig winds th
   // MEASURED: RFI three-turn onto RBO; both sticks 0.3 left, LB + RB 2.25 s:
   // the gate leans, digs, recovers; the blades wind the body -0.42 (from a
   // standstill), -0.41 (3 m/s), -0.55 (5), -0.12 (7: the curve is shallow
-  // that fast); backward and standing after, 3.1-5.3 m/s.
-  for (const angle of ANGLES) for (const [v0, w] of [[0, -0.419], [3, -0.405], [5, -0.552], [7, -0.124]]) {
+  // that fast); backward and standing after, 3.1-5.3 m/s. Since the legs move
+  // the load over time (2026-11-14): -0.415, -0.424, -0.500, and -0.503 at 7 m/s,
+  // where the dig now winds as fully as it does slower.
+  for (const angle of ANGLES) for (const [v0, w] of [[0, -0.415], [3, -0.424], [5, -0.500], [7, -0.503]]) {
     const r = perform("dig", angle, v0);
     assert.equal(r.s.fallen, false);
     assert.equal(r.g.failed, 0);

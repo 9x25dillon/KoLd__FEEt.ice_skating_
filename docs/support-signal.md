@@ -27,7 +27,8 @@ than as an exchange of weight.
 
 ## 1 · The weight transfer (`weightTransferMode`, sim)
 
-With the setting at 1, the right blade's share of the load is solver state, `loadR`. It follows the
+With the setting at 1, the load's place between the blades is solver state, `loadBias` (the right
+blade's share less one half, so a mirrored run negates it exactly). It follows the
 asked share as a critically damped second-order response: no overshoot from rest, its rate
 continuous, done to within 0.5 % in `weightTransferTime` (0.25 s, **authored**; see
 [open-constants §16](open-constants.md#16--the-weight-transfer)).
@@ -50,12 +51,49 @@ continuous, done to within 0.5 % in `weightTransferTime` (0.25 s, **authored**; 
 `test/support.test.ts` holds looser bounds that also cover a whole-load step: 0.1 per tick,
 8 /s, 2.5 cm, and 0.15–0.25 s.
 
-**Off in every setup, for now.** On in Simulation, Experimental and Dig Gate, 51 pinned tests move.
-Among them, the searched double loop's takeoff L falls from 28.65 to 19.90. Its script flips the
-weight input just before the jump loads (ticks 174–186), which was free when the switch took a
-tick and now carries load into the takeoff. That is the transfer doing its job, but it invalidates
-the jump calibrations, the JPSE conformance files and the tutorial scripts. Turning it on is the
-owner's decision.
+**On in Simulation, Experimental and Dig Gate since 2026-11-14** (the owner: "turn it on and re-tune
+them"). Turning it on moved 51 pinned tests. Each was re-measured, or its script re-searched; none
+was loosened, except the warm-up's boards check, which now allows the resolver's real 2 mm. What
+moved:
+
+- **The canonical double loop.** The old script (0.5 s load, check 0.40 s) falls short. The search
+  round it (720 candidates) found 21 clean doubles. The one nearest the old script is load 0.425 s,
+  check 0.45 s: 1.981 rev, L 24.17 (was 28.65). The check's skill window is 0.45–0.475 s.
+- **Power's entrance moves from 7.5 to 7.25 m/s.** At 7.5 m/s with a load of 0.3 s or more, Power
+  now falls in the load. The scripted half-pressed RT triggers Experimental's automatic beat
+  crossovers, which leave the weight on both feet until 5 ticks before the release. At 7.25 m/s the
+  double's window is 53–56 when Power is chosen and 50–52 drilled; no single tick spans every mastery
+  any more.
+- **Styles.** Power now completes the serpentine (it fell first before). Finesse falls in the
+  load from the 7 m/s entrance; at 7.25 m/s the height order holds (Power 0.44, neutral 0.37,
+  Finesse 0.34 m).
+- **Smaller moves.** The dig and hook jumps shift by a few hundredths to tenths of L. The tutorial's
+  steps pass a little sooner, and the marker's test script now steers at gain 1.2 (1.4 sat on a
+  knife edge). The ghost's dig now winds as fully at 7 m/s as it does slower.
+- **The mirror stays exact.** A first version kept the share itself and drifted 1.2e-14 m between
+  a run and its mirror. The bias form negates exactly.
+
+**Two consequences for the owner to decide** (not changed here):
+- **Experimental's automatic beat crossovers.** Each one puts the weight on both feet, and getting
+  back to one foot now takes up to 0.25 s. A load that starts just after a beat begins on two feet,
+  so whether a jump stands can depend on where the music's beat fell. A possible fix: no automatic
+  crossover while the standing trigger is held toward a load. That changes the mapping, so it's the
+  owner's call.
+- **The career's measured rival scores** (`game/rivals.ts` `BASELINE`), re-measured on Simulation
+  with the transfer on (`rival_baseline.mjs`):
+
+  | Event | Was | Now |
+  |---|---|---|
+  | first-ice | 16.5 | 16.7 |
+  | club-debut | 16.7 | 10.6 (range 10.0–17.4) |
+  | jump-showcase | 17.5 | 18.0 |
+  | regional | 16.0 | 14.4 |
+  | finale | 30.9 | 34.0 |
+  | sectionals | 15.5 | 15.2 |
+  | gala | 16.4 | 16.8 |
+
+  Season two's three events had no clean run on the default settings. `BASELINE` is unchanged until
+  the owner decides.
 
 **A stroke changes with it.** A push acts only while the pushing blade is on the ice
 (`if (push.inContact)`). With the transfer, the push keeps acting through the overlap while the

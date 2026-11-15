@@ -39,11 +39,12 @@ test("swung smoothly over a deep edge, the free leg adds spin its own way round"
   // MEASURED (7 m/s, lean 0.9, eased 0.5 s swing; the pendulum with the arms
   // in Experimental): salchow LBI, right leg free, 10.55 -> 12.05; loop RBO,
   // left leg free (clockwise), 10.55 -> 9.05. (The ankle alone: 10.51 ->
-  // 12.01, -> 9.01; without the pendulum: 10.58 -> 12.08, -> 9.08.)
+  // 12.01, -> 9.01; without the pendulum: 10.58 -> 12.08, -> 9.08.) Since the
+  // legs move the load over time (2026-11-14): 10.50 -> 12.00, -> 9.01.
   const near = (x: number, y: number) => Math.abs(x - y) < 0.02;
   const salchow = [takeoff(0, -0.9, null), takeoff(0, -0.9, 0.5)], loop = [takeoff(1, -0.9, null), takeoff(1, -0.9, 0.5)];
-  assert.ok(near(salchow[0].L, 10.547) && near(salchow[1].L, 12.045), `salchow ${salchow.map(r => r.L.toFixed(2)).join(" -> ")}`);
-  assert.ok(near(loop[0].L, 10.547) && near(loop[1].L, 9.05), `loop ${loop.map(r => r.L.toFixed(2)).join(" -> ")}`);
+  assert.ok(near(salchow[0].L, 10.503) && near(salchow[1].L, 12.000), `salchow ${salchow.map(r => r.L.toFixed(2)).join(" -> ")}`);
+  assert.ok(near(loop[0].L, 10.503) && near(loop[1].L, 9.006), `loop ${loop.map(r => r.L.toFixed(2)).join(" -> ")}`);
 });
 
 test("snapped, the free leg twists the blade loose: a fall", () => {

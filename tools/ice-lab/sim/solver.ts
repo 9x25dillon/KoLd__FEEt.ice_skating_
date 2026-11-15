@@ -100,26 +100,32 @@ const legKnees = (input: SkatingInput, floor = 0): [number, number] => {
 const supportKnee = ([l, r]: [number, number], weightR: number): number => l + weightR * (r - l);
 
 /**
- * THE WEIGHT TRANSFER (weightTransferMode). The right blade's share of the
- * load, moved toward the asked share as a critically damped second-order
- * response: it starts and finishes at rate zero, never overshoots from rest,
- * and is snapped to the ask within TRANSFER_EPS (which is where a blade that
- * is giving up the load leaves the ice). TRANSFER_SETTLE is the x at which
- * (1 + x) e^-x = TRANSFER_EPS, so a whole transfer, 0 to 1, takes
- * weightTransferTime. A move that owns its foot, or the first tick on the ice
- * after the air, sets the share outright.
+ * THE WEIGHT TRANSFER (weightTransferMode). How far the load sits toward the
+ * right blade from an even split (loadBias: the right's share less one half,
+ * -0.5 all left .. 0.5 all right), moved toward the asked bias as a critically
+ * damped second-order response: it starts and finishes at rate zero, never
+ * overshoots from rest, and is snapped to the ask within TRANSFER_EPS (which
+ * is where a blade that is giving up the load leaves the ice).
+ * TRANSFER_SETTLE is the x at which (1 + x) e^-x = TRANSFER_EPS, so a whole
+ * transfer, one blade to the other, takes weightTransferTime. A move that owns
+ * its foot, or the first tick on the ice after the air, sets it outright.
+ *
+ * Kept as a bias about the even split, not as a share, so the mirror is exact:
+ * every operation on it is odd, and IEEE arithmetic negates exactly, where
+ * 1 - share does not round the way share does (the mirror test measured
+ * 1.2e-14 m of drift with a share).
  */
 const TRANSFER_EPS = 0.005, TRANSFER_SETTLE = 7.43;
 function transferLoad(s: SkaterState, p: Params, dt: number, asked: number, owned: boolean): number {
   s.loadAsked = asked;
-  if (owned || s.loadR === undefined) { s.loadR = asked; s.loadRate = 0; return asked; }
+  if (owned || s.loadBias === undefined) { s.loadBias = asked; s.loadRate = 0; return asked; }
   const w = TRANSFER_SETTLE / p.weightTransferTime;
-  let rate = (s.loadRate ?? 0) + (w * w * (asked - s.loadR) - 2 * w * (s.loadRate ?? 0)) * dt;
-  let load = s.loadR + rate * dt;
-  if (load <= 0 || load >= 1) { load = clamp(load, 0, 1); rate = 0; }
-  if (Math.abs(asked - load) < TRANSFER_EPS && Math.abs(rate) < TRANSFER_EPS * w) { load = asked; rate = 0; }
-  s.loadR = load; s.loadRate = rate;
-  return load;
+  let rate = (s.loadRate ?? 0) + (w * w * (asked - s.loadBias) - 2 * w * (s.loadRate ?? 0)) * dt;
+  let bias = s.loadBias + rate * dt;
+  if (bias <= -0.5 || bias >= 0.5) { bias = clamp(bias, -0.5, 0.5); rate = 0; }
+  if (Math.abs(asked - bias) < TRANSFER_EPS && Math.abs(rate) < TRANSFER_EPS * w) { bias = asked; rate = 0; }
+  s.loadBias = bias; s.loadRate = rate;
+  return bias;
 }
 
 /**
@@ -131,8 +137,8 @@ function transferLoad(s: SkaterState, p: Params, dt: number, asked: number, owne
  * sum to zero at every share.
  */
 function stanceOffset(s: SkaterState, p: Params, i: number): number {
-  if (p.weightTransferMode === 1 && s.loadR !== undefined)
-    return i === FOOT.Left ? 2 * p.stanceHalfWidth * s.loadR : -2 * p.stanceHalfWidth * (1 - s.loadR);
+  if (p.weightTransferMode === 1 && s.loadBias !== undefined)
+    return i === FOOT.Left ? p.stanceHalfWidth * (1 + 2 * s.loadBias) : -p.stanceHalfWidth * (1 - 2 * s.loadBias);
   return s.supportMode === 2 ? (i === FOOT.Left ? p.stanceHalfWidth : -p.stanceHalfWidth) : 0;
 }
 
@@ -657,7 +663,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     ...(p.pitchMode === 1 ? { pitch: 0, pitchRate: 0, pitchContact: 0, pitchOffTime: 0, contactAsked: [0.5, 0.5] as [number, number], digL: 0 } : {}),
     ...(p.pitchMode === 1 && p.pitchInternalMode === 1 ? { pitchAnkle: 0, pitchIntAccel: 0 } : {}),
     // Two feet, an even share: what supportMode 2 above already says.
-    ...(p.weightTransferMode === 1 ? { loadR: 0.5, loadRate: 0, loadAsked: 0.5 } : {}),
+    ...(p.weightTransferMode === 1 ? { loadBias: 0, loadRate: 0, loadAsked: 0 } : {}),
   };
 }
 
@@ -760,7 +766,7 @@ export function step(
   // body and lands it. Unreachable while jumpMode is 0.
   if (s.jump.phase === JUMP_PHASE.Air) {
     // No blade carries anything in the air; the landing foot takes the load whole.
-    if (p.weightTransferMode === 1) s.loadR = s.loadRate = undefined;
+    if (p.weightTransferMode === 1) s.loadBias = s.loadRate = undefined;
     jumpAir(s, legInput(input), pFatigue, dt, events);
     // A landing resolves INSIDE jumpAir, on this early-return path — the only
     // one there is, every landing goes through it — so this is the one place
@@ -882,11 +888,12 @@ export function step(
   // A move is made on one foot: the pivot or spinning foot, and after a mohawk's cusp the other.
   const loadFoot = !turning ? -1 : s.move === MOVE.Spin ? s.spin.foot : turnLoadFoot(s);
   // An Ina Bauer is on both feet, whatever the weight input says.
-  // weightTransferMode: the legs move the load over time toward the share asked.
-  const shareR = p.weightTransferMode !== 1 ? weightR
-    : transferLoad(s, p, dt, loadFoot >= 0 ? loadFoot : ina ? 0.5 : weightR, loadFoot >= 0 || ina);
+  // weightTransferMode: the legs move the load over time toward the share asked,
+  // as a bias about the even split (transferLoad).
+  const bias = p.weightTransferMode !== 1 ? 0
+    : transferLoad(s, p, dt, loadFoot >= 0 ? loadFoot - 0.5 : ina ? 0 : weightR - 0.5, loadFoot >= 0 || ina);
   const weights = loadFoot === FOOT.Right ? [0, 1] : loadFoot === FOOT.Left ? [1, 0]
-    : ina ? [0.5, 0.5] : [1 - shareR, shareR];
+    : ina ? [0.5, 0.5] : p.weightTransferMode === 1 ? [0.5 - bias, 0.5 + bias] : [1 - weightR, weightR];
   let loaded = 0;
   for (let i = 0; i < 2; i++) {
     const b = s.blade[i];
