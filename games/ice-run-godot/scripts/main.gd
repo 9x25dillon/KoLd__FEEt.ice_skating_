@@ -2033,6 +2033,16 @@ func smoke_planning_ui() -> bool:
 	var result: Dictionary = frame.result
 	focus_event = 0
 	show_page("event")
+	# A menu with requests still in flight is not idle. The kiss-and-cry and podium clips are baked on
+	# request (motionTrack), and winding the clock back while they are out made THEM 20 s late, so the
+	# link failed on the spot. That was this check, not the link: the host answers in ~90 ms. Let them land.
+	var settle := Time.get_ticks_msec()
+	while link.busy() and not link.faulted and Time.get_ticks_msec() - settle < 5000:
+		OS.delay_msec(10)
+		link._process(0.0)
+	if link.busy():
+		push_error("Link: replies still outstanding after 5 s: %s" % str(link.pending.values()))
+		return false
 	# As if the player read this page for a while, then a request whose reply has not had time to arrive:
 	# a quiet spell in a menu is not a late reply.
 	link.last_reply -= 20000

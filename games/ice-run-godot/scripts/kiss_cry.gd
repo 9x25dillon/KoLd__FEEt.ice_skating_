@@ -67,8 +67,13 @@ func present(model: String, costume: Dictionary, kc: Dictionary) -> Array:
 	return ids
 
 func play_track(track: Dictionary) -> void:
+	# Every baked clip reaches here, the podium's too (main.gd routes motionTrack to both), so keep
+	# only this sequence's own, and only while it runs: a cleared bench must stay empty.
+	var id := str(track.get("id",""))
+	if not running or not sequence.any(func(x): return str(x.clip) == id):
+		return
 	# A clip that was due before its track arrived starts as soon as _process sees it.
-	tracks[str(track.get("id",""))] = track
+	tracks[id] = track
 
 func _process(dt: float) -> void:
 	if not running:
