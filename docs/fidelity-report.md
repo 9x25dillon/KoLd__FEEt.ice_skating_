@@ -8,7 +8,7 @@ Preset under test **`responsive`** (the public build's boot preset); reference *
 
 ## Gate
 
-**Gate not met.** 11 pass, 0 fail, 25 unsourced, 0 unmodelled, of 36 cases.
+**Gate not met.** 11 pass, 0 fail, 25 unsourced, 2 unmodelled, of 38 cases.
 
 | §6.3 | Condition | State |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 
 | Class | Cases | Pass | Fail | Unsourced | Unmodelled | External passing |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| O1 carve relation | 6 | 4 | 0 | 2 | 0 | 0 / 3 |
+| O1 carve relation | 8 | 4 | 0 | 2 | 2 | 0 / 3 |
 | O2 tracing curvature | 2 | 0 | 0 | 2 | 0 | 0 / 3 |
 | O3 edge transitions | 7 | 0 | 0 | 7 | 0 | 0 / 3 |
 | O4 speed decay | 5 | 1 | 0 | 4 | 0 | 1 / 3 |
@@ -38,7 +38,7 @@ External passing counts literature cases only once `primary_checked` is true (§
 | `air_time_height_residual_m` | 2 | 2 | 0 | 0 | 0 |
 | `air_time_s` | 5 | 4 | 0 | 1 | 0 |
 | `carve_held` | 1 | 0 | 0 | 1 | 0 |
-| `carve_lean_deg` | 1 | 0 | 0 | 1 | 0 |
+| `carve_lean_deg` | 3 | 0 | 0 | 1 | 2 |
 | `carve_lean_residual_deg` | 4 | 4 | 0 | 0 | 0 |
 | `crossover_gain_ms` | 1 | 0 | 0 | 1 | 0 |
 | `glide_decel_ms2` | 4 | 1 | 0 | 3 | 0 |
@@ -59,19 +59,24 @@ External passing counts literature cases only once `primary_checked` is true (§
 
 ## Sourced cases
 
-| Case | Source | Observable | Expected | Tolerance | Actual | Deviation | Verdict | `spec` |
-| --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
-| `air-time-double-axel-koga2025` | literature | `air_time_s` | 0.5100 s | 0.0640 | 0.7250 | 0.2150 | pass | pass 0.7333 |
-| `air-time-isolated-jumps-bruening2018` | literature | `air_time_s` | 0.4400 s | 0.0781 | 0.5917 | 0.1517 | pass | pass 0.5917 |
-| `air-time-single-axel-koga2025` | literature | `air_time_s` | 0.4000 s | 0.0860 | 0.7250 | 0.3250 | pass | pass 0.7333 |
-| `air-time-waltz-jump-koga2025` | literature | `air_time_s` | 0.3600 s | 0.1118 | 0.7250 | 0.3650 | pass | pass 0.7333 |
-| `carve-residual-fast-deep` | derived | `carve_lean_residual_deg` | 0.0000 deg | 0.5000 | -0.0054 | -0.0054 | pass | fail 0.6109 |
-| `carve-residual-mid` | derived | `carve_lean_residual_deg` | 0.0000 deg | 0.5000 | 0.0032 | 0.0032 | pass | fail 0.5313 |
-| `carve-residual-slow-shallow` | derived | `carve_lean_residual_deg` | 0.0000 deg | 0.5000 | 0.0031 | 0.0031 | pass | fail (no steady window (fidelity-gate §4.4)) |
-| `carve-residual-two-foot` | derived | `carve_lean_residual_deg` | 0.0000 deg | 0.5000 | 0.0517 | 0.0517 | pass | fail (no steady window (fidelity-gate §4.4)) |
-| `flight-residual-full-jump-moves` | derived | `air_time_height_residual_m` | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
-| `flight-residual-hop` | derived | `air_time_height_residual_m` | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
-| `glide-hockey-sled-federolf2008` | literature | `glide_decel_ms2` | 0.0697 m/s^2 | 0.0181 | 0.0720 | 0.0024 | pass | pass 0.0720 |
+**Comparison** says how the case is judged. `±`: two-sided, passes when the deviation is within the tolerance
+either way. `≥`: one-sided, the model must reach at least the expected value less the tolerance, and any amount
+above it passes. `≤`: the mirror, at most the expected value plus the tolerance. So a `≥` or `≤` case can pass with
+a deviation larger than its tolerance, and such a pass says nothing about how far the model overshoots.
+
+| Case | Source | Observable | Comparison | Expected | Tolerance | Actual | Deviation | Verdict | `spec` |
+| --- | --- | --- | :---: | ---: | ---: | ---: | ---: | --- | --- |
+| `air-time-double-axel-koga2025` | literature | `air_time_s` | ≥ | 0.5100 s | 0.0640 | 0.7250 | 0.2150 | pass | pass 0.7333 |
+| `air-time-isolated-jumps-bruening2018` | literature | `air_time_s` | ≥ | 0.4400 s | 0.0781 | 0.5917 | 0.1517 | pass | pass 0.5917 |
+| `air-time-single-axel-koga2025` | literature | `air_time_s` | ≥ | 0.4000 s | 0.0860 | 0.7250 | 0.3250 | pass | pass 0.7333 |
+| `air-time-waltz-jump-koga2025` | literature | `air_time_s` | ≥ | 0.3600 s | 0.1118 | 0.7250 | 0.3650 | pass | pass 0.7333 |
+| `carve-residual-fast-deep` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | -0.0054 | -0.0054 | pass | fail 0.6109 |
+| `carve-residual-mid` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0032 | 0.0032 | pass | fail 0.5313 |
+| `carve-residual-slow-shallow` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0031 | 0.0031 | pass | fail (no steady window (fidelity-gate §4.4)) |
+| `carve-residual-two-foot` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0517 | 0.0517 | pass | fail (no steady window (fidelity-gate §4.4)) |
+| `flight-residual-full-jump-moves` | derived | `air_time_height_residual_m` | ± | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
+| `flight-residual-hop` | derived | `air_time_height_residual_m` | ± | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
+| `glide-hockey-sled-federolf2008` | literature | `glide_decel_ms2` | ± | 0.0697 m/s^2 | 0.0181 | 0.0720 | 0.0024 | pass | pass 0.0720 |
 
 ## Unsourced (25)
 
@@ -103,5 +108,7 @@ Stubs waiting for a measurement. A null expectation is correct; an invented numb
 - `trace-radius-overhead-footage` — footage, `trace_radius_m`
 - `twizzle-rate-footage` — footage, `twizzle_rate_rps`
 
-## Unmodelled (0)
+## Unmodelled (2)
 
+- `carve-lean-speedskate-curve-left-kimura2024` — needs speed-skate
+- `carve-lean-speedskate-curve-right-kimura2024` — needs speed-skate

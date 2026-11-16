@@ -11,6 +11,7 @@ on:
       - "games/ice-run-unreal/**"
       - "data/validation/**"
       - "docs/fidelity-gate.md"
+      - "README.md"
       - ".github/workflows/ice-lab-checks.yml"
   push:
     paths:
@@ -19,6 +20,7 @@ on:
       - "games/ice-run-unreal/**"
       - "data/validation/**"
       - "docs/fidelity-gate.md"
+      - "README.md"
       - ".github/workflows/ice-lab-checks.yml"
   workflow_dispatch:
 
@@ -39,18 +41,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: node --test test/*.test.ts
+      # Each suite prints its usual report and also writes TAP beside it, so the
+      # README's status block can be stamped from these runs without running them twice.
+      - run: >-
+          node --test
+          --test-reporter=spec --test-reporter-destination=stdout
+          --test-reporter=tap --test-reporter-destination="$RUNNER_TEMP/ice-lab.tap"
+          test/*.test.ts
       - run: node app/build.mjs
       - run: node replay/verify.ts test/fixtures/replay-v1.json
       - name: Verify the Godot engine bridge
         working-directory: .
         run: |
           node games/ice-run-godot/tools/prepare.mjs --engine-only
-          node --test games/ice-run-godot/tests/*.test.mjs
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination="$RUNNER_TEMP/godot.tap" games/ice-run-godot/tests/*.test.mjs
       # No Unreal on the runner: the contract and port checks run; the live smoke skips itself.
       - name: Verify the Unreal client's bridge contract
         working-directory: .
-        run: node --test games/ice-run-unreal/tests/*.test.mjs
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination="$RUNNER_TEMP/unreal.tap" games/ice-run-unreal/tests/*.test.mjs
       # The fidelity gate (docs/fidelity-gate.md): exit 1 on any failing sourced
       # case. The human report goes to the log; the JSON is kept as an artifact;
       # the Markdown report is regenerated over the committed one.
@@ -62,6 +70,13 @@ jobs:
       # produces, byte for byte. A stale report fails the build.
       - name: Fidelity report is current
         run: git diff --exit-code -- ../../docs/fidelity-report.md
+      # The README's status block (test counts, replay verdict, gate verdict and
+      # coverage) is generated from the runs above, by the same rule as the
+      # fidelity report: a committed block that differs by a byte fails the build.
+      - name: README status block is current
+        run: |
+          node status.mjs --logs "$RUNNER_TEMP" --write
+          git diff --exit-code -- ../../README.md
       - uses: actions/upload-artifact@v4
         if: always()
         with:

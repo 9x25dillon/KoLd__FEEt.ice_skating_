@@ -123,6 +123,13 @@ var test_seconds := 0.0
 var screenshot_test := false
 var screenshot_saved := false
 var tick_debt := 0.0
+# The debt clamp, counted. The game owes the solver 120 ticks a second and asks for at most 12 at
+# once, so when the bridge is late by more than 100 ms the ticks past 12 are discarded: the program
+# clock, and the music set to it, fall behind the wall clock. That was silent. These are per run.
+var debt_dropped := 0.0   # sim ticks the clamp discarded
+var debt_frames := 0      # physics frames on which it discarded any
+var debt_high := 0.0      # the highest debt reached, in ticks
+var debt_episode := 0.0   # ticks discarded by the saturation still going on
 var test_stage := 0
 var test_wait := 0.0
 var settings_path := "user://preferences.json"
@@ -1661,6 +1668,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		toe_pending = false
 		trick_pending = false
 		tick_debt = 0.0
+		reset_debt()
 		arena.clear_traces()
 		arena.set_course(str(frame.mode),catalog)
 		apply_who()
@@ -2010,11 +2018,32 @@ func _input(event: InputEvent) -> void:
 			JOY_BUTTON_BACK:
 				cycle_camera()
 
+# IceRunGameMode.cpp CountDebt: the same counters, the same log lines.
+func count_debt(lost: float) -> void:
+	debt_high = maxf(debt_high,tick_debt)
+	if lost>0.0:
+		debt_dropped += lost
+		debt_frames += 1
+		debt_episode += lost
+	elif debt_episode>0.0:
+		print("Tick debt: the clamp dropped %.1f sim ticks (%.0f ms of the program); %.1f this run, on %d frames." % [debt_episode,debt_episode*1000.0/120.0,debt_dropped,debt_frames])
+		debt_episode = 0.0
+
+func reset_debt() -> void:
+	if debt_dropped>0.0:
+		print("Tick debt: the last run lost %.1f sim ticks (%.0f ms of the program) on %d frames; highest debt %.1f of 12." % [debt_dropped,debt_dropped*1000.0/120.0,debt_frames,debt_high])
+	debt_dropped = 0.0
+	debt_frames = 0
+	debt_high = 0.0
+	debt_episode = 0.0
+
 func _physics_process(dt: float) -> void:
 	if not playing or link == null or not link.operational:
 		tick_debt = 0.0
 		return
-	tick_debt = minf(12.0,tick_debt+dt*120.0)
+	var owed := tick_debt+dt*120.0
+	tick_debt = minf(12.0,owed)
+	count_debt(owed-tick_debt)
 	if link.busy():
 		return
 	var ticks := mini(12,int(tick_debt))

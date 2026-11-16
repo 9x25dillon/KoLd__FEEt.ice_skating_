@@ -314,6 +314,13 @@ are **not** to be entered as `expected` until checked.
 - **`rut-depth-hockey-lever2022`** — rut depth 0.18 ± 0.08 mm, width 4.16 ± 0.47 mm, primary
   ([LEVER] Table 3). **No current observable.** Ice Lab does not model penetration. Recorded for the
   tracing renderer and for any future ice-state grid.
+- **`carve-lean-speedskate-curve-{right,left}-kimura2024`** — O1 `carve_lean_deg`, *added 2026-11-14*.
+  Kimura and Yokozawa 2024 (Frontiers in Sports and Active Living, open access, read in full): fourteen
+  world-class women in a long-track curve, body tilt 32.18 ± 1.79° at 12.37 m/s on a 26.14 m
+  centre-of-mass radius (right stroke) and 28.00 ± 1.95° at 12.41 m/s on 28.22 m (left). Primary, and
+  **unmodelled**: speed skates, stroking, at a speed and radius the model's figure blade cannot hold.
+  The measured tilts agree with atan(a / g) to within 2.7° on all six rows of the paper. See
+  [divergences/speedskate-curve-out-of-envelope.md](divergences/speedskate-curve-out-of-envelope.md).
 
 ---
 

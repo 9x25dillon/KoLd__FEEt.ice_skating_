@@ -1,0 +1,74 @@
+{
+  "id": "carve-lean-speedskate-curve-right-kimura2024",
+  "kind": "carve",
+  "role": "validation",
+  "source": {
+    "type": "literature",
+    "citation": "Kimura Y, Yokozawa T (2024). Skating techniques of ladies' world-class long-distance speed skaters to shorten curved-section time during the official 3,000 m race. Frontiers in Sports and Active Living 6, 1396219. doi:10.3389/fspor.2024.1396219. PMC11153739. CC BY 4.0. Table 2 (centripetal acceleration, directional velocity, curvature radius) and Table 4 (body-tilt angle), Right stroke, initial stage.",
+    "primary_checked": true,
+    "notes": "Open access; read in the full text (Europe PMC full-text XML of PMC11153739, 2026-11-14), so primary outright. Fourteen world-class women (27.57 +/- 6.21 y, 1.68 +/- 0.07 m, 60.36 +/- 6.80 kg) in the 3,000 m at the 2019-2020 ISU Speed Skating World Cup, filmed through the first inner curve lane by three 300 Hz cameras, 25 points digitised at 50 Hz, three-dimensional by panning DLT, control-point standard errors 0.011-0.014 m. Right stroke, initial stage (laps 3-4), mean +/- SD over the skaters: directional velocity 12.37 +/- 0.33 m/s; curvature radius of the centre-of-mass path 26.14 +/- 1.59 m; centripetal acceleration 6.25 +/- 0.32 m/s^2; body-tilt angle 32.18 +/- 1.79 deg, defined as the angle from vertical of the line from the ankle joint to the whole-body centre of mass, in the plane across the travel, averaged over the stroke. That is fidelity-gate's phi but for the ankle in place of the blade contact; the radius is the centre-of-mass radius, so no conversion is needed. u_m is the SD across skaters. The point-mass balance lean for the reported acceleration, atan(a/g), is 32.50 deg. WHY UNMODELLED (`speed-skate`): these are long-track speed skates under a skater who is stroking, at a speed and radius outside a figure blade's envelope. On the gate's preset the model's bite law caps a 26 m curve at 3.48 m/s^2 (9.5 m/s, 19.5 deg): asked for this curve it skids inside 0.05 s and the edge holds again at 8.9 m/s (tools/ice-lab/test/speedskate-curve.test.ts). A case may not change the blade (fidelity-gate section 3), so the run cannot produce the observable, and the cause is the blade and the regime, not a finding about a figure skate. Recorded with its expectation and its script so the measurement is not lost and the verdict changes by itself if a speed blade is ever modelled. See docs/divergences/speedskate-curve-out-of-envelope.md. The script is the attempt: the paper's speed, the paper's tilt commanded, no push. The initial stage was chosen before any run, as the first row of each table; the other rows are not cased: right middle 30.97 +/- 2.53 deg at 5.94 m/s^2, right final 31.19 +/- 1.45 deg at 5.85 m/s^2. Population: world-class women on speed skates, not the reference figure skater; mass and height are the paper's means."
+  },
+  "requires": [
+    "speed-skate"
+  ],
+  "skater": {
+    "mass_kg": 60.36,
+    "height_m": 1.68
+  },
+  "venue": {
+    "venue_type": "competition",
+    "indoor": null,
+    "elevation_m": null,
+    "slab": null,
+    "ice_surface_temp_c": null,
+    "air_temp_c": null,
+    "air_rh_pct": null,
+    "air_density_kg_m3": null,
+    "water_tds_ppm": null,
+    "ice_hardness_shore_d": null,
+    "minutes_since_resurface": null,
+    "surface": {
+      "profile": "unknown",
+      "relief_mm": null,
+      "measured": false,
+      "method": ""
+    },
+    "rink_location": "corner",
+    "travel_direction": "counterclockwise",
+    "paired_case": null
+  },
+  "inputs": {
+    "initial": {
+      "speed_ms": 12.37,
+      "lean_rad": 0.0
+    },
+    "modes": {
+      "jumpMode": 0,
+      "movesMode": 0
+    },
+    "script": [
+      {
+        "seconds": 8.0,
+        "input": {
+          "lean": 0.497,
+          "weight": 1.0
+        }
+      }
+    ],
+    "clip": null
+  },
+  "observable": {
+    "name": "carve_lean_deg",
+    "window": "steady",
+    "radius": "com"
+  },
+  "expected": {
+    "comparison": "within",
+    "value": 32.18,
+    "unit": "deg",
+    "measurement_uncertainty": 1.79,
+    "band": 3,
+    "tolerance": 3.4934367033052136,
+    "confidence": "L1"
+  }
+}

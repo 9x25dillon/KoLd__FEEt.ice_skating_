@@ -68,8 +68,10 @@ must still pass, but never count toward coverage ([gate §7.2](../../docs/fideli
 
 **`requires`** — model features the case needs. Current features: `jumps`, `moves`, `three-turn`,
 `mohawk`, `bracket`, `twizzle`, `spin`, `ina-bauer`, `crossover`, `loop`, `rocker-turn`, `counter`,
-`spiral`, `choctaw`. A feature not in that list — for example `kerrigan-spiral` — makes the verdict
-*unmodelled*.
+`spiral`, `choctaw`. A feature not in that list — for example `kerrigan-spiral`, or the `speed-skate`
+blade the two long-track curve cases need — makes the verdict *unmodelled*. An unmodelled case may
+still carry its sourced `expected` and the script that attempts it, so the measurement is kept and the
+verdict changes by itself when the feature is added.
 
 **`skater`** — `null` for the reference skater (55 kg, 1.65 m), or `{ "mass_kg", "height_m" }`. Stats
 stay at the neutral 50 ([open-constants §12](../../docs/open-constants.md#12--outside-the-gate)).

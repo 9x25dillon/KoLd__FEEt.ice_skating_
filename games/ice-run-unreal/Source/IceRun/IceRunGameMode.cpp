@@ -218,6 +218,35 @@ void AIceRunGameMode::EndPlay(const EEndPlayReason::Type Reason)
 	Super::EndPlay(Reason);
 }
 
+// main.gd count_debt: the same counters, the same log lines.
+void AIceRunGameMode::CountDebt(double Lost)
+{
+	DebtHigh = FMath::Max(DebtHigh, TickDebt);
+	if (Lost > 0.0)
+	{
+		DebtDropped += Lost;
+		DebtFrames++;
+		DebtEpisode += Lost;
+	}
+	else if (DebtEpisode > 0.0)
+	{
+		UE_LOG(LogIceRun, Warning, TEXT("Tick debt: the clamp dropped %.1f sim ticks (%.0f ms of the program); %.1f this run, on %d frames."), DebtEpisode, DebtEpisode * 1000.0 / 120.0, DebtDropped, DebtFrames);
+		DebtEpisode = 0.0;
+	}
+}
+
+void AIceRunGameMode::ResetDebt()
+{
+	if (DebtDropped > 0.0)
+	{
+		UE_LOG(LogIceRun, Warning, TEXT("Tick debt: the last run lost %.1f sim ticks (%.0f ms of the program) on %d frames; highest debt %.1f of 12."), DebtDropped, DebtDropped * 1000.0 / 120.0, DebtFrames, DebtHigh);
+	}
+	DebtDropped = 0.0;
+	DebtFrames = 0;
+	DebtHigh = 0.0;
+	DebtEpisode = 0.0;
+}
+
 void AIceRunGameMode::Fail(const FString& Message)
 {
 	bFaulted = true;
@@ -557,6 +586,7 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		WearWho();
 		bPlaying = true;
 		TickDebt = 0.0;
+		ResetDebt();
 		LastLandingTick = -1;
 		StartMusic();
 		Announce(TEXT("TAKE THE ICE"), RunPlace());
@@ -894,7 +924,9 @@ void AIceRunGameMode::Tick(float DeltaSeconds)
 	else
 	{
 		// main.gd _physics_process: 120 Hz owed, at most 12 at once, one request in flight.
-		TickDebt = FMath::Min(12.0, TickDebt + DeltaSeconds * 120.0);
+		const double Owed = TickDebt + DeltaSeconds * 120.0;
+		TickDebt = FMath::Min(12.0, Owed);
+		CountDebt(Owed - TickDebt);
 		const int32 Ticks = FMath::Min(12, FMath::FloorToInt32(TickDebt));
 		AIceRunPlayerController* PC = Player();
 		if (!Bridge.Busy() && Ticks >= 1 && PC)
