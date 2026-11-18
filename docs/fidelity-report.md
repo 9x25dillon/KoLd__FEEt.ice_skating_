@@ -63,20 +63,32 @@ External passing counts literature cases only once `primary_checked` is true (§
 either way. `≥`: one-sided, the model must reach at least the expected value less the tolerance, and any amount
 above it passes. `≤`: the mirror, at most the expected value plus the tolerance. So a `≥` or `≤` case can pass with
 a deviation larger than its tolerance, and such a pass says nothing about how far the model overshoots.
+**Two-sided** is a report-only diagnostic for `≥` / `≤` cases showing whether `|deviation| ≤ tolerance` (`✓`, or
+`over by X` / `under by X` for the excess beyond the two-sided band `|deviation| − tolerance`); it is not gated and never affects any verdict, count, or exit code.
 
-| Case | Source | Observable | Comparison | Expected | Tolerance | Actual | Deviation | Verdict | `spec` |
-| --- | --- | --- | :---: | ---: | ---: | ---: | ---: | --- | --- |
-| `air-time-double-axel-koga2025` | literature | `air_time_s` | ≥ | 0.5100 s | 0.0640 | 0.7250 | 0.2150 | pass | pass 0.7333 |
-| `air-time-isolated-jumps-bruening2018` | literature | `air_time_s` | ≥ | 0.4400 s | 0.0781 | 0.5917 | 0.1517 | pass | pass 0.5917 |
-| `air-time-single-axel-koga2025` | literature | `air_time_s` | ≥ | 0.4000 s | 0.0860 | 0.7250 | 0.3250 | pass | pass 0.7333 |
-| `air-time-waltz-jump-koga2025` | literature | `air_time_s` | ≥ | 0.3600 s | 0.1118 | 0.7250 | 0.3650 | pass | pass 0.7333 |
-| `carve-residual-fast-deep` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | -0.0054 | -0.0054 | pass | fail 0.6109 |
-| `carve-residual-mid` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0032 | 0.0032 | pass | fail 0.5313 |
-| `carve-residual-slow-shallow` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0031 | 0.0031 | pass | fail (no steady window (fidelity-gate §4.4)) |
-| `carve-residual-two-foot` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0517 | 0.0517 | pass | fail (no steady window (fidelity-gate §4.4)) |
-| `flight-residual-full-jump-moves` | derived | `air_time_height_residual_m` | ± | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
-| `flight-residual-hop` | derived | `air_time_height_residual_m` | ± | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | pass -0.0010 |
-| `glide-hockey-sled-federolf2008` | literature | `glide_decel_ms2` | ± | 0.0697 m/s^2 | 0.0181 | 0.0720 | 0.0024 | pass | pass 0.0720 |
+| Case | Source | Observable | Comparison | Expected | Tolerance | Actual | Deviation | Verdict | Two-sided | `spec` |
+| --- | --- | --- | :---: | ---: | ---: | ---: | ---: | --- | :---: | --- |
+| `air-time-double-axel-koga2025` | literature | `air_time_s` | ≥ | 0.5100 s | 0.0640 | 0.7250 | 0.2150 | pass | over by 0.1510 | pass 0.7333 |
+| `air-time-isolated-jumps-bruening2018` | literature | `air_time_s` | ≥ | 0.4400 s | 0.0781 | 0.5917 | 0.1517 | pass | over by 0.0736 | pass 0.5917 |
+| `air-time-single-axel-koga2025` | literature | `air_time_s` | ≥ | 0.4000 s | 0.0860 | 0.7250 | 0.3250 | pass | over by 0.2390 | pass 0.7333 |
+| `air-time-waltz-jump-koga2025` | literature | `air_time_s` | ≥ | 0.3600 s | 0.1118 | 0.7250 | 0.3650 | pass | over by 0.2532 | pass 0.7333 |
+| `carve-residual-fast-deep` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | -0.0054 | -0.0054 | pass | — | fail 0.6109 |
+| `carve-residual-mid` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0032 | 0.0032 | pass | — | fail 0.5313 |
+| `carve-residual-slow-shallow` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0031 | 0.0031 | pass | — | fail (no steady window (fidelity-gate §4.4)) |
+| `carve-residual-two-foot` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0517 | 0.0517 | pass | — | fail (no steady window (fidelity-gate §4.4)) |
+| `flight-residual-full-jump-moves` | derived | `air_time_height_residual_m` | ± | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | — | pass -0.0010 |
+| `flight-residual-hop` | derived | `air_time_height_residual_m` | ± | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | — | pass -0.0010 |
+| `glide-hockey-sled-federolf2008` | literature | `glide_decel_ms2` | ± | 0.0697 m/s^2 | 0.0181 | 0.0720 | 0.0024 | pass | — | pass 0.0720 |
+
+## Diagnostics (not gated)
+
+Report-only measurements attached to cases for inspection; never affects any verdict, coverage count, or exit code.
+
+| Case | Observable | Expected | SD | Actual | Deviation | Within ±SD | `spec` |
+| --- | --- | ---: | ---: | ---: | ---: | :---: | --- |
+| `air-time-double-axel-koga2025` | `takeoff_vz` | 2.7300 m/s | 0.3100 | 3.5754 | 0.8454 | over by 0.5354 | 3.6228 |
+| `air-time-single-axel-koga2025` | `takeoff_vz` | 2.2400 m/s | 0.4200 | 3.5754 | 1.3354 | over by 0.9154 | 3.6228 |
+| `air-time-waltz-jump-koga2025` | `takeoff_vz` | 1.7700 m/s | 0.4600 | 3.5754 | 1.8054 | over by 1.3454 | 3.6228 |
 
 ## Unsourced (25)
 

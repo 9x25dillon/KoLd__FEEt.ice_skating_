@@ -1,5 +1,22 @@
 // Types for validate.mjs, which stays plain JavaScript so it runs as `node validate.mjs`.
 
+export interface TwoSidedDiagnostic {
+  deviation: number;
+  within: boolean;
+}
+
+export interface CaseDiagnostic {
+  observable: string;
+  expected: number;
+  sd: number;
+  unit: string;
+  gated: false;
+  actual: number | null;
+  deviation: number | null;
+  within_sd: boolean | null;
+  reason?: string;
+}
+
 export interface CaseResult {
   id: string;
   kind?: string;
@@ -15,8 +32,10 @@ export interface CaseResult {
   unit?: string;
   actual?: number;
   deviation?: number;
+  twoSided?: TwoSidedDiagnostic;
+  diagnostics?: CaseDiagnostic[];
   divergence?: { tick: number; expected: number; actual: number };
-  spec?: { verdict: string; actual: number | null; reason?: string };
+  spec?: { verdict: string; actual: number | null; reason?: string; diagnostics?: CaseDiagnostic[] };
 }
 
 export interface FidelityReport {

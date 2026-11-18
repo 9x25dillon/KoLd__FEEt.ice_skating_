@@ -115,5 +115,14 @@
     "band": 0.05,
     "tolerance": 0.1118033988749895,
     "confidence": "L1"
-  }
+  },
+  "diagnostics": [
+    {
+      "observable": "takeoff_vz",
+      "value": 1.77,
+      "sd": 0.46,
+      "unit": "m/s",
+      "gated": false
+    }
+  ]
 }
