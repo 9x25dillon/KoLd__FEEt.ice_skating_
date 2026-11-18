@@ -1,3 +1,4 @@
+import { stepClipFrame } from './motion/stepclips.ts';
 import { CareerState, Choreography, CAREER_EVENTS, CUSTOM_STYLE, ELEMENTS, MEDALS, seasonEnds, seasonOf } from "./career.ts";
 import type { ElementId } from "./career.ts";
 import { addElement, canAdd, moveEarlier, planRows, removeAt } from "./programplan.ts";
@@ -411,6 +412,7 @@ function draw(_now: number) {
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  scene.stepMotion = stepClipFrame(skater, !playback && choreography && !choreography.done ? choreography.current : null);
   scene.draw(ctx, width, height, skater, params, trail, cantilever, freeSkate ? null : run.collected % 12, freeSkate && !playback && !courseMode && !careerMode && !tutorial && !armDrill ? playground : null, !playback ? rookie : null, playback ? null : ghost, tutorial && !playback ? { targets: tutorial.targets, next: tutorial.target } : null);
   const note = el("ghost-note");
   note.hidden = !ghost || !!playback;

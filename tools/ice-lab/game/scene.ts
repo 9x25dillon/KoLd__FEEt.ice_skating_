@@ -1,3 +1,5 @@
+import { StepArmBlend } from './motion/stepclips.ts';
+import type { MotionFrame } from './motion/player.ts';
 import { fallSide } from "./wear.ts";
 import { animeHead } from "./anime.ts";
 import { performancePose, SKINS } from "./appearance.ts";
@@ -25,6 +27,8 @@ const GHOST_SKIN = { ...SKINS[0], bodice: "#cfeaff", highlight: "#ffffff", trim:
   sleeveShade: "#b4d6ea", skirt: "#e8f7ff", skirtShade: "#bcdcee", tights: "#a9c8de", tightsShade: "#8fb0c8", skin: "#f1f9ff", hair: "#cde4f3" } as unknown as Skin;
 
 export class SkateScene {
+  stepMotion: MotionFrame | null = null;
+  private stepArms = new StepArmBlend();
   /** Which hip each fallen skater is on, read once as the fall begins. */
   private fallSides = new WeakMap<object, number>();
   skin: Skin = SKINS[0];
@@ -34,7 +38,7 @@ export class SkateScene {
   readonly camera = new Camera();
   private map = new Camera();
   constructor() { this.camera.view = VIEW.Chase; this.camera.chaseElevation = 36; }
-  reset(s: SkaterState) { this.camera.snap(s); this.effects.reset(s); }
+  reset(s: SkaterState) { this.stepMotion = null; this.stepArms.reset(); this.camera.snap(s); this.effects.reset(s); }
   update(s: SkaterState, dt: number) { this.camera.update(s, dt); this.effects.update(s, dt); }
   /** A screen-space stick must rotate with the camera, not the spinning body. */
   worldAim(x: number, y: number) {
@@ -209,7 +213,9 @@ export class SkateScene {
     }
     // The figure, for the player and for the ghost (game/ghost.ts) alike.
     const figure = (s: SkaterState, skin: Skin, low: boolean) => {
-      const { body: b, elbows } = performancePose(s, p, this.effects.reducedMotion);
+      const rendered = performancePose(s, p, this.effects.reducedMotion);
+      if (skin === this.skin) this.stepArms.apply(rendered, s, this.stepMotion);
+      const { body: b, elbows } = rendered;
       if (low) {
         // Pose overlay only: actual blade contacts and knee compression remain physical.
         b.shoulder = { x:b.hip.x - s.heading.x * 0.48, y:b.hip.y - s.heading.y * 0.48, z:b.hip.z + 0.05 };
