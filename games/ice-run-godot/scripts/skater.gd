@@ -6,6 +6,12 @@ var state: Dictionary = {}
 # sim/support.ts, sent beside the state: who carries the skater, where the
 # pressure is, how the load is moving. Empty for a clip recorded before it.
 var support_signal: Dictionary = {}
+# game/footprep.ts, per blade: where a free foot is carried before it takes the load. Empty: none sent.
+var foot_prep: Array = []
+# The preparation as posed, eased so a switch between preparations (a crossing into a turn's hold) never jumps.
+var prep_feet: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
+var prep_amount: Array[float] = [0.0,0.0]
+const PREP_RATE := 10.0 # 1/s, AUTHORED
 # game/motion/track.ts: a clip baked into poses, played where there is no sim state (the podium).
 var track: Dictionary = {}
 var track_t := 0.0
@@ -538,6 +544,8 @@ func apply_frame(frame: Dictionary, snap: bool = false) -> void:
 	state = frame.state
 	var sent = frame.get("support")
 	support_signal = sent if sent is Dictionary else {}
+	var prep = frame.get("footPrep")
+	foot_prep = prep if prep is Array and prep.size()==2 else []
 	pose_low = frame.low
 	var next_motion = frame.get("motion")
 	motion = next_motion if next_motion is Dictionary else {}
@@ -796,6 +804,7 @@ func _process(dt: float) -> void:
 	aim_bone("Hips",hip,spine)
 	var ease_arm := 1.0-exp(-ARM_RATE*dt)
 	var ease_foot := 1.0-exp(-FOOT_RATE*dt)
+	var ease_prep := 1.0-exp(-PREP_RATE*dt)
 	# A skater's shoulders lead into a curve, and the eyes go where the ice is
 	# going: over the shoulder when travelling backward. Neither is in the sim;
 	# both are presentation only, on top of the sim's own twist.
@@ -868,6 +877,20 @@ func _process(dt: float) -> void:
 			if grounded: free.x += base.x/support
 			if camel: free = Vector3(side*.08,.94,.68)
 			elif sit: free = Vector3(side*.1,.20,-.60)
+			# Preparation (game/footprep.ts): drawn in beside the skating foot before it takes the
+			# load, crossed in front on a crossover, held in through a turn. Presentation only;
+			# the sim's own free-leg swing still turns it about the hip below.
+			else:
+				var prep_weight := 0.0
+				if grounded and foot_prep.size()==2 and foot_prep[i] is Dictionary:
+					var prep: Dictionary = foot_prep[i]
+					prep_weight = clampf(float(prep.get("weight",0)),0,1)
+					if prep_weight>0.0:
+						var at: Vector3 = to_body*SimSpace.direction(float(prep.at.x),float(prep.at.y))
+						var target := at+Vector3(0,float(prep.lift)+ankle_height,0)
+						prep_feet[i] = target if prep_amount[i]<.001 else prep_feet[i].lerp(target,ease_prep)
+				prep_amount[i] = lerpf(prep_amount[i],prep_weight,ease_prep)
+				if prep_amount[i]>.001: free = free.lerp(prep_feet[i],prep_amount[i])
 			free = h+(free-h).rotated(Vector3.UP,float(state.get("freeSwing",0)))
 		if under:
 			# The outer thigh on the ice, the knee out to that side and the foot trailing.
