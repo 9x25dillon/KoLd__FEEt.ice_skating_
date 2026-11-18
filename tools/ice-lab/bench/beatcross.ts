@@ -42,6 +42,8 @@ import { newSchemeState } from "../app/schemes.ts";
 import type { Controls, ControllerHardware } from "../app/pad.ts";
 import { ReplayRecorder, parseReplay, verifyReplay } from "../sim/replay.ts";
 import { BASELINE } from "../jpse/baseline.ts";
+import { HOLD_SUPPRESS_ENTRANCE, holdSuppressLoadTick, holdSuppressPress } from "../jpse/hold-suppress.ts";
+import type { HoldSuppressKnobs } from "../jpse/hold-suppress.ts";
 
 export interface OffsetRun {
   offsetTicks: number;
@@ -164,6 +166,88 @@ export function runOffset(k: number, p: Params): OffsetRun {
   };
 }
 
+/**
+ * The hold-suppress entrance (jpse/hold-suppress.ts) at load-phase offset k.
+ * The beat sweep shifts the load's start by prepending k released-glide ticks
+ * (the entrance's structure stays fixed; the beat grid is the game's default),
+ * the analogue of the canonical sweep's loadAt shift. Closed-loop on the game's
+ * sheet, replay-verified, same OffsetRun fields. The canonical runOffset above
+ * is untouched.
+ */
+export function runHoldSuppressOffset(k: number, p: Params, knobs: HoldSuppressKnobs = HOLD_SUPPRESS_ENTRANCE): OffsetRun {
+  const s = createState(p, knobs.speed);
+  const ice = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
+  const profile = defaultControllerProfile();
+  const st: GameControlState = newSchemeState();
+  const h: ControllerHardware = { axes: [0, 0, 0, 0], buttons: Array(16).fill(0), keys: [], connected: true };
+  const rec = new ReplayRecorder(p, knobs.speed, 0);
+  const press = holdSuppressPress(knobs, k);
+  const loadAtTick = holdSuppressLoadTick(knobs, k);
+  const cap = loadAtTick + Math.ceil(knobs.load / SIM_DT) + 240;
+  const crossSpan = Math.round(p.strokeDuration / SIM_DT);
+  let took = -1, tookTick = -1, landed = false, landTick = -1, fallTick = -1;
+  let loadStart = -1, shareAtLoad = -1, weightAskedAtLoad = -1;
+  let lastGroundShare = -1, shareAtBladeOff = -1, L = 0;
+  const crossoverTicks: number[] = [];
+  const tick = (pressFn: () => void): EdgeEvent[] => {
+    h.buttons.fill(0); h.axes = [0, 0, 0, 0];
+    pressFn();
+    const input = setupInput({ hardware: h } as Controls, s, BASELINE.setup, st, p, profile).input;
+    if (st.full?.crossUntil === s.tick + crossSpan) crossoverTicks.push(s.tick);
+    const events: EdgeEvent[] = [];
+    step(s, input, p, SIM_DT, events, ice);
+    rec.capture(input, p, s, events);
+    if (loadStart < 0 && s.jump.phase === JUMP_PHASE.Load) {
+      loadStart = s.tick;
+      shareAtLoad = supportSignal(s).share[1];
+      weightAskedAtLoad = input.weight ?? 0.5;
+    }
+    if (s.jump.phase !== JUMP_PHASE.Air && !s.fallen) lastGroundShare = supportSignal(s).share[1];
+    if (took < 0 && events.some((e) => e.type === EVENT.Takeoff)) {
+      tookTick = s.tick; shareAtBladeOff = lastGroundShare; L = s.jump.angMomentum;
+    }
+    if (events.some((e) => e.type === EVENT.Landing)) { landed = true; landTick = s.tick; }
+    if (s.fallen && fallTick < 0) fallTick = s.tick;
+    return events;
+  };
+  for (let i = 0; i < cap && !s.fallen && !landed; i++) {
+    const t = i * SIM_DT;
+    tick(() => press(h, t, i, took));
+    if (took < 0 && tookTick >= 0) took = t;
+  }
+  if (landed) for (let i = 0; i < BASELINE.runOut && !s.fallen; i++) tick(() => {
+    h.buttons[7] = 0.5; h.buttons[1] = 1;
+    if (i >= 18) { h.buttons[6] = 0.5; h.buttons[2] = 1; }
+  });
+  const v = verifyReplay(parseReplay(rec.toJson()));
+  const period = 60 / p.musicBpm;
+  const phase = loadStart >= 0
+    ? ((((loadStart * SIM_DT - p.musicOffset) % period) + period) % period) / period : -1;
+  const beforeLoad = crossoverTicks.filter((t) => loadStart >= 0 && t < loadStart);
+  const Ln = s.landed;
+  let outcome: string, call = "none", revs = 0, deg = 0, fall = false, stood = -1, calls = "none";
+  if (landed) {
+    calls = Ln.kind === JUMP_NONE ? "none" : JUMP_CODE[Ln.kind];
+    revs = Ln.revolutions; deg = Ln.turned * 360;
+    call = CALL_MARK[Ln.rotationCall] ?? "?";
+    fall = Ln.fall || (fallTick >= landTick);
+    stood = (fallTick >= landTick ? fallTick : s.tick) - landTick;
+    outcome = fall ? "fall" : Ln.kind === JUMP_NONE ? "hop" : (CALL_MARK[Ln.rotationCall] ?? "?");
+  } else {
+    outcome = tookTick < 0 ? (s.fallen ? "fell-entry" : "no-takeoff") : (s.fallen ? "fell-air" : "no-landing");
+  }
+  return {
+    offsetTicks: k, loadAtS: loadAtTick * SIM_DT, loadStartTick: loadStart, loadBeatPhase: phase,
+    shareAtLoadStart: shareAtLoad, weightAskedAtLoad, shareAtBladeOff,
+    takeoffTick: tookTick, takeoffL: L, crossoverTicks,
+    lastCrossBeforeLoad: beforeLoad.length ? beforeLoad[beforeLoad.length - 1] : -1,
+    landingTick: landTick, simCalls: calls, revolutions: revs, airborneDeg: deg,
+    rotationCall: call, fall, fallReason: s.fallen ? (FALL_NAME[s.fallReason] ?? "?") : "", stoodTicks: stood, outcome,
+    completed: landed && calls === "Lo" && !fall && stood >= BASELINE.runOut,
+    digest: rec.lastDigest, verified: v.divergence === null,
+  };
+}
+
 function row(r: OffsetRun): string {
   const f = (x: number, d: number) => (x < 0 ? "—" : x.toFixed(d));
   return [
@@ -196,6 +280,8 @@ function main(): void {
   const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
   const off: OffsetRun[] = [], on: OffsetRun[] = [];
   for (let k = 0; k < offsets; k++) { off.push(runOffset(k, pOff)); on.push(runOffset(k, pOn)); }
+  const hsOff: OffsetRun[] = [], hsOn: OffsetRun[] = [];
+  for (let k = 0; k < offsets; k++) { hsOff.push(runHoldSuppressOffset(k, pOff)); hsOn.push(runHoldSuppressOffset(k, pOn)); }
   const doc = {
     bench: "beatcross", date: new Date().toISOString().slice(0, 10), commit,
     question: "Hand_off.md open question 2: does the jump depend on the music?",
@@ -224,6 +310,13 @@ function main(): void {
     ],
     off,
     on,
+    holdSuppress: {
+      source: "jpse/hold-suppress.ts HOLD_SUPPRESS_ENTRANCE — searched 2026-11-18 on HOLD_SUPPRESS_GRID (Experimental, beatCrossoverHoldSuppress 1), nearest the canonical by support-signal.md §1's rule",
+      knobs: HOLD_SUPPRESS_ENTRANCE,
+      sweep: "the load's start shifted by k prepended released-glide ticks (the entrance's structure stays fixed); the same 57 offsets of one beat",
+      off: hsOff,
+      on: hsOn,
+    },
   };
   writeFileSync(out, JSON.stringify(doc, null, 1) + "\n");
   console.log(`beatcross — ${offsets} offsets of 1 tick across one ${period.toFixed(5)} s beat (${pOff.musicBpm} bpm, authored)`);
@@ -234,6 +327,13 @@ function main(): void {
   console.log("── beatCrossoverHoldSuppress 1 (on, the owner's option) ──");
   for (const r of on) console.log(row(r));
   console.log(summary("on", on));
+  console.log("── the searched hold-suppress entrance (HOLD_SUPPRESS_ENTRANCE) ──");
+  console.log("── beatCrossoverHoldSuppress 0 (off) ──");
+  for (const r of hsOff) console.log(row(r));
+  console.log(summary("hold-suppress off", hsOff));
+  console.log("── beatCrossoverHoldSuppress 1 (on) ──");
+  for (const r of hsOn) console.log(row(r));
+  console.log(summary("hold-suppress on", hsOn));
   console.log(`wrote ${out}`);
 }
 
