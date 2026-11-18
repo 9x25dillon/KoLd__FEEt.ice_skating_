@@ -29,6 +29,7 @@ import {libraryIndex,CLIP_BY_ID} from '../runtime/game/motion/library.js';
 import {styleById,choreograph,suggestStyles} from '../runtime/game/motion/dance.js';
 import {MotionPlayer} from '../runtime/game/motion/player.js';
 import {bakeTrack,TRACK_FPS} from '../runtime/game/motion/track.js';
+import {ProgramIntro} from '../runtime/game/motion/intro.js';
 import {kissAndCry} from '../runtime/game/kisscry.js';
 import {WarmupGroup,WARMUP_SECONDS} from '../runtime/game/warmup.js';
 import {podium} from '../runtime/game/podium.js';
@@ -87,6 +88,7 @@ export class IceEngine {
   if(dance!==null&&(!dance||!styleById(dance.style)||!tracks[dance.track]||!Number.isInteger(dance.seed)))throw Error('Unknown dance sequence');
   if(options.pairsChallenge!==undefined&&typeof options.pairsChallenge!=='boolean')throw Error('Invalid pairs challenge');
   if(options.warmup!==undefined&&typeof options.warmup!=='boolean')throw Error('Invalid warm-up choice');
+  if(options.intro!==undefined&&typeof options.intro!=='boolean')throw Error('Invalid intro choice');
   if(options.warmupSeconds!==undefined&&(!Number.isFinite(options.warmupSeconds)||options.warmupSeconds<1||options.warmupSeconds>360))throw Error('A warm-up runs 1–360 seconds');
   const index=options.event??this.event??0;
   if(mode==='career'&&(!Number.isInteger(index)||index<0||index>this.career.unlocked)) throw Error('Complete the previous career event first');
@@ -165,6 +167,11 @@ export class IceEngine {
    const field=standings(index,null).map(r=>r.name);
    this.warmup=new WarmupGroup(field,options.warmupSeconds??WARMUP_SECONDS);this.routine=null;
   }
+  // game/motion/intro.ts: a program asked for it opens with the skater still at her start spot, an
+  // idle clip, before the music. The sim is held at tick 0 meanwhile: nothing is stepped or recorded.
+  // Off unless asked, so every scripted run (tests, rival_baseline.mjs) starts exactly as before.
+  this.introWanted=options.intro??this.introWanted??false;
+  this.intro=this.introWanted&&this.routine&&!this.warmup?new ProgramIntro(dance?dance.seed:index+1):null;
   return this.snapshot();
  }
  /** game/motion/track.ts: a clip baked into poses at `fps`, for a client to play with no sim state under it (the podium). */
@@ -188,7 +195,7 @@ export class IceEngine {
  /** Ends the warm-up group and starts the program itself, fresh. */
  endWarmup(){
   if(!this.warmup)throw Error('No warm-up is running');
-  return this.start({mode:'career',event:this.event});
+  return this.start({mode:'career',event:this.event,intro:this.introWanted});
  }
  /** game/modes.ts: a skater by id: "career", "created:<slot>" or "rival:<name>". */
  character(id){
@@ -288,6 +295,8 @@ export class IceEngine {
   }
   this.trace=[];this.events=[];this.partnerTrace=[];
   for(let i=0;i<ticks&&!this.finished;i++) {
+   // The moment before the music (game/motion/intro.ts): she stands; the program's clock waits.
+   if(this.intro){this.intro.tick(SIM_DT,(c.hardware?.buttons?.[0]??0)>.5||c.push);if(this.intro.done)this.intro=null;continue;}
    if(this.player) {
     this.player.advance();this.state=this.player.state;this.params=this.player.params;this.events=this.player.events;
     resolveRinkCollision(this.state,this.events);
@@ -469,7 +478,7 @@ export class IceEngine {
   return {venue:this.venue??'grand-prix',sheet:this.sheetView(),studio:{skaters:this.studio.skaters,programs:this.studio.programs,dances:this.studio.dances},characters:this.characters(),
    arcade:this.arcade?{character:this.arcade.character,round:this.arcade.round,rounds:this.arcade.rounds.map(r=>({event:r.event,rival:r.rival,target:r.target,title:r.program.title})),lives:this.arcade.lives,points:this.arcade.points,over:this.arcade.over,cleared:this.arcade.cleared}:null,board:this.board.entries,
    showcase:this.showcase,pilotPad:this.pilot?this.pilotShown:null,who:this.who?{id:this.who.id,name:this.who.name,costume:this.who.costume,model:this.who.model??null}:null,
-   motion:this.motion?this.motion.frame(this.state,this.elapsed):null,danceStyle:this.danceStyle??null,runDance:this.runDance??null,warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:s,support:supportSignal(s),elementCard:this.elements?.cards.at(-1)??null,elementCards:this.elements?.recent(8)??[],events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
+   motion:this.intro?this.intro.frame():this.motion?this.motion.frame(this.state,this.elapsed):null,intro:this.intro?{clip:this.intro.clip,left:this.intro.left,seconds:this.intro.seconds}:null,danceStyle:this.danceStyle??null,runDance:this.runDance??null,warmup:this.warmup?this.warmup.snapshot():null,pairs:this.pairs?{...this.pairs.snapshot(),trace:this.partnerTrace}:null,setup:this.setup,assistance:this.assistance,controllerRequest:this.steering.full?.request??null,controllerProfile:this.controllerProfile,controllerBindings:ACTIONS.map(a=>({name:a.name,key:a.key,binding:bindingLabel(this.controllerProfile,a.id)})),state:this.intro?{...s,vel:{x:0,y:0},yawRate:0}:s,support:supportSignal(s),elementCard:this.elements?.cards.at(-1)??null,elementCards:this.elements?.recent(8)??[],events:this.events,trace:this.trace,mode:this.mode,move,low:this.low,elapsed:this.elapsed,finished:this.finished,result:this.result,technical:this.technical,spinLevel:this.spinLevel,footChange:this.footChangeFlash>0,combo:this.comboFlash>0?this.comboLabel:'',track:this.runTrack??this.track,scheme:this.scheme,beginner:this.beginner,cruise:this.cruise,
    edge:s.blade.map(b=>codeToString(b.code)),jump:s.landed.tick<0?null:{tick:s.landed.tick,kind:JUMP_CODE[s.landed.kind]??'Hop',rotations:s.landed.turned,clean:!s.landed.fall&&!s.landed.stepOut},
    recover:recoverHow(words),
    tutorial:l?{unproven:l.step?.id==='spin'&&this.setup==='explorer'?UNPROVEN_AIR:'',course:this.course,index:l.index,total:l.steps.length,title:l.step?.title??'',

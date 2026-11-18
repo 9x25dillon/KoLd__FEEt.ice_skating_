@@ -33,6 +33,8 @@ var pair_hold_pending := false
 var pair_lift_pending := false
 var camera: Camera3D
 var music: AudioStreamPlayer
+# game/motion/intro.ts: the music waits while she stands at her start spot before a program.
+var music_waiting := false
 var blade_audio: AudioStreamPlayer
 var generator: AudioStreamGeneratorPlayback
 var audio_phase := 0.0
@@ -1569,7 +1571,9 @@ func start_game(mode: String, index: int = 0, challenge: bool = false, extra: Di
 	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile,"steady":steady_choice if not steady_choice.is_empty() else null,"danceStyle":dance_style if not dance_style.is_empty() else null}})
 	# A career program opens with its warm-up group (game/warmup.ts); the tests skate straight in.
 	var warm := mode == "career" and not boot_test and (not screenshot_test or "--capture-warmup" in OS.get_cmdline_user_args())
-	var options := {"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null,"warmup":warm}
+	# The moment before the music (game/motion/intro.ts): she stands at her start spot. The tests skate straight in.
+	var intro := not boot_test and not screenshot_test
+	var options := {"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null,"warmup":warm,"intro":intro}
 	options.merge(extra,true)
 	if mode == "arcade" and extra.has("character"):
 		link.send("arcade",{"character":extra.character})
@@ -1678,7 +1682,8 @@ func on_engine(op: String, data: Dictionary) -> void:
 		last_result_tick = -1
 		last_landing_tick = -1
 		music.stream = load("res://assets/generated/audio/"+str(catalog.tracks[int(frame.track)].file))
-		if DisplayServer.get_name() != "headless":
+		music_waiting = frame.get("intro") != null
+		if DisplayServer.get_name() != "headless" and not music_waiting:
 			music.play()
 		music.stream_paused = not music_enabled
 		playing = true
@@ -1695,6 +1700,14 @@ func on_engine(op: String, data: Dictionary) -> void:
 			broadcast.announce("THE GROUP LEAVES THE ICE","Your program  /  "+str(frame.routine.title) if frame.routine != null else "Your program")
 		apply_partner(false)
 		apply_warmup(false)
+		# Out of a warm-up the program's intro begins inside a batch: the music starts again after it.
+		if frame.get("intro") != null and not music_waiting:
+			music_waiting = true
+			music.stop()
+		elif frame.get("intro") == null and music_waiting:
+			music_waiting = false
+			if DisplayServer.get_name() != "headless":
+				music.play()
 	arena.trace_lifted = skater.lifted_blade()
 	arena.add_traces(frame.trace)
 	arena.update_course(frame)
