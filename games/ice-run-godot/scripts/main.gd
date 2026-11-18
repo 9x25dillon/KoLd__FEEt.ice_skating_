@@ -1572,7 +1572,7 @@ func start_game(mode: String, index: int = 0, challenge: bool = false, extra: Di
 	# A career program opens with its warm-up group (game/warmup.ts); the tests skate straight in.
 	var warm := mode == "career" and not boot_test and (not screenshot_test or "--capture-warmup" in OS.get_cmdline_user_args())
 	# The moment before the music (game/motion/intro.ts): she stands at her start spot. The tests skate straight in.
-	var intro := not boot_test and not screenshot_test
+	var intro := not boot_test and (not screenshot_test or "--capture-intro" in OS.get_cmdline_user_args())
 	var options := {"mode":mode,"event":index,"sequence":sequence if mode=="composer" else null,"pairsChallenge":challenge,"course":lesson_course if mode=="lesson" else null,"warmup":warm,"intro":intro}
 	options.merge(extra,true)
 	if mode == "arcade" and extra.has("character"):
@@ -1689,7 +1689,8 @@ func on_engine(op: String, data: Dictionary) -> void:
 		playing = true
 		overlay.hide()
 		broadcast.show()
-		broadcast.announce("TAKE THE ICE", "Northlight Arena  /  "+active_mode.capitalize())
+		if not music_waiting:
+			broadcast.announce("TAKE THE ICE", "Northlight Arena  /  "+active_mode.capitalize())
 		notice.text = ""
 	else:
 		# The warm-up ended inside this batch: the program starts fresh, from its own start.
@@ -1706,6 +1707,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 			music.stop()
 		elif frame.get("intro") == null and music_waiting:
 			music_waiting = false
+			broadcast.announce_time = 0.0
 			if DisplayServer.get_name() != "headless":
 				music.play()
 	arena.trace_lifted = skater.lifted_blade()
@@ -2362,6 +2364,47 @@ func capture() -> void:
 		get_tree().quit()
 		return
 	playing = false
+	if "--capture-intro" in OS.get_cmdline_user_args():
+		# Career program with the intro before the music: mid-intro (with card & hint) and 1 s into the program.
+		var dir := ProjectSettings.globalize_path("res://").path_join("../../docs/presentation/intro")
+		DirAccess.make_dir_recursive_absolute(dir)
+		start_game("career",0,false,{"warmup":false,"intro":true})
+		for k in 30:
+			await get_tree().create_timer(.1).timeout
+			if frame.get("intro") != null: break
+		await get_tree().create_timer(1.8).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(dir.path_join("mid-intro.png"))
+		for k in 60:
+			await get_tree().create_timer(.1).timeout
+			if frame.get("intro") == null: break
+		await get_tree().create_timer(1.0).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(dir.path_join("program-1s.png"))
+		print("GODOT_INTRO_CAPTURE")
+		print("GODOT_CAPTURE_PASS")
+		get_tree().quit()
+		return
+	if "--capture-stepclips" in OS.get_cmdline_user_args():
+		# Composer ['step'] in the real game: arms-only step.swing-roll over the skating.
+		var dir := ProjectSettings.globalize_path("res://").path_join("../../docs/presentation/stepclips")
+		DirAccess.make_dir_recursive_absolute(dir)
+		start_game("composer",0,false,{"sequence":["step"],"intro":false})
+		for k in 30:
+			await get_tree().create_timer(.1).timeout
+			if frame.get("motion") != null: break
+		await get_tree().create_timer(.6).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(dir.path_join("step-swing-roll-1.png"))
+		var m = frame.get("motion")
+		var clip_id := str(m.get("clip","")) if m is Dictionary else ""
+		await get_tree().create_timer(.9).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(dir.path_join("step-swing-roll-2.png"))
+		print("GODOT_STEPCLIPS_CAPTURE: %s" % clip_id)
+		print("GODOT_CAPTURE_PASS")
+		get_tree().quit()
+		return
 	if "--capture-podium" in OS.get_cmdline_user_args():
 		await capture_podium()
 		print("GODOT_CAPTURE_PASS")
