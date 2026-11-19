@@ -21,6 +21,10 @@
 // they move.
 
 export interface Params {
+  /** Game-only prototype: absent/0 = legacy boards, 1 = snap inward hits.
+   * Deliberately absent from DEFAULT_PARAMS: /39 requires its exact key set.
+   * Pass explicitly to resolveRinkCollision; no shipped caller opts in. */
+  boardsSnapInbound?: number;
   // ── blade geometry ────────────────────────────────────────────────────────
   /** Longitudinal rocker radius, m. Bible: 1.8-2.4, tighter toward the front. */
   rocker: number;
@@ -1306,6 +1310,7 @@ export const SIM_DT = 1 / SIM_HZ;
  */
 export function validate(p: Params): string[] {
   const errs: string[] = [];
+  if (p.boardsSnapInbound !== undefined && p.boardsSnapInbound !== 0 && p.boardsSnapInbound !== 1) errs.push("boardsSnapInbound must be 0 or 1");
   if (p.flatHysteresis >= p.flatThreshold)
     errs.push("flatHysteresis must be below flatThreshold, or the classifier has no dead band");
   if (p.balanceKp <= p.gravity)

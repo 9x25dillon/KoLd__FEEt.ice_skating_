@@ -133,7 +133,18 @@ func _draw() -> void:
 	draw_line(current,current+Vector2(s.heading.x,-float(s.heading.y))*9,WHITE,1.5,true)
 	if int(data.get("spinLevel",-1))>=0:
 		text(Vector2(48,bottom-157),"LAST SPIN  /  LEVEL "+("B" if int(data.spinLevel)==0 else str(data.spinLevel)),12,GOLD)
-	if announce_time>0:
+	if data.get("intro") != null:
+		var who = data.get("who")
+		var skater_name := str(who.name) if who is Dictionary and str(who.get("name","")) != "" else "Your career skater"
+		var r = data.get("routine")
+		var program_title := str(r.title) if r is Dictionary and str(r.get("title","")) != "" else "Your program"
+		var w := maxf(380.0, maxf(font.get_string_size(skater_name,HORIZONTAL_ALIGNMENT_LEFT,-1,22).x,font.get_string_size(program_title,HORIZONTAL_ALIGNMENT_LEFT,-1,13).x)+40.0)
+		var x := size.x*.5-w*.5
+		plate(Rect2(x,105,w,96),true)
+		text(Vector2(x+20,135),skater_name,22,GOLD)
+		text(Vector2(x+20,163),program_title,13)
+		text(Vector2(x+20,186),"A  Begin",11,MUTED)
+	elif announce_time>0:
 		var x := size.x*.5-190
 		plate(Rect2(x,105,380,77),true)
 		text(Vector2(x+20,135),announcement,22,GOLD)
