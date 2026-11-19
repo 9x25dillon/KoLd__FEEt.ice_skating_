@@ -67,7 +67,7 @@ if(process.argv.includes('--footwork')){
  const s=e.state;
  writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],...skatesField,marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,frames}));
  console.log(JSON.stringify({ticks:frames.length,marks,fallen:frames.filter(f=>f.state.fallen).length,speed:Math.hypot(s.vel.x,s.vel.y),
-  prep:Object.fromEntries(['beside','cross','under','held'].map(k=>[k,frames.filter(f=>f.footPrep?.some(p=>p.pose===k&&p.weight>.5)).length]))}));
+  prep:Object.fromEntries(['beside','extended','cross','under','held'].map(k=>[k,frames.filter(f=>f.footPrep?.some(p=>p.pose===k&&p.weight>.5)).length]))}));
  process.exit(0);
 }
 run('two-foot glide',120,()=>({lean:0,weight:.5,knee:.35}));

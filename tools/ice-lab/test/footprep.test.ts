@@ -20,7 +20,7 @@ import { dot, len, perpLeft, sub } from "../sim/math.ts";
 import { replayDigest } from "../sim/replay.ts";
 import { supportSignal } from "../sim/support.ts";
 import type { SupportSignal } from "../sim/support.ts";
-import { footPrep, HOLD_IN_TIME } from "../game/footprep.ts";
+import { footPrep, HOLD_IN_TIME, EXTEND_SPEED, EXTEND_FLAT_DWELL, EXTEND_EDGE_DWELL } from "../game/footprep.ts";
 import type { FootPrep } from "../game/footprep.ts";
 
 interface Tick { mark: string; s: SkaterState; g: SupportSignal; prep: [FootPrep, FootPrep] }
@@ -233,4 +233,59 @@ test("crossPlaceMode 1: clockwise crossovers mirror counter-clockwise exactly", 
     assert.ok(dot(d, perpLeft(k.s.heading)) < -(2 * CROSS_HALF_WIDTH - 1e-6));
     assert.ok(dot(d, k.s.heading) > 2 * CROSS_HALF_ALONG - 1e-6);
   }
+});
+
+test("glide recovery: long flat glide blends beside -> extended without pops, no sim change", () => {
+  const LONG_GLIDE = (run: Run): void => {
+    run("push 0", 72, i => ({ lean: 0, weight: i < 24 ? 0.5 : 1, knee: 0.55, push: i === 0, pushFoot: 0 }));
+    run("long glide", 240, () => ({ lean: 0, weight: 1, knee: 0.45 }));
+  };
+  const withP = record(LONG_GLIDE, true);
+  const withoutP = record(LONG_GLIDE, false);
+  assert.deepEqual(withP.digests, withoutP.digests);
+  const glide = withP.ticks.filter(k => k.mark === "long glide" && k.g.phase === "one");
+  assert.ok(glide.length > 200);
+  // Early in the glide (short dwell): still beside.
+  const early = glide.filter(k => k.s.blade[1].dwell < EXTEND_FLAT_DWELL[0]);
+  assert.ok(early.length > 10 && early.every(k => k.prep[0].pose === "beside"));
+  // Late in the glide (past EXTEND_FLAT_DWELL[1]): extended behind, off the ice.
+  const late = glide.filter(k => k.s.blade[1].dwell >= EXTEND_FLAT_DWELL[1]);
+  assert.ok(late.length > 30 && late.every(k => k.prep[0].pose === "extended" && k.prep[0].lift > 0.14));
+  for (const k of late) {
+    const at = fromCarrier(k, 0);
+    assert.ok(at.ahead < -0.35 && at.out >= 0.01, `out ${at.out.toFixed(3)} ahead ${at.ahead.toFixed(3)}`);
+  }
+  // Smooth blend across beside -> extended while on the same edge: no single-tick jump.
+  let maxStep = 0, blendedTicks = 0;
+  for (let i = 1; i < glide.length; i++) {
+    if (glide[i].s.blade[1].code !== glide[i - 1].s.blade[1].code) continue;
+    blendedTicks++;
+    const a = fromCarrier(glide[i - 1], 0), b = fromCarrier(glide[i], 0);
+    maxStep = Math.max(maxStep, Math.hypot(b.out - a.out, b.ahead - a.ahead, glide[i].prep[0].lift - glide[i - 1].prep[0].lift));
+  }
+  assert.ok(blendedTicks > 150 && maxStep < 0.02, `beside <-> extended step ${maxStep.toFixed(4)} m`);
+});
+
+test("glide recovery: carved edge glide extends sooner than flat, stays off skating line, and slow glide stays beside", () => {
+  const EDGE_GLIDE = (run: Run): void => {
+    run("push 0", 48, i => ({ lean: 0, weight: i < 24 ? 0.5 : 1, knee: 0.55, push: i === 0, pushFoot: 0 }));
+    run("edge glide", 180, () => ({ lean: -0.25, weight: 1, knee: 0.5 }));
+  };
+  const edge = record(EDGE_GLIDE, true).ticks.filter(k => k.mark === "edge glide" && k.g.phase === "one");
+  const extended = edge.filter(k => k.prep[0].pose === "extended");
+  assert.ok(extended.length > 30, `expected extended ticks on carved edge, got ${extended.length}`);
+  // Extends before EXTEND_FLAT_DWELL[0] because edge depth brings in EXTEND_EDGE_DWELL.
+  assert.ok(extended[0].s.blade[1].dwell < EXTEND_FLAT_DWELL[0] && extended[0].s.blade[1].dwell >= EXTEND_EDGE_DWELL[0]);
+  for (const k of extended) {
+    assert.ok(fromCarrier(k, 0).out >= 0.01, `never crosses skating line: out ${fromCarrier(k, 0).out.toFixed(3)}`);
+  }
+  // Slow glide (< EXTEND_SPEED[0]): stays beside even at high dwell.
+  const s = createState(P, EXTEND_SPEED[0] * 0.5, 0);
+  s.strokeFoot = 0;
+  s.strokeTime = 0;
+  s.blade[0].inContact = false; s.blade[0].weight = 0;
+  s.blade[1].inContact = true; s.blade[1].weight = 1; s.blade[1].dwell = 3.0;
+  s.supportMode = 1; s.supportFoot = 1;
+  const pSlow = footPrep(s, supportSignal(s));
+  assert.equal(pSlow[0].pose, "beside");
 });

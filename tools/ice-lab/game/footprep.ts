@@ -30,7 +30,7 @@
 //
 // Every distance, time and angle below is AUTHORED, not measured from skaters.
 
-import { add, mul, perpLeft, smoothstep } from "../sim/math.ts";
+import { add, clamp, lerp, mul, perpLeft, smoothstep } from "../sim/math.ts";
 import type { Vec2 } from "../sim/math.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import { CROSS_HALF_ALONG, CROSS_HALF_WIDTH } from "../sim/solver.ts";
@@ -38,7 +38,7 @@ import type { SupportSignal } from "../sim/support.ts";
 import { MOVE } from "../sim/types.ts";
 import type { Foot, SkaterState } from "../sim/types.ts";
 
-export type FootPrepPose = "none" | "beside" | "cross" | "under" | "held";
+export type FootPrepPose = "none" | "beside" | "extended" | "cross" | "under" | "held";
 
 export interface FootPrep {
   pose: FootPrepPose;
@@ -59,6 +59,8 @@ interface Shape { out: number; ahead: number; lift: number }
  */
 export const FOOT_PREP: Record<Exclude<FootPrepPose, "none">, Shape> & { turnBeside: Shape; crossOver: Shape } = {
   beside: { out: 0.08, ahead: -0.10, lift: 0.07 },
+  /** Long glide recovery: free foot extended behind, off the ice, along the tracing. AUTHORED. */
+  extended: { out: 0.06, ahead: -0.44, lift: 0.18 },
   cross: { out: 0.02, ahead: 0.16, lift: 0.12 },
   /**
    * Crossed placement (crossPlaceMode 1): when the sim makes crossed contacts,
@@ -79,14 +81,41 @@ export const HOLD_IN_TIME = 0.25;
 export const RECOVER_TIME = 0.15;
 /** rad of lean toward a crossover's centre across which the crossing comes in, and goes as the lean straightens. AUTHORED. */
 export const CROSS_LEAN: [number, number] = [0.05, 0.15];
+/** m/s: speed band over which a long glide extends the free foot behind (below it, stays beside). AUTHORED. */
+export const EXTEND_SPEED: [number, number] = [1.5, 3.0];
+/** s: carrier blade dwell band over which a flat one-foot glide blends beside -> extended. AUTHORED. */
+export const EXTEND_FLAT_DWELL: [number, number] = [1.15, 1.65];
+/** s: carrier blade dwell band over which a carved edge glide blends beside -> extended. AUTHORED. */
+export const EXTEND_EDGE_DWELL: [number, number] = [0.45, 0.90];
+/** rad: carrier blade tilt band over which edge depth brings in the shorter edge dwell threshold. AUTHORED. */
+export const EXTEND_EDGE_TILT: [number, number] = [0.08, 0.21];
+/** m: max lateral shift of the extended foot to follow a curved tracing (kept below extended.out so it never crosses). AUTHORED. */
+export const EXTEND_ARC_MAX = 0.04;
 
 const NONE = (): FootPrep => ({ pose: "none", weight: 0, at: { x: 0, y: 0 }, lift: 0 });
 
+/**
+ * 0..1: how far a straight-stroke recovery extends behind along the tracing
+ * rather than staying beside the skating heel. Pure function of present state:
+ * support phase, speed, carrier blade dwell and edge depth.
+ */
+function extendBlend(s: SkaterState, g: SupportSignal, carrier: Foot): number {
+  if (g.phase !== "one" || s.strokeTime > 0) return 0;
+  const speed = Math.hypot(s.vel.x, s.vel.y);
+  const speedW = smoothstep(EXTEND_SPEED[0], EXTEND_SPEED[1], speed);
+  if (speedW <= 0) return 0;
+  const b = s.blade[carrier];
+  const edgeW = smoothstep(EXTEND_EDGE_TILT[0], EXTEND_EDGE_TILT[1], Math.abs(b.tilt));
+  const dwell0 = lerp(EXTEND_FLAT_DWELL[0], EXTEND_EDGE_DWELL[0], edgeW);
+  const dwell1 = lerp(EXTEND_FLAT_DWELL[1], EXTEND_EDGE_DWELL[1], edgeW);
+  return speedW * smoothstep(dwell0, dwell1, b.dwell);
+}
+
 function place(s: SkaterState, carrier: Foot, free: Foot, pose: Exclude<FootPrepPose, "none">, weight: number,
-  shape: Shape = FOOT_PREP[pose]): FootPrep {
+  shape: Shape = FOOT_PREP[pose], arcShift = 0): FootPrep {
   const left = perpLeft(s.heading);
   const ownSide = free === 0 ? 1 : -1; // the left foot's side is toward perpLeft(heading)
-  const ground = add(add(s.blade[carrier].contact, mul(left, ownSide * shape.out)), mul(s.heading, shape.ahead));
+  const ground = add(add(s.blade[carrier].contact, mul(left, ownSide * shape.out + arcShift)), mul(s.heading, shape.ahead));
   return { pose, weight: Math.max(0, Math.min(1, weight)), at: { x: ground.x - s.pos.x, y: ground.y - s.pos.y }, lift: shape.lift };
 }
 
@@ -131,10 +160,26 @@ export function footPrep(s: SkaterState, g: SupportSignal): [FootPrep, FootPrep]
       }
     }
     // A straight stroke: once its push is done the pushing foot recovers in
-    // beside the skating heel; placed when the other foot's push begins.
+    // beside the skating heel; on a long glide (by present dwell, speed, edge
+    // depth and support phase) it blends smoothly into an extended recovery
+    // behind along the tracing, and stays beside for stroking rhythm and placement.
     const recovering = !taking && s.strokeFoot === free;
     const placed = taking && s.strokeFoot !== free && s.strokeTime > 0;
-    if ((recovering || placed) && fade > 0) out[free] = place(s, carrier, free, "beside", fade);
+    if ((recovering || placed) && fade > 0) {
+      const ext = recovering ? extendBlend(s, g, carrier) : 0;
+      if (ext > 0) {
+        const shape: Shape = {
+          out: lerp(FOOT_PREP.beside.out, FOOT_PREP.extended.out, ext),
+          ahead: lerp(FOOT_PREP.beside.ahead, FOOT_PREP.extended.ahead, ext),
+          lift: lerp(FOOT_PREP.beside.lift, FOOT_PREP.extended.lift, ext),
+        };
+        const speed = Math.hypot(s.vel.x, s.vel.y);
+        const arcShift = ext * clamp(0.5 * shape.ahead * shape.ahead * (s.yawRate / Math.max(speed, 1)), -EXTEND_ARC_MAX, EXTEND_ARC_MAX);
+        out[free] = place(s, carrier, free, ext >= 0.5 ? "extended" : "beside", fade, shape, arcShift);
+      } else {
+        out[free] = place(s, carrier, free, "beside", fade);
+      }
+    }
   }
   return out;
 }
