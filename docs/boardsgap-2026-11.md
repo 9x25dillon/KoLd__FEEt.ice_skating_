@@ -73,13 +73,13 @@ This is the existing 45-second warm-up pilot. In the on trial, the extra project
 | recordings/edgework-session-d0dfddc5.json | summary-only | No per-tick positions or inputs |
 | recordings/edgework-session-ee907694.json | summary-only | No per-tick positions or inputs |
 | recordings/edgework-session.json | summary-only | No per-tick positions or inputs |
-| owner-first-ice | measured-verified-pre-transfer | Benchmark-only: add exactly weightTransferMode=0 and weightTransferTime=0.25; every archived off digest matched |
+| owner-first-ice | measured-verified-pre-transfer | Benchmark-only: add only the off-mode knobs it predates (weightTransferMode=0, weightTransferTime=0.25, beatCrossoverHoldSuppress=0); every archived off digest matched |
 
 Session summaries only link to replay files by tick count and final digest; they cannot supply missing tick trajectories. Older solvers and malformed JSON require their original compatible recordings/builds; they were neither repaired nor relabelled.
 
 ## First ice
 
-The owner's live Godot save (`ice-run-replay.json`, modified 2026-11-11 18:02, read in place and never modified). The 2026-11-11 hand-off describes First ice as a 75 s replay with 5 falls and a mean speed of 0.64 m/s; this file measures 75 s, 5 falls and 0.642 m/s, which matches on all three. The hand-off's 17:55 stamp is not stored in the file, so identity rests on those three numbers. It is solver /39 without the two later transfer knobs, so it runs through the explicit disabled-transfer adapter, and every one of its 9000 archived digests matches with the param off.
+The owner's live Godot save (`ice-run-replay.json`, modified 2026-11-11 18:02, read in place and never modified). The 2026-11-11 hand-off describes First ice as a 75 s replay with 5 falls and a mean speed of 0.64 m/s; this file measures 75 s, 5 falls and 0.642 m/s, which matches on all three. The hand-off's 17:55 stamp is not stored in the file, so identity rests on those three numbers. It is solver /39 without the three later knobs (weightTransferMode, weightTransferTime, beatCrossoverHoldSuppress), so it runs through the explicit off-mode adapter, and every one of its 9000 archived digests matches with the param off.
 
 | Param | Outside ticks | …of them fallen | Inbound / outbound / tangent | Max depth (mm) | Stuck intervals | Stuck seconds | Longest stuck (s) |
 |---|---:|---:|---:|---:|---:|---:|---:|

@@ -141,17 +141,19 @@ function warmup(enabled: boolean) {
 }
 
 /** Explicit benchmark-only adapter, never a change to the replay importer.
- * Nov 11 /39 lacks only the later transfer knobs. The disabled mode produces
- * no new state fields. Accept this adapter only with every archived digest
- * verified under the off policy (checked below). */
+ * Nov 11 /39 lacks only knobs added later, each defaulting to its off mode.
+ * Only these are filled, with exactly these values; any other missing key
+ * refuses. Accept the result only with every archived digest verified under
+ * the off policy (checked in buildReport). */
+export const PRE_TRANSFER_KNOBS: Record<string, number> = { weightTransferMode: 0, weightTransferTime: 0.25, beatCrossoverHoldSuppress: 0 };
 export function preTransferReplay(candidate: Replay): Replay | null {
   if (candidate.solver !== REPLAY_SOLVER) return null;
   const snapshots = [candidate.initial.params, ...candidate.frames.flatMap(f => f.params ? [f.params] : [])];
   const absent = snapshots.map(p => Object.keys(DEFAULT_PARAMS).filter(k => !(k in p)));
-  if (!absent.every(keys => keys.length === 2 && keys.includes("weightTransferMode") && keys.includes("weightTransferTime"))) return null;
+  if (!absent.every(keys => keys.includes("weightTransferMode") && keys.includes("weightTransferTime") && keys.every(k => k in PRE_TRANSFER_KNOBS))) return null;
   const copy = structuredClone(candidate);
   for (const p of [copy.initial.params, ...copy.frames.flatMap(f => f.params ? [f.params] : [])])
-    Object.assign(p, { weightTransferMode: 0, weightTransferTime: 0.25 });
+    for (const [k, v] of Object.entries(PRE_TRANSFER_KNOBS)) if (!(k in p)) (p as unknown as Record<string, unknown>)[k] = v;
   return parseReplay(JSON.stringify(copy));
 }
 
@@ -167,7 +169,7 @@ function ownerChoiceText(replays: { source: string; comparison: ReturnType<typeo
 
 function firstIceText(c?: ReturnType<typeof compare>) {
   if (!c) return "Supplied, but not replayable by this build.";
-  return `The owner's live Godot save (\`ice-run-replay.json\`, modified 2026-11-11 18:02, read in place and never modified). The 2026-11-11 hand-off describes First ice as a 75 s replay with 5 falls and a mean speed of 0.64 m/s; this file measures ${c.off.ticks / 120} s, ${c.off.falls} falls and ${c.off.meanSpeedMps.toFixed(3)} m/s, which matches on all three. The hand-off's 17:55 stamp is not stored in the file, so identity rests on those three numbers. It is solver /39 without the two later transfer knobs, so it runs through the explicit disabled-transfer adapter, and every one of its ${c.off.ticks} archived digests matches with the param off.`;
+  return `The owner's live Godot save (\`ice-run-replay.json\`, modified 2026-11-11 18:02, read in place and never modified). The 2026-11-11 hand-off describes First ice as a 75 s replay with 5 falls and a mean speed of 0.64 m/s; this file measures ${c.off.ticks / 120} s, ${c.off.falls} falls and ${c.off.meanSpeedMps.toFixed(3)} m/s, which matches on all three. The hand-off's 17:55 stamp is not stored in the file, so identity rests on those three numbers. It is solver /39 without the three later knobs (weightTransferMode, weightTransferTime, beatCrossoverHoldSuppress), so it runs through the explicit off-mode adapter, and every one of its ${c.off.ticks} archived digests matches with the param off.`;
 }
 
 export function buildReport(sessions = DEFAULT_SESSIONS, firstIce?: string) {
@@ -213,7 +215,7 @@ export function buildReport(sessions = DEFAULT_SESSIONS, firstIce?: string) {
           throw Error(`Pre-transfer adapter did not reproduce archived digest at tick ${comparison.off.firstRecordedMismatch}: ${input.id}`);
         inventory.push({ source: input.id, sha256, status: adapted ? "measured-verified-pre-transfer" : "measured",
           solver: clip.solver, ticks: clip.frames.length,
-          ...(adapted ? { reason: "Benchmark-only: add exactly weightTransferMode=0 and weightTransferTime=0.25; every archived off digest matched" } : {}) });
+          ...(adapted ? { reason: "Benchmark-only: add only the off-mode knobs it predates (weightTransferMode=0, weightTransferTime=0.25, beatCrossoverHoldSuppress=0); every archived off digest matched" } : {}) });
         replays.push({ source: input.id, comparison });
       }
     } else if (input.id.endsWith("setup-mapping-v1.json")) {
@@ -234,7 +236,7 @@ export function buildReport(sessions = DEFAULT_SESSIONS, firstIce?: string) {
       duration: "outside tick count / 120; spans include both endpoints; pre- and post-collision measured separately",
       heading: "sign of velocity dot outward normal; zero is tangent/stationary; fallen counted separately",
       feedback: "boards mutate the SAME state used by the next solver tick; recorder digest is taken before each collision",
-      historicalPolicy: "No version relabels or blanket substitution of current defaults. Only /39 missing exactly the two transfer knobs may use the explicit disabled-transfer adapter, and only if every archived off digest matches. Other unsupported clips and summary-only sessions are inventoried, not claimed measured.",
+      historicalPolicy: "No version relabels or blanket substitution of current defaults. Only /39 missing the transfer knobs (and later off-mode knobs listed in PRE_TRANSFER_KNOBS) may use the explicit off-mode adapter, and only if every archived off digest matches. Other unsupported clips and summary-only sessions are inventoried, not claimed measured.",
       stuckRuleAuthored: { distanceM: STUCK_DISTANCE, speedMps: STUCK_SPEED, minimumSeconds: STUCK_SECONDS },
       fixturePolicy: "setup-mapping inputs are reconstructed with current setupParams; digest=0 is an authored placeholder, not an archived digest" },
     inventory, sessionsLinked, replays, warmup: { off: warmupOff, on: warmupOn },
