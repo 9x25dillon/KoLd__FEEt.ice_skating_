@@ -258,6 +258,8 @@ specific real jump are tested **one-sided**: the model must be able to reach the
 test the call boundaries with no effort variable involved, which makes them the most
 information-dense external evidence the corpus can hold.
 
+Two-sided columns and diagnostics are reported, not gated (owner, 2026-11-18).
+
 #### O6 · Moment of inertia
 
 | Observable | Definition | Real measurement | Model status |
