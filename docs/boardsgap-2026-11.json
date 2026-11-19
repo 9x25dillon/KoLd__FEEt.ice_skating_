@@ -1,0 +1,1196 @@
+{
+  "schema": "boards-gap-audit/1",
+  "solver": "ice-lab-f64/39",
+  "method": {
+    "dt": 0.008333333333333333,
+    "outsideEpsilonM": 1e-9,
+    "rawPositiveTicks": "all strictly positive rinkHit distances, including rounding noise",
+    "duration": "outside tick count / 120; spans include both endpoints; pre- and post-collision measured separately",
+    "heading": "sign of velocity dot outward normal; zero is tangent/stationary; fallen counted separately",
+    "feedback": "boards mutate the SAME state used by the next solver tick; recorder digest is taken before each collision",
+    "historicalPolicy": "No version relabels or substitution of current defaults. Unsupported clips and summary-only sessions are inventoried, not claimed measured.",
+    "stuckRuleAuthored": {
+      "distanceM": 0.002,
+      "speedMps": 0.1,
+      "minimumSeconds": 1
+    },
+    "fixturePolicy": "setup-mapping inputs are reconstructed with current setupParams; digest=0 is an authored placeholder, not an archived digest"
+  },
+  "inventory": [
+    {
+      "source": "tools/ice-lab/native/reference/replay-v1.json",
+      "sha256": "4099850360b51c9a24b4a7f57ffccbe32d26c4d59f79ef36fa0ef3ac23fd5c04",
+      "status": "unsupported-replay",
+      "solver": "ice-lab-f64/5",
+      "ticks": 240,
+      "reason": "Replay solver version does not match this build"
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/jpse-loop-v1.json",
+      "sha256": "c2449a4034284cf7529af0ab2d50f5683c26e791d471d764beca65ea079fc3f9",
+      "status": "not-a-replay",
+      "reason": "Geometry/program/measurement fixture; no full replay input stream"
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/jpse/canonical.program.json",
+      "sha256": "fa794ae8bd50e5cbeb4f313a323734306cffbbdb9320c02f36b2bea01b770ab1",
+      "status": "not-a-replay",
+      "reason": "Geometry/program/measurement fixture; no full replay input stream"
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/jpse/geometry-cases.json",
+      "sha256": "028445ef46acf2b57eef375064aa79a2fb1df7fa840af3d7156324240d9fed19",
+      "status": "not-a-replay",
+      "reason": "Geometry/program/measurement fixture; no full replay input stream"
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/jpse/transforms.json",
+      "sha256": "460cfae782fdb6aea1f2c1fd78a7e621f87974f115cf604b2c1af448b24e6f39",
+      "status": "not-a-replay",
+      "reason": "Geometry/program/measurement fixture; no full replay input stream"
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/replay-v1.json",
+      "sha256": "586b9b1dbe3fc58a0364471e24d51762f4154e1b00aac422c38f688549cd5602",
+      "status": "measured",
+      "solver": "ice-lab-f64/39",
+      "ticks": 240
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/setup-mapping-v1.json",
+      "sha256": "74f000b7f14a473dad042d0a7534593ad295de61659096a8bfcc7c84834b76ea",
+      "status": "measured-input-fixture",
+      "ticks": 1200
+    },
+    {
+      "source": "recordings/2026-09-24-edgework-session.json",
+      "sha256": "8f913a3f0806134fc33bd6d8581d834b2fd437bc1c2a26d8d799e5b67fe9cb38",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/2026-09-24-edgework-session1.json",
+      "sha256": "b26bf9d1b5cd1d5a6d5b9b7ededc4012ea69f113c29ec6085d847dd1ef437d15",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/2026-09-24-edgework-session3.json",
+      "sha256": "4ba9ba88c6188f2f7c1b02c190a4d860d4014558fb3c5d96e765c33193a7360e",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/aedgework-replay.json",
+      "sha256": "0ec248e8a3b29a5445fc8f727fd7e66adecbe279e039b8ecb971198d9bec30cd",
+      "status": "unsupported-replay",
+      "solver": "ice-lab-f64/8",
+      "ticks": 36000,
+      "reason": "Replay solver version does not match this build"
+    },
+    {
+      "source": "recordings/edgework-replay-4.json",
+      "sha256": "2ff991bb7aad5432a7fbc1e7265f215b5162d2fe2fdc3159cc70373360874e7a",
+      "status": "invalid-json",
+      "reason": "Not repaired or replayed"
+    },
+    {
+      "source": "recordings/edgework-replay-4768eeb6.json",
+      "sha256": "53992f679dbd983796aabc020d12b7cfb03277c50d2b5f7a119dd305c08e1e11",
+      "status": "invalid-json",
+      "reason": "Not repaired or replayed"
+    },
+    {
+      "source": "recordings/edgework-replay-4b7568b7.json",
+      "sha256": "e8c476c3c969c10490ef2ea8f2cc66a88a38a94153b832658d0a17fa7124a512",
+      "status": "unsupported-replay",
+      "solver": "ice-lab-f64/4",
+      "ticks": 13411,
+      "reason": "Replay solver version does not match this build"
+    },
+    {
+      "source": "recordings/edgework-replay-4b7568b78444.json",
+      "sha256": "d590bf0fe8de2b6e7b4120e75683d834a9a163950f91a9685ed6bef2ecd3f2a1",
+      "status": "invalid-json",
+      "reason": "Not repaired or replayed"
+    },
+    {
+      "source": "recordings/edgework-replay-6f5c711f.json",
+      "sha256": "9cbc6ca66d382002f4a21e5d8f1602dce78bca0ff3f9a6bf42ebdf155e903d6f",
+      "status": "unsupported-replay",
+      "solver": "ice-lab-f64/4",
+      "ticks": 5955,
+      "reason": "Replay solver version does not match this build"
+    },
+    {
+      "source": "recordings/edgework-replay-6f5c711f2.json",
+      "sha256": "a57d4257b6183132a00f0cd0e46e80533bc6aaae57d953c4ce2eced89277fbfe",
+      "status": "invalid-json",
+      "reason": "Not repaired or replayed"
+    },
+    {
+      "source": "recordings/edgework-replay-a5a66c98.json",
+      "sha256": "d8c4eb9343d8c9211eccd3ff5aad3b55621910d8bfff0dcdd737c8d83d967222",
+      "status": "unsupported-replay",
+      "solver": "ice-lab-f64/4",
+      "ticks": 2818,
+      "reason": "Replay solver version does not match this build"
+    },
+    {
+      "source": "recordings/edgework-replay-a5a66c98pt9.json",
+      "sha256": "318a12ddca0ee3a06bd5d72922c6de623bfa7d59a9fd2ea34f734e669dbe82a1",
+      "status": "invalid-json",
+      "reason": "Not repaired or replayed"
+    },
+    {
+      "source": "recordings/edgework-replay-d0dfddc5.json",
+      "sha256": "6a8dc1894258c3ebc8da9791a3bf026f80723e44835d59f5e6abf4134cd29d80",
+      "status": "unsupported-replay",
+      "solver": "ice-lab-f64/6",
+      "ticks": 27115,
+      "reason": "Replay solver version does not match this build"
+    },
+    {
+      "source": "recordings/edgework-replay-ee907694.json",
+      "sha256": "ebd07ed14d04c144e521754e96907c52da8277215755b68314fcef1c967eec4b",
+      "status": "invalid-json",
+      "reason": "Not repaired or replayed"
+    },
+    {
+      "source": "recordings/edgework-replay-f919d62f.json",
+      "sha256": "71cddbb69ec86302f4459307466713f5365dafe7fc024853bcb00ede6defe738",
+      "status": "invalid-json",
+      "reason": "Not repaired or replayed"
+    },
+    {
+      "source": "recordings/edgework-replay.json",
+      "sha256": "fef7286abdf2884af555f76926f3496b2c256966052547bfa4f3c9db42713b46",
+      "status": "unsupported-replay",
+      "solver": "ice-lab-f64/35",
+      "ticks": 20033,
+      "reason": "Replay solver version does not match this build"
+    },
+    {
+      "source": "recordings/edgework-session-1.json",
+      "sha256": "b42d55e5648f56f3b342ac22c026b930786a30cbbe54691ef382410d177d811e",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-2.json",
+      "sha256": "b42d55e5648f56f3b342ac22c026b930786a30cbbe54691ef382410d177d811e",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-3.json",
+      "sha256": "74ac62698b1da422acf689a8f6d48202bae2daa6bb0d1e9ecd00d5d093e8c701",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-4.json",
+      "sha256": "43efa063fa254175a17aded951dbb2632445adfab49c9374f38c5bfc529dd947",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-4b7568b7.json",
+      "sha256": "8be701ea7c999514b0b2e43959e94e44f8efc2669ec58c1d2b3bf17c472e5f68",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-5.json",
+      "sha256": "aedb1514dea502df50dddcf5b73cf98c20ec5ef1906f4a54e4562008008f0381",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-6.json",
+      "sha256": "c3f8748d330c2e9757830c32d1f95408e07fcb1472b5d8b074513880791bb95d",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-6f5c711f.json",
+      "sha256": "74ac62698b1da422acf689a8f6d48202bae2daa6bb0d1e9ecd00d5d093e8c701",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-7.json",
+      "sha256": "d970e92a1dcf821a556c8aeabc3ca07ecc3daa67140432c53126ec4841285176",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-a5a66c98.json",
+      "sha256": "88493f135d0654fce34abc7880aaa366bb1ae071b09e84662d132d52b44e1c25",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-d0dfddc5.json",
+      "sha256": "d970e92a1dcf821a556c8aeabc3ca07ecc3daa67140432c53126ec4841285176",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session-ee907694.json",
+      "sha256": "a87ddc267b433d8014c2db8714ec68a29b67f282895b04ec6f94a39b6d784b1e",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "recordings/edgework-session.json",
+      "sha256": "3eb3f81c016ea92d934f14b90a8ed819895799a7eca6c4bcd88e7d99685807b6",
+      "status": "summary-only",
+      "reason": "No per-tick positions or inputs"
+    }
+  ],
+  "sessionsLinked": [
+    {
+      "source": "recordings/2026-09-24-edgework-session.json",
+      "ticks": 2124,
+      "digest": 2374331431,
+      "matchingReplays": []
+    },
+    {
+      "source": "recordings/2026-09-24-edgework-session1.json",
+      "ticks": 1760,
+      "digest": 2513588606,
+      "matchingReplays": []
+    },
+    {
+      "source": "recordings/2026-09-24-edgework-session3.json",
+      "ticks": 3977,
+      "digest": 4261696156,
+      "matchingReplays": []
+    },
+    {
+      "source": "recordings/edgework-session-1.json",
+      "ticks": 714,
+      "digest": 3228127947,
+      "matchingReplays": []
+    },
+    {
+      "source": "recordings/edgework-session-2.json",
+      "ticks": 714,
+      "digest": 3228127947,
+      "matchingReplays": []
+    },
+    {
+      "source": "recordings/edgework-session-3.json",
+      "ticks": 5955,
+      "digest": 1868329247,
+      "matchingReplays": [
+        "recordings/edgework-replay-6f5c711f.json"
+      ]
+    },
+    {
+      "source": "recordings/edgework-session-4.json",
+      "ticks": 34226,
+      "digest": 2626452701,
+      "matchingReplays": []
+    },
+    {
+      "source": "recordings/edgework-session-4b7568b7.json",
+      "ticks": 13411,
+      "digest": 1265985719,
+      "matchingReplays": [
+        "recordings/edgework-replay-4b7568b7.json"
+      ]
+    },
+    {
+      "source": "recordings/edgework-session-5.json",
+      "ticks": 20033,
+      "digest": 4179220015,
+      "matchingReplays": []
+    },
+    {
+      "source": "recordings/edgework-session-6.json",
+      "ticks": 13411,
+      "digest": 1265985719,
+      "matchingReplays": [
+        "recordings/edgework-replay-4b7568b7.json"
+      ]
+    },
+    {
+      "source": "recordings/edgework-session-6f5c711f.json",
+      "ticks": 5955,
+      "digest": 1868329247,
+      "matchingReplays": [
+        "recordings/edgework-replay-6f5c711f.json"
+      ]
+    },
+    {
+      "source": "recordings/edgework-session-7.json",
+      "ticks": 27115,
+      "digest": 3504332229,
+      "matchingReplays": [
+        "recordings/edgework-replay-d0dfddc5.json"
+      ]
+    },
+    {
+      "source": "recordings/edgework-session-a5a66c98.json",
+      "ticks": 2818,
+      "digest": 2779147416,
+      "matchingReplays": [
+        "recordings/edgework-replay-a5a66c98.json"
+      ]
+    },
+    {
+      "source": "recordings/edgework-session-d0dfddc5.json",
+      "ticks": 27115,
+      "digest": 3504332229,
+      "matchingReplays": [
+        "recordings/edgework-replay-d0dfddc5.json"
+      ]
+    },
+    {
+      "source": "recordings/edgework-session-ee907694.json",
+      "ticks": 30294,
+      "digest": 4002444948,
+      "matchingReplays": []
+    },
+    {
+      "source": "recordings/edgework-session.json",
+      "ticks": null,
+      "digest": null,
+      "matchingReplays": []
+    }
+  ],
+  "replays": [
+    {
+      "source": "tools/ice-lab/test/fixtures/replay-v1.json",
+      "comparison": {
+        "off": {
+          "enabled": false,
+          "ticks": 240,
+          "firstRecordedMismatch": null,
+          "before": {
+            "sampledTicks": 240,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "after": {
+            "sampledTicks": 240,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "1247f7ab84115ba1ba67309a20cc80fbc36cd581b55774c3ae455f1a4dbfeac3",
+          "displayedDigestSha256": "1247f7ab84115ba1ba67309a20cc80fbc36cd581b55774c3ae455f1a4dbfeac3"
+        },
+        "on": {
+          "enabled": true,
+          "ticks": 240,
+          "firstRecordedMismatch": null,
+          "before": {
+            "sampledTicks": 240,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "after": {
+            "sampledTicks": 240,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "1247f7ab84115ba1ba67309a20cc80fbc36cd581b55774c3ae455f1a4dbfeac3",
+          "displayedDigestSha256": "1247f7ab84115ba1ba67309a20cc80fbc36cd581b55774c3ae455f1a4dbfeac3"
+        },
+        "recorderChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        },
+        "displayedChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        }
+      }
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/setup-mapping-v1.json#simulation",
+      "comparison": {
+        "off": {
+          "enabled": false,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.01947342830700549,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 658,
+                "lastTick": 658,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.01947342830700549,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "c08549382846dcc33f907778277ae4a4e08aaf70f9fb89dbb482b8f1027b6301",
+          "displayedDigestSha256": "0100425d6a491b535b2d933494e3b5cc6e8c0c5fe03c7f6c3a019c0110105a93"
+        },
+        "on": {
+          "enabled": true,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.01947342830700549,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 658,
+                "lastTick": 658,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.01947342830700549,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "c08549382846dcc33f907778277ae4a4e08aaf70f9fb89dbb482b8f1027b6301",
+          "displayedDigestSha256": "0100425d6a491b535b2d933494e3b5cc6e8c0c5fe03c7f6c3a019c0110105a93"
+        },
+        "recorderChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        },
+        "displayedChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        }
+      }
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/setup-mapping-v1.json#explorer",
+      "comparison": {
+        "off": {
+          "enabled": false,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.028966308457315293,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 572,
+                "lastTick": 572,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.028966308457315293,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "4b327d4474e2a65ba8df401291ef00b628ef3acc5c77d758fba6a29b29158aa0",
+          "displayedDigestSha256": "c2a37b5b0c8dbcc7e8c064205870e388fc8331160affeca229d8ac5d48c90afe"
+        },
+        "on": {
+          "enabled": true,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.028966308457315293,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 572,
+                "lastTick": 572,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.028966308457315293,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "4b327d4474e2a65ba8df401291ef00b628ef3acc5c77d758fba6a29b29158aa0",
+          "displayedDigestSha256": "c2a37b5b0c8dbcc7e8c064205870e388fc8331160affeca229d8ac5d48c90afe"
+        },
+        "recorderChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        },
+        "displayedChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        }
+      }
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/setup-mapping-v1.json#experimental",
+      "comparison": {
+        "off": {
+          "enabled": false,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.01423168518652318,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 660,
+                "lastTick": 660,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.01423168518652318,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "1418aa207ab390e92eec37856b984d886e314a76db3b49d74477cf0750a7b6c3",
+          "displayedDigestSha256": "e4bfa872e2b53e05b8fad03ac87b5ab540fa794e0297cfb196bd39a4294c9367"
+        },
+        "on": {
+          "enabled": true,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.01423168518652318,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 660,
+                "lastTick": 660,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.01423168518652318,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "1418aa207ab390e92eec37856b984d886e314a76db3b49d74477cf0750a7b6c3",
+          "displayedDigestSha256": "e4bfa872e2b53e05b8fad03ac87b5ab540fa794e0297cfb196bd39a4294c9367"
+        },
+        "recorderChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        },
+        "displayedChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        }
+      }
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/setup-mapping-v1.json#diggate",
+      "comparison": {
+        "off": {
+          "enabled": false,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.014253546786090254,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 660,
+                "lastTick": 660,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.014253546786090254,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "2cd1a2e1333a7d2b095602fefbe23c68c2bf9c4fc5988dc9c25d442415e051b9",
+          "displayedDigestSha256": "f7aaed15fa5d836f837f58b9482f61f337d37d2b00f6c06a389b8de5ddcc2735"
+        },
+        "on": {
+          "enabled": true,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.014253546786090254,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 660,
+                "lastTick": 660,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.014253546786090254,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "2cd1a2e1333a7d2b095602fefbe23c68c2bf9c4fc5988dc9c25d442415e051b9",
+          "displayedDigestSha256": "f7aaed15fa5d836f837f58b9482f61f337d37d2b00f6c06a389b8de5ddcc2735"
+        },
+        "recorderChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        },
+        "displayedChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        }
+      }
+    },
+    {
+      "source": "tools/ice-lab/test/fixtures/setup-mapping-v1.json#repertoire",
+      "comparison": {
+        "off": {
+          "enabled": false,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.008114779899869973,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 545,
+                "lastTick": 545,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.008114779899869973,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "b4ea119f8514a4aa1b32155b9015cc78e8effdbd0da5a6fd41d1cb7833fe9ff2",
+          "displayedDigestSha256": "181d4ab7220d9232aaf164bb27668618c5e839aca54ffbe7dbedbb14ef7874f9"
+        },
+        "on": {
+          "enabled": true,
+          "ticks": 1200,
+          "firstRecordedMismatch": 1,
+          "before": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 1,
+            "outsideTicks": 1,
+            "seconds": 0.008333333333333333,
+            "maxDepthM": 0.008114779899869973,
+            "inbound": 0,
+            "outbound": 1,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0.008333333333333333,
+            "spans": [
+              {
+                "firstTick": 545,
+                "lastTick": 545,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.008114779899869973,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 1200,
+            "rawPositiveTicks": 0,
+            "outsideTicks": 0,
+            "seconds": 0,
+            "maxDepthM": 0,
+            "inbound": 0,
+            "outbound": 0,
+            "tangent": 0,
+            "fallen": 0,
+            "longestSeconds": 0,
+            "spans": []
+          },
+          "stuck": [],
+          "recorderDigestSha256": "b4ea119f8514a4aa1b32155b9015cc78e8effdbd0da5a6fd41d1cb7833fe9ff2",
+          "displayedDigestSha256": "181d4ab7220d9232aaf164bb27668618c5e839aca54ffbe7dbedbb14ef7874f9"
+        },
+        "recorderChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        },
+        "displayedChanges": {
+          "changedTicks": 0,
+          "firstChangedTick": null,
+          "lastChangedTick": null
+        }
+      }
+    }
+  ],
+  "warmup": {
+    "off": [
+      {
+        "skater": "Ansa Merrow",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "cbb33607cd5a81202346dbcc4570e64eef06b6a1921e18ec536f2a9d4b51ace4"
+      },
+      {
+        "skater": "Lio Tarrant",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "1f29958f2738585914035afea97b047b18dfe812cd9ef4b0bea71b792b181e0e"
+      },
+      {
+        "skater": "Katya Vell",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 97,
+        "outsideTicks": 97,
+        "seconds": 0.8083333333333333,
+        "maxDepthM": 0.0011346922108153024,
+        "inbound": 3,
+        "outbound": 10,
+        "tangent": 84,
+        "fallen": 10,
+        "longestSeconds": 0.8083333333333333,
+        "spans": [
+          {
+            "firstTick": 4372,
+            "lastTick": 4468,
+            "ticks": 97,
+            "seconds": 0.8083333333333333,
+            "maxDepthM": 0.0011346922108153024,
+            "inbound": 3,
+            "outbound": 10,
+            "tangent": 84,
+            "fallen": 10
+          }
+        ],
+        "stateSha256": "428251df85dae2a119e8361500122ea130bd835a9b7949b98d7309fdfd7f7675"
+      },
+      {
+        "skater": "Noor Ashdown",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "d8c04abcb649a3bcdf0c9835f380fabcea5477e2967963b71da012b6e2e6c371"
+      },
+      {
+        "skater": "Remi Castellan",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "b65aa6475db5ee9c89ecab3b11b94437dca0e1b62f4a8453bee4c94c20f485d7"
+      },
+      {
+        "skater": "Teodora Wynn",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "ed12117f249e4e1778cf65cee260b742793de81cea2f63116fb6acd187e720b4"
+      }
+    ],
+    "on": [
+      {
+        "skater": "Ansa Merrow",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "cbb33607cd5a81202346dbcc4570e64eef06b6a1921e18ec536f2a9d4b51ace4"
+      },
+      {
+        "skater": "Lio Tarrant",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "1f29958f2738585914035afea97b047b18dfe812cd9ef4b0bea71b792b181e0e"
+      },
+      {
+        "skater": "Katya Vell",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 10,
+        "outsideTicks": 10,
+        "seconds": 0.08333333333333333,
+        "maxDepthM": 0.0011346922108153024,
+        "inbound": 0,
+        "outbound": 10,
+        "tangent": 0,
+        "fallen": 10,
+        "longestSeconds": 0.08333333333333333,
+        "spans": [
+          {
+            "firstTick": 4372,
+            "lastTick": 4381,
+            "ticks": 10,
+            "seconds": 0.08333333333333333,
+            "maxDepthM": 0.0011346922108153024,
+            "inbound": 0,
+            "outbound": 10,
+            "tangent": 0,
+            "fallen": 10
+          }
+        ],
+        "stateSha256": "eed4b8b8fbe24c59c83170ec002b1a78fffdc6374cdec20b9e04a7343ee98f67"
+      },
+      {
+        "skater": "Noor Ashdown",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "d8c04abcb649a3bcdf0c9835f380fabcea5477e2967963b71da012b6e2e6c371"
+      },
+      {
+        "skater": "Remi Castellan",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "b65aa6475db5ee9c89ecab3b11b94437dca0e1b62f4a8453bee4c94c20f485d7"
+      },
+      {
+        "skater": "Teodora Wynn",
+        "sampledTicks": 5401,
+        "rawPositiveTicks": 0,
+        "outsideTicks": 0,
+        "seconds": 0,
+        "maxDepthM": 0,
+        "inbound": 0,
+        "outbound": 0,
+        "tangent": 0,
+        "fallen": 0,
+        "longestSeconds": 0,
+        "spans": [],
+        "stateSha256": "ed12117f249e4e1778cf65cee260b742793de81cea2f63116fb6acd187e720b4"
+      }
+    ]
+  },
+  "firstIce": "Missing: the 2026-11-11 17:55 recording is not in the specified corpus",
+  "ownerChoice": "Pending owner decision: keep the shipped behavior (default off), or authorize enabling inward snapping after reviewing replay changes. This experiment does not enable it in gameplay."
+}
