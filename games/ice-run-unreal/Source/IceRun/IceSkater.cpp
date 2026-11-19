@@ -37,6 +37,7 @@ namespace
 	constexpr double InertiaOpen = 4.0;
 	constexpr double ArmRate = 14.0;
 	constexpr double FootRate = 16.0;
+	constexpr double PrepRate = 10.0;
 	constexpr double SpinExit = 1.6;
 	constexpr double SpinArmTurn = UE_DOUBLE_PI / 2.0;
 	constexpr double ShoulderHold = .8;
@@ -148,6 +149,7 @@ AIceSkater::AIceSkater()
 	for (FVector& V : TrunkOffsets) V = FVector::ZeroVector;
 	FreeFeet[0] = FVector(-.15, .16, .22);
 	FreeFeet[1] = FVector(.15, .16, .22);
+	PrepFeet[0] = PrepFeet[1] = FVector::ZeroVector;
 	ArmTargets[0] = FVector(-.25, -.14, -.05);
 	ArmTargets[1] = FVector(-.43, -.19, -.12);
 	ArmTargets[2] = FVector(.25, -.14, -.05);
@@ -376,6 +378,9 @@ void AIceSkater::ApplyFrame(const FIceFrame& Frame, bool bSnap)
 	{
 		Spray->Clear();
 		bSkirtDirty = true;
+		PrepFeet[0] = PrepFeet[1] = FVector::ZeroVector;
+		PrepAmount[0] = PrepAmount[1] = 0.0;
+		bBladeWasOnIce[0] = bBladeWasOnIce[1] = true;
 		Facing = FMath::Atan2(State.Heading.Y, State.Heading.X);
 		SetActorLocationAndRotation(IceSimSpace::Point(State.Pos.X, State.Pos.Y, FMath::Max(0.0, State.JumpZ) + LiftHeight),
 			FRotator(0.0, -FMath::RadiansToDegrees(Facing), 0.0));
@@ -691,6 +696,7 @@ void AIceSkater::Pose(float Dt)
 
 	const double EaseArm = Ease(ArmRate, Dt);
 	const double EaseFoot = Ease(FootRate, Dt);
+	const double EasePrep = Ease(PrepRate, Dt);
 	// How hard the arms are working, from what the sim is asking of the body.
 	const double YawRateNow = S.YawRate;
 	const double Stroking = FMath::Sin(FMath::Clamp(S.StrokeTime * 3.0, 0.0, 1.0) * UE_DOUBLE_PI);
@@ -771,6 +777,30 @@ void AIceSkater::Pose(float Dt)
 			{
 				Free = FVector(Side * .1, .20, -.60);
 			}
+			// Preparation (game/footprep.ts): drawn in beside the skating foot before it takes the
+			// load, extended behind on a long glide, crossed in front (or across with crossPlaceMode)
+			// on a crossover, held in through a turn. Presentation only; the sim's own free-leg
+			// swing still turns it about the hip below.
+			else
+			{
+				double PrepWeight = 0.0;
+				if (bGrounded && S.FootPrep[I].bValid)
+				{
+					const FIceFootPrep& Prep = S.FootPrep[I];
+					PrepWeight = FMath::Clamp(Prep.Weight, 0.0, 1.0);
+					if (PrepWeight > 0.0)
+					{
+						const FVector At = BodyFromSim(Prep.At.X, Prep.At.Y);
+						const FVector Target = At + FVector(0.0, Prep.Lift + AnkleHeight, 0.0);
+						PrepFeet[I] = PrepAmount[I] < .001 ? Target : FMath::Lerp(PrepFeet[I], Target, EasePrep);
+					}
+				}
+				PrepAmount[I] = FMath::Lerp(PrepAmount[I], PrepWeight, EasePrep);
+				if (PrepAmount[I] > .001)
+				{
+					Free = FMath::Lerp(Free, PrepFeet[I], PrepAmount[I]);
+				}
+			}
 			Free = H + RotY(Free - H, S.FreeSwing);
 		}
 		if (bUnder)
@@ -798,6 +828,8 @@ void AIceSkater::Pose(float Dt)
 		FreeFeet[I] = FMath::Lerp(FreeFeet[I], Free, EaseFoot);
 		// Coming down, the landing foot reaches for the ice ahead of the touchdown.
 		const bool bReaching = bComingDown && I == S.SupportFoot;
+		const bool bWasOnIce = bBladeWasOnIce[I];
+		bBladeWasOnIce[I] = bOnIce;
 		FootOnIce[I] = FMath::Lerp(FootOnIce[I], bOnIce || bReaching ? 1.0 : 0.0, EaseFoot);
 		if (FootOnIce[I] > .995)
 		{
@@ -809,7 +841,9 @@ void AIceSkater::Pose(float Dt)
 		const FVector BladeLeft = FVector::CrossProduct(Up, Toe).GetSafeNormal();
 		const FVector BladeUp = Up * FMath::Cos(Blade.Tilt) + BladeLeft * FMath::Sin(Blade.Tilt);
 		// The solver moves a contact in one step when the support changes; the boot carries it.
-		if (LastContacts.Num() == 2 && FVector::Dist(Contacts[I], LastContacts[I]) > .02)
+		// Only for a blade already on the ice: a blade touching down from the air lands at its
+		// new contact rather than sliding from its old unloaded one.
+		if (bWasOnIce && LastContacts.Num() == 2 && FVector::Dist(Contacts[I], LastContacts[I]) > .02)
 		{
 			ContactSlide[I] += LastContacts[I] - Contacts[I];
 		}

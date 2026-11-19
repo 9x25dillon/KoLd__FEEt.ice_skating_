@@ -67,6 +67,18 @@ namespace
 		Support.ComHeight = Number(O, TEXT("comHeight"), 0.95);
 		return Support;
 	}
+
+	FIceFootPrep ParseFootPrep(const TSharedPtr<FJsonObject>& O)
+	{
+		FIceFootPrep Prep;
+		if (!O.IsValid()) return Prep;
+		Prep.bValid = true;
+		O->TryGetStringField(TEXT("pose"), Prep.Pose);
+		Prep.Weight = Number(O, TEXT("weight"));
+		Prep.At = Vec(O, TEXT("at"));
+		Prep.Lift = Number(O, TEXT("lift"));
+		return Prep;
+	}
 }
 
 FIceFrame FIceFrame::Parse(const TSharedPtr<FJsonObject>& Snapshot)
@@ -116,6 +128,14 @@ FIceFrame FIceFrame::Parse(const TSharedPtr<FJsonObject>& Snapshot)
 		}
 	}
 	State.Support = ParseSupport(Child(Snapshot, TEXT("support")));
+	const TArray<TSharedPtr<FJsonValue>>* Preps = nullptr;
+	if (Snapshot->TryGetArrayField(TEXT("footPrep"), Preps))
+	{
+		for (int32 I = 0; I < 2 && I < Preps->Num(); ++I)
+		{
+			State.FootPrep[I] = ParseFootPrep((*Preps)[I]->AsObject());
+		}
+	}
 
 	Snapshot->TryGetStringField(TEXT("mode"), Frame.Mode);
 	Snapshot->TryGetStringField(TEXT("move"), Frame.MoveLabel);

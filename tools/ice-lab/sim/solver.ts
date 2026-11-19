@@ -129,17 +129,47 @@ function transferLoad(s: SkaterState, p: Params, dt: number, asked: number, owne
 }
 
 /**
+ * m: half the lateral crossing clearance between blades in a crossover
+ * under-push (crossPlaceMode 1). At 50/50 load the blades sit 2 * 0.06 = 12 cm
+ * apart across the heading, past each other's normal lines, clear of boot and
+ * blade width with no interpenetration. AUTHORED.
+ */
+export const CROSS_HALF_WIDTH = 0.06;
+/**
+ * m: half the fore-aft clearance between blades in a crossover under-push
+ * (outside blade ahead, inside blade pushing under behind; 20 cm apart along
+ * the heading). AUTHORED.
+ */
+export const CROSS_HALF_ALONG = 0.10;
+
+/**
  * m from the pendulum's base (the centre of pressure) to blade i, toward
  * perpLeft of the stance's frame. weightTransferMode 0: half a stance either
  * side on two feet, both under the base on one. 1: the stance moves with the
  * load and the base stays the centre of pressure, so the loaded blade is under
  * it and the other is out by the stance's width: share-weighted, the offsets
- * sum to zero at every share.
+ * sum to zero at every share. With crossPlaceMode 1 during a crossover
+ * under-push (s.crossed), the outside blade sits past the skating blade's line
+ * on the far side (negated half-width, authored crossing clearance).
  */
 function stanceOffset(s: SkaterState, p: Params, i: number): number {
+  const halfW = s.crossed ? -CROSS_HALF_WIDTH : p.stanceHalfWidth;
   if (p.weightTransferMode === 1 && s.loadBias !== undefined)
-    return i === FOOT.Left ? p.stanceHalfWidth * (1 + 2 * s.loadBias) : -p.stanceHalfWidth * (1 - 2 * s.loadBias);
-  return s.supportMode === 2 ? (i === FOOT.Left ? p.stanceHalfWidth : -p.stanceHalfWidth) : 0;
+    return i === FOOT.Left ? halfW * (1 + 2 * s.loadBias) : -halfW * (1 - 2 * s.loadBias);
+  return s.supportMode === 2 ? (i === FOOT.Left ? halfW : -halfW) : 0;
+}
+
+/**
+ * m along the stance's heading from the centre of pressure to blade i during a
+ * crossed placement (outside blade ahead, inside blade behind). Share-weighted
+ * offsets sum to zero so COP stays at the pendulum's base. 0 when not crossed.
+ */
+function stanceAlong(s: SkaterState, p: Params, i: number): number {
+  if (!s.crossed) return 0;
+  const halfA = -s.crossSide * CROSS_HALF_ALONG;
+  if (p.weightTransferMode === 1 && s.loadBias !== undefined)
+    return i === FOOT.Left ? halfA * (1 + 2 * s.loadBias) : -halfA * (1 - 2 * s.loadBias);
+  return s.supportMode === 2 ? (i === FOOT.Left ? halfA : -halfA) : 0;
 }
 
 /**
@@ -224,7 +254,8 @@ function slipSolveFeet(
     const b = s.blade[i];
     if (!b.inContact || (stroking && i === s.strokeFoot)) continue;
     const side = stanceOffset(s, p, i);
-    const r = add(mul(b.tangent, (digS(s, p, i) - 0.5) * p.bladeLength), mul(bodyLeft, side));
+    const baseR = add(mul(b.tangent, (digS(s, p, i) - 0.5) * p.bladeLength), mul(bodyLeft, side));
+    const r = s.crossed ? add(baseR, mul(s.heading, stanceAlong(s, p, i))) : baseR;
     const n = perpLeft(b.tangent);
     const vLat = dot(add(s.vel, mul(perpLeft(r), spin)), n), into = -sign(vLat);
     const need = p.mass * b.weight * Math.abs(vLat);
@@ -664,6 +695,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     ...(p.pitchMode === 1 && p.pitchInternalMode === 1 ? { pitchAnkle: 0, pitchIntAccel: 0 } : {}),
     // Two feet, an even share: what supportMode 2 above already says.
     ...(p.weightTransferMode === 1 ? { loadBias: 0, loadRate: 0, loadAsked: 0 } : {}),
+    ...(p.crossPlaceMode === 1 ? { crossed: false } : {}),
   };
 }
 
@@ -767,6 +799,7 @@ export function step(
   if (s.jump.phase === JUMP_PHASE.Air) {
     // No blade carries anything in the air; the landing foot takes the load whole.
     if (p.weightTransferMode === 1) s.loadBias = s.loadRate = undefined;
+    if (p.crossPlaceMode === 1) s.crossed = false;
     jumpAir(s, legInput(input), pFatigue, dt, events);
     // A landing resolves INSIDE jumpAir, on this early-return path — the only
     // one there is, every landing goes through it — so this is the one place
@@ -883,6 +916,9 @@ export function step(
     s.legLength = clamp(s.legLength, 0.3, p.comHeight * 1.05);
   }
 
+  // Track whether the skater entered this tick gliding on one foot (for crossPlaceMode uncrossing).
+  const prevSupportMode = s.supportMode;
+  const prevSupportFoot = s.supportFoot;
   // A jump's push-off (pushOffMode): the takeoff's upward speed goes through the blade.
   const nTotal = Math.max(0, p.mass * (g + legAccel)) + (s.jump.pushLoad ?? 0);
   // A move is made on one foot: the pivot or spinning foot, and after a mohawk's cusp the other.
@@ -930,6 +966,10 @@ export function step(
     // half a stroke into a crossover.
     s.crossover = p.movesMode >= 1 && Math.abs(s.lean) >= p.crossoverLean;
     s.crossSide = s.crossover ? sign(s.lean) : 0;
+    if (p.crossPlaceMode === 1) {
+      const inside = s.crossSide > 0 ? FOOT.Left : FOOT.Right;
+      s.crossed = s.crossover && s.crossSide !== 0 && s.strokeFoot === inside;
+    }
     // The rhythm layer's beat window (sim/music.ts, bible §2.6): a crossover
     // push either lands on tempo or it does not, decided once at the push's
     // start, same as crossover itself.
@@ -953,6 +993,18 @@ export function step(
   if (s.strokeTime > 0 && input.pushFoot === s.strokeFoot && input.pushKnee !== undefined && s.strokeKnee !== undefined)
     s.strokeKnee = Math.max(s.strokeKnee, clamp(axis(input.pushKnee, 0), 0, 1));
   const stroking = s.strokeTime > 0;
+  if (p.crossPlaceMode === 1) {
+    if (s.crossed === undefined) s.crossed = false;
+    if (s.crossed) {
+      const inside = s.crossSide > 0 ? FOOT.Left : FOOT.Right;
+      const outside = (1 - inside) as Foot;
+      const wasOutsideOnly = prevSupportMode === 1 && prevSupportFoot === outside;
+      const returningInside = wasOutsideOnly && (s.supportMode === 2 || (s.loadAsked !== undefined && s.loadAsked !== outside - 0.5));
+      if (!alive || turning || ina || !s.crossover || s.crossSide === 0 || returningInside) {
+        s.crossed = false;
+      }
+    }
+  }
 
   // ── 1c. or a turn's pivot, in place of sections 2-5 ───────────────────────
   let yawNumer = 0, yawDenom = 0, latForceTotal = 0, excessWeighted = 0;
@@ -1460,7 +1512,7 @@ export function step(
     // stance's load at this speed — which at a standstill is not at all, so
     // standing still is what it was.
     if (s.supportMode === 2) {
-      const copMax = g * p.stanceHalfWidth / L;
+      const copMax = g * (s.crossed ? CROSS_HALF_WIDTH : p.stanceHalfWidth) / L;
       let copError = s.balanceError;
       if (p.copCommandShare > 0) {
         const edgeCan = dot(s.vel, s.vel) * sin(pFatigue.maxTilt) / effectiveRocker(s.blade[s.supportFoot].contactS, p);
@@ -1494,7 +1546,8 @@ export function step(
   // Pitched toward the toe, the boots are behind the centre of mass.
   if (pitchOn) base = add(base, mul(s.blade[s.supportFoot].tangent, -L * sin(s.pitch ?? 0)));
   for (let i = 0; i < 2; i++) {
-    s.blade[i].contact = add(base, mul(perpLeft(frameH), stanceOffset(s, p, i)));
+    const c = add(base, mul(perpLeft(frameH), stanceOffset(s, p, i)));
+    s.blade[i].contact = s.crossed ? add(c, mul(frameH, stanceAlong(s, p, i))) : c;
   }
   // An Ina Bauer's feet are a stride apart along the track: the lead ahead.
   if (ina) {

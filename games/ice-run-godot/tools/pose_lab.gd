@@ -23,6 +23,7 @@ var previous: Array[Vector3] = []
 var previous_ankles: Array[Vector3] = []
 var pop := 0.0
 var crossed := 0
+var sim_crossed := 0
 var two_foot := 0
 var wrong_way := 0
 var last_heading := Vector3.ZERO
@@ -264,6 +265,10 @@ func measure(now: Dictionary, s: Dictionary) -> void:
 		var a := skater.to_local(joint("FootL"))
 		var b := skater.to_local(joint("FootR"))
 		if a.x>b.x: crossed += 1
+		var dx := float(s.blade[0].contact.x)-float(s.blade[1].contact.x)
+		var dy := float(s.blade[0].contact.y)-float(s.blade[1].contact.y)
+		var sep := dx*(-float(s.heading.y))+dy*float(s.heading.x)
+		if sep<-1e-4: sim_crossed += 1
 	if not previous_ankles.is_empty():
 		for i in 2: pop = maxf(pop,ankles[i].distance_to(previous_ankles[i]))
 	previous_ankles = ankles
@@ -330,7 +335,7 @@ func hips_local() -> Vector3:
 	return skater.to_local((joint("ThighL")+joint("ThighR"))*.5)
 
 func report() -> void:
-	var result := {"frames":render,"samples":samples.get("roll_deg",[]).size(),"two_foot_frames":two_foot,"crossed_frames":crossed,"wrong_way_frames":wrong_way,"max_foot_step_m":snappedf(pop,.001),"skirt_leg_push_m":snappedf(skirt_worst,.001),"skirt_reach_m":snappedf(skirt_reach,.01)}
+	var result := {"frames":render,"samples":samples.get("roll_deg",[]).size(),"two_foot_frames":two_foot,"crossed_frames":crossed,"sim_crossed_frames":sim_crossed,"wrong_way_frames":wrong_way,"max_foot_step_m":snappedf(pop,.001),"skirt_leg_push_m":snappedf(skirt_worst,.001),"skirt_reach_m":snappedf(skirt_reach,.01)}
 	for name in ["skirt_sag_m","roll_deg","foot_off_line_m","foot_along_line_m","hip_m","lean_deg","lag_m","jerk"]:
 		result[name] = snappedf(rms(name),.001)
 	if arena: result["trace_steps"] = arena.trace_steps
@@ -364,6 +369,12 @@ func report() -> void:
 	print("POSE_LAB ",JSON.stringify(result))
 	if args.has("check"):
 		for name in LIMITS:
+			if name=="crossed_frames" and sim_crossed>0:
+				if crossed!=sim_crossed:
+					printerr("POSE_LAB_FAIL crossed_frames ",crossed," != sim_crossed_frames ",sim_crossed)
+					quit(1)
+					return
+				continue
 			if float(result[name])>float(LIMITS[name]):
 				printerr("POSE_LAB_FAIL ",name," ",result[name]," > ",LIMITS[name])
 				quit(1)

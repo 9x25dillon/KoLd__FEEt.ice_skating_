@@ -23,6 +23,8 @@ const e=new IceEngine();
 e.start({mode:'free'});
 // --transfer: the legs move the load between the blades over time (weightTransferMode 1).
 if(process.argv.includes('--transfer'))e.params={...e.params,weightTransferMode:1};
+// --cross-place: crossover places the outside blade past the skating blade's line (crossPlaceMode 1).
+if(process.argv.includes('--cross-place'))e.params={...e.params,crossPlaceMode:1};
 e.state=createState(e.params,6);
 e.state.pos.y=18;
 const pick=b=>({contact:b.contact,tangent:b.tangent,tilt:b.tilt,weight:b.weight,normalLoad:b.normalLoad,inContact:b.inContact,latSlipAccel:b.latSlipAccel,longSpeed:b.longSpeed,demandRatio:b.demandRatio});
@@ -65,7 +67,7 @@ if(process.argv.includes('--footwork')){
  const s=e.state;
  writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],...skatesField,marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,frames}));
  console.log(JSON.stringify({ticks:frames.length,marks,fallen:frames.filter(f=>f.state.fallen).length,speed:Math.hypot(s.vel.x,s.vel.y),
-  prep:Object.fromEntries(['beside','cross','under','held'].map(k=>[k,frames.filter(f=>f.footPrep?.some(p=>p.pose===k&&p.weight>.5)).length]))}));
+  prep:Object.fromEntries(['beside','extended','cross','under','held'].map(k=>[k,frames.filter(f=>f.footPrep?.some(p=>p.pose===k&&p.weight>.5)).length]))}));
  process.exit(0);
 }
 run('two-foot glide',120,()=>({lean:0,weight:.5,knee:.35}));

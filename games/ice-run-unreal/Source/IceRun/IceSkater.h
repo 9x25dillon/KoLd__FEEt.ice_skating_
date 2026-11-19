@@ -188,7 +188,10 @@ private:
 
 	FVector TrunkOffsets[4];
 	FVector FreeFeet[2];
+	FVector PrepFeet[2];
+	double PrepAmount[2] = {0.0, 0.0};
 	double FootOnIce[2] = {1.0, 1.0};
+	bool bBladeWasOnIce[2] = {true, true};
 	FVector ArmTargets[4];
 	FVector HandLast[2];
 	FVector HandAim[2];

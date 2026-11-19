@@ -561,6 +561,11 @@ export interface SkaterState {
    */
   crossSide: number;
   /**
+   * crossPlaceMode 1: true while the outside blade is placed past the skating
+   * blade's line during a crossover under-push. Absent when crossPlaceMode is 0.
+   */
+  crossed?: boolean;
+  /**
    * Whether push was down last tick. Strokes are level-triggered (hold it and
    * you keep stroking); standing up after a fall is edge-triggered, because a
    * button already held when the ice arrived is not a decision to get up.

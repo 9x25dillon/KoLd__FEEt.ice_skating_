@@ -125,6 +125,7 @@ var hand_last: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
 var hand_aim: Array[Vector3] = [Vector3.DOWN,Vector3.DOWN]
 var trunk_offsets: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO,Vector3.ZERO,Vector3.ZERO]
 var foot_on_ice: Array[float] = [1.0,1.0]
+var blade_was_on_ice: Array[bool] = [true,true]
 # The skirt: panels hanging from the waist (tools/build_athlete.py), each a tip on
 # a spring toward where it hangs at rest. Presentation only; nothing reads it back.
 const SKIRT_STIFFNESS := 160.0
@@ -909,6 +910,8 @@ func _process(dt: float) -> void:
 		free_feet[i] = free_feet[i].lerp(free,ease_foot)
 		# Coming down, the landing foot reaches for the ice ahead of the touchdown.
 		var reaching := coming_down and i==int(state.supportFoot)
+		var was_on_ice := blade_was_on_ice[i]
+		blade_was_on_ice[i] = on_ice
 		foot_on_ice[i] = lerpf(foot_on_ice[i],1.0 if on_ice or reaching else 0.0,ease_foot)
 		if foot_on_ice[i]>.995: foot_on_ice[i] = 1.0
 		# The blade's top leans toward perpLeft(tangent) by its tilt, and the
@@ -919,7 +922,9 @@ func _process(dt: float) -> void:
 		var blade_up := Vector3.UP*cos(tilt)+blade_left*sin(tilt)
 		# The solver moves a contact in one step when the support changes, two
 		# feet to one. The boot carries that step away instead of teleporting.
-		if last_contacts.size()==2 and contacts[i].distance_to(last_contacts[i])>.02:
+		# Only for a blade already on the ice: a blade touching down from the air
+		# lands at its new contact rather than sliding from its old unloaded one.
+		if was_on_ice and last_contacts.size()==2 and contacts[i].distance_to(last_contacts[i])>.02:
 			contact_slide[i] += last_contacts[i]-contacts[i]
 		contact_slide[i] = contact_slide[i].lerp(Vector3.ZERO,ease_foot)
 		var planted: Vector3 = contacts[i]+contact_slide[i]+blade_up*ankle_height
