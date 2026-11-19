@@ -298,6 +298,8 @@ private:
 	int32 TrackIndex = 0;
 	bool bMusicOn = true;
 	bool bMusicPaused = false;
+	/** game/motion/intro.ts: the music waits while she stands at her start spot before a program. */
+	bool bMusicWaiting = false;
 	/** Plays the run's own track from its start (the snapshot's track: a career program's laid music, else yours). */
 	void StartMusic();
 	USoundBase* TrackSound(int32 Track) const;

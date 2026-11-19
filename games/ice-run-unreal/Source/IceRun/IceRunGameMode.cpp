@@ -335,6 +335,11 @@ void AIceRunGameMode::StartRun()
 	{
 		Options->SetBoolField(TEXT("warmup"), true);
 	}
+	// The moment before the music (game/motion/intro.ts): she stands at her start spot. The smoke run and stills skate straight in unless -IceIntro is passed.
+	if (!bSmoke && (ShotTimes.Num() == 0 || FParse::Param(FCommandLine::Get(), TEXT("IceIntro"))))
+	{
+		Options->SetBoolField(TEXT("intro"), true);
+	}
 	// game/modes.ts: a picked skater, program and dance (IceRunModes.cpp StartWith).
 	if (RunExtra.IsValid())
 	{
@@ -588,8 +593,17 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 		TickDebt = 0.0;
 		ResetDebt();
 		LastLandingTick = -1;
-		StartMusic();
-		Announce(TEXT("TAKE THE ICE"), RunPlace());
+		const TSharedPtr<FJsonObject>* IntroObj = nullptr;
+		bMusicWaiting = Reply.Data->TryGetObjectField(TEXT("intro"), IntroObj) && IntroObj->IsValid();
+		if (bMusicWaiting)
+		{
+			if (Music) Music->Stop();
+		}
+		else
+		{
+			StartMusic();
+			Announce(TEXT("TAKE THE ICE"), RunPlace());
+		}
 		UE_LOG(LogIceRun, Log, TEXT("Skating: mode %s, setup %s, scheme %d."), *RunMode, SetupId.IsEmpty() ? TEXT("(original schemes)") : *SetupId, Scheme);
 		FString OpenPage;
 		if (ShotTimes.Num() > 0 && FParse::Value(FCommandLine::Get(), TEXT("IceOpenMenu="), OpenPage))
@@ -638,6 +652,18 @@ void AIceRunGameMode::OnReply(const FIceBridge::FReply& Reply)
 	else if (Reply.Op == TEXT("frame"))
 	{
 		Present(FIceFrame::Parse(Reply.Data), false);
+		const TSharedPtr<FJsonObject>* IntroObj = nullptr;
+		const bool bIntroNow = Reply.Data->TryGetObjectField(TEXT("intro"), IntroObj) && IntroObj->IsValid();
+		if (bIntroNow && !bMusicWaiting)
+		{
+			bMusicWaiting = true;
+			if (Music) Music->Stop();
+		}
+		else if (!bIntroNow && bMusicWaiting)
+		{
+			bMusicWaiting = false;
+			StartMusic();
+		}
 		SenseLanding();
 		if (Latest.bFinished)
 		{

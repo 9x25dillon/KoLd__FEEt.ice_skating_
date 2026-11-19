@@ -44,6 +44,7 @@ const FEATURES = new Set([
 ]);
 const KINDS = new Set(["carve", "tracing", "transition", "glide", "jump", "inertia", "propulsion"]);
 const SOURCES = new Set(["derived", "literature", "protocol", "footage"]);
+const DIAGNOSTIC_KEYS = new Set(["observable", "value", "sd", "unit", "gated"]);
 
 /**
  * fidelity-gate §5.1, the model band b per observable. `rel` bands are a share
@@ -76,6 +77,22 @@ function invalid(c, file) {
   if (!c.source || !SOURCES.has(c.source.type)) return `unknown source type`;
   if (!Array.isArray(c.requires)) return "requires must be a list";
   if (!c.observable || !(c.observable.name in BANDS)) return `unknown observable "${c.observable?.name}"`;
+  if (c.diagnostics !== undefined) {
+    if (!Array.isArray(c.diagnostics)) return "diagnostics must be a list";
+    for (const d of c.diagnostics) {
+      if (!d || typeof d !== "object" || Array.isArray(d)) return "diagnostics entry must be an object";
+      for (const k of Object.keys(d)) {
+        if (!DIAGNOSTIC_KEYS.has(k)) return `unknown diagnostics field "${k}"`;
+      }
+      if (typeof d.observable !== "string" || !(d.observable in DIAGNOSTIC_EXTRACT)) {
+        return `unknown diagnostic observable "${d.observable}"`;
+      }
+      if (typeof d.value !== "number" || !Number.isFinite(d.value)) return "diagnostics.value must be a finite number";
+      if (typeof d.sd !== "number" || !Number.isFinite(d.sd) || d.sd < 0) return "diagnostics.sd must be a non-negative finite number";
+      if (typeof d.unit !== "string" || d.unit.length === 0) return "diagnostics.unit must be a non-empty string";
+      if (d.gated !== false) return "diagnostics.gated must be false";
+    }
+  }
   const e = c.expected;
   if (e === null) return null;
   if (c.inputs === null || typeof c.inputs !== "object") return "a sourced case needs inputs";
@@ -143,6 +160,8 @@ function snapshot(s, input, events) {
     fallen: s.fallen,
     events: events.map((e) => e.type),
     landed: events.some((e) => e.type === EVENT.Landing) ? { ...s.landed } : null,
+    // Sampled on the Takeoff event tick, matching tools/ice-lab/bench/overflight.ts (overflight branch).
+    takeoff_vz: events.some((e) => e.type === EVENT.Takeoff) ? s.jump.vz : null,
   };
 }
 
@@ -235,8 +254,17 @@ function flight(trace) {
   if (down < 0) return null;
   let h = 0;
   for (let k = up; k <= down; k++) h = Math.max(h, trace[k].z);
-  return { t: (trace[down].tick - trace[up].tick) * SIM_DT, h, landed: trace[down].landed };
+  return { t: (trace[down].tick - trace[up].tick) * SIM_DT, h, landed: trace[down].landed, takeoff_vz: trace[up].takeoff_vz };
 }
+
+/** Report-only diagnostic extractors; never gated. */
+const DIAGNOSTIC_EXTRACT = {
+  // Takeoff vertical velocity (m/s) sampled at EVENT.Takeoff, per tools/ice-lab/bench/overflight.ts.
+  takeoff_vz(run) {
+    const f = flight(run.trace);
+    return f && typeof f.takeoff_vz === "number" ? { value: f.takeoff_vz } : { reason: "no takeoff and landing" };
+  },
+};
 
 /** Each returns { value } or { reason } when the run could not produce the observable. */
 const EXTRACT = {
@@ -288,6 +316,34 @@ function compare(e, value) {
   }
 }
 
+function twoSidedCheck(e, deviation) {
+  if ((e.comparison !== "at_least" && e.comparison !== "at_most")
+    || typeof e.value !== "number" || typeof e.tolerance !== "number"
+    || typeof deviation !== "number") return undefined;
+  return {
+    deviation,
+    within: Math.abs(deviation) <= e.tolerance + 1e-12,
+  };
+}
+
+function evalDiagnostics(c, run) {
+  if (!Array.isArray(c.diagnostics) || c.diagnostics.length === 0) return undefined;
+  return c.diagnostics.map((d) => {
+    const got = DIAGNOSTIC_EXTRACT[d.observable](run, c);
+    if (!("value" in got)) {
+      return {
+        observable: d.observable, expected: d.value, sd: d.sd, unit: d.unit, gated: false,
+        actual: null, deviation: null, within_sd: null, reason: got.reason,
+      };
+    }
+    const deviation = got.value - d.value;
+    return {
+      observable: d.observable, expected: d.value, sd: d.sd, unit: d.unit, gated: false,
+      actual: got.value, deviation, within_sd: Math.abs(deviation) <= d.sd + 1e-12,
+    };
+  });
+}
+
 /** One preset's verdict on one case. */
 function judge(c, preset, casesDir, clipsDir = null) {
   let run;
@@ -297,14 +353,18 @@ function judge(c, preset, casesDir, clipsDir = null) {
   if (run.nondeterministic) {
     return { verdict: "fail", reason: `nondeterministic: replay diverged at tick ${run.nondeterministic.tick}` };
   }
+  const diagnostics = evalDiagnostics(c, run);
   const extract = EXTRACT[c.observable.name];
-  if (!extract) return { verdict: "fail", reason: `no extractor for ${c.observable.name} yet` };
+  if (!extract) return { verdict: "fail", reason: `no extractor for ${c.observable.name} yet`, ...(diagnostics ? { diagnostics } : {}) };
   const got = extract(run, c);
-  if (!("value" in got)) return { verdict: "fail", reason: got.reason };
+  if (!("value" in got)) return { verdict: "fail", reason: got.reason, ...(diagnostics ? { diagnostics } : {}) };
   const cmp = compare(c.expected, got.value);
-  if (!cmp) return { verdict: "fail", reason: `comparison "${c.expected.comparison}" not implemented yet` };
+  if (!cmp) return { verdict: "fail", reason: `comparison "${c.expected.comparison}" not implemented yet`, ...(diagnostics ? { diagnostics } : {}) };
+  const twoSided = twoSidedCheck(c.expected, cmp.deviation);
   return {
     verdict: cmp.pass ? "pass" : "fail", actual: got.value, deviation: cmp.deviation,
+    ...(twoSided ? { twoSided } : {}),
+    ...(diagnostics ? { diagnostics } : {}),
     ...(run.divergence ? { divergence: run.divergence } : {}),
   };
 }
@@ -333,7 +393,10 @@ export function validateCorpus(casesDir = DEFAULT_CASES, clipsDir = null) {
     results.push({
       ...base, expected: c.expected.value, comparison: c.expected.comparison,
       tolerance: c.expected.tolerance, unit: c.expected.unit, ...gated,
-      [REFERENCE_PRESET]: { verdict: reference.verdict, actual: reference.actual ?? null, reason: reference.reason },
+      [REFERENCE_PRESET]: {
+        verdict: reference.verdict, actual: reference.actual ?? null, reason: reference.reason,
+        ...(reference.diagnostics ? { diagnostics: reference.diagnostics } : {}),
+      },
     });
   }
   return summarize(results);
@@ -393,6 +456,27 @@ function human(report) {
   ])];
   const widths = head.map((_, i) => Math.max(...table.map((row) => String(row[i]).length)));
   for (const row of table) out.push(row.map((cell, i) => String(cell).padEnd(widths[i])).join("  ").trimEnd());
+  const diagRows = [];
+  for (const x of rows) {
+    if (!x.diagnostics) continue;
+    for (let i = 0; i < x.diagnostics.length; i++) {
+      const d = x.diagnostics[i];
+      const refD = x[report.reference]?.diagnostics?.[i];
+      diagRows.push([
+        x.id, d.observable, `${fmt(d.expected, d.unit)} ± ${fmt(d.sd)}`, fmt(d.actual, d.unit), fmt(d.deviation),
+        d.within_sd === null ? (d.reason ?? "—") : d.within_sd ? "within ±SD" : (d.deviation > 0 ? `over by ${fmt(d.deviation - d.sd)}` : `under by ${fmt(-d.deviation - d.sd)}`),
+        refD && refD.actual !== null ? fmt(refD.actual, d.unit) : "—",
+      ]);
+    }
+  }
+  if (diagRows.length > 0) {
+    out.push("");
+    out.push("Diagnostics (not gated):");
+    const dHead = ["case", "observable", "expected ± SD", "actual", "deviation", "status", report.reference];
+    const dTable = [dHead, ...diagRows];
+    const dWidths = dHead.map((_, i) => Math.max(...dTable.map((row) => String(row[i]).length)));
+    for (const row of dTable) out.push(row.map((cell, i) => String(cell).padEnd(dWidths[i])).join("  ").trimEnd());
+  }
   const unsourced = report.results.filter((r) => r.verdict === "unsourced");
   const unmodelled = report.results.filter((r) => r.verdict === "unmodelled");
   out.push("");
@@ -471,14 +555,40 @@ export function markdown(report) {
     out.push("**Comparison** says how the case is judged. `±`: two-sided, passes when the deviation is within the tolerance");
     out.push("either way. `≥`: one-sided, the model must reach at least the expected value less the tolerance, and any amount");
     out.push("above it passes. `≤`: the mirror, at most the expected value plus the tolerance. So a `≥` or `≤` case can pass with");
-    out.push("a deviation larger than its tolerance, and such a pass says nothing about how far the model overshoots.", "");
-    out.push(`| Case | Source | Observable | Comparison | Expected | Tolerance | Actual | Deviation | Verdict | \`${report.reference}\` |`);
-    out.push("| --- | --- | --- | :---: | ---: | ---: | ---: | ---: | --- | --- |");
+    out.push("a deviation larger than its tolerance, and such a pass says nothing about how far the model overshoots.");
+    out.push("**Two-sided** is a report-only diagnostic for `≥` / `≤` cases showing whether `|deviation| ≤ tolerance` (`✓`, or");
+    out.push("`over by X` / `under by X` for the excess beyond the two-sided band `|deviation| − tolerance`); it is not gated and never affects any verdict, count, or exit code.", "");
+    out.push(`| Case | Source | Observable | Comparison | Expected | Tolerance | Actual | Deviation | Verdict | Two-sided | \`${report.reference}\` |`);
+    out.push("| --- | --- | --- | :---: | ---: | ---: | ---: | ---: | --- | :---: | --- |");
     for (const x of sourced) {
       const ref = x[report.reference];
       const refCell = ref ? `${ref.verdict}${ref.actual !== null ? " " + num(ref.actual) : ""}${ref.reason ? " (" + ref.reason + ")" : ""}` : "—";
+      const ts = x.twoSided;
+      const tsCell = !ts ? "—" : ts.within ? "✓" : (ts.deviation > 0 ? `over by ${num(ts.deviation - x.tolerance)}` : `under by ${num(-ts.deviation - x.tolerance)}`);
       out.push(`| \`${x.id}\` | ${x.source} | \`${x.observable}\` | ${COMPARISON[x.comparison] ?? "—"} | ${num(x.expected)} ${x.unit ?? ""} | ${num(x.tolerance)} | ${num(x.actual)} | ${num(x.deviation)} | `
-        + `${x.verdict === "pass" ? "pass" : "**FAIL**"}${x.reason ? " — " + x.reason : ""} | ${refCell} |`);
+        + `${x.verdict === "pass" ? "pass" : "**FAIL**"}${x.reason ? " — " + x.reason : ""} | ${tsCell} | ${refCell} |`);
+    }
+    out.push("");
+  }
+
+  const diagEntries = [];
+  for (const x of r) {
+    if (!x.diagnostics) continue;
+    for (let i = 0; i < x.diagnostics.length; i++) {
+      diagEntries.push({ id: x.id, d: x.diagnostics[i], refD: x[report.reference]?.diagnostics?.[i] });
+    }
+  }
+  if (diagEntries.length > 0) {
+    out.push("## Diagnostics (not gated)", "");
+    out.push("Report-only measurements attached to cases for inspection; never affects any verdict, coverage count, or exit code.", "");
+    out.push(`| Case | Observable | Expected | SD | Actual | Deviation | Within ±SD | \`${report.reference}\` |`);
+    out.push("| --- | --- | ---: | ---: | ---: | ---: | :---: | --- |");
+    for (const { id, d, refD } of diagEntries) {
+      const statusCell = d.within_sd === null ? (d.reason ?? "—")
+        : d.within_sd ? "✓"
+        : (d.deviation > 0 ? `over by ${num(d.deviation - d.sd)}` : `under by ${num(-d.deviation - d.sd)}`);
+      const refCell = refD && refD.actual !== null ? num(refD.actual) : "—";
+      out.push(`| \`${id}\` | \`${d.observable}\` | ${num(d.expected)} ${d.unit} | ${num(d.sd)} | ${num(d.actual)} | ${num(d.deviation)} | ${statusCell} | ${refCell} |`);
     }
     out.push("");
   }
