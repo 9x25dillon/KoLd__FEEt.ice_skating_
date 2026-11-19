@@ -101,3 +101,24 @@ test('the story and the coach reach the bridge catalog and snapshot the menus re
   for (const key of ['season', 'coach', 'cast', 'statTitles']) assert.ok(story[key], key);
   assert.ok(Array.isArray(e.snapshot().career.advice));
 });
+
+test("the frame's footPrep is parsed and IceSkater blends toward it at PREP_RATE before freeSwing", async () => {
+  const {IceEngine} = await import('../../ice-run-godot/bridge/engine.mjs');
+  const e = new IceEngine();
+  e.start({mode: 'free'});
+  const preps = e.snapshot().footPrep;
+  assert.ok(Array.isArray(preps) && preps.length === 2, 'snapshot carries two footPrep entries');
+  for (const field of ['pose', 'weight', 'at', 'lift']) {
+    assert.ok(Object.hasOwn(preps[0], field), `footPrep[0] has '${field}'`);
+  }
+  const frameCpp = read('Source/IceRun/IceFrame.cpp');
+  assert.match(frameCpp, /TryGetArrayField\(TEXT\("footPrep"\)/, 'IceFrame.cpp parses footPrep array');
+  for (const field of ['pose', 'weight', 'at', 'lift']) {
+    assert.match(frameCpp, new RegExp(`TEXT\\("${field}"\\)`), `IceFrame.cpp reads footPrep.${field}`);
+  }
+  const skaterCpp = read('Source/IceRun/IceSkater.cpp');
+  assert.match(skaterCpp, /constexpr double PrepRate = 10\.0;/, 'IceSkater.cpp matches skater.gd PREP_RATE');
+  const blendIdx = skaterCpp.indexOf('Free = FMath::Lerp(Free, PrepFeet[I], PrepAmount[I]);');
+  const swingIdx = skaterCpp.indexOf('Free = H + RotY(Free - H, S.FreeSwing);');
+  assert.ok(blendIdx > 0 && swingIdx > blendIdx, 'footPrep blend runs before sim freeSwing');
+});

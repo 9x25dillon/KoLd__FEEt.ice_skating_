@@ -51,6 +51,20 @@ struct FIceSupport
 	double ComHeight = 0.95;
 };
 
+/**
+ * game/footprep.ts FootPrep, per blade: where a free foot is carried before it
+ * takes the load (beside, extended, cross, under, held, or none).
+ * scripts/skater.gd reads the same one.
+ */
+struct FIceFootPrep
+{
+	bool bValid = false;
+	FString Pose;
+	double Weight = 0.0;
+	FVector2D At = FVector2D::ZeroVector;
+	double Lift = 0.0;
+};
+
 /** The solver's SkaterState, the fields scripts/skater.gd poses from. */
 struct FIceState
 {
@@ -81,6 +95,7 @@ struct FIceState
 	double SpinInertia = 0.0;
 	FIceBlade Blade[2];
 	FIceSupport Support;
+	FIceFootPrep FootPrep[2];
 };
 
 /** A trace sample: both blades' contacts, every fourth tick (bridge/engine.mjs advance). */
