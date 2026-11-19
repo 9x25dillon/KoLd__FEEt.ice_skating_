@@ -1,8 +1,8 @@
 # Hand-off — EDGEWORK / native game
 
 ## Resume here
-**Newest close:** 19 November 2026, 13:00 PST · Claude Code, Opus 5.5 · session `374084d9`
-**Where things stand:** `origin/main` is `8c2fc0b` (#121), and CI is green on it (all three workflows). **No PRs are open.**
+**Newest close:** 19 November 2026, 13:20 PST · Claude Code, Opus 5.5 · session `374084d9`
+**Where things stand:** `origin/main` is `cf0ad40` (#124), and CI was green on the PR head. **No PRs are open.**
 - Landed today:
   - #114 free-foot prep;
   - #115 beatcross;
@@ -10,8 +10,10 @@
   - #122 boards gap;
   - #119 presentation parity, which carried #116 step clips and #117 program intro;
   - #120 over-flight bench;
-  - #121 two-sided fidelity report.
-- **Still running: agy** on `footprep2` (`.delivery/footprep2`). All 3 parts are committed (`a342da1`, `7c836fc`, `71b1a0a`), plus a main merge and README counts. Not pushed yet, and 3 merges behind `main` at 12:50.
+  - #121 two-sided fidelity report;
+  - #123 this hand-off;
+  - #124 free-foot part 2 by agy: `crossPlaceMode` (off everywhere), `extended` glide recovery, and the Unreal port. Its report is `docs/reports/footprep2-2026-11-19.md`.
+- Nothing is running.
 
 **Corrects the previous hand-off (18 Nov):**
 - `gh` is logged in.
@@ -20,18 +22,15 @@
 - `boards-gap` was finished and merged (#122).
 - Open questions 1–3 of 18 Nov are answered (see Decisions).
 
-**Decision needed:** none to start.
+**Decision needed:** which setups get `crossPlaceMode: 1`. agy recommends Simulation, Experimental and Dig Gate (all have weight transfer), and off in Explorer and Repertoire. Turning it on in Experimental moves the 2Lo's L from 24.17 to 23.58, so the pinned `backjump.test.ts` value must be re-measured. Say "turn it on in …".
 **Start with:**
-1. `git fetch origin; git log --oneline -5 origin/main; gh pr list`: expect `8c2fc0b` or later, with a `footprep2` PR open or about to be.
-2. When agy's PR opens:
-   - check it doesn't replace the committed root `REPORT.md` (beatcross's). At 12:50 agy was overwriting it in its worktree, uncommitted. The fix: its report goes to `docs/reports/footprep2-2026-11-19.md`, and main's `REPORT.md` is kept.
-   - merge `origin/main` in and regenerate the README block, as below;
-   - then review `crossPlaceMode`'s on vs off numbers.
+1. `git fetch origin; git log --oneline -5 origin/main; gh pr list`: expect `cf0ad40` or later.
+2. Read `docs/reports/footprep2-2026-11-19.md` (the off vs on table and the recommendation). Then do the owner's `crossPlaceMode` pick behind a test, re-measuring any pinned value it moves (re-search; never loosen).
 
 ## Progress track (newest first)
 | Date | Session | Shipped | State after |
 |---|---|---|---|
-| 2026-11-19 | Opus 5.5 `374084d9` + Codex `01a1f564` + Sonnet | PR #114, #118–#122 landed (#115 by owner) | main `8c2fc0b`, CI green, no open PRs; agy on `footprep2` |
+| 2026-11-19 | Opus 5.5 `374084d9` + Codex `01a1f564` + Sonnet + agy | PR #114, #118–#124 landed (#115 by owner) | main `cf0ad40`, no open PRs; `crossPlaceMode` built, off |
 | 2026-11-18 | Opus 5.5 `43d27f3e` | `59f3e42` on `footprep` | `game/footprep.ts` posed by `skater.gd`; no sim change |
 | 2026-11-18 | Claude `2eb8d038` + Codex + Qwen + agy briefs | local branches | beatcross, nationals-pilot, overflight, programclips, stepclips, two-sided-report, boards-gap |
 | 2026-11-14–16 | various | PR #107–#113 | venues, kiss-and-cry, costume test, validation tranche, fidelity-ascension; main `4aaf328` |
@@ -39,13 +38,8 @@
 | earlier | — | — | `docs/handoff-before-*.md`; previous page: `docs/handoff-before-landing-2026-11-19.md` |
 
 ## In flight
-- **Free-foot part 2** (agy; brief `.delivery/footprep2-brief.md`; worktree `.delivery/footprep2`; branch `footprep2`, local only at 12:50). Done:
-  1. `crossPlaceMode` (sim, 0 in every preset): a crossover's outside blade is placed past the skating blade.
-  2. `extended` glide recovery, chosen from present state (presentation only).
-  3. The blend ported to Unreal `IceSkater.cpp`.
-  - Left: push, PR, the `REPORT.md` problem above, catching up with main, and its mode on vs off table.
-  - Verify: with the mode off, digests are identical to main. The pose lab's crossings must equal the sim's crossed contacts.
-- **How today's conflicts were landed** (use the same way for `footprep2`):
+- **Free-foot part 2: landed (#124).** Measured with the mode on: 108 crossed ticks in the footwork passage, 23.3 cm blade clearance, 0 falls, the same speed gain and curve, and pose crossings equal to the sim's (54/54). Not felt on the pad yet.
+- **How today's conflicts were landed** (use the same way for future branches):
   - merge `origin/main` into the branch, never rebase;
   - main's root `REPORT.md` is kept, and the branch's report goes to `docs/reports/<branch>-<date>.md`;
   - regenerate what CI checks byte for byte (run the suites with TAP into a scratch dir, then `node status.mjs --logs <dir> --write` and `node validate.mjs --report ../../docs/fidelity-report.md` in `tools/ice-lab`).
@@ -91,8 +85,8 @@
 - The over-flight bench reproduces its committed JSON exactly after the merge.
 
 ## Next steps, in order
-1. agy's `footprep2` PR: fix `REPORT.md`, merge main, regenerate the README block, CI green, merge.
-2. The owner reads `crossPlaceMode`'s numbers and picks its setups (Open question 2), plus the boards-snap choice in `docs/boardsgap-2026-11.md`.
+1. The owner picks `crossPlaceMode`'s setups (Open question 2) from `docs/reports/footprep2-2026-11-19.md`; build that, and re-measure `backjump.test.ts`'s L if Experimental is included.
+2. The owner reads the boards-snap choice in `docs/boardsgap-2026-11.md`.
 3. Settle Open question 1 (beatcross WIP).
 4. Pad playtest: a crossover and a three-turn on Simulation, with and without `crossPlaceMode`; the program intro.
 5. Then the known limit: the COM swaying over a planted blade (`docs/support-signal.md`).
@@ -119,4 +113,4 @@ Conflict test without touching a branch: `git merge-tree --write-tree --name-onl
 word, referent, idempotent, provenance, invariant, presupposition, stipulate, contiguous, fast-forward, confabulation, threat model, reaction torque, confound, regression, acceptance criterion, race condition, negative control, preregistration, stacked PR, attestation, opt-in, monotonic, triage, Goodhart's law, protocol deviation, chirality, Pareto front, squash merge, dangling commit, forward kinematics, contact constraint, false negative, affordance, counterfactual, bake, centre of pressure, knife-edge result, lookahead, latch, superset (Opus 5.5, 2026-11-19), addressee (Opus 5.5, 2026-11-19)
 
 ## Opening prompt for next session (edit the brackets)
-> Read `Hand_off.md` on `origin/main` (or branch `handoff-2026-11-19` if unmerged) in a fresh worktree and run its one-shot check. [agy's footprep2 PR is #… / not open yet.] Land it (REPORT.md to docs/reports, merge main, README block), then [review crossPlaceMode's numbers | the boards-snap choice | …]. Stipulate: live work. When we wrap up: /hanoffed.
+> Read `Hand_off.md` on `origin/main` (or branch `handoff-2026-11-19` if unmerged) in a fresh worktree and run its one-shot check. Turn crossPlaceMode on in [Simulation, Experimental, Dig Gate | …] and re-measure what it moves; then [the boards-snap choice | …]. Stipulate: live work. When we wrap up: /hanoffed.
