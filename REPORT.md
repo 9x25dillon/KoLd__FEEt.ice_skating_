@@ -1,79 +1,138 @@
-# Report: Two-sided Reporting & `takeoff_vz` Diagnostics (`two-sided-report`)
+# REPORT — Qwen beatcross (measurement, not a behaviour change)
 
-## What Changed
+Brief: `.delivery/briefs/qwen-beatcross.md`. Hand_off.md open question 2: do
+Experimental's automatic beat crossovers make a jump depend on the music?
+Worktree `.delivery/beatcross`, branch `beatcross`, baseline `4aaf328`.
+Session: `qwen-beatcross-75b8` (auric porter). **No push, no PR** — Claude Code
+reviews and relays.
 
-1. **`tools/ice-lab/validate.mjs`**
-   - Added report-only `twoSided: { deviation, within }` for every `at_least` / `at_most` case with a finite `value` and `tolerance` (`within: |deviation| <= tolerance + 1e-12`). Never read by `verdict`, `summary`, `coverage`, or exit code.
-   - Added a `Two-sided` column to `markdown()` (`✓` / `over by X` / `under by X` for excess beyond the two-sided tolerance band, or `—` for two-sided/categorical cases) and documented it in the Sourced cases legend.
-   - Added `takeoff_vz` snapshot capture at `EVENT.Takeoff` (`s.jump.vz`), copying the method from `tools/ice-lab/bench/overflight.ts` (branch `overflight`), and `DIAGNOSTIC_EXTRACT.takeoff_vz`.
-   - Added strict validation of the optional `diagnostics` array in `invalid(c, file)` so unknown keys, unknown diagnostic observables, invalid numbers/units, or `gated !== false` fail loudly as `invalid case: ...`.
-   - Added a `Diagnostics (not gated)` table to both `human()` and `markdown()` outputs.
+## Answer (one line)
 
-2. **Koga 2025 Case Files** (`data/validation/cases/air-time-*-koga2025.json`)
-   - Added optional `diagnostics` entry for `takeoff_vz` (`gated: false`) using the Koga 2025 Table 2 mean ± SD already cited in each case's `source.notes`:
-     - `air-time-waltz-jump-koga2025.json`: `1.77 ± 0.46 m/s`
-     - `air-time-single-axel-koga2025.json`: `2.24 ± 0.42 m/s`
-     - `air-time-double-axel-koga2025.json`: `2.73 ± 0.31 m/s`
+Yes — the same clean-2Lo script stands at only **20 of 57** load phases across one
+beat on the shipped setup; the beat's crossovers shape the entry and a load just
+after a beat begins two-footed. The owner's hold-suppression option removes the
+two-footed start (share **1.000 at all 57**) but also the crossover pushes this
+entrance rode in on, so it stands at **0 of 57**. Full report:
+`docs/beatcross-2026-11.md`; data: `docs/beatcross-2026-11.json`.
 
-3. **Documentation**
-   - `docs/fidelity-gate.md` (§4.3 O5): Added the paragraph `"Two-sided columns and diagnostics are reported, not gated (owner, 2026-11-18)."`
-   - `docs/fidelity-report.md`: Regenerated with `node tools/ice-lab/validate.mjs --report docs/fidelity-report.md`.
+## What changed
 
-4. **Tests**
-   - `tools/ice-lab/test/two-sided-report.test.ts`: Added tests verifying that verdicts, summary counts, coverage, and `spec` results are identical with and without `diagnostics`, that `twoSided` covers `at_least` and `at_most` without affecting verdicts or exit code, and that malformed `diagnostics` entries are rejected loudly.
+New files (mine):
+- `tools/ice-lab/bench/beatcross.ts` — the sweep. Canonical 2Lo entrance
+  (`jpse/baseline.ts` BASELINE) with `loadAt` shifted across one beat period
+  (0.46875 s @ 128 bpm) in 1-tick steps, 57 offsets, twice (lever 0 and 1).
+  Closed-loop through `setupInput`, on the game's ice grid; every run
+  replay-verified, carries its digest. Records support shares, crossover starts,
+  L, call, airborne degrees, run-out, fall reason. `import.meta.main`-guarded so
+  tests can import `runOffset`.
+- `tools/ice-lab/test/beatcross.test.ts` — 7 tests: param default/validate, the
+  guard is the hold not the crossover (released glide identical at 0/1; held glide
+  suppressed only at 1), pinned sweep anchors (off 0 clean two-footed, off 36
+  entry fall, on one-footed/no-crossover/fell-entry), determinism (same offset
+  twice, digest and all).
+- `docs/beatcross-2026-11.md`, `docs/beatcross-2026-11.json` — the report + data.
+- `REPORT.md` — this file.
 
-## Verdict Table Comparison (Before vs. After)
+The single param and its guarded use (exact sites):
+- `tools/ice-lab/sim/params.ts:949–961` — `beatCrossoverHoldSuppress: number`
+  declaration + doc (mapping-only; the solver never reads it).
+- `tools/ice-lab/sim/params.ts:1273` — default `0`.
+- `tools/ice-lab/sim/params.ts:1478` — validate `0` or `1`.
+- `tools/ice-lab/game/full-controls.ts:735–739` — the guarded use: `stand`,
+  `standPull`, `heldTowardLoad` (lever ≥ 1, one foot, not mid-push, standing
+  trigger pulled past `GESTURE_TICKS`), OR-ed into the existing `loading` that
+  already gates `autoCrossover` at lines 740–744. At 0 `heldTowardLoad` is false
+  and `loading` is exactly the shipped expression.
+- `tools/ice-lab/sim/replay.ts:291–293` — /39 changelog note, **unbumped**
+  (default-off mapping lever, the established convention).
+- `tools/ice-lab/test/fixtures/replay-v1.json` — rebased via the sanctioned
+  `node replay/rebase-fixture.ts`: `addedParams:["beatCrossoverHoldSuppress"]`,
+  `frames:240`, `digestsUnchanged:true`. Only the new key at default 0; every
+  input and digest unchanged.
 
-All 11 sourced cases keep the exact same `Expected`, `Tolerance`, `Actual`, `Deviation`, `Verdict` (`pass`), and `spec` values. Summary counts remain:
-`11 pass, 0 fail, 25 unsourced, 2 unmodelled, of 38 cases` (exit code `0`).
+Not touched: `native/reference/*` and its 93-param pin — already stale on main
+(current DEFAULT_PARAMS has 219 keys; the native reference is frozen at the
+93-param era and is not in the brief's verify commands; recent lever commits
+`3c6c554`, `cd05bb3` did not regenerate it). No setup enables the lever; it is 0
+in every setup. No solver, score, presentation or replay-contract change.
 
-Diff of `docs/fidelity-report.md` sourced cases and diagnostics:
+## Commands run (from the worktree) and outputs
 
-```diff
-+**Two-sided** is a report-only diagnostic for `≥` / `≤` cases showing whether `|deviation| ≤ tolerance` (`✓`, or
-+`over by X` / `under by X` for the excess beyond the two-sided band `|deviation| − tolerance`); it is not gated and never affects any verdict, count, or exit code.
-+
-+| Case | Source | Observable | Comparison | Expected | Tolerance | Actual | Deviation | Verdict | Two-sided | `spec` |
-+| --- | --- | --- | :---: | ---: | ---: | ---: | ---: | --- | :---: | --- |
-+| `air-time-double-axel-koga2025` | literature | `air_time_s` | ≥ | 0.5100 s | 0.0640 | 0.7250 | 0.2150 | pass | over by 0.1510 | pass 0.7333 |
-+| `air-time-isolated-jumps-bruening2018` | literature | `air_time_s` | ≥ | 0.4400 s | 0.0781 | 0.5917 | 0.1517 | pass | over by 0.0736 | pass 0.5917 |
-+| `air-time-single-axel-koga2025` | literature | `air_time_s` | ≥ | 0.4000 s | 0.0860 | 0.7250 | 0.3250 | pass | over by 0.2390 | pass 0.7333 |
-+| `air-time-waltz-jump-koga2025` | literature | `air_time_s` | ≥ | 0.3600 s | 0.1118 | 0.7250 | 0.3650 | pass | over by 0.2532 | pass 0.7333 |
-+| `carve-residual-fast-deep` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | -0.0054 | -0.0054 | pass | — | fail 0.6109 |
-+| `carve-residual-mid` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0032 | 0.0032 | pass | — | fail 0.5313 |
-+| `carve-residual-slow-shallow` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0031 | 0.0031 | pass | — | fail (no steady window (fidelity-gate §4.4)) |
-+| `carve-residual-two-foot` | derived | `carve_lean_residual_deg` | ± | 0.0000 deg | 0.5000 | 0.0517 | 0.0517 | pass | — | fail (no steady window (fidelity-gate §4.4)) |
-+| `flight-residual-full-jump-moves` | derived | `air_time_height_residual_m` | ± | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | — | pass -0.0010 |
-+| `flight-residual-hop` | derived | `air_time_height_residual_m` | ± | 0.0000 m | 0.0500 | -0.0010 | -0.0010 | pass | — | pass -0.0010 |
-+| `glide-hockey-sled-federolf2008` | literature | `glide_decel_ms2` | ± | 0.0697 m/s^2 | 0.0181 | 0.0720 | 0.0024 | pass | — | pass 0.0720 |
-+
-+## Diagnostics (not gated)
-+
-+Report-only measurements attached to cases for inspection; never affects any verdict, coverage count, or exit code.
-+
-+| Case | Observable | Expected | SD | Actual | Deviation | Within ±SD | `spec` |
-+| --- | --- | ---: | ---: | ---: | ---: | :---: | --- |
-+| `air-time-double-axel-koga2025` | `takeoff_vz` | 2.7300 m/s | 0.3100 | 3.5754 | 0.8454 | over by 0.5354 | 3.6228 |
-+| `air-time-single-axel-koga2025` | `takeoff_vz` | 2.2400 m/s | 0.4200 | 3.5754 | 1.3354 | over by 0.9154 | 3.6228 |
-+| `air-time-waltz-jump-koga2025` | `takeoff_vz` | 1.7700 m/s | 0.4600 | 3.5754 | 1.8054 | over by 1.3454 | 3.6228 |
-```
+Baseline before editing (`4aaf328`): ice-lab 1095 tests / 1094 pass / 0 fail /
+1 todo; replay verify `{"verified":true,"ticks":240}`; Godot prepare 94 modules;
+Godot 68/68. (The 1 todo is the documented fidelity-floor test
+`discretisation.test.ts:332`, failing-by-design, exit 0.)
 
-## Verification Commands & Outputs
+After the param + bench + tests:
+- `(cd tools/ice-lab && node --test test/*.test.ts)` → **1102 tests, 1101 pass,
+  0 fail, 1 todo**, exit 0 (1095 + the 7 new).
+- `(cd tools/ice-lab && node replay/verify.ts test/fixtures/replay-v1.json)` →
+  `{"verified":true,"ticks":240}`.
+- `node games/ice-run-godot/tools/prepare.mjs --engine-only` → exit 0,
+  "Prepared 94 Ice Lab modules".
+- `node --test --test-isolation=none games/ice-run-godot/tests/*.test.mjs` →
+  **68 tests, 68 pass, 0 fail**, exit 0.
+- Typecheck: scratch `/tmp/qwen-beatcross-tsc` (`npm install typescript
+  @types/node`), then from `tools/ice-lab`:
+  `/tmp/qwen-beatcross-tsc/node_modules/.bin/tsc --noEmit -p . --typeRoots
+  /tmp/qwen-beatcross-tsc/node_modules/@types` → **exit 0, no errors**.
+- `node tools/ice-lab/replay/rebase-fixture.ts` →
+  `{"from":"HEAD (ice-lab-f64/39)","to":"ice-lab-f64/39","frames":240,
+  "addedParams":["beatCrossoverHoldSuppress"],"removedParams":[],
+  "digestsUnchanged":true}`.
+- `node bench/beatcross.ts` → both sweeps, all 114 runs replay-verified, writes
+  `docs/beatcross-2026-11.json`.
 
-- **Baseline** (commit `4aaf328`):
-  - `tools/ice-lab`: `node --test test/*.test.ts` → 1095 tests: 1094 pass, 0 fail, 1 todo (`test/discretisation.test.ts:332:1` known floor todo)
-  - `node replay/verify.ts test/fixtures/replay-v1.json` → `{"verified":true,"ticks":240}`
-  - `games/ice-run-godot`: `node games/ice-run-godot/tools/prepare.mjs --engine-only && node --test --test-isolation=none games/ice-run-godot/tests/*.test.mjs` → 68 tests: 68 pass, 0 fail
-  - `node tools/ice-lab/validate.mjs` → 11 pass, 0 fail, 25 unsourced, 2 unmodelled (exit 0)
+Inertness proof (lever 0): the off sweep measured **before** the param existed
+(`/tmp/qwen-beatcross-off-preparam.json`) and **after** is byte-identical across
+all 57 records — every field, every digest (compared excluding only the
+`fallReason` field added to the schema between runs). The full verify suite is
+identical to baseline. Replay stays /39; every digest unchanged.
 
-- **Post-edit**:
-  - `(cd tools/ice-lab && node --test test/*.test.ts && node replay/verify.ts test/fixtures/replay-v1.json)` → 1098 tests: 1097 pass, 0 fail, 1 todo (+3 new tests in `test/two-sided-report.test.ts`); replay `{"verified":true,"ticks":240}`
-  - `node games/ice-run-godot/tools/prepare.mjs --engine-only && node --test --test-isolation=none games/ice-run-godot/tests/*.test.mjs` → 68 tests: 68 pass, 0 fail
-  - `node tools/ice-lab/validate.mjs --report docs/fidelity-report.md` → 11 pass, 0 fail, 25 unsourced, 2 unmodelled (exit 0); rerun diff against `docs/fidelity-report.md` is empty (byte-identical).
-  - `tsc --noEmit`: Passed with 0 errors (`/tmp/agy-tsc/node_modules/.bin/tsc --noEmit -p . --typeRoots /tmp/agy-tsc/node_modules/@types`, after adding `twoSided` and `diagnostics` types to `tools/ice-lab/validate.d.mts`).
+## Measurements (the two sweeps)
 
-## Open Questions for the Owner
+Off (shipped): 20/57 complete; 37 falls (35 LEAN EXCEEDED, 2 LANDING); 27 entry
+falls (offsets 20–22, 33–56), 8 run-out falls (13, 15, 18, 23, 29–32), 2 landing
+falls (1–2, under/downgraded). Load-start right share 0.531–0.978; blade-off share
+1.000 on every takeoff. Crossovers fire at ticks 113, 169 in the entry (the beat at
+57 is too shallow), then 338, 394, 450… in the run-out.
 
-- In `docs/fidelity-report.md`, `over by X` / `under by X` in the `Two-sided` and `Within ±SD` columns reports the excess beyond the tolerance / SD band (`|deviation| − tolerance` or `|deviation| − sd`) rather than raw `|deviation|`, since `Deviation` is already shown in its own column. Confirm if that convention is preferred.
-- `README.md` was not modified (outside owned files); CI's `status.mjs` check may expect `README.md` test count to be updated when merging (1094 → 1097 passing tests).
-- Commit on branch `two-sided-report` is pending owner confirmation per workspace git-commit approval rules.
+On (owner's option, literal reading): 0/57 complete; 57 LEAN EXCEEDED entry falls;
+**0 crossovers**; load-start share **1.000 at every offset**. The canonical script
+holds RT half from tick 0, so the hold suppresses the whole entry's crossovers;
+without their pushes the glide is shallower/slower and every load leans past the
+limit before release.
+
+Mechanism probes (scratch `/tmp/qwen-beatcross-probe.mjs`, not committed): off
+offset 36 falls LEAN EXCEEDED at tick 261 (lean −0.88 at load → −1.13, release due
+267); off offset 21 the same at 240 with a diverging balance error (−1.54); on
+offset 0 falls at 216 (lean −0.69 at load → −1.16, release due 231), entry glide
+lean −0.64 / speed 6.56 vs off −0.88 / 6.78 at tick 160.
+
+## Open questions for the owner
+
+1. **The choice** (spelled out in `docs/beatcross-2026-11.md` §"The owner's
+   choice"): keep 0; or adopt 1 **and re-search the entrance** (the lever is sound
+   for a released-glide-then-hold posture, but the searched canonical script holds
+   throughout and loses its propulsion); or refine the reading. Recommendation:
+   do not ship 1 on by default — it breaks the canonical entrance.
+2. **"Held toward a load" threshold.** Prototyped as any standing-trigger hold
+   past the snap window on one foot. A narrower reading (only holds ≥ `PUMP_HIGH`
+   0.6) would not suppress the script's RT half (0.474) and would leave this
+   entrance unchanged — the existing load guard already stops crossovers at
+   RT ≥ 0.7. Which reading does the owner want? The 0/57 result is specific to the
+   literal reading + this script.
+3. **Scope of the measurement.** One entrance, one speed (7 m/s), one bpm (128),
+   Experimental only. Should the sweep be re-pointed at other jumps/speeds/tracks
+   before the decision? The bench takes BASELINE and params as given.
+
+## Hard rules honoured
+
+Worked only in `.delivery/beatcross`; never touched the outer checkout or another
+worktree. No deletes/resets/clean/force-push/`checkout --`. No process kills.
+Presentation/sim/score untouched; new physics behind a default-off mode; replay
+/39, every digest unchanged. Measured before claiming; authored numbers labelled
+(authored: weightTransferTime 0.25, musicBpm 128, strokeDuration 0.30,
+jumpLoadKnee 0.7). No test loosened; the fixture rebase is the sanctioned
+default-off recipe (digests unchanged), not a re-pin of behaviour. Commit on
+`beatcross` with Co-Authored-By; no push, no PR.

@@ -288,6 +288,9 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       2026-11-14, also unbumped: Params weightTransferMode (0 everywhere)
 //       and weightTransferTime; SkaterState optional loadBias/loadRate/
 //       loadAsked, present only at 1. Fixture rebased, every digest unchanged.
+//       2026-11-18, also unbumped: Params beatCrossoverHoldSuppress (0 by
+//       default), a mapping-only guard (game/full-controls.ts) — the solver
+//       never reads it. Fixture rebased, every digest unchanged.
 export const REPLAY_SOLVER = "ice-lab-f64/39";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;

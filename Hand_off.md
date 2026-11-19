@@ -1,112 +1,96 @@
 # Hand-off — EDGEWORK / native game
 
 ## Resume here
-**Newest close:** 14 November 2026, 19:20 PST · Claude Code, Opus 5.5 · session `2525c6dc`
-**Where things stand:** `main` is `dc51b4b` (PRs #95–#106 all merged today).
-- **Weight transfer is on** in Simulation, Experimental and Dig Gate.
-  - The blades now hand the load over in about 0.25 s instead of in one tick.
-  - One support signal (`sim/support.ts`) is sent with every frame, and Godot and Unreal both pose from it.
-  - Every pinned test it moved was re-measured, or its script re-searched with JPSE (#105).
-- **New resources:** skates (#102), element telemetry cards (#103), 34 costumes in 10 collections (#104).
-- **Ships separately:** venues and the kiss-and-cry fix come from session `fcd73900`.
+**Newest close:** 18 November 2026, 15:40 PST · Claude Code, Opus 5.5 · session `43d27f3e`
+**Where things stand:** `origin/main` is `4aaf328` (#113). Free-foot preparation (the directive's next phase) is built, presentation only, as commit `59f3e42` on branch `footprep` in `.delivery/footprep`. It is **not pushed**: `gh`'s token is invalid (HTTP 401). Seven other briefs ran today in parallel, each on its own local, unpushed branch (see In flight).
+**Corrects the previous hand-off (14 Nov):**
+- The costume test is fixed (#111).
+- #108 (venues) and #109 (kiss-and-cry) are merged, as are #112 (validation tranche) and #113 (fidelity-ascension).
+- Open question 1 is closed. Next step 5 (free-foot preparation) is done, pending merge.
 
-**Broken on main:** CI "Ice Lab checks" fails at `dc51b4b`. The only failure is `games/ice-run-godot/tests/engine.test.mjs:150`, which expects exactly the four original costumes.
-**Corrects the previous hand-off:** the morning hand-off (`5770ba3`, session `50f7edd7`) was never pushed; it's archived as `docs/handoff-before-weight-transfer-2026-11-14.md`. Its kiss-and-cry diagnosis ("large replies time out") was wrong. Session `fcd73900` found the real causes (see Decisions).
-**Decision needed:** fix the costume test: `hello.skins.slice(0,4)` at `engine.test.mjs:150`. Say yes and it's a one-line PR.
+**Decision needed:** run `! gh auth login`, then say "push footprep and open the PR".
 **Start with:**
-1. `git fetch origin; git log --oneline -5 origin/main; gh pr list`: expect `b3e0f8f` or later, and PRs #108 (`venues`) and #109 (`kiss-and-cry-wip`) open or merged.
-2. The costume test fix (one line), then check that CI is green.
-3. Then the owner's answers to Open questions 1–3.
+1. `gh auth status; git fetch origin; git log --oneline -3 origin/main`: expect `4aaf328` or later.
+2. Look at `docs/presentation/footprep/*.jpg` (before | after, boots view), then read `.delivery/footprep/REPORT.md` (not committed) for the four owner questions.
+3. Push `footprep` and open the PR. Then merge with `! gh pr merge <n> --merge`, once CI is green.
 
 ## Progress track (newest first)
 | Date | Session | Shipped | State after |
 |---|---|---|---|
-| 2026-11-14 eve | Opus 5.5 `2525c6dc` | PR #105, #106 | `weightTransferMode` on in Sim/Exp/DigGate; 2Lo baseline re-searched (load 0.425 s, check 0.45 s); Power's entrance 7.25 m/s |
-| 2026-11-14 eve | Sonnet agents for `2525c6dc` | PR #102, #103, #104 | `game/skates.ts`; `game/elementstats.ts` + broadcast cards; 38 skins in collections, sequin fabric |
-| 2026-11-14 | Opus 5.5 `2525c6dc` | PR #101 `3c6c554` | `sim/support.ts` signal; Godot/Unreal pose from it; `weightTransferMode` added (off) |
-| 2026-11-14 | Opus 5.5 `50f7edd7` | PR #95–#100 | dance per event; Explorer knee 0.6; spin poses; 418 clips; Light/Strong bodies; podium plays |
-| 2026-11-11 eve | Opus 5.5 `db93fb4b` | PR #92–#93 | backstories, create-a-skater, Arcade, Exhibition, Creation, demonstration |
-| earlier | — | — | `docs/handoff-before-*.md` |
+| 2026-11-18 | Opus 5.5 `43d27f3e` | `59f3e42` on `footprep` (local) | `game/footprep.ts` posed by `skater.gd`; no sim change; stills in `docs/presentation/footprep/` |
+| 2026-11-18 | Claude `2eb8d038` + Codex + Qwen + agy briefs | local branches (In flight) | beatcross, nationals-pilot, overflight, programclips, stepclips, two-sided-report, boards-gap |
+| 2026-11-14–16 | various | PR #107–#113 | venues, kiss-and-cry, costume test, validation tranche, fidelity-ascension merged; main `4aaf328` |
+| 2026-11-14 eve | Opus 5.5 `2525c6dc` | PR #105, #106 | `weightTransferMode` on in Sim/Exp/DigGate; 2Lo baseline re-searched |
+| 2026-11-14 | Opus 5.5 `2525c6dc` | PR #101–#104 | `sim/support.ts` signal; skates, telemetry cards, costumes |
+| earlier | — | — | `docs/handoff-before-*.md`; previous page: `docs/handoff-before-footprep-2026-11-18.md` |
 
 ## In flight
-- **Venues**: PR #108 (`venues`, head `c2d869c`, MERGEABLE at 19:10), by session `fcd73900`:
-  - six rinks, each with its own look around the same ice: `game/venues.ts`, `arena.gd`, Unreal `AIceRink::ApplyVenue`, stills in `docs/presentation/venues/`;
-  - I merged main into it as `8eddd7e`, keeping the skates and venues catalogue entries side by side;
-  - checked: Ice Lab 1082/1082, Unreal builds and passes 8/8, Godot 66/67 (the costume test);
-  - not yet seen: the Unreal TextRender banners in a running game (yaw = bank + 180).
-- **Watch, unverified:** a new engine starts a free skate, so the hello frame's venue is the outdoor night rink. The Godot title backdrop will probably show the lakeside rink, not Northlight. The owner should say if that's wanted.
-- **Kiss-and-cry**: PR #109 (`kiss-and-cry-wip`, head `f3a7557`), by session `fcd73900`.
-  - The smoke failure was the smoke check's fake-idle trick racing in-flight `motionTrack` requests, not the link.
-  - #108 and #109 carry the same drain fix, so either can merge second.
-- **The Codex session `01a1dc33`** never received a task (its brief was cancelled). It is idle.
+- **Free-foot preparation** on `footprep` (local, 1 commit ahead of `4aaf328`).
+  - Done:
+    - `footPrep(state, signal)` with four poses: `beside` (a straight stroke's recovery), `cross` and `under` (crossovers), `held` (turns).
+    - It is sent next to `support` in the bridge, warm-up, pairs, podium and `pose_clip.mjs`.
+    - `skater.gd` eases toward it at `PREP_RATE` 10/s.
+    - `pose_clip.mjs --footwork [--no-prep]`.
+    - `docs/support-signal.md` §4.
+  - Left: push and open the PR; the owner's four questions (below).
+  - Verify: the one-shot check, plus `pose_clip.mjs <clip> --footwork --transfer`, then `pose_lab.gd -- --clip=<clip> --check`.
+- **Other briefs' branches, seen in the scan and not verified by this session.** Each is 1–2 commits on `4aaf328`, local only:
+  - `beatcross` `00b4258` (Qwen): beat crossovers against the jump load, the owner's option prototyped off;
+  - `nationals-pilot` `9c9487a` (in `.delivery/freefoot`): Nationals keeps borrowing the Northern Cup's baseline;
+  - `overflight` `e4aa194` (Codex): jump over-flight by body mass against Koga 2025;
+  - `programclips` `be6af6e` (agy): an idle clip before the music;
+  - `stepclips` `e60b467` (Codex): arms-only step sequences;
+  - `two-sided-report` `3561b51` (agy): report-only fidelity column;
+  - `boards-gap` (Codex): 6 files dirty, no commit.
+
+  Their briefs are in `.delivery/briefs/`. The coordinating session `2eb8d038` said "worry about git later" at 11:42.
 - Carried: the jump lesson, uncommitted in `.delivery/jumplesson`; the Unreal director camera `b230393` on `unreal-choreo`, local only.
 
 ## Decisions (why things are the way they are)
-- 2026-11-14 **The load moves between blades over time** (owner: "go for it", then "turn it on and re-tune them"):
-  - critically damped, done in `weightTransferTime` 0.25 s (authored);
-  - the stance moves round the centre of pressure, and a blade leaves the ice when its share reaches 0;
-  - pivots, spins, Ina Bauers and landings still set the share at once;
-  - stored as `loadBias` (right share − 0.5) so the mirror is exact; a share form drifted 1.2e-14 m.
-- 2026-11-14 **One support signal, derived, never stored** (`supportSignal(state)`): phase, foot, toward, shares, rates, roles, centre of pressure, and the COM over it. Read-only (tested: no digest changes).
-- 2026-11-14 **Re-tune by re-searching, not by loosening.**
-  - The 2Lo baseline is the clean double nearest the old script, out of 21 in 720.
-  - The tutorial marker's scripted player steers at gain 1.2: 1.4 was the only gain from 0.8 to 2.0 that missed the ring.
-  - The one loosening is the warm-up's boards check, 2 mm, because `game/rink.ts` leaves a skater already heading back in where it is.
-- 2026-11-14 **Rival `BASELINE` unchanged** until the owner decides; the re-measured values are in `docs/support-signal.md`.
-- 2026-11-14 **Resources are cosmetic only.** Skates never touch Params (a test runs 360 ticks per preset and finds byte-identical state). Telemetry cards are display only, and their style thresholds are authored in `STYLE_RULES`.
-- 2026-11-14 **Kiss-and-cry smoke** (session `fcd73900`, two causes):
-  - the smoke's idle trick wound `link.last_reply` back 20 s while `motionTrack` requests were in flight;
-  - `kiss_cry.gd` kept the podium's tracks.
-- From the morning (`50f7edd7`):
-  - per-event dance is `CareerState.dances`;
-  - Explorer's push knee is 0.6;
-  - library poses move the body, never the arms, in spins;
-  - baked tracks travel on request (`motionTrack`).
-- Earlier, still in force: presentation never moves the sim or a score; rivals never decide medals; replay stays at `/39`.
+- 2026-11-18 **Free-foot preparation is presentation only** (owner, AskUserQuestion).
+  - Rejected: a sim set-down mode. Nothing measured asked for it, and it would change timing (mode + JPSE re-search).
+- 2026-11-18 **No preparation goes past the skating foot's line.** The sim's contacts never cross, and the pose lab forbids crossed feet on two blades (`crossed_frames` 0).
+  - Rejected: crossing the outside foot over to the far side. It gave 2 crossed frames: a take can't be foreseen, so the foot was still crossed when it touched down.
+- 2026-11-18 **Set the pose while the foot is planted; fade it as the share comes on.**
+  - Rejected: switching the pose on when the foot lifts. Steps of 11–15 cm in a frame.
+  - Rejected: aiming a taking foot at its own contact. It moved toward two places at once.
+- 2026-11-18 **Godot eases between preparations** (`PREP_RATE`). A latched crossover flag can hold a pose until a turn replaces it; without the easing that switch jumped 12 cm.
+- Earlier, still in force: weight transfer on in Sim/Exp/DigGate; one derived support signal; re-tune by re-searching, never loosening; rival `BASELINE` unchanged; presentation never moves the sim or a score; replay stays at `/39`.
 
 ## Dead ends (don't retry without new information)
-- **Treating the 2Lo failure as a script problem to tweak.** Power at 7.5 m/s falls in the load whatever the check: the weight is still shared 5 ticks before the release. Find where the weight goes, then re-search.
-- **A zsh loop that `set -- $pair` to split pairs.** zsh doesn't word-split, so `$1` was the whole string and every pair "conflicted". Write each pair out.
-- **`git cat-file -p "$T:path"` in zsh.** `$T:g` is read as a modifier. Use `"${T}:path"`.
-- **Passing two flags in one variable to Godot.** They arrive as one argument; the pose lab's "front" and "side" stills came out identical. Pass each flag as its own argument.
-- From the morning: an open-loop replay of the owner's run with one input changed (diverges at tick 1261); `checks.sh` here SKIPs everything; telling whether the game is open with `pgrep`.
+- **Judging foot poses in the body view.** `--view=body` crops the feet. Use `--view=boots`.
+- **`set -- $v` to split flags in zsh** (again, 18 Nov): both runs got the same one argument and gave identical numbers. Write each command out.
+- **Running pose_lab in a fresh worktree without `--import`.** You get 900+ "Nil" script errors that look like a broken skeleton.
+- Earlier: tweaking the 2Lo script instead of finding where the weight goes; ``git cat-file -p "$T:path"`` in zsh; an open-loop replay with one input changed.
 
 ## Open questions (settle these first)
-1. **The costume test:** apply `slice(0,4)` at `engine.test.mjs:150`? CI is red until then.
-2. **Experimental's automatic beat crossovers.** Each puts the weight on both feet, and getting back to one takes up to 0.25 s, so a load just after a beat starts on two feet. Whether a jump stands can depend on the music. Option: no automatic crossover while the standing trigger is held toward a load.
-3. **Rival `BASELINE`.** Re-measured on Simulation with the transfer on:
-   - club-debut 16.7 → 10.6, regional 16.0 → 14.4, finale 30.9 → 34.0;
-   - Nationals had no clean run in 45 tries.
+1. **Crossed placement:** is "carried in front" enough? A true crossed placement needs a sim mode.
+2. **The recovery look:** after a straight stroke the free foot now stays beside the heel for the whole glide. Do you want it held there, or extended again on long glides?
+3. **Unreal:** port the `footPrep` blend to `IceSkater.cpp`, or not?
+4. Still open from 14 Nov: Experimental's automatic beat crossovers (see `beatcross`); the rival `BASELINE` (see `nationals-pilot`); the boards gap (see `boards-gap`).
+5. Not yet felt on the pad: the transfer, skates, outfits, venues, the free-foot preparation.
 
-   Adopt the new values, keep the old ones, or re-measure with a better pilot?
-4. **The boards gap:** `game/rink.ts` leaves a skater heading back in up to 1.1 mm out. Fixing it could change replays (the owner's First ice was stuck on the boards).
-5. Not yet felt on the pad: the transfer, skates, cards, outfits, venues, nor the morning's Explorer 0.6 knee and spin poses.
-
-## State (verified 19:05–19:15 PST)
-- `main` `dc51b4b`.
-- CI: Ice Lab ✓, Native replay ✓, Ice Lab checks ✗ (the costume test only; green at `915b79b` and earlier).
-- Session `fcd73900` was LIVE at this close; it opened #108 and #109 and writes only `~/Hand_off.md`.
-- Unpushed and superseded: `5770ba3` on `handoff-2026-11-14`; its content is archived here.
-- Worktrees left (no deletes): `.delivery/weight`, `transfer-on`, `skates`, `telemetry`, `outfits` (all merged), `main-1114`, `handoff-1114`, `handoff-1114c`. Scratch merge worktree: `/tmp/claude-1000/…/scratchpad/combo`.
+## State (verified 15:29–15:40 PST)
+- `origin/main` `4aaf328`; local `main` matches. CI on `4aaf328`: unknown, because `gh` is unauthenticated.
+- The outer checkout is on `phase17-assurance`, 85 dirty files, and is owned by another session. Its `Hand_off.md` is September's. Don't touch it.
 
 ## Project health
-- On `dc51b4b`:
-  - Ice Lab 1077/1077 · `replay/verify.ts` verified (240 ticks) · typecheck clean (scratch TypeScript 7.0.2);
-  - bridge 62/63 (the costume test) · Godot smoke passes (protocol, career, podium, pairs).
-- Unreal built clean and passed 8/8 on `venues`, which is main plus venues.
-- Fragile:
-  - a fresh worktree needs `godot4 --headless --path games/ice-run-godot --import`, and Unreal needs `prepare.mjs --content`;
-  - pinned jump scripts sit on knife edges; when one breaks, search (`jpse/search.ts`) before you tweak;
-  - `rival_baseline.mjs` takes over 10 minutes; run it in the background.
-- Authored, not measured: `weightTransferTime` 0.25 s, the telemetry style thresholds, the skate finishes, costume palettes, venue lighting.
+- On `footprep`:
+  - Ice Lab: 1105 tests, 1104 pass, 1 todo (the discretisation floor, as on main) · replay verified;
+  - bridge 69/69 · typecheck clean · Godot smoke all PASS.
+- Pose lab, before → after:
+  - strokes with the transfer: largest foot step 9.0 → 5.7 cm;
+  - footwork: 9.2 → 8.8 cm;
+  - crossed frames 0 everywhere; foot-off-line and jerk unchanged.
+- `--footwork` reports 2 `wrong_way_frames` with or without the prep. They come from the sim's heading, not from the pose.
+- Authored, not measured: everything in `FOOT_PREP`, `RECOVER_TIME` 0.15 s, `HOLD_IN_TIME` 0.25 s, `CROSS_LEAN`, `PREP_RATE` 10/s.
+- Minor: the senders compute `supportSignal` twice per frame (`footPrep(s, supportSignal(s))`). It's cheap, but a shared helper would be cleaner.
 
 ## Next steps, in order
-1. The costume test fix, then green CI.
-2. Merge #108 and #109 (`! gh pr merge 108 --merge`, then 109). Look at the Unreal banners and the Godot title backdrop in a running game.
-3. **The owner plays** (timestamped notes): a stroke and a crossover on Simulation (the transfer); the 2Lo on Experimental; the skates and outfits pages; the cards after a jump; each venue.
-4. The owner's answers to Open questions 2–4, then build them.
-5. The directive's next phase: edges, crossovers and three-turns read the support signal (roles `taking`/`giving`) for free-foot preparation. The COM swaying over a planted blade is the known limit (`docs/support-signal.md`).
-6. Carried from the morning: idle clips before a program; `step.*` clips over step sequences.
+1. `! gh auth login`. Then push `footprep`, open the PR, and merge once CI is green.
+2. The owner looks at the stills and plays a crossover and a three-turn on Simulation. Then answers Open questions 1–3.
+3. Review and ship the other briefs' branches one at a time (fetch, rebase onto main, run the one-shot check, open a PR).
+4. Then the known limit: the COM swaying over a planted blade (`docs/support-signal.md`).
 
 ## One-shot check
     bash ~/.claude/skills/hanoffed/scripts/scan.sh --root ~/KoLd__FEEt.ice_skating_ --fetch
@@ -114,29 +98,22 @@
     node games/ice-run-godot/tools/prepare.mjs --engine-only
     node --test --test-isolation=none games/ice-run-godot/tests/*.test.mjs
     godot4 --headless --path games/ice-run-godot --import && godot4 --headless --path games/ice-run-godot -- --smoke-test
-    node games/ice-run-unreal/tools/prepare.mjs --content && node --test games/ice-run-unreal/tests/*.test.mjs
 
 Typecheck: `npm install typescript @types/node` in a scratch directory, then from `tools/ice-lab` run `<scratch>/node_modules/.bin/tsc --noEmit -p . --typeRoots <scratch>/node_modules/@types`.
 
-Re-tuning tools:
-- `node jpse/search-cli.ts [--grid power --style power --mastery 0|1 --windows]`
-- `node jpse/cli.ts --out test/fixtures/jpse-loop-v1.json` and `node jpse/conformance.ts --write` (fixtures)
-- `node test/setup-script.ts --write`
-- `node games/ice-run-godot/tools/rival_baseline.mjs [--from=5 --wide]`
-
-Stills:
-- `pose_clip.mjs <clip> --strokes [--transfer] [--skates=<id>]`, then `pose_lab.gd -- --clip=<clip> --shots=<dir> --ticks=… --view=body --around=<rad>` (0 is the front);
-- `--capture --capture-telemetry`; `--capture-venues`.
+Stills and pose checks:
+- `pose_clip.mjs <clip> --strokes|--footwork [--transfer] [--no-prep]`, then `pose_lab.gd -- --clip=<clip> --check`;
+- for stills, add `--shots=<dir> --ticks=… --view=boots|body`. Run without `--headless`; it needs the display.
 
 ## Rules that still apply
 - No deletes, resets, cleans, force pushes or overwrites. New work goes in a fresh worktree off `origin/main`. Never a broad process kill.
 - New physics stays behind a mode; replay stays at `/39`. Presentation never moves the sim or a score.
 - Measure before claiming; label authored numbers; re-pin a test only for a deliberate change, with the reason in the test.
-- Subagents: own worktree, file ownership in the brief, absolute paths. If a subagent's edit is denied, don't make it on its behalf; ask the owner.
+- Coordinate through auric porter: check in, claim your worktree, note decisions, check out.
 - The owner decides gate policy. `gh pr merge` needs the owner's `!`. The repo is PUBLIC.
 
 ## Vocabulary so far
-word, referent, idempotent, provenance, invariant, presupposition, stipulate, contiguous, fast-forward, confabulation, threat model, reaction torque, confound, regression, acceptance criterion, race condition, negative control, preregistration, stacked PR, attestation, opt-in, monotonic, triage, Goodhart's law, protocol deviation, chirality, Pareto front, squash merge, dangling commit, forward kinematics, contact constraint, false negative, affordance, counterfactual, bake, centre of pressure, knife-edge result
+word, referent, idempotent, provenance, invariant, presupposition, stipulate, contiguous, fast-forward, confabulation, threat model, reaction torque, confound, regression, acceptance criterion, race condition, negative control, preregistration, stacked PR, attestation, opt-in, monotonic, triage, Goodhart's law, protocol deviation, chirality, Pareto front, squash merge, dangling commit, forward kinematics, contact constraint, false negative, affordance, counterfactual, bake, centre of pressure, knife-edge result, lookahead (Opus 5.5, 2026-11-18), latch (Opus 5.5, 2026-11-18)
 
 ## Opening prompt for next session (edit the brackets)
-> Read `Hand_off.md` in a fresh worktree off `origin/main` and run its one-shot check. [Yes, fix the costume test.] [My play notes: … | none yet.] Then [answer the beat-crossover question: … | adopt / keep the rival BASELINE | start the directive's next phase]. Stipulate: live work. When we wrap up: /hanoffed.
+> Read `Hand_off.md` in a fresh worktree off `origin/main` and run its one-shot check. [gh is logged in again.] Push `footprep` and open its PR. [My answers on the footprep questions: 1 … 2 … 3 …] Then [ship the next brief's branch: … | build …]. Stipulate: live work. When we wrap up: /hanoffed.

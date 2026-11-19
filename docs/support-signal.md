@@ -146,6 +146,24 @@ They no longer each derive these from the blades. A frame without the signal (a 
 before it) falls back to the old reading. `contact_slide` stays, because with the setting off the
 contacts still jump.
 
+## 4 · Free-foot preparation (`game/footprep.ts`, presentation)
+
+Added 2026-11-18; the owner chose presentation only. `footPrep(state, signal)` says where each free foot is carried before it takes the load. Every frame that sends `support` also sends `footPrep`. `skater.gd` eases toward it, and the solver's `freeSwing` still turns it about the hip. Unreal ignores the field for now.
+
+| Pose | When |
+|---|---|
+| `beside` | As a straight stroke's push ends, the pushing foot comes in beside the skating heel. When the other foot's push begins, it is placed from there. |
+| `cross` | On a crossover, the outside foot that pushed is carried forward in front of the skating foot. It is placed from there. |
+| `under` | On a crossover, the inside foot that pushed under is carried behind the skating foot. It is placed from there. |
+| `held` | Through a one-foot turn or a twizzle, the free foot is held in by the skating ankle. A mohawk or choctaw's changing foot is drawn in beside. |
+
+Three constraints shape it, each measured in the pose lab:
+- **The sim gives no warning of a take.** A blade carries from the first tick it is asked. So a pose is set while the foot is still planted and giving, when the pose doesn't show it. Switched on in the frame the foot lifted, the foot jumped 11–15 cm in one frame.
+- **Taking fades the pose out.** The prepared pose fades as the share comes on, so the foot is not sent toward two places at once.
+- **No pose goes past the skating foot's line.** The sim's contacts never cross, and the lab allows no crossed feet on two blades. A crossover's crossing therefore shows as the foot carried in front, not over to the far side.
+
+All of its distances and times are **authored**. The before/after stills are in `presentation/footprep/` (`pose_clip.mjs --footwork --transfer [--no-prep]`, then `pose_lab.gd --view=boots`).
+
 ## Evidence
 
 - **Tests:**

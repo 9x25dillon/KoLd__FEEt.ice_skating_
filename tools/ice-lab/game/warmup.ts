@@ -20,6 +20,7 @@ import type { SkaterState } from "../sim/types.ts";
 import { MOVE } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import { supportSignal } from "../sim/support.ts";
+import { footPrep } from "./footprep.ts";
 import { IceGrid } from "../sim/ice.ts";
 import { setupParams, setupInput } from "./setups.ts";
 import { defaultControllerProfile } from "./full-controls.ts";
@@ -142,6 +143,6 @@ export class WarmupGroup {
 
   /** For a client: each skater's name and whole state, the pairs partner's shape. */
   snapshot() {
-    return { seconds: this.secondsLeft, skaters: this.skaters.map(k => ({ name: k.name, state: k.state, support: supportSignal(k.state), low: false, falls: k.falls })) };
+    return { seconds: this.secondsLeft, skaters: this.skaters.map(k => ({ name: k.name, state: k.state, support: supportSignal(k.state), footPrep: footPrep(k.state, supportSignal(k.state)), low: false, falls: k.falls })) };
   }
 }
