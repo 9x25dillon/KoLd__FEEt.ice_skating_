@@ -7,6 +7,7 @@ import { SIM_DT } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
 import { IceGrid } from "../sim/ice.ts";
 import { supportSignal } from "../sim/support.ts";
+import { footPrep } from "./footprep.ts";
 import { MOVE, NEUTRAL_INPUT } from "../sim/types.ts";
 import type { SkaterState, SkatingInput, EdgeEvent } from "../sim/types.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
@@ -247,7 +248,7 @@ export class PairsSession {
 
   snapshot() {
     const phrase = PAIRS_PHRASES[this.phrase];
-    return { state: this.partner, support: supportSignal(this.partner), low: false, challenge: this.challenge, seconds: Math.max(0, PAIRS_SECONDS - this.elapsed),
+    return { state: this.partner, support: supportSignal(this.partner), footPrep: footPrep(this.partner, supportSignal(this.partner)), low: false, challenge: this.challenge, seconds: Math.max(0, PAIRS_SECONDS - this.elapsed),
       distance: this.distance, sync: this.sync, holding: this.holding, holdRequested: this.holdRequested,
       status: this.liftPhase !== "none" ? "Supported lift" : this.holding ? "Hand in hand" : this.partner.fallen ? "Partner recovering"
         : this.holdRequested ? "Closing for a handhold" : this.distance > 4 ? "Regrouping" : "Side by side",
