@@ -88,7 +88,7 @@ export function auditReplay(clip: Replay, enabled = false) {
   const ice = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
   const before = new OutsideMeter(), after = new OutsideMeter(), stuck = new StuckMeter();
   const digests: number[] = [], displayedDigests: number[] = [];
-  let firstRecordedMismatch: number | null = null;
+  let firstRecordedMismatch: number | null = null, falls = 0, wasFallen = false, speedSum = 0;
   for (const frame of clip.frames) {
     if (frame.params) p = { ...frame.params };
     const events: EdgeEvent[] = [];
@@ -99,9 +99,12 @@ export function auditReplay(clip: Replay, enabled = false) {
     before.sample(s);
     resolveRinkCollision(s, events, { boardsSnapInbound: enabled ? 1 : 0 });
     after.sample(s); stuck.sample(s);
+    if (s.fallen && !wasFallen) falls++;
+    wasFallen = !!s.fallen; speedSum += Math.hypot(s.vel.x, s.vel.y);
     displayedDigests.push(replayDigest(s, events));
   }
-  return { enabled, ticks: s.tick, firstRecordedMismatch, before: before.result(), after: after.result(),
+  return { enabled, ticks: s.tick, firstRecordedMismatch, falls,
+    meanSpeedMps: clip.frames.length ? speedSum / clip.frames.length : 0, before: before.result(), after: after.result(),
     stuck: stuck.result(), digests, displayedDigests };
 }
 
@@ -150,6 +153,21 @@ export function preTransferReplay(candidate: Replay): Replay | null {
   for (const p of [copy.initial.params, ...copy.frames.flatMap(f => f.params ? [f.params] : [])])
     Object.assign(p, { weightTransferMode: 0, weightTransferTime: 0.25 });
   return parseReplay(JSON.stringify(copy));
+}
+
+function ownerChoiceText(replays: { source: string; comparison: ReturnType<typeof compare> }[], off: ReturnType<typeof warmup>, on: ReturnType<typeof warmup>) {
+  const f = replays.find(r => r.source === "owner-first-ice")?.comparison;
+  const sum = (r: NonNullable<typeof f>["off"]) => r.stuck.reduce((n, s) => n + s.seconds, 0);
+  const longest = (r: NonNullable<typeof f>["off"]) => Math.max(0, ...r.stuck.map(s => s.seconds));
+  const worst = off.reduce((a, b) => b.outsideTicks > a.outsideTicks ? b : a);
+  const worstOn = on[off.indexOf(worst)];
+  const ice = f ? ` The inward snap does not unstick First ice: stuck time is ${sum(f.off).toFixed(1)} s off and ${sum(f.on).toFixed(1)} s on, its longest stuck interval ${longest(f.off).toFixed(1)} s off and ${longest(f.on).toFixed(1)} s on, and the digests diverge from tick ${f.recorderChanges.firstChangedTick}, so turning it on would also change how that recorded clip plays back (playback runs the same collision between ticks, game/main.ts:534).` : "";
+  return `Recommendation: leave \`boardsSnapInbound\` off in every setup (Simulation, Explorer, Experimental, Dig Gate, Repertoire) for now.${ice} The only standing gap in the measured corpus is ${worst.skater} in the warm-up pilot, ${worst.outsideTicks} ticks, ${(worst.maxDepthM * 1000).toFixed(2)} mm deep; with the snap on that falls to ${worstOn.outsideTicks} ticks, all of them while fallen, at the same ${(worstOn.maxDepthM * 1000).toFixed(2)} mm, which comes from the fallen-skater policy the snap leaves alone. So the warm-up's 2 mm allowance cannot go back to 0 on this change alone; it could only if the owner also decides that a fallen skater is held by the boards. If you still want a zero standing gap, the narrowest place to turn it on is the warm-up pilot (game/warmup.ts), with the tolerance left at 2 mm; Godot's bridge/engine.mjs would need the param passed separately and was not touched. Authored: the 2 mm stuck proxy and every threshold in this document. Pending owner decision.`;
+}
+
+function firstIceText(c?: ReturnType<typeof compare>) {
+  if (!c) return "Supplied, but not replayable by this build.";
+  return `The owner's live Godot save (\`ice-run-replay.json\`, modified 2026-11-11 18:02, read in place and never modified). The 2026-11-11 hand-off describes First ice as a 75 s replay with 5 falls and a mean speed of 0.64 m/s; this file measures ${c.off.ticks / 120} s, ${c.off.falls} falls and ${c.off.meanSpeedMps.toFixed(3)} m/s, which matches on all three. The hand-off's 17:55 stamp is not stored in the file, so identity rests on those three numbers. It is solver /39 without the two later transfer knobs, so it runs through the explicit disabled-transfer adapter, and every one of its ${c.off.ticks} archived digests matches with the param off.`;
 }
 
 export function buildReport(sessions = DEFAULT_SESSIONS, firstIce?: string) {
@@ -209,6 +227,7 @@ export function buildReport(sessions = DEFAULT_SESSIONS, firstIce?: string) {
       }
     } else inventory.push({ source: input.id, sha256, status: "not-a-replay", reason: "Geometry/program/measurement fixture; no full replay input stream" });
   }
+  const warmupOff = warmup(false), warmupOn = warmup(true);
   for (const session of sessionsLinked) session.matchingReplays = lastDigests.filter(r => r.ticks === session.ticks && r.digest === session.digest).map(r => r.source);
   return { schema: "boards-gap-audit/1", solver: REPLAY_SOLVER,
     method: { dt: SIM_DT, outsideEpsilonM: OUTSIDE_EPS, rawPositiveTicks: "all strictly positive rinkHit distances, including rounding noise",
@@ -218,9 +237,23 @@ export function buildReport(sessions = DEFAULT_SESSIONS, firstIce?: string) {
       historicalPolicy: "No version relabels or blanket substitution of current defaults. Only /39 missing exactly the two transfer knobs may use the explicit disabled-transfer adapter, and only if every archived off digest matches. Other unsupported clips and summary-only sessions are inventoried, not claimed measured.",
       stuckRuleAuthored: { distanceM: STUCK_DISTANCE, speedMps: STUCK_SPEED, minimumSeconds: STUCK_SECONDS },
       fixturePolicy: "setup-mapping inputs are reconstructed with current setupParams; digest=0 is an authored placeholder, not an archived digest" },
-    inventory, sessionsLinked, replays, warmup: { off: warmup(false), on: warmup(true) },
-    firstIce: firstIce ? "Candidate: live Godot export modified 2026-11-11 18:02:19, 9,000 ticks (75 s). The hand-off cites 17:55; identity as that exact run is not confirmed. Every archived off digest matches using the explicit disabled-transfer adapter. See owner-first-ice comparison and stuck intervals; this does not establish a fix for the owner's experience." : "Missing: the 2026-11-11 17:55 recording is not in the specified corpus",
-    ownerChoice: "Pending owner decision: keep the shipped behavior (default off), or authorize enabling inward snapping after reviewing replay changes. This experiment does not enable it in gameplay." };
+    inventory, sessionsLinked, replays, warmup: { off: warmupOff, on: warmupOn },
+    firstIce: firstIce ? firstIceText(replays.find(r => r.source === "owner-first-ice")?.comparison) : "Missing: no First ice recording was supplied (--first-ice)",
+    ownerChoice: ownerChoiceText(replays, warmupOff, warmupOn) };
+}
+
+function firstIceTables(report: ReturnType<typeof buildReport>) {
+  const c = report.replays.find(r => r.source === "owner-first-ice")?.comparison;
+  if (!c) return [];
+  const total = (r: typeof c.off) => r.stuck.reduce((n, s) => n + s.seconds, 0);
+  const row = (label: string, r: typeof c.off) => `| ${label} | ${r.after.outsideTicks} | ${r.after.fallen} | ${r.after.inbound} / ${r.after.outbound} / ${r.after.tangent} | ${(r.after.maxDepthM * 1000).toFixed(3)} | ${r.stuck.length} | ${total(r).toFixed(2)} | ${Math.max(0, ...r.stuck.map(s => s.seconds)).toFixed(2)} |`;
+  const outside = (r: typeof c.off) => r.after.spans.map(s => `ticks ${s.firstTick}–${s.lastTick}: ${(s.maxDepthM * 1000).toFixed(3)} mm, ${s.fallen}/${s.ticks} fallen`).join("; ");
+  return ["| Param | Outside ticks | …of them fallen | Inbound / outbound / tangent | Max depth (mm) | Stuck intervals | Stuck seconds | Longest stuck (s) |", "|---|---:|---:|---:|---:|---:|---:|---:|",
+    row("off", c.off), row("on", c.on), "",
+    `First tick where the digest changes with the param on: recorder ${c.recorderChanges.firstChangedTick}, after collision ${c.displayedChanges.firstChangedTick}; ${c.recorderChanges.changedTicks} of ${c.off.ticks} recorder ticks differ from there on.`, "",
+    `Outside intervals, off: ${outside(c.off)}. On: ${outside(c.on)}.`, "",
+    `Stuck intervals, off (first–last tick): ${c.off.stuck.map(s => `${s.firstTick}–${s.lastTick}`).join(", ")}. On: ${c.on.stuck.map(s => `${s.firstTick}–${s.lastTick}`).join(", ")}.`, "",
+    "The 8.76 m depth is a fallen skater sliding out through the boards: `resolveRinkCollision` returns early for a fallen skater, in both modes, by the existing policy this prototype does not change.", ""];
 }
 
 export function markdown(report: ReturnType<typeof buildReport>) {
@@ -232,11 +265,11 @@ export function markdown(report: ReturnType<typeof buildReport>) {
     const { off, on, recorderChanges: c } = r.comparison;
     lines.push(`| ${r.source} | ${off.after.outsideTicks} | ${on.after.outsideTicks} | ${(off.after.maxDepthM * 1000).toFixed(6)} | ${(on.after.maxDepthM * 1000).toFixed(6)} | ${c.changedTicks} | ${c.firstChangedTick ?? "—"} |`);
   }
-  lines.push("", "The JSON includes every contiguous outside interval, inbound/outbound/tangent counts, fallen counts, total and longest duration, pre-collision measurements, raw positive-distance counts, input SHA-256 hashes, and digest-stream hashes. Unsupported recordings are not zero-gap results.", "", "## Warm-up reproducer", "", "| Skater | Off ticks | On ticks | Off max depth (mm) | Off seconds | Longest interval (s) |", "|---|---:|---:|---:|---:|---:|");
-  report.warmup.off.forEach((s, i) => lines.push(`| ${s.skater} | ${s.outsideTicks} | ${report.warmup.on[i].outsideTicks} | ${(s.maxDepthM * 1000).toFixed(6)} | ${s.seconds.toFixed(6)} | ${s.longestSeconds.toFixed(6)} |`));
+  lines.push("", "The JSON includes every contiguous outside interval, inbound/outbound/tangent counts, fallen counts, total and longest duration, pre-collision measurements, raw positive-distance counts, input SHA-256 hashes, and digest-stream hashes. Unsupported recordings are not zero-gap results.", "", "## Warm-up reproducer", "", "| Skater | Off ticks | On ticks | Off max depth (mm) | On max depth (mm) | On ticks while fallen | Off seconds | Longest interval (s) |", "|---|---:|---:|---:|---:|---:|---:|---:|");
+  report.warmup.off.forEach((s, i) => lines.push(`| ${s.skater} | ${s.outsideTicks} | ${report.warmup.on[i].outsideTicks} | ${(s.maxDepthM * 1000).toFixed(6)} | ${(report.warmup.on[i].maxDepthM * 1000).toFixed(6)} | ${report.warmup.on[i].fallen} | ${s.seconds.toFixed(6)} | ${s.longestSeconds.toFixed(6)} |`));
   lines.push("", "This is the existing 45-second warm-up pilot. In the on trial, the extra projection runs after its existing collision call, before the next tick; no controls or tolerances change.", "", "## Corpus coverage", "", "| Source | Status | Reason |", "|---|---|---|");
   for (const row of report.inventory) lines.push(`| ${row.source} | ${row.status} | ${row.reason ?? row.solver ?? "—"} |`);
-  lines.push("", "Session summaries only link to replay files by tick count and final digest; they cannot supply missing tick trajectories. Older solvers and malformed JSON require their original compatible recordings/builds; they were neither repaired nor relabelled.", "", "## First ice", "", report.firstIce, "", "The authored stuck diagnostic is speed ≤0.1 m/s within 2 mm of the boards for at least one second. It is a proxy, not a claim about what the player felt; intervals are in JSON when the run is available.", "", "## Owner's choice", "", report.ownerChoice, "");
+  lines.push("", "Session summaries only link to replay files by tick count and final digest; they cannot supply missing tick trajectories. Older solvers and malformed JSON require their original compatible recordings/builds; they were neither repaired nor relabelled.", "", "## First ice", "", report.firstIce, "", ...firstIceTables(report), "The authored stuck diagnostic is speed ≤0.1 m/s within 2 mm of the boards for at least one second. It is a proxy, not a claim about what the player felt; every interval is in the JSON.", "", "## Owner's choice", "", report.ownerChoice, "");
   return lines.join("\n");
 }
 

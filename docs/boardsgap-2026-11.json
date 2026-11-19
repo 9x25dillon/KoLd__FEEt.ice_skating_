@@ -8,7 +8,7 @@
     "duration": "outside tick count / 120; spans include both endpoints; pre- and post-collision measured separately",
     "heading": "sign of velocity dot outward normal; zero is tangent/stationary; fallen counted separately",
     "feedback": "boards mutate the SAME state used by the next solver tick; recorder digest is taken before each collision",
-    "historicalPolicy": "No version relabels or substitution of current defaults. Unsupported clips and summary-only sessions are inventoried, not claimed measured.",
+    "historicalPolicy": "No version relabels or blanket substitution of current defaults. Only /39 missing exactly the two transfer knobs may use the explicit disabled-transfer adapter, and only if every archived off digest matches. Other unsupported clips and summary-only sessions are inventoried, not claimed measured.",
     "stuckRuleAuthored": {
       "distanceM": 0.002,
       "speedMps": 0.1,
@@ -247,6 +247,14 @@
       "sha256": "3eb3f81c016ea92d934f14b90a8ed819895799a7eca6c4bcd88e7d99685807b6",
       "status": "summary-only",
       "reason": "No per-tick positions or inputs"
+    },
+    {
+      "source": "owner-first-ice",
+      "sha256": "801d6f2ea6b57fc03d6062be0ecbb10db181446ebe62f57797e92e668f41db0f",
+      "status": "measured-verified-pre-transfer",
+      "solver": "ice-lab-f64/39",
+      "ticks": 9000,
+      "reason": "Benchmark-only: add exactly weightTransferMode=0 and weightTransferTime=0.25; every archived off digest matched"
     }
   ],
   "sessionsLinked": [
@@ -369,6 +377,8 @@
           "enabled": false,
           "ticks": 240,
           "firstRecordedMismatch": null,
+          "falls": 0,
+          "meanSpeedMps": 4.213643603860656,
           "before": {
             "sampledTicks": 240,
             "rawPositiveTicks": 0,
@@ -403,6 +413,8 @@
           "enabled": true,
           "ticks": 240,
           "firstRecordedMismatch": null,
+          "falls": 0,
+          "meanSpeedMps": 4.213643603860656,
           "before": {
             "sampledTicks": 240,
             "rawPositiveTicks": 0,
@@ -452,6 +464,8 @@
           "enabled": false,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 3.0623828439381553,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -498,6 +512,8 @@
           "enabled": true,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 3.0623828439381553,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -559,6 +575,8 @@
           "enabled": false,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 3.0402464201677017,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -605,6 +623,8 @@
           "enabled": true,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 3.0402464201677017,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -666,6 +686,8 @@
           "enabled": false,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 2.486822522322166,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -712,6 +734,8 @@
           "enabled": true,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 2.486822522322166,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -773,6 +797,8 @@
           "enabled": false,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 2.4868687765521553,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -819,6 +845,8 @@
           "enabled": true,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 2.4868687765521553,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -880,6 +908,8 @@
           "enabled": false,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 2.899147331953561,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -926,6 +956,8 @@
           "enabled": true,
           "ticks": 1200,
           "firstRecordedMismatch": 1,
+          "falls": 1,
+          "meanSpeedMps": 2.899147331953561,
           "before": {
             "sampledTicks": 1200,
             "rawPositiveTicks": 1,
@@ -977,6 +1009,1436 @@
           "changedTicks": 0,
           "firstChangedTick": null,
           "lastChangedTick": null
+        }
+      }
+    },
+    {
+      "source": "owner-first-ice",
+      "comparison": {
+        "off": {
+          "enabled": false,
+          "ticks": 9000,
+          "firstRecordedMismatch": null,
+          "falls": 5,
+          "meanSpeedMps": 0.641607043061988,
+          "before": {
+            "sampledTicks": 9000,
+            "rawPositiveTicks": 2973,
+            "outsideTicks": 2414,
+            "seconds": 20.116666666666667,
+            "maxDepthM": 8.76197463057379,
+            "inbound": 0,
+            "outbound": 2228,
+            "tangent": 186,
+            "fallen": 424,
+            "longestSeconds": 3.3833333333333333,
+            "spans": [
+              {
+                "firstTick": 893,
+                "lastTick": 1298,
+                "ticks": 406,
+                "seconds": 3.3833333333333333,
+                "maxDepthM": 8.76197463057379,
+                "inbound": 0,
+                "outbound": 394,
+                "tangent": 12,
+                "fallen": 356
+              },
+              {
+                "firstTick": 1991,
+                "lastTick": 1992,
+                "ticks": 2,
+                "seconds": 0.016666666666666666,
+                "maxDepthM": 0.000012845649411730165,
+                "inbound": 0,
+                "outbound": 2,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2055,
+                "lastTick": 2059,
+                "ticks": 5,
+                "seconds": 0.041666666666666664,
+                "maxDepthM": 0.000024500792621395817,
+                "inbound": 0,
+                "outbound": 5,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2068,
+                "lastTick": 2088,
+                "ticks": 21,
+                "seconds": 0.175,
+                "maxDepthM": 0.00024100269464888413,
+                "inbound": 0,
+                "outbound": 21,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2137,
+                "lastTick": 2172,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00006270096383254042,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2182,
+                "lastTick": 2184,
+                "ticks": 3,
+                "seconds": 0.025,
+                "maxDepthM": 0.000033874960308821755,
+                "inbound": 0,
+                "outbound": 3,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2195,
+                "lastTick": 2198,
+                "ticks": 4,
+                "seconds": 0.03333333333333333,
+                "maxDepthM": 0.00012730118700154947,
+                "inbound": 0,
+                "outbound": 4,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2212,
+                "lastTick": 2216,
+                "ticks": 5,
+                "seconds": 0.041666666666666664,
+                "maxDepthM": 0.00004618123541533237,
+                "inbound": 0,
+                "outbound": 5,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2519,
+                "lastTick": 2554,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00006127326477489703,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2699,
+                "lastTick": 2728,
+                "ticks": 30,
+                "seconds": 0.25,
+                "maxDepthM": 0.000015527210685206683,
+                "inbound": 0,
+                "outbound": 30,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2783,
+                "lastTick": 2818,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.000018303193506596926,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2987,
+                "lastTick": 3022,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00006207347611564273,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3026,
+                "lastTick": 3026,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.00004699002191443924,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3070,
+                "lastTick": 3070,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.0001757626528728906,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3074,
+                "lastTick": 3096,
+                "ticks": 23,
+                "seconds": 0.19166666666666665,
+                "maxDepthM": 0.000352388420116867,
+                "inbound": 0,
+                "outbound": 23,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3398,
+                "lastTick": 3414,
+                "ticks": 17,
+                "seconds": 0.14166666666666666,
+                "maxDepthM": 0.0006019818709557256,
+                "inbound": 0,
+                "outbound": 17,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3476,
+                "lastTick": 3509,
+                "ticks": 34,
+                "seconds": 0.2833333333333333,
+                "maxDepthM": 0.00009058100328473984,
+                "inbound": 0,
+                "outbound": 34,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3781,
+                "lastTick": 3816,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007693709463829634,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3871,
+                "lastTick": 4042,
+                "ticks": 172,
+                "seconds": 1.4333333333333333,
+                "maxDepthM": 0.00007693719720691661,
+                "inbound": 0,
+                "outbound": 43,
+                "tangent": 129,
+                "fallen": 46
+              },
+              {
+                "firstTick": 4057,
+                "lastTick": 4091,
+                "ticks": 35,
+                "seconds": 0.2916666666666667,
+                "maxDepthM": 0.00008598360594014309,
+                "inbound": 0,
+                "outbound": 35,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4141,
+                "lastTick": 4176,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007696922529021322,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4344,
+                "lastTick": 4356,
+                "ticks": 13,
+                "seconds": 0.10833333333333334,
+                "maxDepthM": 0.0005156474580445547,
+                "inbound": 0,
+                "outbound": 13,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4418,
+                "lastTick": 4451,
+                "ticks": 34,
+                "seconds": 0.2833333333333333,
+                "maxDepthM": 0.0000853141416463643,
+                "inbound": 0,
+                "outbound": 34,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4501,
+                "lastTick": 4536,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007714493955113255,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4599,
+                "lastTick": 4620,
+                "ticks": 22,
+                "seconds": 0.18333333333333332,
+                "maxDepthM": 0.0000531539036696671,
+                "inbound": 0,
+                "outbound": 22,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4640,
+                "lastTick": 4644,
+                "ticks": 5,
+                "seconds": 0.041666666666666664,
+                "maxDepthM": 0.00006507729015936548,
+                "inbound": 0,
+                "outbound": 5,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4681,
+                "lastTick": 4716,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007715403219599182,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4779,
+                "lastTick": 4810,
+                "ticks": 32,
+                "seconds": 0.26666666666666666,
+                "maxDepthM": 0.00008167288881288925,
+                "inbound": 0,
+                "outbound": 32,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4861,
+                "lastTick": 4896,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007714815282611198,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4959,
+                "lastTick": 4991,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.00008557740207670861,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5115,
+                "lastTick": 5150,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007729225546881935,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5230,
+                "lastTick": 5262,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.0000901521042369069,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5311,
+                "lastTick": 5346,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007680006201304934,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5379,
+                "lastTick": 5411,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.00008985981926201703,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5549,
+                "lastTick": 5584,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007678682905876144,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5617,
+                "lastTick": 5649,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.00008617779042729978,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5669,
+                "lastTick": 5704,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007677359427127328,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5730,
+                "lastTick": 5796,
+                "ticks": 67,
+                "seconds": 0.5583333333333333,
+                "maxDepthM": 0.00008690944022227143,
+                "inbound": 0,
+                "outbound": 67,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 6031,
+                "lastTick": 6077,
+                "ticks": 47,
+                "seconds": 0.39166666666666666,
+                "maxDepthM": 0.00005896605500943508,
+                "inbound": 0,
+                "outbound": 47,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 6291,
+                "lastTick": 6322,
+                "ticks": 32,
+                "seconds": 0.26666666666666666,
+                "maxDepthM": 0.00005875523880760625,
+                "inbound": 0,
+                "outbound": 32,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7176,
+                "lastTick": 7176,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.0017576383056585598,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7191,
+                "lastTick": 7191,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.0006119998078855104,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7196,
+                "lastTick": 7280,
+                "ticks": 85,
+                "seconds": 0.7083333333333334,
+                "maxDepthM": 0.0007966352841659585,
+                "inbound": 0,
+                "outbound": 85,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7291,
+                "lastTick": 7326,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00005365487354502818,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7406,
+                "lastTick": 7436,
+                "ticks": 31,
+                "seconds": 0.2583333333333333,
+                "maxDepthM": 0.00008274117100626199,
+                "inbound": 0,
+                "outbound": 31,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7439,
+                "lastTick": 7474,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.0000772914399345126,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7510,
+                "lastTick": 7576,
+                "ticks": 67,
+                "seconds": 0.5583333333333333,
+                "maxDepthM": 0.00009295139929399454,
+                "inbound": 0,
+                "outbound": 67,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7729,
+                "lastTick": 7761,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.00007804385388432422,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7777,
+                "lastTick": 7815,
+                "ticks": 39,
+                "seconds": 0.325,
+                "maxDepthM": 0.00005970584824233072,
+                "inbound": 0,
+                "outbound": 39,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7831,
+                "lastTick": 7866,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007726366470883761,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7894,
+                "lastTick": 7926,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.00008155500265871751,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7929,
+                "lastTick": 8078,
+                "ticks": 150,
+                "seconds": 1.25,
+                "maxDepthM": 0.00010124350803408788,
+                "inbound": 0,
+                "outbound": 105,
+                "tangent": 45,
+                "fallen": 22
+              },
+              {
+                "firstTick": 8109,
+                "lastTick": 8140,
+                "ticks": 32,
+                "seconds": 0.26666666666666666,
+                "maxDepthM": 0.00007898893079172353,
+                "inbound": 0,
+                "outbound": 32,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 8191,
+                "lastTick": 8226,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007725303628092206,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 8396,
+                "lastTick": 8406,
+                "ticks": 11,
+                "seconds": 0.09166666666666666,
+                "maxDepthM": 0.0005794819567590537,
+                "inbound": 0,
+                "outbound": 11,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 8468,
+                "lastTick": 8501,
+                "ticks": 34,
+                "seconds": 0.2833333333333333,
+                "maxDepthM": 0.00008326233815303397,
+                "inbound": 0,
+                "outbound": 34,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 8551,
+                "lastTick": 8586,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007725061438357272,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 8617,
+                "lastTick": 8631,
+                "ticks": 15,
+                "seconds": 0.125,
+                "maxDepthM": 0.00005490394930696141,
+                "inbound": 0,
+                "outbound": 15,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 8746,
+                "lastTick": 8766,
+                "ticks": 21,
+                "seconds": 0.175,
+                "maxDepthM": 0.0002267722452131693,
+                "inbound": 0,
+                "outbound": 21,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 8828,
+                "lastTick": 8861,
+                "ticks": 34,
+                "seconds": 0.2833333333333333,
+                "maxDepthM": 0.00008403277015567312,
+                "inbound": 0,
+                "outbound": 34,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 8885,
+                "lastTick": 8920,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007721024817541888,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 9000,
+            "rawPositiveTicks": 1266,
+            "outsideTicks": 552,
+            "seconds": 4.6,
+            "maxDepthM": 8.76197394280156,
+            "inbound": 0,
+            "outbound": 366,
+            "tangent": 186,
+            "fallen": 424,
+            "longestSeconds": 3.0666666666666664,
+            "spans": [
+              {
+                "firstTick": 893,
+                "lastTick": 1260,
+                "ticks": 368,
+                "seconds": 3.0666666666666664,
+                "maxDepthM": 8.76197394280156,
+                "inbound": 0,
+                "outbound": 356,
+                "tangent": 12,
+                "fallen": 356
+              },
+              {
+                "firstTick": 3875,
+                "lastTick": 4006,
+                "ticks": 132,
+                "seconds": 1.1,
+                "maxDepthM": 0.00000781780164338386,
+                "inbound": 0,
+                "outbound": 3,
+                "tangent": 129,
+                "fallen": 46
+              },
+              {
+                "firstTick": 7991,
+                "lastTick": 8042,
+                "ticks": 52,
+                "seconds": 0.43333333333333335,
+                "maxDepthM": 0.00009480694711250237,
+                "inbound": 0,
+                "outbound": 7,
+                "tangent": 45,
+                "fallen": 22
+              }
+            ]
+          },
+          "stuck": [
+            {
+              "firstTick": 1261,
+              "lastTick": 3037,
+              "ticks": 1777,
+              "seconds": 14.808333333333334
+            },
+            {
+              "firstTick": 3081,
+              "lastTick": 3290,
+              "ticks": 210,
+              "seconds": 1.75
+            },
+            {
+              "firstTick": 3404,
+              "lastTick": 4248,
+              "ticks": 845,
+              "seconds": 7.041666666666667
+            },
+            {
+              "firstTick": 4346,
+              "lastTick": 6318,
+              "ticks": 1973,
+              "seconds": 16.441666666666666
+            },
+            {
+              "firstTick": 7277,
+              "lastTick": 8299,
+              "ticks": 1023,
+              "seconds": 8.525
+            },
+            {
+              "firstTick": 8398,
+              "lastTick": 8640,
+              "ticks": 243,
+              "seconds": 2.025
+            },
+            {
+              "firstTick": 8738,
+              "lastTick": 9000,
+              "ticks": 263,
+              "seconds": 2.1916666666666664
+            }
+          ],
+          "recorderDigestSha256": "ee24e2f445ee826bf3013a1a180c6650eed33998de272fc6143bc9f99376a820",
+          "displayedDigestSha256": "f8a974e62b681c8d93a4d7e1b02bbf4f9c2bf11cdc9d934e84dd7e45b5e3a588"
+        },
+        "on": {
+          "enabled": true,
+          "ticks": 9000,
+          "firstRecordedMismatch": 1250,
+          "falls": 5,
+          "meanSpeedMps": 0.8278263754408679,
+          "before": {
+            "sampledTicks": 9000,
+            "rawPositiveTicks": 1929,
+            "outsideTicks": 1926,
+            "seconds": 16.05,
+            "maxDepthM": 8.76197394280156,
+            "inbound": 0,
+            "outbound": 1880,
+            "tangent": 46,
+            "fallen": 407,
+            "longestSeconds": 2.975,
+            "spans": [
+              {
+                "firstTick": 893,
+                "lastTick": 1249,
+                "ticks": 357,
+                "seconds": 2.975,
+                "maxDepthM": 8.76197394280156,
+                "inbound": 0,
+                "outbound": 356,
+                "tangent": 1,
+                "fallen": 356
+              },
+              {
+                "firstTick": 1261,
+                "lastTick": 1298,
+                "ticks": 38,
+                "seconds": 0.31666666666666665,
+                "maxDepthM": 0.000053211074323655794,
+                "inbound": 0,
+                "outbound": 38,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 1991,
+                "lastTick": 1992,
+                "ticks": 2,
+                "seconds": 0.016666666666666666,
+                "maxDepthM": 0.00001284642124055324,
+                "inbound": 0,
+                "outbound": 2,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2055,
+                "lastTick": 2059,
+                "ticks": 5,
+                "seconds": 0.041666666666666664,
+                "maxDepthM": 0.00002450129311526439,
+                "inbound": 0,
+                "outbound": 5,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2068,
+                "lastTick": 2088,
+                "ticks": 21,
+                "seconds": 0.175,
+                "maxDepthM": 0.0002402417187781225,
+                "inbound": 0,
+                "outbound": 21,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2137,
+                "lastTick": 2172,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00006272733241630135,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2182,
+                "lastTick": 2184,
+                "ticks": 3,
+                "seconds": 0.025,
+                "maxDepthM": 0.00003388036617479884,
+                "inbound": 0,
+                "outbound": 3,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2195,
+                "lastTick": 2198,
+                "ticks": 4,
+                "seconds": 0.03333333333333333,
+                "maxDepthM": 0.00012398806017621666,
+                "inbound": 0,
+                "outbound": 4,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2212,
+                "lastTick": 2216,
+                "ticks": 5,
+                "seconds": 0.041666666666666664,
+                "maxDepthM": 0.000046226554506034745,
+                "inbound": 0,
+                "outbound": 5,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2519,
+                "lastTick": 2554,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.000061319912937563,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2699,
+                "lastTick": 2728,
+                "ticks": 30,
+                "seconds": 0.25,
+                "maxDepthM": 0.00001553990121294646,
+                "inbound": 0,
+                "outbound": 30,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2783,
+                "lastTick": 2818,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.000018313969974315114,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 2987,
+                "lastTick": 3022,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00006209813875734937,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3026,
+                "lastTick": 3026,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.000046871409386639584,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3070,
+                "lastTick": 3070,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.00015980469792786778,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3074,
+                "lastTick": 3096,
+                "ticks": 23,
+                "seconds": 0.19166666666666665,
+                "maxDepthM": 0.0003527159077041375,
+                "inbound": 0,
+                "outbound": 23,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3398,
+                "lastTick": 3414,
+                "ticks": 17,
+                "seconds": 0.14166666666666666,
+                "maxDepthM": 0.0006015348019072775,
+                "inbound": 0,
+                "outbound": 17,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3476,
+                "lastTick": 3509,
+                "ticks": 34,
+                "seconds": 0.2833333333333333,
+                "maxDepthM": 0.00009064642945233459,
+                "inbound": 0,
+                "outbound": 34,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3781,
+                "lastTick": 3816,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007693291063759489,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 3871,
+                "lastTick": 3921,
+                "ticks": 51,
+                "seconds": 0.425,
+                "maxDepthM": 0.00000781909929514768,
+                "inbound": 0,
+                "outbound": 7,
+                "tangent": 44,
+                "fallen": 46
+              },
+              {
+                "firstTick": 4007,
+                "lastTick": 4042,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007693301734690294,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4057,
+                "lastTick": 4091,
+                "ticks": 35,
+                "seconds": 0.2916666666666667,
+                "maxDepthM": 0.00008604662649780437,
+                "inbound": 0,
+                "outbound": 35,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4141,
+                "lastTick": 4176,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007696516647293095,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4344,
+                "lastTick": 4356,
+                "ticks": 13,
+                "seconds": 0.10833333333333334,
+                "maxDepthM": 0.0005088919923998958,
+                "inbound": 0,
+                "outbound": 13,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4418,
+                "lastTick": 4451,
+                "ticks": 34,
+                "seconds": 0.2833333333333333,
+                "maxDepthM": 0.0000853549191415226,
+                "inbound": 0,
+                "outbound": 34,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4501,
+                "lastTick": 4536,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007714113262657918,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4599,
+                "lastTick": 4620,
+                "ticks": 22,
+                "seconds": 0.18333333333333332,
+                "maxDepthM": 0.00005318047233515699,
+                "inbound": 0,
+                "outbound": 22,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4640,
+                "lastTick": 4644,
+                "ticks": 5,
+                "seconds": 0.041666666666666664,
+                "maxDepthM": 0.00009725704004459601,
+                "inbound": 0,
+                "outbound": 5,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4681,
+                "lastTick": 4716,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007715012018394418,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4779,
+                "lastTick": 4810,
+                "ticks": 32,
+                "seconds": 0.26666666666666666,
+                "maxDepthM": 0.00008174674695915485,
+                "inbound": 0,
+                "outbound": 32,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4861,
+                "lastTick": 4896,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.0000771442823062074,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 4959,
+                "lastTick": 4991,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.00008564285393930504,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5115,
+                "lastTick": 5150,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007728884366819955,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5230,
+                "lastTick": 5262,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.00009022037420081119,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5311,
+                "lastTick": 5346,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007679519079673014,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5379,
+                "lastTick": 5411,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.00008981294761767344,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5549,
+                "lastTick": 5584,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007678190106652494,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5617,
+                "lastTick": 5649,
+                "ticks": 33,
+                "seconds": 0.275,
+                "maxDepthM": 0.00008624721576211414,
+                "inbound": 0,
+                "outbound": 33,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5669,
+                "lastTick": 5704,
+                "ticks": 36,
+                "seconds": 0.3,
+                "maxDepthM": 0.00007676861506489274,
+                "inbound": 0,
+                "outbound": 36,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 5730,
+                "lastTick": 5796,
+                "ticks": 67,
+                "seconds": 0.5583333333333333,
+                "maxDepthM": 0.0000869799435339047,
+                "inbound": 0,
+                "outbound": 67,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 6031,
+                "lastTick": 6077,
+                "ticks": 47,
+                "seconds": 0.39166666666666666,
+                "maxDepthM": 0.00005895842454428646,
+                "inbound": 0,
+                "outbound": 47,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 6291,
+                "lastTick": 6322,
+                "ticks": 32,
+                "seconds": 0.26666666666666666,
+                "maxDepthM": 0.000058654753116726965,
+                "inbound": 0,
+                "outbound": 32,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7249,
+                "lastTick": 7249,
+                "ticks": 1,
+                "seconds": 0.008333333333333333,
+                "maxDepthM": 0.0073858664201296165,
+                "inbound": 0,
+                "outbound": 1,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7456,
+                "lastTick": 7503,
+                "ticks": 48,
+                "seconds": 0.4,
+                "maxDepthM": 0.0011316088584365502,
+                "inbound": 0,
+                "outbound": 47,
+                "tangent": 1,
+                "fallen": 5
+              },
+              {
+                "firstTick": 7541,
+                "lastTick": 7709,
+                "ticks": 169,
+                "seconds": 1.4083333333333332,
+                "maxDepthM": 0.00010849509353505482,
+                "inbound": 0,
+                "outbound": 169,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7764,
+                "lastTick": 7776,
+                "ticks": 13,
+                "seconds": 0.10833333333333334,
+                "maxDepthM": 0.00008076523186950624,
+                "inbound": 0,
+                "outbound": 13,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7780,
+                "lastTick": 7829,
+                "ticks": 50,
+                "seconds": 0.4166666666666667,
+                "maxDepthM": 0.00015946265382282832,
+                "inbound": 0,
+                "outbound": 50,
+                "tangent": 0,
+                "fallen": 0
+              },
+              {
+                "firstTick": 7832,
+                "lastTick": 7961,
+                "ticks": 130,
+                "seconds": 1.0833333333333333,
+                "maxDepthM": 0.00021547784133524317,
+                "inbound": 0,
+                "outbound": 130,
+                "tangent": 0,
+                "fallen": 0
+              }
+            ]
+          },
+          "after": {
+            "sampledTicks": 9000,
+            "rawPositiveTicks": 559,
+            "outsideTicks": 407,
+            "seconds": 3.3916666666666666,
+            "maxDepthM": 8.76197394280156,
+            "inbound": 0,
+            "outbound": 364,
+            "tangent": 43,
+            "fallen": 407,
+            "longestSeconds": 2.966666666666667,
+            "spans": [
+              {
+                "firstTick": 893,
+                "lastTick": 1248,
+                "ticks": 356,
+                "seconds": 2.966666666666667,
+                "maxDepthM": 8.76197394280156,
+                "inbound": 0,
+                "outbound": 356,
+                "tangent": 0,
+                "fallen": 356
+              },
+              {
+                "firstTick": 3875,
+                "lastTick": 3920,
+                "ticks": 46,
+                "seconds": 0.3833333333333333,
+                "maxDepthM": 0.00000781909929514768,
+                "inbound": 0,
+                "outbound": 3,
+                "tangent": 43,
+                "fallen": 46
+              },
+              {
+                "firstTick": 7498,
+                "lastTick": 7502,
+                "ticks": 5,
+                "seconds": 0.041666666666666664,
+                "maxDepthM": 0.0011316088584365502,
+                "inbound": 0,
+                "outbound": 5,
+                "tangent": 0,
+                "fallen": 5
+              }
+            ]
+          },
+          "stuck": [
+            {
+              "firstTick": 1249,
+              "lastTick": 3037,
+              "ticks": 1789,
+              "seconds": 14.908333333333333
+            },
+            {
+              "firstTick": 3081,
+              "lastTick": 3290,
+              "ticks": 210,
+              "seconds": 1.75
+            },
+            {
+              "firstTick": 3404,
+              "lastTick": 4248,
+              "ticks": 845,
+              "seconds": 7.041666666666667
+            },
+            {
+              "firstTick": 4346,
+              "lastTick": 6318,
+              "ticks": 1973,
+              "seconds": 16.441666666666666
+            },
+            {
+              "firstTick": 7601,
+              "lastTick": 7746,
+              "ticks": 146,
+              "seconds": 1.2166666666666666
+            }
+          ],
+          "recorderDigestSha256": "306957d405f5fdc071a3849e9218ef512d12e9c388491ea6897ee34e3f677ac0",
+          "displayedDigestSha256": "5d90a33f4a36255bae28e46356bfbe4db209f362e04ff3c4a03ce4c4c64a9955"
+        },
+        "recorderChanges": {
+          "changedTicks": 7751,
+          "firstChangedTick": 1250,
+          "lastChangedTick": 9000
+        },
+        "displayedChanges": {
+          "changedTicks": 7752,
+          "firstChangedTick": 1249,
+          "lastChangedTick": 9000
         }
       }
     }
@@ -1191,6 +2653,6 @@
       }
     ]
   },
-  "firstIce": "Missing: the 2026-11-11 17:55 recording is not in the specified corpus",
-  "ownerChoice": "Pending owner decision: keep the shipped behavior (default off), or authorize enabling inward snapping after reviewing replay changes. This experiment does not enable it in gameplay."
+  "firstIce": "The owner's live Godot save (`ice-run-replay.json`, modified 2026-11-11 18:02, read in place and never modified). The 2026-11-11 hand-off describes First ice as a 75 s replay with 5 falls and a mean speed of 0.64 m/s; this file measures 75 s, 5 falls and 0.642 m/s, which matches on all three. The hand-off's 17:55 stamp is not stored in the file, so identity rests on those three numbers. It is solver /39 without the two later transfer knobs, so it runs through the explicit disabled-transfer adapter, and every one of its 9000 archived digests matches with the param off.",
+  "ownerChoice": "Recommendation: leave `boardsSnapInbound` off in every setup (Simulation, Explorer, Experimental, Dig Gate, Repertoire) for now. The inward snap does not unstick First ice: stuck time is 52.8 s off and 41.4 s on, its longest stuck interval 16.4 s off and 16.4 s on, and the digests diverge from tick 1250, so turning it on would also change how that recorded clip plays back (playback runs the same collision between ticks, game/main.ts:534). The only standing gap in the measured corpus is Katya Vell in the warm-up pilot, 97 ticks, 1.13 mm deep; with the snap on that falls to 10 ticks, all of them while fallen, at the same 1.13 mm, which comes from the fallen-skater policy the snap leaves alone. So the warm-up's 2 mm allowance cannot go back to 0 on this change alone; it could only if the owner also decides that a fallen skater is held by the boards. If you still want a zero standing gap, the narrowest place to turn it on is the warm-up pilot (game/warmup.ts), with the tolerance left at 2 mm; Godot's bridge/engine.mjs would need the param passed separately and was not touched. Authored: the 2 mm stuck proxy and every threshold in this document. Pending owner decision."
 }
