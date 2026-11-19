@@ -727,7 +727,16 @@ export function fullInput(c: Controls, s: SkaterState, st: GameControlState, p: 
     // weight, so a deep edge can be held through the load.
     // The standing leg's knee, as the solver reads the load (sim/solver.ts legInput).
     const standingKnee = mapped.knee + (mapped.kneeSplit ?? 0) * (2 * f.foot - 1);
-    const loading = s.jump.phase === JUMP_PHASE.Load || standingKnee >= p.jumpLoadKnee;
+    // beatCrossoverHoldSuppress 1 (the owner's option, Hand_off.md open
+    // question 2, measured 2026-11-18 in docs/beatcross-2026-11.md): the
+    // standing trigger held toward a load — on one foot, not mid-push, pulled
+    // past the snap window so a pump is not a hold — stops the beat's
+    // crossovers too, before the knee reaches the load.
+    const stand = f.foot === 1 ? 1 : 0;
+    const standPull = h.connected && !key("shift") ? trigger(stand === 1 ? 7 : 6) : 0;
+    const heldTowardLoad = p.beatCrossoverHoldSuppress >= 1 && f.foot !== 0.5 && !pushing
+      && standPull > 0 && s.tick - (f.gestures?.rise?.[stand] ?? -1e9) >= GESTURE_TICKS;
+    const loading = s.jump.phase === JUMP_PHASE.Load || standingKnee >= p.jumpLoadKnee || heldTowardLoad;
     if (options.pumps && loading) f.crossUntil = -1;
     if (options.pumps && !mapped.push && !loading) {
       const auto = autoCrossover(f, s, p);

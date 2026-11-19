@@ -7,6 +7,9 @@ import {IceEngine} from '../bridge/engine.mjs';
 import {createState} from '../runtime/sim/solver.js';
 import {NEUTRAL_INPUT} from '../runtime/sim/types.js';
 import {supportSignal} from '../runtime/sim/support.js';
+import {footPrep} from '../runtime/game/footprep.js';
+// --no-prep: frames without footPrep, so pose_lab shows the free foot as it was before it (the "before" stills).
+const prepArg=!process.argv.includes('--no-prep');
 import {SKINS} from '../runtime/game/appearance.js';
 import {lookOf} from '../runtime/game/skates.js';
 import {MotionPlayer} from '../runtime/game/motion/player.js';
@@ -24,7 +27,7 @@ e.state=createState(e.params,6);
 e.state.pos.y=18;
 const pick=b=>({contact:b.contact,tangent:b.tangent,tilt:b.tilt,weight:b.weight,normalLoad:b.normalLoad,inContact:b.inContact,latSlipAccel:b.latSlipAccel,longSpeed:b.longSpeed,demandRatio:b.demandRatio});
 const frames=[],marks=[];
-const record=()=>{const s=e.state;const motion=player?player.frame(s,s.tick/120):null;frames.push({low:false,motion,support:supportSignal(s),state:{tick:s.tick,pos:s.pos,vel:s.vel,heading:s.heading,yawRate:s.yawRate,lean:s.lean,comZ:s.comZ,knee:s.knee,intAccel:s.intAccel,balanceError:s.balanceError,latAccel:s.latAccel,armsL:s.armsL,strokeTime:s.strokeTime,strokeFoot:s.strokeFoot,twist:s.twist,freeSwing:s.freeSwing,fallen:s.fallen,move:s.move,supportMode:s.supportMode,supportFoot:s.supportFoot,jump:{phase:s.jump.phase,z:s.jump.z,vz:s.jump.vz,rotation:s.jump.rotation,inertia:s.jump.inertia},spin:{position:s.spin.position,inertia:s.spin.inertia,omega:s.spin.omega},blade:s.blade.map(pick)}});};
+const record=()=>{const s=e.state;const motion=player?player.frame(s,s.tick/120):null;frames.push({low:false,motion,support:supportSignal(s),...(prepArg?{footPrep:footPrep(s,supportSignal(s))}:{}),state:{tick:s.tick,pos:s.pos,vel:s.vel,heading:s.heading,yawRate:s.yawRate,lean:s.lean,comZ:s.comZ,knee:s.knee,intAccel:s.intAccel,balanceError:s.balanceError,latAccel:s.latAccel,armsL:s.armsL,strokeTime:s.strokeTime,strokeFoot:s.strokeFoot,twist:s.twist,freeSwing:s.freeSwing,fallen:s.fallen,move:s.move,supportMode:s.supportMode,supportFoot:s.supportFoot,jump:{phase:s.jump.phase,z:s.jump.z,vz:s.jump.vz,rotation:s.jump.rotation,inertia:s.jump.inertia},spin:{position:s.spin.position,inertia:s.spin.inertia,omega:s.spin.omega},blade:s.blade.map(pick)}});};
 const run=(name,ticks,input)=>{marks.push({name,tick:frames.length});for(let i=0;i<ticks;i++){e.tick({...NEUTRAL_INPUT,...input(i)});record();}};
 // --falls: a real fall each way and getting up, instead of the passage below.
 if(process.argv.includes('--falls')){
@@ -48,6 +51,21 @@ if(process.argv.includes('--strokes')){
  const s=e.state;
  writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],...skatesField,marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,frames}));
  console.log(JSON.stringify({ticks:frames.length,marks,fallen:frames.filter(f=>f.state.fallen).length,speed:Math.hypot(s.vel.x,s.vel.y)}));
+ process.exit(0);
+}
+// --footwork: forward crossovers round a counter-clockwise curve, then a left forward outside three-turn,
+// for the free-foot preparation stills (game/footprep.ts). Pair with --transfer, as Simulation plays it.
+if(process.argv.includes('--footwork')){
+ e.state.pos.x=-20;
+ run('two-foot curve',90,()=>({lean:.3,weight:.5,knee:.45}));
+ for(let k=0;k<4;k++){const foot=k%2?0:1,other=1-foot;run(`crossover: push off the ${foot?'right (outside)':'left (under)'}`,72,i=>({lean:.3,weight:i<24?.5:other,knee:.55,push:i===0,pushFoot:foot}));}
+ run('left outside edge',90,()=>({lean:.25,weight:0,knee:.5}));
+ run('three-turn',90,i=>({lean:.2,weight:0,knee:.5,turn:i<4}));
+ run('back glide',60,()=>({lean:-.15,weight:0,knee:.5}));
+ const s=e.state;
+ writeFileSync(process.argv[2],JSON.stringify({skin:SKINS.find(k=>k.name==='Northlight')??SKINS[0],...skatesField,marks,landed:null,fallen:frames.filter(f=>f.state.fallen).length,frames}));
+ console.log(JSON.stringify({ticks:frames.length,marks,fallen:frames.filter(f=>f.state.fallen).length,speed:Math.hypot(s.vel.x,s.vel.y),
+  prep:Object.fromEntries(['beside','cross','under','held'].map(k=>[k,frames.filter(f=>f.footPrep?.some(p=>p.pose===k&&p.weight>.5)).length]))}));
  process.exit(0);
 }
 run('two-foot glide',120,()=>({lean:0,weight:.5,knee:.35}));

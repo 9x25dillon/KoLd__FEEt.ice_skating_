@@ -950,6 +950,19 @@ export interface Params {
    * reference skating.
    */
   weightTransferTime: number;
+  /**
+   * 0: the beat's automatic crossovers (game/full-controls.ts autoCrossover)
+   * run whenever the skater is backward on a deep enough curve, except once a
+   * jump is loading (the standing knee at jumpLoadKnee, or the Load phase).
+   * 1: the standing trigger held toward a load also stops them — on one foot,
+   * not mid-push, pulled past the snap window (GESTURE_TICKS), so a hold is
+   * not a pump. The owner's option for Hand_off.md open question 2 (2026-11-18,
+   * measured in docs/beatcross-2026-11.md): a crossover puts the weight on both
+   * feet, and with weightTransferMode 1 the return takes up to
+   * weightTransferTime, so a load just after a beat can begin on two feet.
+   * Mapping only: the solver never reads it.
+   */
+  beatCrossoverHoldSuppress: number;
 
   // ── the toe pick ──────────────────────────────────────────────────────────
   /**
@@ -1261,6 +1274,7 @@ export const DEFAULT_PARAMS: Params = {
   pitchAnkleTau: 0.16,
   weightTransferMode: 0,
   weightTransferTime: 0.25,
+  beatCrossoverHoldSuppress: 0,
 
   toePickMode: 0,
   toePickEngage: 0.11,
@@ -1466,6 +1480,7 @@ export function validate(p: Params): string[] {
   if (!(p.pitchAnkleTau >= 0)) errs.push("pitchAnkleTau is a time constant in seconds, or 0 (the ankle takes the whole demand)");
   if (![0, 1].includes(p.weightTransferMode)) errs.push("weightTransferMode is 0 (the weight input sets each blade's load at once) or 1 (the legs move the load over time)");
   if (!(p.weightTransferTime >= 0.05 && p.weightTransferTime <= 1)) errs.push("weightTransferTime is s for a whole transfer, 0.05 to 1");
+  if (![0, 1].includes(p.beatCrossoverHoldSuppress)) errs.push("beatCrossoverHoldSuppress is 0 (the beat's crossovers run until a jump loads) or 1 (the standing trigger held toward a load stops them)");
   if (![0, 1].includes(p.toePickMode)) errs.push("toePickMode is 0 (the pick never trips) or 1 (a pick that bites going forward trips)");
   if (!(p.toePickEngage > 0 && p.toePickEngage < 0.5 * p.bladeLength)) errs.push("toePickEngage must lie between the blade's centre and its toe (0 .. bladeLength / 2)");
   if (!(p.toePickTripSpeed > 0)) errs.push("toePickTripSpeed must be positive");

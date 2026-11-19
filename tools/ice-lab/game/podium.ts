@@ -18,6 +18,7 @@ import { NEUTRAL_INPUT } from "../sim/types.ts";
 import type { SkaterState } from "../sim/types.ts";
 import type { Standing } from "./rivals.ts";
 import { supportSignal } from "../sim/support.ts";
+import { footPrep } from "./footprep.ts";
 
 /** Blocks by place: offset along the sheet (m), top height (m). Silver to gold's -x, bronze to +x. AUTHORED. */
 export const PODIUM_BLOCKS = [
@@ -52,6 +53,6 @@ export function podium(rows: readonly Standing[], params: Params): PodiumPlace[]
       b.tangent = turn(b.tangent);
     }
     s.pos = at;
-    return { place: r.place, name: r.name, you: r.you, height: block.height, state: s, support: supportSignal(s), low: false, clip: PODIUM_CLIPS[r.place - 1] };
+    return { place: r.place, name: r.name, you: r.you, height: block.height, state: s, support: supportSignal(s), footPrep: footPrep(s, supportSignal(s)), low: false, clip: PODIUM_CLIPS[r.place - 1] };
   });
 }

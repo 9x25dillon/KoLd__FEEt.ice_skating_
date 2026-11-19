@@ -21,6 +21,11 @@ import { CAREER_EVENTS, seasonOf } from "./career.ts";
 // turn scores no TES, so both are PCS). Season one's were not re-measured; on this engine the
 // pilot no longer skates the Championship program clean, a jump straight out of a crossover.
 // The gala is an exhibition: it places nobody, so its baseline only fills the field's view.
+//
+// 2026-11-18 (docs/nationals-baseline-2026-11-18.md): the borrowing stays (the owner's call). With
+// the weight transfer on, Nationals still has no clean run, but turning the transfer off gives
+// 0/45 too: the cause is a fresh skater's legs (jump 2 takes off on ~0.81, turns 0.42-0.52), not
+// the transfer. Northern Cup re-measured with it on: 31.0 (7/45), with it off 32.04 (7/45).
 export const BASELINE = [16.5, 16.7, 17.5, 16.0, 30.9, 15.5, 12.8, 32.0, 32.0, 16.4] as const;
 /** `season`: the first season a rival skates in. Their growth runs on through every event. */
 export const RIVALS = [
