@@ -42,6 +42,22 @@ test('a completed spin reaches snapshot().spinLevel, the free-skate readout game
  assert.ok(level>=0&&level<=4,`spinLevel should be a real, scored level, got ${level}`);
 });
 
+test('the frame carries game/footprep.ts beside the support signal',()=>{
+ // Presentation only: skater.gd poses the free foot from it; nothing reads it back.
+ const e=new IceEngine();
+ for(let i=0;i<120;i++)e.tick({...NEUTRAL_INPUT,weight:0,lean:.3,knee:.5});
+ const snap=e.snapshot();
+ assert.ok(Array.isArray(snap.footPrep)&&snap.footPrep.length===2);
+ for(const p of snap.footPrep){
+  assert.ok(['none','beside','cross','under','held'].includes(p.pose));
+  assert.ok(p.weight>=0&&p.weight<=1&&Number.isFinite(p.at.x)&&Number.isFinite(p.at.y)&&Number.isFinite(p.lift));
+ }
+ // On one foot with nothing pushed, the carrying blade is never prepared.
+ assert.equal(snap.footPrep[0].pose,'none');
+ const json=JSON.parse(JSON.stringify(snap));
+ assert.deepEqual(json.footPrep,snap.footPrep,'survives the wire as plain JSON');
+});
+
 test("a turn's own kind reaches snapshot().move — the bridge used to say the bare 'Turn' for all six",()=>{
  // Fourteenth session (this file's own note in engine.mjs): the bridge never
  // broke Turn down the way game/main.ts's free-skate HUD already did. Direct
