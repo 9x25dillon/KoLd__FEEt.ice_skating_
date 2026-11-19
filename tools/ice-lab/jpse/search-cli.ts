@@ -10,13 +10,14 @@ import { STYLES, styleParams } from "../game/styles.ts";
 import { BASELINE_KNOBS, baselineParams } from "./baseline.ts";
 import { FIRST_GRID, POWER_GRID, checkWindows, revolutionsOf, runSearch } from "./search.ts";
 import type { SearchSpec } from "./search.ts";
+import { HOLD_SUPPRESS_GRID, nearestToCanonical, runHoldSuppressSearch } from "./hold-suppress.ts";
 
 const arg = (name: string): string | undefined => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; };
 const mirror = process.argv.includes("--mirror");
 const gridName = arg("--grid") ?? "first";
 const grids: Record<string, SearchSpec> = { first: FIRST_GRID, power: POWER_GRID };
 const grid = grids[gridName];
-if (!grid) { console.error(`--grid: one of ${Object.keys(grids).join(", ")}`); process.exit(2); }
+if (!grid && gridName !== "hold-suppress") { console.error(`--grid: one of ${Object.keys(grids).join(", ")}, hold-suppress`); process.exit(2); }
 const styleId = arg("--style");
 const styleIndex = styleId ? STYLES.findIndex((s) => s.id === styleId) : -1;
 if (styleId && styleIndex < 0) { console.error(`--style: one of ${STYLES.map((s) => s.id).join(", ")}`); process.exit(2); }
@@ -24,6 +25,30 @@ const mastery = Number(arg("--mastery") ?? 1);
 const params = styleParams(baselineParams(), styleIndex, mastery);
 const who = styleId ? `${styleId} at mastery ${mastery}` : "the neutral skater";
 const transform = { mirror, reverse: false };
+
+// The hold-suppress entrance search (Brief 2): Experimental with the owner's
+// beatCrossoverHoldSuppress 1, the three-phase player-doable entrance. A guarded
+// grid of its own; the first/power grids and their reports are unchanged.
+if (gridName === "hold-suppress") {
+  const hsParams = { ...params, beatCrossoverHoldSuppress: 1 };
+  const t0 = performance.now();
+  const r = runHoldSuppressSearch(HOLD_SUPPRESS_GRID, hsParams);
+  const ms = performance.now() - t0;
+  console.log(`JPSE hold-suppress search — ${r.jump}, ${who}, beatCrossoverHoldSuppress 1, ${r.evaluated} candidates (+${r.repeatability.checked} repeats), ${r.ticksTotal} solver ticks`);
+  console.log(`cost: ${(ms / (r.evaluated + r.repeatability.checked)).toFixed(1)} ms per candidate on this machine (${(ms / 1000).toFixed(1)} s total)`);
+  console.log(`repeatability: ${r.repeatability.identical}/${r.repeatability.checked} identical digests`);
+  console.log("first failed gate:");
+  for (const [k, n] of Object.entries(r.distribution)) console.log(`  ${k.padEnd(28)} ${n}`);
+  console.log(`accepted ${r.accepted.length}, clean doubles ${r.doubles.length}`);
+  const show = (i: number) => { const p = r.points[i]; const k = p.knobs;
+    return `#${i} speed ${k.speed} glide ${k.glideTicks} pushes ${k.pushCount} hold ${k.holdTicks}@${k.holdPull} load ${k.load} check ${k.checkAt} depth ${k.depth}: ${revolutionsOf(p.turned)}${p.simCalls} ${p.turned.toFixed(3)} rev, L ${(p.angMomentum ?? 0).toFixed(2)}, takeoff q ${p.takeoffQuality.toFixed(3)}, landing q ${p.landingQuality.toFixed(3)}`; };
+  for (const i of r.doubles) console.log("  " + show(i));
+  const nearest = nearestToCanonical(r);
+  console.log(nearest >= 0 ? `nearest the canonical entrance (§1 rule): ${show(nearest)}` : "no clean double on this grid");
+  const out = arg("--out");
+  if (out) writeFileSync(out, JSON.stringify(r, null, 1) + "\n");
+  process.exit(0);
+}
 
 if (process.argv.includes("--windows")) {
   const speeds = grid.axes.speed ?? [BASELINE_KNOBS.speed], loads = grid.axes.load ?? [BASELINE_KNOBS.load];

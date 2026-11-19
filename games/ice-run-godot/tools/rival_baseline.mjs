@@ -85,7 +85,7 @@ function pad(h,s,cur,t,mem,R,entry){
  if(cur==='spin'){h.axes[0]=h.axes[2]=.5;if(lt>1&&(s.move===MOVE.Spin||lt%1<.5))h.buttons[Y]=1;}
  if(cur==='pose'){if(v<2.5){if(tap(t,1))h.buttons[A]=1;}else{h.buttons[A]=1;h.buttons[L3]=1;}}
 }
-export function skate(i,R=12,jumpEntry=3){
+export function skate(i,R=12,jumpEntry=3,onTick){
  const entry={glide:0,crossover:0,edge:3,pose:3,jump:jumpEntry,spin:SPIN_ENTRY};
  const e=new IceEngine();
  e.configure({setup:'simulation',beginner:false,cruise:false});
@@ -99,6 +99,7 @@ export function skate(i,R=12,jumpEntry=3){
   pad(h,e.state,r.current,t,mem,R,entry);
   e.advance({hardware:h},1,false);
   const air=e.state.jump.phase===JUMP_PHASE.Air;
+  onTick?.(e,t,air,wasAir);
   if(wasAir&&!air)jumps.push(+e.state.landed.turned.toFixed(2));
   wasAir=air;
   if(e.state.fallen&&!wasFallen)falls.push(`${t.toFixed(1)} s ${FALL_NAME[e.state.fallReason]} (${r.current??'after the last element'})`);

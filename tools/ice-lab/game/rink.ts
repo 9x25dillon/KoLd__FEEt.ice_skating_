@@ -1,16 +1,14 @@
 // game/rink.ts — the boards, matching the rounded rectangle scene.ts already
 // draws (bible §3.5: collision and environment interaction). Live gameplay
 // only, applied to the object the frame renders, never inside sim/'s own
-// step(): a replay's recorded digest is captured from the pure solver output
-// before this runs, so a clip stays part of the verified contract regardless
-// of which wall it hit and when — the boards are presentation, the way the
-// cantilever pose overlay is (README.md). Played back, the same function
-// runs again on the replay's own live state, so watching one still shows the
-// bounce; it is simply not what a divergence check compares against.
+// step(). The recorder captures BEFORE collision, but the changed state feeds
+// the NEXT solver tick. Playback must apply the same collision policy between
+// ticks; changing it can change future digests. It is not a pose-only overlay.
 
 import type { SkaterState } from "../sim/types.ts";
 import { FALL, EVENT } from "../sim/types.ts";
 import type { EdgeEvent } from "../sim/types.ts";
+import type { Params } from "../sim/params.ts";
 
 /** The rounded rectangle scene.ts's `ctx.roundRect(-28, -10, 56, 56, 9)` draws. */
 export const RINK = { minX: -28, maxX: 28, minY: -10, maxY: 46, corner: 9 };
@@ -42,17 +40,26 @@ export function rinkHit(x: number, y: number): RinkHit | null {
 /**
  * Push the skater back inside the boards and answer their velocity into the
  * wall: a bounce below `CRASH_SPEED`, a fall onto the ice above it. Mutates
- * `s.pos` and `s.vel` always on a hit; `s.fallen` and friends only on a
+ * position and velocity on outward hits; `s.fallen` and friends only on a
  * crash, mirroring sim/solver.ts's own fall assignment so the rest of the
  * game reads it the same way it reads any other fall.
  */
-export function resolveRinkCollision(s: SkaterState, events: EdgeEvent[]): void {
+export function resolveRinkCollision(s: SkaterState, events: EdgeEvent[],
+  options: Pick<Params, "boardsSnapInbound"> = { boardsSnapInbound: 0 }): void {
   if (s.fallen) return;
   const hit = rinkHit(s.pos.x, s.pos.y);
   if (!hit) return;
   // Positive: still heading further out, along the outward normal.
   const into = s.vel.x * hit.nx + s.vel.y * hit.ny;
-  if (into <= 0) return; // already heading back onto the ice
+  if (into <= 0) {
+    // Opt-in prototype: recover position without reflecting inward velocity,
+    // adding an event, or changing the existing fallen-skater policy.
+    if (options.boardsSnapInbound === 1) {
+      s.pos.x -= hit.nx * hit.penetration;
+      s.pos.y -= hit.ny * hit.penetration;
+    }
+    return;
+  }
   s.pos.x -= hit.nx * hit.penetration;
   s.pos.y -= hit.ny * hit.penetration;
   s.vel.x -= hit.nx * into * (1 + RESTITUTION);
