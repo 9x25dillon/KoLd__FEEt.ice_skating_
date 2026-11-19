@@ -23,6 +23,8 @@ const e=new IceEngine();
 e.start({mode:'free'});
 // --transfer: the legs move the load between the blades over time (weightTransferMode 1).
 if(process.argv.includes('--transfer'))e.params={...e.params,weightTransferMode:1};
+// --cross-place: crossover places the outside blade past the skating blade's line (crossPlaceMode 1).
+if(process.argv.includes('--cross-place'))e.params={...e.params,crossPlaceMode:1};
 e.state=createState(e.params,6);
 e.state.pos.y=18;
 const pick=b=>({contact:b.contact,tangent:b.tangent,tilt:b.tilt,weight:b.weight,normalLoad:b.normalLoad,inContact:b.inContact,latSlipAccel:b.latSlipAccel,longSpeed:b.longSpeed,demandRatio:b.demandRatio});

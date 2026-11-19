@@ -959,6 +959,14 @@ export interface Params {
    * Mapping only: the solver never reads it.
    */
   beatCrossoverHoldSuppress: number;
+  /**
+   * Crossed placement on a crossover (owner's choice, 2026-11-19). 0: contacts
+   * stay on their own sides of the body (unchanged from main). 1: during a
+   * crossover's under-push the outside blade is placed past the skating blade's
+   * line on the far side (with authored crossing clearance, no interpenetration),
+   * and the stance, centre of pressure and support signal follow it.
+   */
+  crossPlaceMode: number;
 
   // ── the toe pick ──────────────────────────────────────────────────────────
   /**
@@ -1271,6 +1279,7 @@ export const DEFAULT_PARAMS: Params = {
   weightTransferMode: 0,
   weightTransferTime: 0.25,
   beatCrossoverHoldSuppress: 0,
+  crossPlaceMode: 0,
 
   toePickMode: 0,
   toePickEngage: 0.11,
@@ -1476,6 +1485,7 @@ export function validate(p: Params): string[] {
   if (![0, 1].includes(p.weightTransferMode)) errs.push("weightTransferMode is 0 (the weight input sets each blade's load at once) or 1 (the legs move the load over time)");
   if (!(p.weightTransferTime >= 0.05 && p.weightTransferTime <= 1)) errs.push("weightTransferTime is s for a whole transfer, 0.05 to 1");
   if (![0, 1].includes(p.beatCrossoverHoldSuppress)) errs.push("beatCrossoverHoldSuppress is 0 (the beat's crossovers run until a jump loads) or 1 (the standing trigger held toward a load stops them)");
+  if (![0, 1].includes(p.crossPlaceMode)) errs.push("crossPlaceMode is 0 (uncrossed stance) or 1 (crossover places the outside blade past the skating blade's line)");
   if (![0, 1].includes(p.toePickMode)) errs.push("toePickMode is 0 (the pick never trips) or 1 (a pick that bites going forward trips)");
   if (!(p.toePickEngage > 0 && p.toePickEngage < 0.5 * p.bladeLength)) errs.push("toePickEngage must lie between the blade's centre and its toe (0 .. bladeLength / 2)");
   if (!(p.toePickTripSpeed > 0)) errs.push("toePickTripSpeed must be positive");

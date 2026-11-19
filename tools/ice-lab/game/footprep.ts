@@ -33,6 +33,7 @@
 import { add, mul, perpLeft, smoothstep } from "../sim/math.ts";
 import type { Vec2 } from "../sim/math.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
+import { CROSS_HALF_ALONG, CROSS_HALF_WIDTH } from "../sim/solver.ts";
 import type { SupportSignal } from "../sim/support.ts";
 import { MOVE } from "../sim/types.ts";
 import type { Foot, SkaterState } from "../sim/types.ts";
@@ -56,9 +57,16 @@ interface Shape { out: number; ahead: number; lift: number }
  * `out` toward the free foot's own side (never negative: see above), `ahead`
  * along the facing, `lift` the blade above the ice. AUTHORED.
  */
-export const FOOT_PREP: Record<Exclude<FootPrepPose, "none">, Shape> & { turnBeside: Shape } = {
+export const FOOT_PREP: Record<Exclude<FootPrepPose, "none">, Shape> & { turnBeside: Shape; crossOver: Shape } = {
   beside: { out: 0.08, ahead: -0.10, lift: 0.07 },
   cross: { out: 0.02, ahead: 0.16, lift: 0.12 },
+  /**
+   * Crossed placement (crossPlaceMode 1): when the sim makes crossed contacts,
+   * the outside foot crosses past the skating blade's line onto the far side,
+   * matching the sim's crossed contact (2 * CROSS_HALF_WIDTH across, 2 * CROSS_HALF_ALONG ahead).
+   * Never used when crossPlaceMode is off (s.crossed === undefined). AUTHORED.
+   */
+  crossOver: { out: -2 * CROSS_HALF_WIDTH, ahead: 2 * CROSS_HALF_ALONG, lift: 0.12 },
   under: { out: 0.02, ahead: -0.24, lift: 0.06 },
   held: { out: 0.04, ahead: -0.08, lift: 0.20 },
   /** A mohawk or choctaw's changing foot, heel drawn to the skating instep. */
@@ -112,7 +120,13 @@ export function footPrep(s: SkaterState, g: SupportSignal): [FootPrep, FootPrep]
       // The crossover's own beat: the foot that pushed, or one being placed.
       // A crossover flag left over on a held edge carries nothing.
       if (toward > 0 && fade > 0 && (taking || s.strokeFoot === free)) {
-        out[free] = place(s, carrier, free, free === outside ? "cross" : "under", toward * fade);
+        const pose = free === outside ? "cross" : "under";
+        // Follow crossed contacts only when the sim has crossPlaceMode on:
+        // while taking, only if s.crossed is true; while free after the outside push,
+        // carry across to meet the upcoming crossed contact. Never invent a crossing
+        // when crossPlaceMode is off (s.crossed === undefined).
+        const followCross = pose === "cross" && s.crossed !== undefined && (taking ? s.crossed : true);
+        out[free] = place(s, carrier, free, pose, toward * fade, followCross ? FOOT_PREP.crossOver : FOOT_PREP[pose]);
         continue;
       }
     }

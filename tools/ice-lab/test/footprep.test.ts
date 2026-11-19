@@ -10,13 +10,13 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { SIM_DT } from "../sim/params.ts";
+import { DEFAULT_PARAMS, PRESETS, SIM_DT } from "../sim/params.ts";
 import type { Params } from "../sim/params.ts";
-import { setupParams } from "../game/setups.ts";
-import { createState, step } from "../sim/solver.ts";
+import { SETUPS, setupParams } from "../game/setups.ts";
+import { CROSS_HALF_ALONG, CROSS_HALF_WIDTH, createState, step } from "../sim/solver.ts";
 import { MOVE, NEUTRAL_INPUT } from "../sim/types.ts";
 import type { SkatingInput, SkaterState } from "../sim/types.ts";
-import { dot, perpLeft, sub } from "../sim/math.ts";
+import { dot, len, perpLeft, sub } from "../sim/math.ts";
 import { replayDigest } from "../sim/replay.ts";
 import { supportSignal } from "../sim/support.ts";
 import type { SupportSignal } from "../sim/support.ts";
@@ -28,11 +28,11 @@ type Run = (mark: string, n: number, input: (i: number) => Partial<SkatingInput>
 
 const P: Params = setupParams("simulation");
 
-function record(script: (run: Run) => void, withPrep = true): { ticks: Tick[]; digests: number[] } {
-  const s = createState(P, 6, 0), ticks: Tick[] = [], digests: number[] = [];
+function record(script: (run: Run) => void, withPrep = true, params: Params = P): { ticks: Tick[]; digests: number[] } {
+  const s = createState(params, 6, 0), ticks: Tick[] = [], digests: number[] = [];
   script((mark, n, input) => {
     for (let i = 0; i < n; i++) {
-      step(s, { ...NEUTRAL_INPUT, ...input(i) }, P, SIM_DT, []);
+      step(s, { ...NEUTRAL_INPUT, ...input(i) }, params, SIM_DT, []);
       if (withPrep) {
         const g = supportSignal(s);
         ticks.push({ mark, s: structuredClone(s), g, prep: footPrep(s, g) });
@@ -165,4 +165,72 @@ test("in the air and down, nothing is prepared", () => {
   const s = createState(P, 6, 0);
   s.fallen = true;
   assert.deepEqual(footPrep(s, supportSignal(s)).map(p => p.pose), ["none", "none"]);
+});
+
+test("crossPlaceMode is 0 in every preset and setup", () => {
+  assert.equal(DEFAULT_PARAMS.crossPlaceMode, 0);
+  for (const [name, preset] of Object.entries(PRESETS)) assert.equal(preset.crossPlaceMode, 0, name);
+  for (const { id } of SETUPS) assert.equal(setupParams(id).crossPlaceMode, 0, id);
+});
+
+test("crossPlaceMode 0: replay digests are byte-identical with crossPlaceMode explicitly 0", () => {
+  const explicitOff: Params = { ...P, crossPlaceMode: 0 };
+  for (const script of [FOOTWORK, STROKES]) {
+    const a = record(script, false, P).digests;
+    const b = record(script, false, explicitOff).digests;
+    assert.deepEqual(a, b);
+  }
+});
+
+test("crossPlaceMode 1: outside blade crosses past skating blade with clearance, COP follows, and footPrep follows it", () => {
+  const pCross: Params = { ...P, crossPlaceMode: 1 };
+  const ticks = record(FOOTWORK, true, pCross).ticks;
+  const underTwoFoot = ticks.filter(k => k.mark === "under push" && k.s.supportMode === 2);
+  assert.ok(underTwoFoot.length > 50, `expected >50 crossed two-foot ticks, got ${underTwoFoot.length}`);
+  for (const k of underTwoFoot) {
+    assert.equal(k.s.crossed, true);
+    const d = sub(k.s.blade[0].contact, k.s.blade[1].contact);
+    const lat = dot(d, perpLeft(k.s.heading));
+    const along = dot(d, k.s.heading);
+    // Left (inside) is to the right of Right (outside), separated by 2 * CROSS_HALF_WIDTH laterally
+    // and 2 * CROSS_HALF_ALONG fore-aft: no interpenetration.
+    assert.ok(lat < -(2 * CROSS_HALF_WIDTH - 1e-6), `lat ${lat.toFixed(4)}`);
+    assert.ok(along < -(2 * CROSS_HALF_ALONG - 1e-6), `along ${along.toFixed(4)}`);
+    assert.ok(len(d) >= Math.hypot(2 * CROSS_HALF_WIDTH, 2 * CROSS_HALF_ALONG) - 1e-6);
+    // Support signal COP matches share-weighted contacts.
+    const w0 = k.g.share[0], w1 = k.g.share[1];
+    assert.ok(Math.abs(k.g.cop.x - (k.s.blade[0].contact.x * w0 + k.s.blade[1].contact.x * w1)) < 1e-9);
+    assert.ok(Math.abs(k.g.cop.y - (k.s.blade[0].contact.y * w0 + k.s.blade[1].contact.y * w1)) < 1e-9);
+  }
+  // footPrep follows the crossing when crossPlaceMode is on.
+  const crossing = ticks.filter(k => k.mark === "outside push" && k.g.role[1] === "free");
+  assert.ok(crossing.length > 10);
+  for (const k of crossing) {
+    assert.equal(k.prep[1].pose, "cross");
+    assert.ok(fromCarrier(k, 1).out < -0.05, `expected crossed prep out < -0.05, got ${fromCarrier(k, 1).out.toFixed(3)}`);
+  }
+  // Uncrossed again on the left outside edge after the crossovers.
+  const edgeTwoFoot = ticks.filter(k => k.mark === "edge" && k.s.supportMode === 2);
+  assert.ok(edgeTwoFoot.length > 0 && edgeTwoFoot.every(k => k.s.crossed === false));
+});
+
+test("crossPlaceMode 1: clockwise crossovers mirror counter-clockwise exactly", () => {
+  const pCross: Params = { ...P, crossPlaceMode: 1 };
+  const CW_FOOTWORK = (run: Run): void => {
+    run("curve", 90, () => ({ lean: -0.3, weight: 0.5, knee: 0.45 }));
+    for (let k = 0; k < 4; k++) {
+      const foot = k % 2 ? 1 : 0, other = 1 - foot;
+      run(foot === 0 ? "outside push" : "under push", 72, i => ({ lean: -0.3, weight: i < 24 ? 0.5 : other, knee: 0.55, push: i === 0, pushFoot: foot }));
+    }
+  };
+  const cw = record(CW_FOOTWORK, true, pCross).ticks;
+  const underTwoFoot = cw.filter(k => k.mark === "under push" && k.s.supportMode === 2);
+  assert.ok(underTwoFoot.length > 50);
+  for (const k of underTwoFoot) {
+    assert.equal(k.s.crossed, true);
+    const d = sub(k.s.blade[0].contact, k.s.blade[1].contact);
+    // Still Left to the right of Right (lat < 0), and now Left (outside) is ahead of Right (inside) (along > 0).
+    assert.ok(dot(d, perpLeft(k.s.heading)) < -(2 * CROSS_HALF_WIDTH - 1e-6));
+    assert.ok(dot(d, k.s.heading) > 2 * CROSS_HALF_ALONG - 1e-6);
+  }
 });
