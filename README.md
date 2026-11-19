@@ -109,7 +109,7 @@ them at a fixed commit, with the command for each, see
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Ice Lab suite | `cd tools/ice-lab && node --test test/*.test.ts` | 1131 tests: 1130 pass, 0 fail, 1 todo |
+| Ice Lab suite | `cd tools/ice-lab && node --test test/*.test.ts` | 1134 tests: 1133 pass, 0 fail, 1 todo |
 | Godot bridge tests | `node --test games/ice-run-godot/tests/*.test.mjs` | 77 tests: 77 pass, 0 fail |
 | Unreal contract tests | `node --test games/ice-run-unreal/tests/*.test.mjs` | 10 tests: 8 pass, 0 fail, 2 skipped |
 | Replay fixture | `cd tools/ice-lab && node replay/verify.ts test/fixtures/replay-v1.json` | verified, 240 ticks |
