@@ -66,6 +66,28 @@ test('both clients count the sim ticks the debt clamp drops, and say so in the s
   assert.match(cpp, /TickDebt = 0\.0;\s+ResetDebt\(\);/, 'IceRunGameMode.cpp starts each run with the counters at zero');
 });
 
+test('the fifth camera is a director that cuts among the four authored shots', () => {
+  const mode = read('Source/IceRun/IceRunGameMode.cpp');
+  const camera = read('Source/IceRun/IceShotCamera.cpp');
+  const header = read('Source/IceRun/IceShotCamera.h');
+  assert.match(mode, /StartCamera % 5/, 'command-line camera selection includes Director');
+  assert.match(camera, /Tracking.*Broadcast.*Rink.*Blade.*Director/, 'the HUD names all five modes');
+  assert.match(camera, /CameraMode = \(CameraMode \+ 1\) % 5;/, 'View cycles through all five modes');
+  assert.match(camera, /CameraMode == 4 \? Direct\(S, Dt\) : CameraMode/, 'Director chooses one of the four fixed framings');
+  const direct = camera.slice(camera.indexOf('int32 AIceShotCamera::Direct'), camera.indexOf('AIceShotCamera::FShot'));
+  for (const rule of [
+    /bJumping \|\| S\.bFallen \|\| SinceJump < 1\.6/,
+    /S\.Move == IceMove::Spin/,
+    /S\.Move == IceMove::Turn \|\| S\.Move == IceMove::Twizzle/,
+    /S\.Move == IceMove::Spiral \|\| S\.Move == IceMove::InaBauer/,
+    /GlideAge > 12\.0/,
+    /Want == 0 && bJumping \? \.4 : 1\.6/,
+  ]) assert.match(direct, rule);
+  for (const state of ['Directed', 'CutAge', 'GlideAge', 'SinceJump', 'SpinShot', 'LastMove']) {
+    assert.match(header, new RegExp(`\\b${state}\\b`), `${state} persists between frames`);
+  }
+});
+
 const engine = process.env.UE_ROOT ?? join(homedir(), 'UnrealEngine/Linux_Unreal_Engine_5.8.4');
 const editorCmd = join(engine, 'Engine/Binaries/Linux/UnrealEditor-Cmd');
 const built = existsSync(join(root, 'Binaries/Linux/libUnrealEditor-IceRun.so')) && existsSync(join(godot, 'runtime/sim/solver.js'));
