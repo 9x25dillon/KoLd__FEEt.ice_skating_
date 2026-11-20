@@ -162,7 +162,7 @@ void AIceRunGameMode::StartPlay()
 	Ambience->SetVolumeMultiplier(.316f);
 	Ambience->Play();
 	ShotCamera->Watch(Skater);
-	for (int32 I = 0; I < StartCamera % 4; ++I)
+	for (int32 I = 0; I < StartCamera % 5; ++I)
 	{
 		ShotCamera->Cycle(FIceState());
 	}
