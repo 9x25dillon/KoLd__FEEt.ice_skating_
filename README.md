@@ -109,8 +109,8 @@ them at a fixed commit, with the command for each, see
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Ice Lab suite | `cd tools/ice-lab && node --test test/*.test.ts` | 1135 tests: 1134 pass, 0 fail, 1 todo |
-| Godot bridge tests | `node --test games/ice-run-godot/tests/*.test.mjs` | 77 tests: 77 pass, 0 fail |
+| Ice Lab suite | `cd tools/ice-lab && node --test test/*.test.ts` | 1143 tests: 1142 pass, 0 fail, 1 todo |
+| Godot bridge tests | `node --test games/ice-run-godot/tests/*.test.mjs` | 78 tests: 78 pass, 0 fail |
 | Unreal contract tests | `node --test games/ice-run-unreal/tests/*.test.mjs` | 10 tests: 8 pass, 0 fail, 2 skipped |
 | Replay fixture | `cd tools/ice-lab && node replay/verify.ts test/fixtures/replay-v1.json` | verified, 240 ticks |
 | Fidelity validator | `cd tools/ice-lab && node validate.mjs` | 38 cases: 11 pass, 0 fail, 25 unsourced, 2 unmodelled |
