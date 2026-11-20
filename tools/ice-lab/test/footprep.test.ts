@@ -6,6 +6,9 @@
 //   is outside), a held left outside edge, then a three-turn;
 // - strokes: pose_clip.mjs --strokes's own: straight forward stroking.
 // The stills record them on the bridge's free mode with --transfer.
+// Both run with crossPlaceMode 0, pinned here: the Simulation setup ships it
+// on (2026-11-20), and these are the uncrossed baseline (pose lab
+// crossed_frames 0). The crossPlaceMode tests below use the shipped setup.
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
@@ -26,7 +29,10 @@ import type { FootPrep } from "../game/footprep.ts";
 interface Tick { mark: string; s: SkaterState; g: SupportSignal; prep: [FootPrep, FootPrep] }
 type Run = (mark: string, n: number, input: (i: number) => Partial<SkatingInput>) => void;
 
-const P: Params = setupParams("simulation");
+/** The shipped Simulation setup: crossPlaceMode 1 since 2026-11-20. */
+const P_ON: Params = setupParams("simulation");
+/** The same with crossPlaceMode explicitly 0: this file's uncrossed baseline. */
+const P: Params = { ...P_ON, crossPlaceMode: 0 };
 
 function record(script: (run: Run) => void, withPrep = true, params: Params = P): { ticks: Tick[]; digests: number[] } {
   const s = createState(params, 6, 0), ticks: Tick[] = [], digests: number[] = [];
@@ -167,72 +173,124 @@ test("in the air and down, nothing is prepared", () => {
   assert.deepEqual(footPrep(s, supportSignal(s)).map(p => p.pose), ["none", "none"]);
 });
 
-test("crossPlaceMode is 0 in every preset and setup", () => {
+test("crossPlaceMode: 0 in every preset; on in Simulation, Experimental and Dig Gate, off in Explorer and Repertoire", () => {
+  // The owner's pick, 2026-11-20: on where the legs move the load over time
+  // (weightTransferMode), off where the contacts switch without a hand-over.
   assert.equal(DEFAULT_PARAMS.crossPlaceMode, 0);
   for (const [name, preset] of Object.entries(PRESETS)) assert.equal(preset.crossPlaceMode, 0, name);
-  for (const { id } of SETUPS) assert.equal(setupParams(id).crossPlaceMode, 0, id);
+  const on = new Set(["simulation", "experimental", "diggate"]);
+  for (const { id } of SETUPS) {
+    assert.equal(setupParams(id).crossPlaceMode, on.has(id) ? 1 : 0, id);
+    if (on.has(id)) assert.equal(setupParams(id).weightTransferMode, 1, id);
+  }
 });
 
 test("crossPlaceMode 0: replay digests are byte-identical with crossPlaceMode explicitly 0", () => {
-  const explicitOff: Params = { ...P, crossPlaceMode: 0 };
+  // Explorer ships the mode off: its own params and the same with an explicit 0 replay identically.
+  const explorer = setupParams("explorer");
   for (const script of [FOOTWORK, STROKES]) {
-    const a = record(script, false, P).digests;
-    const b = record(script, false, explicitOff).digests;
+    const a = record(script, false, explorer).digests;
+    const b = record(script, false, { ...explorer, crossPlaceMode: 0 }).digests;
     assert.deepEqual(a, b);
   }
 });
 
-test("crossPlaceMode 1: outside blade crosses past skating blade with clearance, COP follows, and footPrep follows it", () => {
-  const pCross: Params = { ...P, crossPlaceMode: 1 };
-  const ticks = record(FOOTWORK, true, pCross).ticks;
-  const underTwoFoot = ticks.filter(k => k.mark === "under push" && k.s.supportMode === 2);
-  assert.ok(underTwoFoot.length > 50, `expected >50 crossed two-foot ticks, got ${underTwoFoot.length}`);
-  for (const k of underTwoFoot) {
-    assert.equal(k.s.crossed, true);
-    const d = sub(k.s.blade[0].contact, k.s.blade[1].contact);
-    const lat = dot(d, perpLeft(k.s.heading));
-    const along = dot(d, k.s.heading);
-    // Left (inside) is to the right of Right (outside), separated by 2 * CROSS_HALF_WIDTH laterally
-    // and 2 * CROSS_HALF_ALONG fore-aft: no interpenetration.
+/**
+ * A crossover in the order it is skated (2026-11-20): the outside foot pushes
+ * while the inside carries; then it crosses over and takes the load, and only
+ * then does the inside foot push under. dir +1 counter-clockwise (lean +, the
+ * right foot outside), -1 clockwise.
+ */
+const crossovers = (dir: 1 | -1) => (run: Run): void => {
+  const inside = dir > 0 ? 0 : 1, outside = 1 - inside;
+  run("curve", 90, () => ({ lean: 0.3 * dir, weight: 0.5, knee: 0.45 }));
+  for (let k = 0; k < 4; k++) {
+    run("outside push", 72, i => ({ lean: 0.3 * dir, weight: i < 24 ? 0.5 : inside, knee: 0.55, push: i === 0, pushFoot: outside }));
+    run("under push", 72, i => ({ lean: 0.3 * dir, weight: outside, knee: 0.55, push: i === 18, pushFoot: inside }));
+  }
+  run("edge", 90, () => ({ lean: 0.25 * dir, weight: inside, knee: 0.5 }));
+};
+
+/**
+ * Ticks whose push was live when the tick's gate ran. A recorded state is
+ * after the step, whose stroke clock has already counted that tick down (to
+ * about 0 on the push's last tick, where it then stays).
+ */
+const pushingTicks = (t: Tick[]): Tick[] =>
+  t.filter((k, j) => k.s.strokeTime > 1e-9 || (j > 0 && t[j - 1].s.strokeTime > 1e-9));
+
+/** Every live under-push tick is crossed, and every two-foot one is clear and balanced over its contacts. */
+function assertCrossed(ticks: Tick[], dir: 1 | -1): void {
+  const inside = dir > 0 ? 0 : 1, outside = 1 - inside;
+  const pushing = new Set(pushingTicks(ticks));
+  const live = ticks.filter(k => k.mark === "under push" && pushing.has(k));
+  assert.ok(live.length > 100, `live under-push ticks ${live.length}`);
+  assert.ok(live.every(k => k.s.crossed === true), "every live under-push tick crossed");
+  const twoFoot = live.filter(k => k.s.supportMode === 2);
+  assert.ok(twoFoot.length > 50, `expected >50 crossed two-foot ticks, got ${twoFoot.length}`);
+  for (const k of twoFoot) {
+    // The inside blade is past the outside blade's line, toward the outside,
+    // and behind it: 2 * CROSS_HALF_WIDTH across, 2 * CROSS_HALF_ALONG fore-aft.
+    const d = sub(k.s.blade[inside].contact, k.s.blade[outside].contact);
+    const lat = dot(d, perpLeft(k.s.heading)) * dir, along = dot(d, k.s.heading);
     assert.ok(lat < -(2 * CROSS_HALF_WIDTH - 1e-6), `lat ${lat.toFixed(4)}`);
     assert.ok(along < -(2 * CROSS_HALF_ALONG - 1e-6), `along ${along.toFixed(4)}`);
     assert.ok(len(d) >= Math.hypot(2 * CROSS_HALF_WIDTH, 2 * CROSS_HALF_ALONG) - 1e-6);
-    // Support signal COP matches share-weighted contacts.
+    // The support signal's centre of pressure is the share-weighted contacts.
     const w0 = k.g.share[0], w1 = k.g.share[1];
     assert.ok(Math.abs(k.g.cop.x - (k.s.blade[0].contact.x * w0 + k.s.blade[1].contact.x * w1)) < 1e-9);
     assert.ok(Math.abs(k.g.cop.y - (k.s.blade[0].contact.y * w0 + k.s.blade[1].contact.y * w1)) < 1e-9);
   }
-  // footPrep follows the crossing when crossPlaceMode is on.
+  // Off the moment the push ends, and never outside an under-push.
+  const stray = ticks.filter(k => k.s.crossed && (!pushing.has(k) || k.mark !== "under push"));
+  assert.deepEqual(stray.map(k => `${k.s.tick} ${k.mark} ${k.s.strokeTime.toFixed(4)}`), []);
+  assert.ok(ticks.every(k => !k.s.fallen));
+}
+
+test("crossPlaceMode 1: a crossover's under-push crosses the blades with clearance, COP follows, and footPrep follows it", () => {
+  const ticks = record(crossovers(1), true, P_ON).ticks;
+  assertCrossed(ticks, 1);
+  // footPrep carries the outside foot across while it is free after its push.
   const crossing = ticks.filter(k => k.mark === "outside push" && k.g.role[1] === "free");
   assert.ok(crossing.length > 10);
   for (const k of crossing) {
     assert.equal(k.prep[1].pose, "cross");
     assert.ok(fromCarrier(k, 1).out < -0.05, `expected crossed prep out < -0.05, got ${fromCarrier(k, 1).out.toFixed(3)}`);
   }
-  // Uncrossed again on the left outside edge after the crossovers.
-  const edgeTwoFoot = ticks.filter(k => k.mark === "edge" && k.s.supportMode === 2);
-  assert.ok(edgeTwoFoot.length > 0 && edgeTwoFoot.every(k => k.s.crossed === false));
 });
 
-test("crossPlaceMode 1: clockwise crossovers mirror counter-clockwise exactly", () => {
-  const pCross: Params = { ...P, crossPlaceMode: 1 };
-  const CW_FOOTWORK = (run: Run): void => {
-    run("curve", 90, () => ({ lean: -0.3, weight: 0.5, knee: 0.45 }));
-    for (let k = 0; k < 4; k++) {
-      const foot = k % 2 ? 1 : 0, other = 1 - foot;
-      run(foot === 0 ? "outside push" : "under push", 72, i => ({ lean: -0.3, weight: i < 24 ? 0.5 : other, knee: 0.55, push: i === 0, pushFoot: foot }));
-    }
-  };
-  const cw = record(CW_FOOTWORK, true, pCross).ticks;
-  const underTwoFoot = cw.filter(k => k.mark === "under push" && k.s.supportMode === 2);
-  assert.ok(underTwoFoot.length > 50);
-  for (const k of underTwoFoot) {
-    assert.equal(k.s.crossed, true);
-    const d = sub(k.s.blade[0].contact, k.s.blade[1].contact);
-    // Still Left to the right of Right (lat < 0), and now Left (outside) is ahead of Right (inside) (along > 0).
-    assert.ok(dot(d, perpLeft(k.s.heading)) < -(2 * CROSS_HALF_WIDTH - 1e-6));
-    assert.ok(dot(d, k.s.heading) > 2 * CROSS_HALF_ALONG - 1e-6);
+test("crossPlaceMode 1: clockwise crossovers mirror counter-clockwise", () => {
+  const ccw = record(crossovers(1), false, P_ON), cw = record(crossovers(-1), true, P_ON).ticks;
+  assertCrossed(cw, -1);
+  const crossedAt = (t: Tick[]) => t.map((k, i) => k.s.crossed ? i : -1).filter(i => i >= 0);
+  assert.deepEqual(crossedAt(cw), crossedAt(record(crossovers(1), true, P_ON).ticks));
+  assert.equal(ccw.digests.length, cw.length);
+});
+
+test("crossPlaceMode 1: pushes out of order never cross — the load not on the outside foot, or moving onto the pushing foot", () => {
+  // The old footwork script pushes under while the inside foot still carries
+  // (3% outside share at the push): crossed only once the outside foot has
+  // most of the load and the skater asks for it there.
+  const fw = record(FOOTWORK, true, P_ON).ticks, fwPushing = new Set(pushingTicks(fw));
+  for (const k of fw.filter(k => k.s.crossed)) {
+    const outside = k.s.crossSide > 0 ? 1 : 0;
+    assert.ok(fwPushing.has(k) && k.s.blade[outside].weight > 0.5, `tick ${k.s.tick}`);
+    assert.ok((outside === 1 ? k.s.loadAsked! : -k.s.loadAsked!) > 0, `tick ${k.s.tick}: load asked toward the inside`);
   }
+  // An inside push whose load moves onto the pushing foot is a step, not an
+  // under-push: the outside foot carrying at the push, the load asked inside.
+  const step = record(run => {
+    run("curve", 90, () => ({ lean: 0.3, weight: 1, knee: 0.45 }));
+    run("step", 72, i => ({ lean: 0.3, weight: 0, knee: 0.55, push: i === 0, pushFoot: 0 }));
+  }, true, P_ON).ticks;
+  assert.ok(pushingTicks(step).some(k => k.s.crossover && k.s.strokeFoot === 0), "the push is a crossover push");
+  assert.ok(step.every(k => k.s.crossed === false));
+  // Straight strokes never lean into a crossover, and move nothing physical.
+  const on = record(STROKES, true, P_ON).ticks, off = record(STROKES, true, P).ticks;
+  assert.ok(on.every(k => k.s.crossed === false));
+  on.forEach((k, i) => assert.deepEqual(
+    [k.s.pos, k.s.vel, k.s.lean, k.s.blade.map(b => [b.contact, b.weight])],
+    [off[i].s.pos, off[i].s.vel, off[i].s.lean, off[i].s.blade.map(b => [b.contact, b.weight])]));
 });
 
 test("glide recovery: long flat glide blends beside -> extended without pops, no sim change", () => {

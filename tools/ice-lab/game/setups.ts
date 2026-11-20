@@ -52,6 +52,12 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
   // the owner's word, 2026-11-14 — "turn it on and re-tune them". Dig Gate
   // shares Experimental's athlete.
   if (setup === "simulation" || exp) p.weightTransferMode = 1;
+  // A crossover's under-push crosses the blades (crossPlaceMode): the owner's
+  // word, 2026-11-20 — on in Simulation, Experimental and Dig Gate, where the
+  // legs hand the load over; off in Explorer and Repertoire. Crossed only
+  // during a real under-push (sim/solver.ts); measured, every other test
+  // unchanged with it on.
+  if (setup === "simulation" || exp) p.crossPlaceMode = 1;
   // A landing pays for the energy the ice takes (staminaLandingMode): the operator's choice, 2026-10-31.
   if (exp) p.staminaLandingMode = 1;
   // A jump turns the way its entry turns it, clockwise or counter-clockwise
