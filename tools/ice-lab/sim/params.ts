@@ -971,6 +971,23 @@ export interface Params {
    * and the stance, centre of pressure and support signal follow it.
    */
   crossPlaceMode: number;
+  /**
+   * The body sways over a planted blade (2026-11-20). With weightTransferMode
+   * 1 the stance moves with the load, so at 0 a weight shift slides both
+   * blades sideways under a centre of mass that keeps its path. At 1, each
+   * tick the legs move the load, the centre of mass moves by the same amount
+   * the other way, so the blades stay where they were planted and the body
+   * goes over them. The load then follows a minimum-jerk curve over
+   * comSwayTransferTime (its acceleration starts and ends at zero, where
+   * weightTransferMode's critically damped response starts at its peak), and
+   * the push that moves the body goes into the blades: the stance takes the
+   * opposite impulse, which their bite holds or doesn't (a skid). Only with
+   * weightTransferMode 1; a share set outright (a move that owns its foot, a
+   * landing) does not sway. 0 leaves weightTransferMode exactly as it was.
+   */
+  comSwayMode: number;
+  /** s for a load change under comSwayMode 1, start to finish (minimum jerk). AUTHORED, 2026-11-20. */
+  comSwayTransferTime: number;
 
   // ── the toe pick ──────────────────────────────────────────────────────────
   /**
@@ -1284,6 +1301,8 @@ export const DEFAULT_PARAMS: Params = {
   weightTransferTime: 0.25,
   beatCrossoverHoldSuppress: 0,
   crossPlaceMode: 0,
+  comSwayMode: 0,
+  comSwayTransferTime: 0.35,
 
   toePickMode: 0,
   toePickEngage: 0.11,
@@ -1490,6 +1509,8 @@ export function validate(p: Params): string[] {
   if (![0, 1].includes(p.weightTransferMode)) errs.push("weightTransferMode is 0 (the weight input sets each blade's load at once) or 1 (the legs move the load over time)");
   if (!(p.weightTransferTime >= 0.05 && p.weightTransferTime <= 1)) errs.push("weightTransferTime is s for a whole transfer, 0.05 to 1");
   if (![0, 1].includes(p.beatCrossoverHoldSuppress)) errs.push("beatCrossoverHoldSuppress is 0 (the beat's crossovers run until a jump loads) or 1 (the standing trigger held toward a load stops them)");
+  if (!(p.comSwayTransferTime >= 0.1 && p.comSwayTransferTime <= 1)) errs.push("comSwayTransferTime is s for a whole load change under comSwayMode, 0.1 to 1");
+  if (![0, 1].includes(p.comSwayMode)) errs.push("comSwayMode is 0 (the stance slides under the body in a weight shift) or 1 (the body sways over planted blades)");
   if (![0, 1].includes(p.crossPlaceMode)) errs.push("crossPlaceMode is 0 (uncrossed stance) or 1 (crossover places the outside blade past the skating blade's line)");
   if (![0, 1].includes(p.toePickMode)) errs.push("toePickMode is 0 (the pick never trips) or 1 (a pick that bites going forward trips)");
   if (!(p.toePickEngage > 0 && p.toePickEngage < 0.5 * p.bladeLength)) errs.push("toePickEngage must lie between the blade's centre and its toe (0 .. bladeLength / 2)");

@@ -117,6 +117,7 @@ const supportKnee = ([l, r]: [number, number], weightR: number): number => l + w
  */
 const TRANSFER_EPS = 0.005, TRANSFER_SETTLE = 7.43;
 function transferLoad(s: SkaterState, p: Params, dt: number, asked: number, owned: boolean): number {
+  if (p.comSwayMode === 1) return transferSmooth(s, p, dt, asked, owned);
   s.loadAsked = asked;
   if (owned || s.loadBias === undefined) { s.loadBias = asked; s.loadRate = 0; return asked; }
   const w = TRANSFER_SETTLE / p.weightTransferTime;
@@ -126,6 +127,101 @@ function transferLoad(s: SkaterState, p: Params, dt: number, asked: number, owne
   if (Math.abs(asked - bias) < TRANSFER_EPS && Math.abs(rate) < TRANSFER_EPS * w) { bias = asked; rate = 0; }
   s.loadBias = bias; s.loadRate = rate;
   return bias;
+}
+
+/**
+ * [position, rate, accel] at t of the quintic from (x0, v0, a0) at 0 to
+ * (xf, 0, 0) at T: the minimum-jerk path. Every term is odd in (x0, v0, a0,
+ * xf), so a mirrored run negates exactly.
+ */
+function minJerk(x0: number, v0: number, a0: number, xf: number, T: number, t: number): [number, number, number] {
+  const d = xf - x0, T2 = T * T, T3 = T2 * T;
+  const c3 = (20 * d - 12 * v0 * T - 3 * a0 * T2) / (2 * T3);
+  const c4 = (-30 * d + 16 * v0 * T + 3 * a0 * T2) / (2 * T3 * T);
+  const c5 = (12 * d - 6 * v0 * T - a0 * T2) / (2 * T3 * T2);
+  const t2 = t * t;
+  return [
+    x0 + v0 * t + a0 / 2 * t2 + c3 * t2 * t + c4 * t2 * t2 + c5 * t2 * t2 * t,
+    v0 + a0 * t + 3 * c3 * t2 + 4 * c4 * t2 * t + 5 * c5 * t2 * t2,
+    a0 + 6 * c3 * t + 12 * c4 * t2 + 20 * c5 * t2 * t,
+  ];
+}
+
+/**
+ * The load under comSwayMode 1: a minimum-jerk plan to the asked bias over
+ * comSwayTransferTime, re-planned from where the load is (its rate and
+ * acceleration carried) whenever the ask changes. The plan is evaluated, not
+ * integrated, so it ends exactly. loadRate is the tick's own change over dt,
+ * which is what the body's sway and its push on the blades are made of.
+ */
+function transferSmooth(s: SkaterState, p: Params, dt: number, asked: number, owned: boolean): number {
+  const T = p.comSwayTransferTime;
+  const prevAsked = s.loadAsked ?? asked;
+  s.loadAsked = asked;
+  if (owned || s.loadBias === undefined || s.loadPlan === undefined) {
+    s.loadBias = asked; s.loadRate = 0; s.loadPlan = [asked, 0, 0, T];
+    return asked;
+  }
+  let plan = s.loadPlan;
+  if (asked !== prevAsked) {
+    const [, v, a] = plan[3] >= T ? [0, 0, 0] : minJerk(plan[0], plan[1], plan[2], prevAsked, T, plan[3]);
+    plan = [s.loadBias, v, a, 0];
+  }
+  const t = Math.min(plan[3] + dt, T);
+  const bias = clamp(t >= T ? asked : minJerk(plan[0], plan[1], plan[2], asked, T, t)[0], -0.5, 0.5);
+  s.loadRate = (bias - s.loadBias) / dt;
+  s.loadBias = bias;
+  s.loadPlan = [plan[0], plan[1], plan[2], t];
+  return bias;
+}
+
+/**
+ * comSwayMode: the body's velocity over the stance that keeps the blades
+ * planted while the load moves at loadRate. stanceOffset/stanceAlong move each
+ * blade by 2 * half per unit of load; the body moves the other way.
+ */
+function swayPlanVel(s: SkaterState, p: Params): Vec2 {
+  const rate = s.loadRate ?? 0, halfW = s.crossed ? -CROSS_HALF_WIDTH : p.stanceHalfWidth;
+  const lat = mul(perpLeft(s.heading), -2 * halfW * rate);
+  return s.crossed ? add(lat, mul(s.heading, 2 * s.crossSide * CROSS_HALF_ALONG * rate)) : lat;
+}
+
+/**
+ * comSwayMode: the largest share k (0..1) of a velocity change dv on the
+ * stance that the slip solve about to run would still hold without a skid,
+ * by its own rule (a blade, or the pooled grip, holds while its share of
+ * the sideways velocity is within biteCapacity * dt). A blade already past
+ * its bite allows only a change that doesn't make it worse. Odd in dv and the
+ * velocity, so a mirrored run gets the same k.
+ */
+function swayHeadroom(s: SkaterState, p: Params, dt: number, stroking: boolean, footOn: boolean, torqueOn: boolean, dv: Vec2): number {
+  const fit = (x: number, d: number, lim: number): number => {
+    if (d === 0) return 1;
+    if (Math.abs(x) > lim) return x * d < 0 ? Math.min(1, 2 * Math.abs(x) / Math.abs(d)) : 0;
+    return clamp(((d > 0 ? lim : -lim) - x) / d, 0, 1);
+  };
+  let k = 1;
+  if (footOn) {
+    // slipSolveFeet's own lateral velocity at each blade, spin and all.
+    const bodyLeft = perpLeft(s.heading), spin = torqueOn ? s.yawDev ?? 0 : 0;
+    for (let i = 0; i < 2; i++) {
+      const b = s.blade[i];
+      if (!b.inContact || (stroking && i === s.strokeFoot) || b.weight <= 0) continue;
+      const baseR = add(mul(b.tangent, (digS(s, p, i) - 0.5) * p.bladeLength), mul(bodyLeft, stanceOffset(s, p, i)));
+      const r = s.crossed ? add(baseR, mul(s.heading, stanceAlong(s, p, i))) : baseR;
+      const n = perpLeft(b.tangent);
+      k = Math.min(k, fit(dot(add(s.vel, mul(perpLeft(r), spin)), n), dot(dv, n), b.biteCapacity * dt / (p.mass * b.weight)));
+    }
+  } else {
+    const n = perpLeft(s.heading);
+    let grip = 0;
+    for (let i = 0; i < 2; i++) {
+      const b = s.blade[i];
+      if (b.inContact && !(stroking && i === s.strokeFoot)) grip += b.biteCapacity;
+    }
+    k = fit(dot(s.vel, n), dot(dv, n), grip * dt / p.mass);
+  }
+  return k;
 }
 
 /**
@@ -701,6 +797,7 @@ export function createState(p: Params, speed = 0, lean = 0): SkaterState {
     ...(p.pitchMode === 1 && p.pitchInternalMode === 1 ? { pitchAnkle: 0, pitchIntAccel: 0 } : {}),
     // Two feet, an even share: what supportMode 2 above already says.
     ...(p.weightTransferMode === 1 ? { loadBias: 0, loadRate: 0, loadAsked: 0 } : {}),
+    ...(p.weightTransferMode === 1 && p.comSwayMode === 1 ? { loadPlan: [0, 0, 0, p.comSwayTransferTime] as [number, number, number, number], swayVel: v2(0, 0) } : {}),
     ...(p.crossPlaceMode === 1 ? { crossed: false } : {}),
   };
 }
@@ -805,6 +902,9 @@ export function step(
   if (s.jump.phase === JUMP_PHASE.Air) {
     // No blade carries anything in the air; the landing foot takes the load whole.
     if (p.weightTransferMode === 1) s.loadBias = s.loadRate = undefined;
+    if (p.comSwayMode === 1) s.loadPlan = undefined;
+    // The body's sway leaves the ice with it: back into the flight's velocity.
+    if (p.comSwayMode === 1 && s.swayVel !== undefined) { s.vel = add(s.vel, s.swayVel); s.swayVel = v2(0, 0); }
     if (p.crossPlaceMode === 1) s.crossed = false;
     jumpAir(s, legInput(input), pFatigue, dt, events);
     // A landing resolves INSIDE jumpAir, on this early-return path — the only
@@ -929,8 +1029,20 @@ export function step(
   // An Ina Bauer is on both feet, whatever the weight input says.
   // weightTransferMode: the legs move the load over time toward the share asked,
   // as a bias about the even split (transferLoad).
+  const biasBefore = s.loadBias;
   const bias = p.weightTransferMode !== 1 ? 0
     : transferLoad(s, p, dt, loadFoot >= 0 ? loadFoot - 0.5 : ina ? 0 : weightR - 0.5, loadFoot >= 0 || ina);
+  // comSwayMode: how far the legs moved the load this tick. A share set
+  // outright (a move that owns its foot, the first tick down) is not a sway.
+  const swaying = p.comSwayMode === 1 && p.weightTransferMode === 1 && biasBefore !== undefined
+    && alive && loadFoot < 0 && !ina;
+  // Not swaying (a move that owns its foot, the air, a fall): the body's sway
+  // velocity goes back into the skater's, so no momentum is lost.
+  if (p.comSwayMode === 1 && !swaying && s.swayVel !== undefined) {
+    s.vel = add(s.vel, s.swayVel);
+    s.swayVel = v2(0, 0);
+  }
+  let swayDone = false;
   const weights = loadFoot === FOOT.Right ? [0, 1] : loadFoot === FOOT.Left ? [1, 0]
     : ina ? [0.5, 0.5] : p.weightTransferMode === 1 ? [0.5 - bias, 0.5 + bias] : [1 - weightR, weightR];
   let loaded = 0;
@@ -1374,11 +1486,41 @@ export function step(
       // a weight change mid-curve on Blade Explorer, the lean ran away).
       if (slipOn) for (const b of s.blade) if (!b.inContact) b.tangent = s.heading;
     }
+    // comSwayMode: the legs push the body over the blades, and the blades
+    // take the opposite push. The push is capped at what every carrying
+    // blade's bite can still hold this tick (swayHeadroom), so the sway never
+    // skids a blade by itself; what the cap holds back, the body doesn't get,
+    // and the feet slide by that much instead.
+    let swayLat = 0;
+    if (slipOn && swaying) {
+      // The legs push no harder than the plan's own peak: a whole load
+      // change over comSwayTransferTime, minimum jerk (5.7735 * distance / T^2).
+      let want = sub(swayPlanVel(s, p), s.swayVel ?? v2(0, 0));
+      const T = p.comSwayTransferTime, maxDv = 5.7735 * 2 * p.stanceHalfWidth / (T * T) * dt, wantLen = len(want);
+      if (wantLen > maxDv) want = mul(want, maxDv / wantLen);
+      // Just inside the bite, so the slip solve's own test can't round over it.
+      const k = swayHeadroom(s, p, dt, stroking, footOn, torqueOn, mul(want, -1)) * (1 - 1e-6);
+      const push = mul(want, k);
+      s.swayVel = add(s.swayVel ?? v2(0, 0), push);
+      s.vel = sub(s.vel, push);
+      swayLat = -dot(push, perpLeft(s.heading));
+      swayDone = true;
+    }
     if (slipOn) {
       const slip = footOn ? slipSolveFeet(s, p, dt, stroking, wasSkidAll!, events, torqueOn, axis(input.carriage, 0))
         : slipSolve(s, p, dt, stroking, wasSkidAll!, events);
       // A lost carve holds nothing toward its centre; the scrape is the force.
       latForceTotal = carveLost ? slip : latForceTotal + slip;
+      // The part of that force which held the sway's push moved the body over
+      // the blades on both legs; it is not a shove at the pendulum's base, so
+      // the lean doesn't feel it. Where a blade skidded the scrape is what
+      // there was, and it stays. (An estimate: the held share is the share of
+      // the load on blades that held.)
+      if (swayLat !== 0) {
+        let held = 0;
+        for (const b of s.blade) if (b.inContact && b.regime !== REGIME.Skid) held += b.weight;
+        latForceTotal += p.mass * swayLat / dt * held;
+      }
     }
   }
 
@@ -1550,6 +1692,14 @@ export function step(
   // turn the pendulum is in the travel frame, and so are they.
   const frameH = moveThisTick === MOVE.Turn || moveThisTick === MOVE.Twizzle ? turnFrame(s) : s.heading;
   const right = mul(perpLeft(frameH), -1);
+  // comSwayMode: the body goes over the blades instead of the blades sliding
+  // under it, at the sway velocity section 4 gave it (uncapped where no slip
+  // solve ran). At the plan's velocity the contacts below stay planted;
+  // whatever the cap held back, they slide.
+  if (swaying) {
+    if (!swayDone) s.swayVel = swayPlanVel(s, p);
+    s.pos = add(s.pos, mul(s.swayVel!, dt));
+  }
   let base = add(s.pos, mul(right, L * sin(s.lean)));
   // Pitched toward the toe, the boots are behind the centre of mass.
   if (pitchOn) base = add(base, mul(s.blade[s.supportFoot].tangent, -L * sin(s.pitch ?? 0)));
