@@ -299,6 +299,9 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       load), and ships on in Simulation, Experimental and Dig Gate. No
 //       replay recorded before it ran mode 1 (it was off in every setup); the
 //       fixture runs mode 0, every digest unchanged.
+//       2026-11-20, also unbumped: Params comSwayMode (0 everywhere) and
+//       comSwayTransferTime; SkaterState optional loadPlan and swayVel,
+//       present only at 1. Fixture rebased, every digest unchanged.
 export const REPLAY_SOLVER = "ice-lab-f64/39";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;

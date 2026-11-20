@@ -192,7 +192,9 @@ All of its distances and times are **authored**. The before/after stills are in 
 - **The stance moves under the COM; the COM doesn't sway over the stance.** The COM's path stays
   the solver's. In the world, a loaded blade slides up to the stance's width sideways over a
   transfer, where a real skater's body would move over a planted blade instead. The body-frame pose
-  is right, but a blade's tracing on the ice is not.
+  is right, but a blade's tracing on the ice is not. *Built behind `comSwayMode` (off everywhere,
+  2026-11-20): the body sways over planted blades, with the push capped at their bite. See
+  [the report](reports/comsway-2026-11-20.md) for what has to happen before it's turned on.*
 - **A blade comes down already carrying.** It takes load from the first tick of a transfer, and the
   critically damped start makes that first load tiny. There is no separate set-down (a free foot
   reaching the ice before it bears anything).

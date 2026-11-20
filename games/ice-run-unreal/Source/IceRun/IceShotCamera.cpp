@@ -40,8 +40,52 @@ void AIceShotCamera::Tick(float DeltaSeconds)
 
 const TCHAR* AIceShotCamera::ModeName(int32 Mode)
 {
-	static const TCHAR* Names[] = {TEXT("Tracking"), TEXT("Broadcast"), TEXT("Rink"), TEXT("Blade")};
-	return Names[FMath::Clamp(Mode, 0, 3)];
+	static const TCHAR* Names[] = {TEXT("Tracking"), TEXT("Broadcast"), TEXT("Rink"), TEXT("Blade"), TEXT("Director")};
+	return Names[FMath::Clamp(Mode, 0, 4)];
+}
+
+int32 AIceShotCamera::Direct(const FIceState& S, float Dt)
+{
+	CutAge += Dt;
+	const bool bGliding = S.Move == IceMove::None && S.JumpPhase == IceJumpPhase::None && !S.bFallen;
+	GlideAge = bGliding ? GlideAge + Dt : 0.0;
+	const bool bJumping = S.JumpPhase != IceJumpPhase::None;
+	SinceJump = bJumping ? 0.0 : SinceJump + Dt;
+	if (S.Move == IceMove::Spin && LastMove != IceMove::Spin)
+	{
+		SpinShot = SpinShot == 0 ? 3 : 0;
+	}
+	LastMove = S.Move;
+	int32 Want = 1;
+	if (bJumping || S.bFallen || SinceJump < 1.6)
+	{
+		Want = 0;
+	}
+	else if (S.Move == IceMove::Spin)
+	{
+		Want = SpinShot;
+	}
+	else if (S.Move == IceMove::Turn || S.Move == IceMove::Twizzle)
+	{
+		Want = 3;
+	}
+	else if (S.Move == IceMove::Spiral || S.Move == IceMove::InaBauer)
+	{
+		Want = 0;
+	}
+	else if (GlideAge > 12.0 && FMath::Fmod(GlideAge, 16.0) > 12.0)
+	{
+		Want = 2;
+	}
+	// A jump is cut to at once (a short hold); anything else holds the shot a moment first.
+	const double Hold = Want == 0 && bJumping ? .4 : 1.6;
+	if (Want != Directed && CutAge >= Hold)
+	{
+		Directed = Want;
+		CutAge = 0.0;
+		bPlaced = false;
+	}
+	return Directed;
 }
 
 AIceShotCamera::FShot AIceShotCamera::Framing(const FIceState& S)
@@ -64,7 +108,7 @@ void AIceShotCamera::Cycle(const FIceState& State)
 {
 	if (State.JumpPhase != IceJumpPhase::Air)
 	{
-		CameraMode = (CameraMode + 1) % 4;
+		CameraMode = (CameraMode + 1) % 5;
 	}
 }
 
@@ -106,6 +150,8 @@ void AIceShotCamera::Follow(const FIceState& S, const FVector& SkaterLocation, f
 	{
 		FollowDirection = FMath::Lerp(FollowDirection, Velocity.GetSafeNormal(), Ease(1.8, Dt)).GetSafeNormal();
 	}
+	// The director picks which of the four; the others are themselves.
+	const int32 Use = CameraMode == 4 ? Direct(S, Dt) : CameraMode;
 	const FShot Target = Framing(S);
 	const double Blend = Ease(3.0, Dt);
 	Shot.Away = FMath::Lerp(Shot.Away, Target.Away, Blend);
@@ -118,18 +164,18 @@ void AIceShotCamera::Follow(const FIceState& S, const FVector& SkaterLocation, f
 	// It looks a little ahead of a moving skater, to where the program is going.
 	FVector Look = Focus + FollowDirection * Shot.Lead * (1.0 + Velocity.Size() * .14) * M;
 	double TargetFov = 46.0;
-	if (CameraMode == 1)
+	if (Use == 1)
 	{
 		Desired = FVector(FMath::Clamp(Focus.X * .45, -18.0 * M, 18.0 * M), 31.5 * M, 7.8 * M);
 		TargetFov = FMath::Clamp(160.0 / (FVector::Dist(Desired, Focus) / M) * 10.0, 28.0, 48.0);
 	}
-	else if (CameraMode == 2)
+	else if (Use == 2)
 	{
 		Desired = FVector(39.0 * M, 43.0 * M, 44.0 * M);
 		Look = FVector::ZeroVector;
 		TargetFov = 58.0;
 	}
-	else if (CameraMode == 3)
+	else if (Use == 3)
 	{
 		Desired = Focus - FollowDirection * 3.5 * M + Side * 1.8 * M + FVector(0, 0, -.25 * M);
 		Look = Focus + FVector(0, 0, -.3 * M);

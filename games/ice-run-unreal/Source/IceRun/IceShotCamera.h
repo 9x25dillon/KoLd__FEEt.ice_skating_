@@ -36,6 +36,19 @@ private:
 		double Lead = .6;
 	};
 	static FShot Framing(const FIceState& State);
+	/**
+	 * The director (camera 5): picks one of the four each moment, as a broadcast's would: close
+	 * through a jump's load, flight and landing, close or at the blades in a spin (alternating), at
+	 * the blades for turns, wide for the glide, the rink from above now and then on a long one; a
+	 * hard cut each time, held at least a moment. AUTHORED (L3) rules.
+	 */
+	int32 Direct(const FIceState& State, float Dt);
+	int32 Directed = 1;
+	double CutAge = 0.0;
+	double GlideAge = 0.0;
+	double SinceJump = 10.0;
+	int32 SpinShot = 3;
+	int32 LastMove = 0;
 
 	TWeakObjectPtr<class AIceSkater> Watched;
 	int32 CameraMode = 0;
