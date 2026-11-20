@@ -141,6 +141,12 @@ export const CROSS_HALF_WIDTH = 0.06;
  * the heading). AUTHORED.
  */
 export const CROSS_HALF_ALONG = 0.10;
+/**
+ * Share of the load the outside (crossed-over) foot must carry, above which an
+ * inside-foot push on a curve crosses the blades (crossPlaceMode 1): "carrying
+ * most of it". AUTHORED, 2026-11-20.
+ */
+export const CROSS_OUTSIDE_SHARE = 0.5;
 
 /**
  * m from the pendulum's base (the centre of pressure) to blade i, toward
@@ -916,9 +922,6 @@ export function step(
     s.legLength = clamp(s.legLength, 0.3, p.comHeight * 1.05);
   }
 
-  // Track whether the skater entered this tick gliding on one foot (for crossPlaceMode uncrossing).
-  const prevSupportMode = s.supportMode;
-  const prevSupportFoot = s.supportFoot;
   // A jump's push-off (pushOffMode): the takeoff's upward speed goes through the blade.
   const nTotal = Math.max(0, p.mass * (g + legAccel)) + (s.jump.pushLoad ?? 0);
   // A move is made on one foot: the pivot or spinning foot, and after a mohawk's cusp the other.
@@ -966,10 +969,6 @@ export function step(
     // half a stroke into a crossover.
     s.crossover = p.movesMode >= 1 && Math.abs(s.lean) >= p.crossoverLean;
     s.crossSide = s.crossover ? sign(s.lean) : 0;
-    if (p.crossPlaceMode === 1) {
-      const inside = s.crossSide > 0 ? FOOT.Left : FOOT.Right;
-      s.crossed = s.crossover && s.crossSide !== 0 && s.strokeFoot === inside;
-    }
     // The rhythm layer's beat window (sim/music.ts, bible §2.6): a crossover
     // push either lands on tempo or it does not, decided once at the push's
     // start, same as crossover itself.
@@ -993,17 +992,26 @@ export function step(
   if (s.strokeTime > 0 && input.pushFoot === s.strokeFoot && input.pushKnee !== undefined && s.strokeKnee !== undefined)
     s.strokeKnee = Math.max(s.strokeKnee, clamp(axis(input.pushKnee, 0), 0, 1));
   const stroking = s.strokeTime > 0;
+  // crossPlaceMode: the blades are crossed only during a crossover's
+  // under-push, judged afresh every tick (2026-11-20). The push must be on a
+  // curve (s.crossover), by the inside foot, while the outside foot — the one
+  // that crossed over — carries more than half the load: weight transfer
+  // hands the load over gradually, so this is a share, not one-foot support
+  // (a crossover's under-push measured from 3% to 92% outside share before
+  // the outside foot carried alone). Any other push on a lean — a jump
+  // entrance's pump, a stroke onto an edge — has the pushing foot carrying,
+  // and never crosses. With weight transfer the skater must also be asking
+  // for the load on the outside foot: a push whose load is moving onto the
+  // pushing foot is a step onto it (a back push before a jump, measured
+  // 95% -> 51% outside share), not an under-push (3% -> 92%). Off the moment
+  // the push ends, the load goes back to the inside foot, a move or a jump
+  // begins, or the skater falls.
   if (p.crossPlaceMode === 1) {
-    if (s.crossed === undefined) s.crossed = false;
-    if (s.crossed) {
-      const inside = s.crossSide > 0 ? FOOT.Left : FOOT.Right;
-      const outside = (1 - inside) as Foot;
-      const wasOutsideOnly = prevSupportMode === 1 && prevSupportFoot === outside;
-      const returningInside = wasOutsideOnly && (s.supportMode === 2 || (s.loadAsked !== undefined && s.loadAsked !== outside - 0.5));
-      if (!alive || turning || ina || !s.crossover || s.crossSide === 0 || returningInside) {
-        s.crossed = false;
-      }
-    }
+    const inside = s.crossSide > 0 ? FOOT.Left : FOOT.Right;
+    s.crossed = alive && stroking && s.move === MOVE.None && !turning && !ina
+      && s.jump.phase === JUMP_PHASE.None && s.crossover && s.crossSide !== 0
+      && s.strokeFoot === inside && s.blade[1 - inside].weight > CROSS_OUTSIDE_SHARE
+      && (s.loadAsked === undefined || (inside === FOOT.Left ? s.loadAsked : -s.loadAsked) > 0);
   }
 
   // ── 1c. or a turn's pivot, in place of sections 2-5 ───────────────────────

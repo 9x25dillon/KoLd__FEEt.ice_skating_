@@ -294,6 +294,11 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       2026-11-19, also unbumped: Params crossPlaceMode (0 everywhere);
 //       SkaterState optional crossed, present only at 1. Fixture rebased, every
 //       digest unchanged.
+//       2026-11-20, also unbumped: crossPlaceMode 1 is judged every tick (a
+//       live inside-foot under-push with the outside foot carrying most of the
+//       load), and ships on in Simulation, Experimental and Dig Gate. No
+//       replay recorded before it ran mode 1 (it was off in every setup); the
+//       fixture runs mode 0, every digest unchanged.
 export const REPLAY_SOLVER = "ice-lab-f64/39";
 export const MAX_REPLAY_TICKS = SIM_HZ * 300;
 export const MAX_REPLAY_BYTES = 64 * 1024 * 1024;
