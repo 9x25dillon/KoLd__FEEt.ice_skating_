@@ -1,5 +1,13 @@
 # Beat crossovers vs the jump load — does the jump depend on the music?
 
+> **Status, 2026-11-20 (owner):** the lever stays **0** (choice 1). The jump stays
+> music-dependent for now. Commit `71ffbe8` ("a 2Lo entrance for
+> beatCrossoverHoldSuppress … (WIP)") is **unfinished research**, kept on main
+> on purpose. Its `HOLD_SUPPRESS_ENTRANCE` stands at 0/57 with the lever off and
+> 3/57 with it on, and its grid search was not re-run, so "nearest of N clean
+> doubles" is unconfirmed. Its steps 4–5 (a section here and a pinned test)
+> are not done. Nothing in the game reads it. Don't treat its numbers as a result.
+
 **Measurement report, 2026-11-18.** Hand_off.md open question 2. Branch
 `beatcross`, baseline `4aaf328`. Data: [`beatcross-2026-11.json`](beatcross-2026-11.json);
 bench: `tools/ice-lab/bench/beatcross.ts`; pins: `tools/ice-lab/test/beatcross.test.ts`.
