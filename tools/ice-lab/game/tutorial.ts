@@ -20,8 +20,21 @@
 // Clients draw them (Tutorial.targets); the pass conditions still read only the
 // solver's state, now measured against those places.
 
+//
+// Placement (the owner, 2026-11-10: a jump lesson "places the skater at the
+// entry"): a step may name an entry, a speed and a place on the ice. The
+// tutorial still writes nothing. It says when a placement is owed
+// (Tutorial.entry); the client swaps in a fresh skater (entryState), on the
+// music where the entry asks (entryOnBeat), and says so (Tutorial.entered). One
+// is owed as the step begins, a moment after a fall (she is not asked to get
+// up: the drill is the try), and when a try is spent.
+
 import { MOVE, REGIME } from "../sim/types.ts";
 import type { SkaterState } from "../sim/types.ts";
+import { SIM_DT } from "../sim/params.ts";
+import type { Params } from "../sim/params.ts";
+import { createState } from "../sim/solver.ts";
+import { beatOffset } from "../sim/music.ts";
 import { JUMP_PHASE } from "../sim/jump.ts";
 import type { Setup } from "./setups.ts";
 import { RINK } from "./rink.ts";
@@ -79,6 +92,14 @@ const freshMemory = (): StepMemory => ({ pushes: 0, stroking: false, armed: fals
 /** A place on the ice a step asks for: a marker to reach, a cone to round, a checkpoint to pass; r in metres. */
 export interface TutorialTarget { x: number; y: number; r: number; kind: "marker" | "cone" | "checkpoint" }
 
+/**
+ * Where a step puts the skater for each try: m/s along her heading (negative:
+ * backward), and the place. She faces +x. `beat`, when given, is the tick of
+ * the try a beat of the music must fall on: the try starts on the music
+ * (entryOnBeat), because what she does on the beat is part of the entry.
+ */
+export interface StepEntry { speed: number; x: number; y: number; beat?: number }
+
 export interface TutorialStep {
   id: string;
   stage: StageId;
@@ -101,6 +122,8 @@ export interface TutorialStep {
   check: (s: SkaterState, m: StepMemory, t: Tutorial, dt: number) => boolean;
   /** Travel: the targets this step puts on the ice, placed once as it begins, from where the skater is. */
   place?: (s: SkaterState, t: Tutorial) => TutorialTarget[];
+  /** Placement: where each try at this step starts. Absent: the step is skated into, like every other. */
+  entry?: StepEntry;
 }
 
 // ── measured thresholds ─────────────────────────────────────────────────────
@@ -127,6 +150,12 @@ export const DIG_WIND = 0.5;
 export const SCRAPE_GAP = 0.3;
 /** Revolutions a turning jump must turn. */
 export const AIR_TURN = 0.5;
+/** Revolutions the double loop's lesson asks for: the solver calls 1.75 and up a double. */
+export const LOOP_TURN = 1.75;
+/** AUTHORED: s after a landing that did not pass before the skater is put back at the entry. */
+export const RETRY_S = 1;
+/** AUTHORED: the share of the entry's speed under which a try has run out of ice to jump from, and the longest a try may take, s. */
+export const ENTRY_SPENT = 0.6, ENTRY_LONGEST = 12;
 
 export const speed = (s: SkaterState) => Math.hypot(s.vel.x, s.vel.y);
 const backward = (s: SkaterState) => s.vel.x * s.heading.x + s.vel.y * s.heading.y < -0.5;
@@ -434,6 +463,73 @@ function landedClean(s: SkaterState, m: StepMemory, turn: number): boolean {
   return m.landed && settled(s);
 }
 
+/**
+ * The double loop, from a placed entry. MEASURED 2026-11-10, Experimental, on a
+ * sheet, the neutral skater:
+ *
+ * - Skated into from strokes, no scripted entry lands it: 0 of 7,344 from 0 to
+ *   4 m/s (and 11,520 tries on 2026-11-02). From a glide it is there. So each
+ *   try starts in the glide.
+ * - Re-measured on current main with Experimental's weightTransferMode 1 and
+ *   crossPlaceMode 1: their beat crossover shifts the old timing three ticks.
+ *   Backward at 6.6 m/s: both sticks full left, RT at 0.55 for 1.325 s (the back
+ *   outside edge deepening), RT full with B for 0.1 s then X, everything let go
+ *   0.309 s after the squeeze. No check in the air: it turns 2.03 and stands.
+ *   In the air RT at 0.7 or more (below it, the landing falls); B on the
+ *   landing inside 0.2 s, X inside 0.3 s.
+ * - The load is a race: the edge keeps deepening under it, and a load held a
+ *   few ticks long falls inward before the release.
+ * - THE BEAT IS IN THE ENTRY. Backward on a deep edge, Experimental strokes a
+ *   crossover by itself on every beat of the music (game/full-controls.ts
+ *   autoCrossover). The script above was measured at the default 128 bpm from
+ *   tick 0, where a beat falls on tick 113 of the try (0.94 s), the edge
+ *   already past the crossover's lean: one crossover, then the load 0.36 s
+ *   after it. Re-measured on current main, started at any moment of the music,
+ *   the same hands land 3 in 10 at 128, 54.3 and 100 bpm. Started so that a
+ *   beat falls on tick 113, they land it
+ *   every time, on all five tracks (54.3 to 68.1 bpm) and at 100, 128 and
+ *   160 bpm, turning 1.96 (test/jump-lesson.test.ts). At 170 bpm a second
+ *   beat falls inside the entry and 3 in 10 land. So each try starts on the
+ *   music.
+ * - How forgiving: with each of the three timings a tick or two off (27
+ *   combinations) 20 land the double from this place (test/jump-lesson.test.ts;
+ *   21 from the sheet's origin). A pilot whose timings are off by up to
+ *   25 ms each and whose trigger is off by up to 0.05 lands it 34% of 300
+ *   tries; up to 17 ms, 55%; up to 50 ms, 10%. Every landing that is not a
+ *   whole turn falls: of 826 landings mapped, none between 0.2 and 0.9 turns stood.
+ *
+ * Only Experimental: nothing here was measured on another setup.
+ */
+export const LOOP_ENTRY: StepEntry = { speed: -6.6, x: 10, y: 38, beat: 113 };
+export const LOOP_STEP: TutorialStep = {
+  id: "doubleloop", stage: "air", title: "The double loop", hold: 2, entry: LOOP_ENTRY,
+  available: setup => setup === "experimental",
+  prose: "Two turns, off the edge you are standing on. The edge winds you; the leg sends you up before the edge takes you down. You start each try already gliding backward. Miss, and you are put back.",
+  how: () => "You start gliding backward, on the music. Hold both sticks all the way left and RT just past halfway: the back outside edge, deepening. On the next beat she crosses over by herself. A third of a second after that beat, squeeze RT all the way with B, change B for X straight away, and let go of everything a third of a second after the squeeze. In the air squeeze RT most of the way for soft knees, and touch nothing else. Land on B, then X, and glide 2 s.",
+  trust: "Two turns, and the ice took you back. That is the hardest thing here, and it is yours.",
+  check: (s, m) => landedClean(s, m, LOOP_TURN),
+};
+
+/**
+ * A fresh skater at a step's entry, for the client to swap in: createState's
+ * own, moved to the place. `tick` is the run's clock, which she keeps: the
+ * beat grid is counted from the run's first tick, and so is the music the
+ * player hears.
+ */
+export function entryState(p: Params, e: StepEntry, tick = 0): SkaterState {
+  const s = createState(p, e.speed);
+  s.pos = { x: e.x, y: e.y };
+  s.tick = tick;
+  return s;
+}
+
+/** Is `tick` a moment to place her: would a try starting now meet a beat on its tick `e.beat`? Always, for an entry with none. */
+export function entryOnBeat(p: Params, e: StepEntry, tick: number): boolean {
+  if (e.beat === undefined) return true;
+  const off = beatOffset(p, tick + e.beat);
+  return off >= 0 && off < SIM_DT;
+}
+
 export class Tutorial {
   readonly setup: Setup | null;
   /** The course: this tutorial's own, unless game/padcourse.ts hands it another. */
@@ -457,12 +553,27 @@ export class Tutorial {
   targets: TutorialTarget[] = [];
   private placed = false;
   private wasFallen = false;
+  /** Placement: a fresh skater at the step's entry is owed. */
+  private entryDue = false;
+  /** Placement: s since the last one, s since a landing that did not pass, and the landing tick seen at the placement. */
+  private tryTime = 0;
+  private tryMissed = 0;
+  private tryLanded: number | null = null;
 
   constructor(setup: Setup | null, start = 0, steps: readonly TutorialStep[] = STEPS) {
     this.setup = setup;
     this.steps = steps;
     this.index = start;
     this.skipUnavailable();
+    this.entryDue = !!this.step?.entry;
+  }
+  /** Placement: where the client should put a fresh skater now (entryState), or null. The tutorial goes on watching either way. */
+  get entry(): StepEntry | null { return this.entryDue ? this.step?.entry ?? null : null; }
+  /** Placement: the client has put the skater `s` at the entry. The try starts from nothing. */
+  entered(s: SkaterState): void {
+    this.entryDue = false; this.wasFallen = false; this.settle = 0;
+    this.progress = 0; this.memory = freshMemory();
+    this.tryTime = 0; this.tryMissed = 0; this.tryLanded = s.landed.tick;
   }
   get done() { return this.index >= this.steps.length; }
   get step(): TutorialStep | null { return this.steps[this.index] ?? null; }
@@ -485,6 +596,11 @@ export class Tutorial {
         this.progress = 0; this.memory = freshMemory(); this.settle = SETTLE_S;
       }
       this.wasFallen = true;
+      // Placement: she is not asked to get up. Once the fall has been seen (the settle's time), the next try is owed.
+      if (step.entry && !this.entryDue) {
+        this.settle = this.settle - dt < 1e-6 ? 0 : this.settle - dt;
+        if (this.settle === 0) this.entryDue = true;
+      }
       return;
     }
     this.wasFallen = false;
@@ -493,11 +609,23 @@ export class Tutorial {
       // (Snapped to zero within a microsecond: 1.5 s of 1/120 s ticks does not sum to exactly 1.5.)
       if (settled(s) && Math.abs(s.lean) < TALL_LEAN * 1.5) this.settle = this.settle - dt < 1e-6 ? 0 : this.settle - dt;
       else this.settle = SETTLE_S;
+      // Up and steady again: the next try starts from the entry.
+      if (this.settle === 0 && step.entry) this.entryDue = true;
       return;
     }
     if (step.check(s, this.memory, this, dt)) this.progress += dt;
     else this.progress = 0;
-    if (this.progress >= step.hold) this.pass();
+    if (this.progress >= step.hold) { this.pass(); return; }
+    if (step.entry && !this.entryDue) this.entryDue = this.trySpent(s, step.entry, dt);
+  }
+
+  /** Placement: is this try over without a pass? A landing that did not count, the speed gone, or too long. */
+  private trySpent(s: SkaterState, e: StepEntry, dt: number): boolean {
+    this.tryTime += dt;
+    if (this.progress > 0 || !settled(s)) { this.tryMissed = 0; return false; }
+    if (this.tryLanded === null) this.tryLanded = s.landed.tick;
+    if (s.landed.tick !== this.tryLanded) { this.tryMissed += dt; if (this.tryMissed >= RETRY_S) return true; }
+    return speed(s) < ENTRY_SPENT * Math.abs(e.speed) || this.tryTime >= ENTRY_LONGEST;
   }
 
   /** Move on without passing (the player's choice). */
@@ -516,6 +644,8 @@ export class Tutorial {
     this.index++; this.progress = 0; this.settle = 0; this.memory = freshMemory();
     this.targets = []; this.placed = false;
     this.skipUnavailable();
+    this.entryDue = !!this.step?.entry;
+    this.tryTime = 0; this.tryMissed = 0; this.tryLanded = null;
   }
 
   private skipUnavailable(): void {
@@ -525,7 +655,7 @@ export class Tutorial {
   /** The status line: re-drilling, or how far through the hold. */
   get status(): string {
     if (!this.step) return "Tutorial complete";
-    if (this.wasFallen) return "Down is part of it. Get up when you're ready.";
+    if (this.wasFallen) return this.step.entry ? "Down is part of it. Back to the start in a moment, on the music." : "Down is part of it. Get up when you're ready.";
     if (this.settle > 0) return `Back on your feet. Stand still a moment — ${this.settle.toFixed(1)} s — and let your balance come back.`;
     const passed = this.targets.length > 1 ? ` · ${this.memory.reached} / ${this.targets.length} checkpoints` : "";
     return `${(Math.min(this.progress, this.step.hold)).toFixed(1)} / ${this.step.hold} s${passed}${this.falls ? ` · ${this.falls} fall${this.falls > 1 ? "s" : ""}` : ""}`;

@@ -20,7 +20,7 @@ import {gameInput,GAME_PARAMS} from '../runtime/game/controls.js';
 import {defaultControllerProfile,parseControllerProfile,validHardware,ACTIONS,BUTTON_NAMES,TUNING,bindingLabel} from '../runtime/game/full-controls.js';
 import {BeginnerCoach,BEGINNER_PARAMS} from '../runtime/game/beginner.js';
 import {CareerState,Choreography,CAREER_EVENTS,ELEMENTS,MEDALS,EVENT_FLOORS,LESSON_XP,PLAN_EXTRA,SEASONS,seasonOf,seasonEnds} from '../runtime/game/career.js';
-import {Tutorial,STEPS as TRUST_STEPS,STAGES as TRUST_STAGES} from '../runtime/game/tutorial.js';
+import {Tutorial,STEPS as TRUST_STEPS,STAGES as TRUST_STAGES,entryState,entryOnBeat} from '../runtime/game/tutorial.js';
 import {SteadyHand,STEADY_LEVELS,steadyDefault,isSteadyLevel,steadyStrength,steadyName,safeLean,SAFE_SHARE} from '../runtime/game/steady.js';
 import {SEASON,SEASONS_STORY,CHAPTERS,COACH,cast,outcome,finale,coachAdvice,STAT_TITLES} from '../runtime/game/story.js';
 import {RustGate,JUMP_FAMILIES} from '../runtime/game/training.js';
@@ -145,7 +145,7 @@ export class IceEngine {
   if(mode==='career')this.routine.armExpression=armExpression(focus,this.career.armBest[focus]);
   if(timeline&&!this.routine.setCues(cueTimes(tracks[timeline.track],timeline)))throw Error('This program no longer matches its music');
   this.lesson=mode==='lesson'?(course==='trust'?new Tutorial(this.setup):new Tutorial(this.setup,0,courseSteps(courseById(course),this.setup))):null;this.lessonXp=0;
-  this.recorder=new ReplayRecorder(this.params,4.5);this.player=null;this.meter=new SessionMeter();this.elements=new ElementRecorder();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
+  this.recorder=new ReplayRecorder(this.params,4.5);this.unrecorded=false;this.player=null;this.meter=new SessionMeter();this.elements=new ElementRecorder();this.elapsed=0;this.low=false;this.technical=0;this.scoredTick=-1;this.finished=false;this.result=null;this.events=[];this.trace=[];
   // The live free-skate readout game/main.ts already has (frame.technical above is its jump half) —
   // sample every tick a spin is live, score the moment it ends. -1 means no spin has finished yet;
   // scoreSpinLevel's own 0 is a real result, "level B", so it cannot double as that sentinel.
@@ -338,7 +338,7 @@ export class IceEngine {
  tick(input,pairActions=0) {
   const events=[];
   step(this.state,input,this.params,SIM_DT,events,this.ice);
-  this.recorder.capture(input,this.params,this.state,events,['A','B','C','D'][this.scheme]);
+  if(!this.unrecorded)this.recorder.capture(input,this.params,this.state,events,['A','B','C','D'][this.scheme]);
   this.meter.sample(this.state,input,events,SIM_DT);
   this.elements.sample(this.state,events,supportSignal(this.state),SIM_DT);
   resolveRinkCollision(this.state,events);this.events.push(...events);
@@ -357,6 +357,7 @@ export class IceEngine {
    const at=this.lesson.step;this.lesson.sample(this.state,SIM_DT);
    if(this.lesson.step!==at)this.lessonXp+=this.career.recordLesson(at.id);
    if(this.lesson.done)this.finishLesson();
+   else if(this.lesson.entry&&entryOnBeat(this.params,this.lesson.entry,this.state.tick))this.placeForLesson(this.lesson.entry);
   }
   if(this.mode==='timed')this.run.sample(this.state,SIM_DT);
   // Free Skate stays quiet per the bible. The original playground remains available in runtime.
@@ -401,6 +402,13 @@ export class IceEngine {
   const skipped=l.skipped.map(id=>l.steps.find(x=>x.id===id)?.title).filter(Boolean);
   this.finished=true;
   this.result={title,detail:`${l.steps.length-skipped.length}/${l.steps.length} steps${l.falls?` · ${l.falls} fall${l.falls>1?'s':''} you got up from`:' · without a fall'}${skipped.length?` · skipped: ${skipped.join(', ')}`:''}`,xp:this.lessonXp,lesson:true,complete:true};
+ }
+ /** Put a lesson try at its measured entry, on a fresh sheet and outside replay recording. */
+ placeForLesson(entry){
+  this.state=entryState(this.params,entry,this.state.tick);this.steering=newSchemeState();
+  this.ice=new IceGrid(this.params.rinkHalfLength,this.params.rinkHalfWidth);
+  this.recorder=new ReplayRecorder(this.params,4.5);this.unrecorded=true;
+  this.lesson.entered(this.state);
  }
  /** The player moves past a step. It pays nothing. */
  skipStep(){if(!this.lesson||this.finished)throw Error('No lesson is running');this.lesson.skip();if(this.lesson.done)this.finishLesson();return this.snapshot();}

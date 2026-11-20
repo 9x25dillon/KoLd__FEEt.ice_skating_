@@ -13,7 +13,7 @@
 
 import { MOVE } from "../sim/types.ts";
 import type { SkaterState } from "../sim/types.ts";
-import { STEPS, EDGE_SPEED, settled, speed } from "./tutorial.ts";
+import { STEPS, LOOP_STEP, EDGE_SPEED, settled, speed } from "./tutorial.ts";
 import type { HowContext, TutorialStep } from "./tutorial.ts";
 import { BUTTON_NAMES, PADDLE_BUTTONS, PADDLE_POSITIONS, bindingLabel, paddleLayer } from "./full-controls.ts";
 import type { ControllerProfile, PaddleAction } from "./full-controls.ts";
@@ -199,6 +199,11 @@ export const COURSES: readonly PadCourse[] = [
   { id: "paddles", title: "Elite paddles: the lower-body layer", setups: ["experimental", "simulation"],
     blurb: "Top paddles turn the feet. The bottom two are the free leg in Experimental, the weight in Simulation. Put the Elite on its default profile, profile LEDs off, with the feet on the D-pad or modifier layout.",
     steps: [paddleFeet, paddleFreeLeg, paddleWeight] },
+  // Not the instrument but one jump on it (the owner, 2026-11-10). A course of its own, so the Tutorial's
+  // fifteen steps and their pinned times stay as they are. Each try starts at the entry (game/tutorial.ts).
+  { id: "doubleloop", title: "The double loop: two turns off the edge", setups: ["experimental"],
+    blurb: "The hardest thing on this pad, one try after another. You are placed gliding backward; the edge, the load and the landing are yours.",
+    steps: [LOOP_STEP] },
 ];
 
 export const courseById = (id: string) => COURSES.find(c => c.id === id);

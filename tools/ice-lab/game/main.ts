@@ -29,7 +29,7 @@ import { Practice, LESSONS } from "./practice.ts";
 import { BeginnerCoach, BEGINNER_PARAMS } from "./beginner.ts";
 import { Playground } from "./playground.ts";
 import { RookieCourse } from "./rookie.ts";
-import { Tutorial, STAGES, STEPS, tutorialGhost } from "./tutorial.ts";
+import { Tutorial, STAGES, STEPS, tutorialGhost, entryState, entryOnBeat } from "./tutorial.ts";
 import { SteadyHand, steadyDefault, steadyStrength, isSteadyLevel } from "./steady.ts";
 import type { SteadyLevel } from "./steady.ts";
 import { RustGate, JUMP_FAMILIES } from "./training.ts";
@@ -106,6 +106,8 @@ function applyTrack(p: typeof params): void {
 }
 let coach = new BeginnerCoach(), playground = new Playground(), pendingTrick = false;
 let recorder = new ReplayRecorder(params, 4.5), playback: ReplayPlayer | null = null;
+/** A lesson placed the skater this run (Tutorial.entry): nothing more is recorded. */
+let unrecorded = false;
 let replayJson = "", technical = 0, scoredTick = -1, tables: ScoreTables | null = null;
 let replayNotice = "Recording your skating · first five minutes";
 let spinThresholds: SpinFeatureThresholds | null = null;
@@ -203,7 +205,7 @@ function start() {
   coach = new BeginnerCoach(); playground = new Playground(); pendingTrick = false; rookie = courseMode ? new RookieCourse() : null;
   tutorial = tutorialMode ? new Tutorial(setup, 0, lessonCourse ? courseSteps(lessonCourse, setup) : STEPS) : null;
   document.body.dataset.tutorial = String(tutorial !== null);
-  recorder = new ReplayRecorder(params, 4.5); playback = null; replayJson = "";
+  recorder = new ReplayRecorder(params, 4.5); unrecorded = false; playback = null; replayJson = "";
   technical = 0; scoredTick = -1; replayNotice = "Recording your skating · first five minutes";
   skater = createState(params, 4.5); steering = newSchemeState(); run = new IceRun();
   ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
@@ -267,11 +269,14 @@ function startCourse(course: PadCourse | null) { lessonCourse = course; startTut
 /** The courses this setup has: its own, and the paddles' where it reads them. */
 function renderCourses() {
   const mine = setup ? COURSES.filter(c => c.setups.includes(setup!)) : [];
-  const own = mine.find(c => c.id !== "paddles") ?? null, paddles = mine.find(c => c.id === "paddles") ?? null;
+  const own = mine.find(c => c.id !== "paddles" && c.id !== "doubleloop") ?? null, paddles = mine.find(c => c.id === "paddles") ?? null;
+  const loop = mine.find(c => c.id === "doubleloop") ?? null;
   el("course").hidden = !own; el("course").textContent = own ? `Controls course · ${own.title}` : "";
   el("course-paddles").hidden = !paddles; el("course-paddles").textContent = paddles ? paddles.title : "";
+  el("course-loop").hidden = !loop; el("course-loop").textContent = loop ? `Jump lesson · ${loop.title}` : "";
 }
-el("course").addEventListener("click", () => startCourse(COURSES.find(c => c.id !== "paddles" && setup !== null && c.setups.includes(setup)) ?? null));
+el("course-loop").addEventListener("click", () => startCourse(COURSES.find(c => c.id === "doubleloop") ?? null));
+el("course").addEventListener("click", () => startCourse(COURSES.find(c => c.id !== "paddles" && c.id !== "doubleloop" && setup !== null && c.setups.includes(setup)) ?? null));
 el("course-paddles").addEventListener("click", () => startCourse(COURSES.find(c => c.id === "paddles") ?? null));
 function startTutorial() { careerMode = false; freeSkate = true; courseMode = false; tutorialMode = true; cruise = false; start(); }
 el("tutorial").addEventListener("click", () => startCourse(null));
@@ -602,9 +607,19 @@ function frame(now: number) {
         if (at && tutorial.step !== at && career.recordLesson(at.id)) saveCareer();
         ghost = tutorialGhost(tutorial.step, ghost, skater, ghostOn);
         if (tutorial.done) finishTutorial();
+        // A step with an entry (game/tutorial.ts): a fresh skater at its place, on a fresh sheet, for each
+        // try, started on the music. The recording ends there: a clip starts from the spawn, and this skater did not.
+        else if (tutorial.entry && entryOnBeat(params, tutorial.entry, skater.tick)) {
+          skater = entryState(params, tutorial.entry, skater.tick); steering = newSchemeState();
+          ice = new IceGrid(params.rinkHalfLength, params.rinkHalfWidth);
+          recorder = new ReplayRecorder(params, 4.5); unrecorded = true;
+          replayNotice = "Not recorded · this lesson places you on the ice";
+          trail.forEach(t => t.length = 0); scene.reset(skater);
+          tutorial.entered(skater);
+        }
       }
       scene.update(skater, SIM_DT);
-      recorder.capture(input, params, skater, events, (["A","B","C","D"] as const)[scheme]);
+      if (!unrecorded) recorder.capture(input, params, skater, events, (["A","B","C","D"] as const)[scheme]);
       const wasUp = !skater.fallen;
       resolveRinkCollision(skater, events);
       if (sound && wasUp && skater.fallReason === FALL.Collision) audio.crash();
