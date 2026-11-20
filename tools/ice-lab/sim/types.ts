@@ -705,6 +705,18 @@ export interface SkaterState {
   /** weightTransferMode 1 only: the bias the skater is asking for, -0.5..0.5. */
   loadAsked?: number;
   /**
+   * comSwayMode 1 only: the minimum-jerk plan the load follows toward
+   * loadAsked — [bias, rate, accel] where it was planned from, and the seconds
+   * since. Absent in the air and whenever comSwayMode is 0.
+   */
+  loadPlan?: [number, number, number, number];
+  /**
+   * comSwayMode 1 only: m/s, world — the body's velocity over its stance, the
+   * sway the legs have built so far (capped by the blades' bite). Folded back
+   * into vel whenever the body stops swaying.
+   */
+  swayVel?: Vec2;
+  /**
    * Accumulated musical credit (sim/music.ts): a turn's cusp or a jump's
    * landing that landed within `musicAccentWindow` of an accent, phrase-weighted.
    * Tracked and replay-safe; not yet spent by sim/score.ts.
