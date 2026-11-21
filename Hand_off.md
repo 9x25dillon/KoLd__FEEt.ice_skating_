@@ -18,7 +18,7 @@
 Also: research-only or shippable licensing for the 3D pose models.
 
 **Start with:**
-1. `git fetch origin; git log --oneline -3 origin/main; gh pr list`. Expect `4b05863`, plus this hand-off's PR if unmerged.
+1. `git fetch origin; git log --oneline -3 origin/main; gh pr list`. Expect `4b05863`, or #132's merge commit once this hand-off has landed.
 2. Read blueprint §11–§12 (link above). If you can't open claude.ai, the In flight entry below has the essentials.
 3. After the owner decides, build `edgework-video intake` (In flight) in a fresh worktree off `origin/main`. On the sway track, wait for the owner's pad test instead.
 
@@ -110,7 +110,7 @@ Also: research-only or shippable licensing for the 3D pose models.
    - Nothing has been felt on the pad since 14 November.
 
 ## State (verified 19:58–20:05 PST)
-- `origin/main` `4b05863`. No open PRs in this repo except this hand-off's. `gh` is logged in as `9x25dillon`, and the repo is PUBLIC.
+- `origin/main` `4b05863`. No open PRs in this repo except #132 (this hand-off). `gh` is logged in as `9x25dillon`, and the repo is PUBLIC.
 - O1–O7 corpus at `49849f2`, read from the files, not a validator run: 38 cases, 25 unsourced. O2, O3, O6 and O7 have no sourced external case. The committed report says "Gate not met".
 - Worktree made this session: `.delivery/handoff-1120-blueprint`. Nothing deleted.
 - The outer checkout is on `phase17-assurance`, with 85 dirty files and `e94d0d9` unpushed (14 Nov). Another session owns it. Don't touch it.
@@ -120,7 +120,7 @@ Also: research-only or shippable licensing for the 3D pose models.
 - Fragile spots (carried): the scripted jump entrances are knife-edge search results; the sim's skid never recovers once the carve is lost.
 
 ## Next steps, in order
-1. Merge this hand-off: `! gh pr merge <n> --merge`, once CI is green.
+1. Merge this hand-off: `! gh pr merge 132 --merge`. It's docs only, so no CI runs, and GitHub reports it mergeable.
 2. The owner answers Open questions 1 and 2, one line each.
 3. Video track: build `edgework-video intake` (blueprint §11), then the M0 schemas: `edgework-take/1`, the wireframe/1 export profile and `edgework-evidence/1`.
 4. Sway track, independent of the video track:
@@ -153,4 +153,4 @@ README block: run the three suites with `--test-reporter=tap` into a directory a
 word, referent, idempotent, provenance, invariant, presupposition, stipulate, contiguous, fast-forward, confabulation, threat model, reaction torque, confound, regression, acceptance criterion, race condition, negative control, preregistration, stacked PR, attestation, opt-in, monotonic, triage, Goodhart's law, protocol deviation, chirality, Pareto front, squash merge, dangling commit, forward kinematics, contact constraint, false negative, affordance, counterfactual, bake, centre of pressure, knife-edge result, lookahead, latch, superset, addressee, seam, test double, headroom, jerk, pseudoreplication (Opus 5.5, 2026-11-20), homography (Opus 5.5, 2026-11-20)
 
 ## Opening prompt for next session (edit the brackets)
-> Read `Hand_off.md` on `origin/main` (or branch `handoff-2026-11-20-blueprint` if unmerged) in a fresh worktree, and run its one-shot check. On agy's draft I choose [a / b / c]; licensing is [research-only / shippable]. Then [build `edgework-video intake` per blueprint §11 | comSway pad notes: …]. Stipulate: live work; run only the new tests unless I ask for the full suite; commit on the branch, push, open a PR, don't merge. When we wrap up: /hanoffed.
+> Read `Hand_off.md` on `origin/main` (or branch `handoff-2026-11-20-blueprint` if #132 is unmerged) in a fresh worktree, and run its one-shot check. On agy's draft I choose [a / b / c]; licensing is [research-only / shippable]. Then [build `edgework-video intake` per blueprint §11 | comSway pad notes: …]. Stipulate: live work; run only the new tests unless I ask for the full suite; commit on the branch, push, open a PR, don't merge. When we wrap up: /hanoffed.
