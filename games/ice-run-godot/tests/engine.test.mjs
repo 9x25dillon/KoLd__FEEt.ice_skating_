@@ -5,7 +5,7 @@ import {setupParams} from '../runtime/game/setups.js';
 import {CareerState} from '../runtime/game/career.js';
 import {createState,step} from '../runtime/sim/solver.js';
 import {IceGrid} from '../runtime/sim/ice.js';
-import {NEUTRAL_INPUT,MOVE,TURN_KIND} from '../runtime/sim/types.js';
+import {NEUTRAL_INPUT,MOVE,TURN_KIND,EVENT} from '../runtime/sim/types.js';
 import {verifyReplay,parseReplay} from '../runtime/sim/replay.js';
 import {JUMP_PHASE} from '../runtime/sim/jump.js';
 import {readFileSync} from 'node:fs';
@@ -582,4 +582,60 @@ test('a career result carries its kiss-and-cry: the wait, a reaction read off th
  assert.ok(!k.state.fallen&&k.state.pos.y===18);
  // A free skate has none.
  e.start({mode:'free'});assert.equal(e.snapshot().result,null);
+});
+test('the double loop lesson places the skater at its entry for each try, and the measured pad lands it',()=>{
+ // tools/ice-lab/test/jump-lesson.test.ts's script, through the engine: the edge 1.3 s, a 0.317 s load with B
+ // then X, hands off (off the ice at tick 195, down at 265), soft knees, B then X on the landing.
+ const e=new IceEngine();
+ e.configure({setup:'explorer'});
+ assert.throws(()=>e.start({mode:'lesson',course:'doubleloop'}),/needs its own setup/);
+ e.configure({setup:'experimental'});
+ assert.ok(e.catalog().courses.some(c=>c.id==='doubleloop'));
+ assert.equal(e.start({mode:'lesson',course:'doubleloop'}).tutorial.title,'The double loop');
+ const h={axes:[0,0,0,0],buttons:Array(16).fill(0),keys:[],connected:true};
+ // Placed on the music (the first track, 54.3 bpm: under a beat's wait), keeping the run's clock:
+ // a fresh skater at the entry, gliding backward.
+ const spawn=e.state;let waited=0;
+ while(e.state===spawn&&waited<200){e.advance({hardware:h},1);waited++;}
+ assert.ok(waited<=Math.ceil(120*60/54.3),`waited ${waited} ticks`);
+ assert.deepEqual([e.state.pos.x,e.state.pos.y,e.state.vel.x,e.state.tick],[10,38,-6.6,waited]);
+ const B=1,X=2,LT=6,RT=7;let took=false,landedAt=-1;
+ for(let k=0;k<700&&!e.finished;k++){
+  const t=k/120;h.buttons.fill(0);h.axes=[0,0,0,0];
+  if(landedAt>=0){h.buttons[RT]=0.5;h.buttons[B]=1;if((k-landedAt)/120>=0.15){h.buttons[LT]=0.5;h.buttons[X]=1;}}
+  else if(took)h.buttons[RT]=0.7;
+  else{
+   if(k<2)h.buttons[B]=1;
+   h.axes[0]=h.axes[2]=-Math.min(1,t/0.5);
+   if(t<1.3+3/120)h.buttons[RT]=0.55;else if(t<1.3+3/120+0.317-1/120){h.buttons[RT]=1;h.buttons[t-(1.3+3/120)<0.1?B:X]=1;}
+  }
+  e.advance({hardware:h},1);
+  took=took||e.events.some(x=>x.type===EVENT.Takeoff);
+  if(landedAt<0&&e.state.landed.tick>=0)landedAt=k;
+ }
+ assert.equal(e.finished,true);
+ assert.match(e.result.detail,/^1\/1 steps · without a fall/);
+ assert.ok(Math.abs(e.state.landed.turned-2.030)<0.002,`turned ${e.state.landed.turned}`);
+ assert.deepEqual(e.career.lessons,['doubleloop']);
+ // A placed run is not recorded: a clip starts from the spawn, and this skater did not.
+ assert.equal(JSON.parse(e.exportReplay()).frames.length,0);
+ // A try that falls (the load held 0.4 s) is put back at the entry a moment later, with nothing pressed.
+ e.start({mode:'lesson',course:'doubleloop'});
+ h.buttons.fill(0);h.axes=[0,0,0,0];
+ const again=e.state;let n=0;
+ while(e.state===again&&n<200){e.advance({hardware:h},1);n++;}
+ const first=e.state;let fell=false;
+ for(let k=0;k<700&&e.state===first;k++){
+  const t=k/120;h.buttons.fill(0);h.axes=[0,0,0,0];
+  if(!fell){
+   if(k<2)h.buttons[B]=1;
+   h.axes[0]=h.axes[2]=-Math.min(1,t/0.5);
+   if(t<1.3+3/120)h.buttons[RT]=0.55;else if(t<1.3+3/120+0.4){h.buttons[RT]=1;h.buttons[t-(1.3+3/120)<0.1?B:X]=1;}
+  }
+  e.advance({hardware:h},1);fell=fell||e.state.fallen;
+ }
+ assert.equal(fell,true);
+ assert.notEqual(e.state,first,'a fresh skater');
+ assert.deepEqual([e.state.pos.x,e.state.pos.y,e.state.vel.x,e.state.fallen],[10,38,-6.6,false]);
+ assert.equal(e.snapshot().tutorial.index,0,'still the same step');
 });

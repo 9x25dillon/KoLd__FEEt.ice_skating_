@@ -7,6 +7,8 @@ import { test } from "node:test";
 
 import { SIM_DT } from "../sim/params.ts";
 import { createState, step } from "../sim/solver.ts";
+import { EVENT } from "../sim/types.ts";
+import type { EdgeEvent, SkaterState } from "../sim/types.ts";
 import { IceGrid } from "../sim/ice.ts";
 import { setupParams, setupInput, SETUPS } from "../game/setups.ts";
 import type { Setup } from "../game/setups.ts";
@@ -14,7 +16,7 @@ import { defaultControllerProfile } from "../game/full-controls.ts";
 import type { FeetLayout, GameControlState } from "../game/full-controls.ts";
 import { newSchemeState } from "../app/schemes.ts";
 import type { Controls, ControllerHardware } from "../app/pad.ts";
-import { Tutorial } from "../game/tutorial.ts";
+import { Tutorial, entryState, entryOnBeat } from "../game/tutorial.ts";
 import { COURSES, courseById, courseSteps, howContext, elementHow, recoverHow } from "../game/padcourse.ts";
 import { Choreography, ELEMENTS } from "../game/career.ts";
 import type { ElementId } from "../game/career.ts";
@@ -29,7 +31,7 @@ const bothFeet = (h: H, s: Setup) => { if (isExp(s)) h.buttons[X] = h.buttons[B]
 const modifier = (h: H, s: Setup) => { h.buttons[isExp(s) ? RB : L3] = 1; };
 
 /** Each step's script: what its own words ask, on each setup. `speed` is where the step starts. */
-type Script = { speed: number; pad: (h: H, k: number, s: Setup, feet: FeetLayout) => void };
+type Script = { speed: number; pad: (h: H, k: number, s: Setup, feet: FeetLayout, skater: SkaterState, tookAt: number, landedAt: number) => void };
 const SCRIPTS: Record<string, Script> = {
   edge: { speed: 3.7, pad: (h, _k, s) => lean(h, s, 0.5) },
   other: { speed: 3.7, pad: (h, _k, s) => lean(h, s, -0.5) },
@@ -50,6 +52,22 @@ const SCRIPTS: Record<string, Script> = {
     h.axes[0] = -m; h.axes[2] = m;
   } },
   dig: { speed: -4, pad: (h, k) => { h.axes[0] = h.axes[2] = 0.3; if (k >= 30 && k < 400) h.buttons[LB] = h.buttons[RB] = 1; } },
+  // The double loop from its entry (test/jump-lesson.test.ts plays it placed, and pins it): the edge for
+  // 1.3 s, a 0.317 s load with B then X, hands off. MEASURED: the blade leaves at tick 195 and lands at 265.
+  // Soft knees in the air; B on the landing, X 0.15 s later.
+  doubleloop: { speed: -6.6, pad: (h, k, _setup, _feet, _skater, tookAt, landedAt) => {
+    const t = k * SIM_DT;
+    if (landedAt >= 0) {
+      h.buttons[RT] = 0.5; h.buttons[B] = 1;
+      if ((k - landedAt) * SIM_DT >= 0.15) { h.buttons[LT] = 0.5; h.buttons[X] = 1; }
+    } else if (tookAt >= 0) h.buttons[RT] = 0.7;
+    else {
+      if (k < 2) h.buttons[B] = 1;
+      h.axes[0] = h.axes[2] = -Math.min(1, t / 0.5);
+      if (t < 1.3 + 3 * SIM_DT) h.buttons[RT] = 0.55;
+      else if (t < 1.3 + 3 * SIM_DT + 0.317 - SIM_DT) { h.buttons[RT] = 1; h.buttons[t - (1.3 + 3 * SIM_DT) < 0.1 ? B : X] = 1; }
+    }
+  } },
   hop: { speed: 4.5, pad: (h, k, s) => {
     const t = k * SIM_DT;
     if (isExp(s) && k >= 2 && k < 4) h.buttons[B] = 1;
@@ -95,27 +113,35 @@ const SCRIPTS: Record<string, Script> = {
 
 function play(setup: Setup, id: string, feet: FeetLayout = "dpad", T = 15) {
   const course = COURSES.flatMap(c => c.steps).find(x => x.id === id)!;
-  const p = setupParams(setup), { speed, pad } = SCRIPTS[id], s = createState(p, speed);
+  const p = setupParams(setup), { speed, pad } = SCRIPTS[id];
+  // Match a real client: it advances once before asking for the first beat-aligned placement.
+  let entryTick = 1;
+  if (course.entry) while (!entryOnBeat(p, course.entry, entryTick)) entryTick++;
+  const s = course.entry ? entryState(p, course.entry, entryTick) : createState(p, speed);
   const profile = { ...defaultControllerProfile(), feet }, st: GameControlState = newSchemeState();
   const ice = new IceGrid(p.rinkHalfLength, p.rinkHalfWidth);
   const h: H = { axes: [0, 0, 0, 0], buttons: Array(22).fill(0), keys: [], connected: true };
   const tut = new Tutorial(setup, 0, [course]);
+  if (course.entry) tut.entered(s);
   tut.side = -Math.sign(id === "other" ? -1 : 1) || 1;
-  let k = 0;
+  let k = 0, tookAt = -1, landedAt = -1;
   for (; k < T / SIM_DT && !tut.done; k++) {
     h.buttons.fill(0); h.axes = [0, 0, 0, 0];
-    pad(h, k, setup, feet);
-    step(s, setupInput({ hardware: h } as Controls, s, setup, st, p, profile).input, p, SIM_DT, [], ice);
+    pad(h, k, setup, feet, s, tookAt, landedAt);
+    const events: EdgeEvent[] = [];
+    step(s, setupInput({ hardware: h } as Controls, s, setup, st, p, profile).input, p, SIM_DT, events, ice);
+    if (events.some(e => e.type === EVENT.Takeoff)) tookAt = k;
+    if (events.some(e => e.type === EVENT.Landing)) landedAt = k;
     tut.sample(s, SIM_DT);
   }
-  return { passed: tut.done ? +(k * SIM_DT).toFixed(3) : -1, falls: tut.falls, s };
+  return { passed: tut.done ? +(k * SIM_DT).toFixed(3) : -1, falls: tut.falls, s, tut };
 }
 
 for (const course of COURSES) for (const setup of course.setups) for (const x of courseSteps(course, setup)) {
   const layouts: FeetLayout[] = x.id === "feet" ? ["dpad", "stickY", "modifier"] : ["dpad"];
   for (const feet of layouts) test(`${course.id} on ${setup}: "${x.title}" (${x.id}${x.id === "feet" ? `, ${feet}` : ""}) passes on the pad, standing`, () => {
     const r = play(setup, x.id, feet);
-    assert.ok(r.passed > 0, `never passed; fallen ${r.s.fallen}, moved ${r.s.move}`);
+    assert.ok(r.passed > 0, `never passed; fallen ${r.s.fallen}, moved ${r.s.move}, turned ${r.s.landed.turned}, ${r.tut.status}`);
     assert.equal(r.falls, 0, "without a fall");
   });
 }
