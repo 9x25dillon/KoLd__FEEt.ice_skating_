@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgework.local/schemas/edgework-wireframe-v1.schema.json",
+  "title": "edgework-wireframe/1 (export profile edgework-export/1)",
+  "description": "Writer contract for edgework-wireframe/1 exports with meta.ext provenance.",
+  "type": "object",
+  "required": ["schema", "id", "name", "category", "loop", "meta", "frames"],
+  "properties": {
+    "schema": { "const": "edgework-wireframe/1" },
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "category": { "type": "string", "minLength": 1 },
+    "loop": { "type": "boolean" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "meta": {
+      "type": "object",
+      "required": ["fps", "coordSpace", "extractor", "cameraCompensated", "provenance", "ext"],
+      "properties": {
+        "fps": { "type": "number", "exclusiveMinimum": 0 },
+        "coordSpace": { "enum": ["world-yup", "skater-local"] },
+        "extractor": { "type": "string", "minLength": 1 },
+        "cameraCompensated": { "type": "boolean" },
+        "provenance": { "type": "string", "minLength": 1 },
+        "styleTag": { "type": "string" },
+        "note": { "type": "string" },
+        "ext": {
+          "type": "object",
+          "required": ["profile", "time", "frames", "scale", "scoreKind", "mirrored", "worldGrounding", "sidecar"],
+          "properties": {
+            "profile": { "const": "edgework-export/1" },
+            "time": {
+              "type": "object",
+              "required": ["t", "streamTimeBase", "vfr", "playback"]
+            },
+            "frames": {
+              "type": "object",
+              "required": ["world", "from", "matrix", "det", "verified"]
+            },
+            "scale": {
+              "type": "object",
+              "required": ["status", "source"],
+              "properties": {
+                "status": { "enum": ["surveyed", "rulebook-verified-at-venue", "model", "unknown"] }
+              }
+            },
+            "scoreKind": { "type": "string", "minLength": 1 },
+            "mirrored": { "enum": [true, false, "unknown"] },
+            "worldGrounding": {
+              "type": "object",
+              "required": ["method", "validated"],
+              "properties": {
+                "method": { "type": "string" },
+                "validated": { "type": "boolean" }
+              }
+            },
+            "sidecar": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["t", "joints", "confidence"],
+        "properties": {
+          "t": { "type": "number" },
+          "joints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": { "type": "number" }
+            }
+          },
+          "confidence": {
+            "type": "object",
+            "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    }
+  }
+}
