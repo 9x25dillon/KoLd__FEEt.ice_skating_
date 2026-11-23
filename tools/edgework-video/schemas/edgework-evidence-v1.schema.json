@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgework.local/schemas/edgework-evidence-v1.schema.json",
+  "title": "edgework-evidence/1",
+  "description": "Evidence sidecar separating observed, reconstructed, model-derived, and unavailable metrics.",
+  "type": "object",
+  "required": ["schema", "take", "shot", "clip", "inputs", "time", "frames", "metrics", "rejectedIntervals", "checks", "review"],
+  "properties": {
+    "schema": { "const": "edgework-evidence/1" },
+    "take": { "type": "string", "minLength": 1 },
+    "shot": { "type": "string", "minLength": 1 },
+    "clip": { "type": "string", "minLength": 1 },
+    "inputs": {
+      "type": "object",
+      "required": ["manifestSha256", "sourceSha256", "exportSha256", "annotations"]
+    },
+    "time": {
+      "type": "object",
+      "required": ["base", "fps", "playback", "eventTimeStatus"]
+    },
+    "frames": {
+      "type": "object",
+      "required": ["image", "plane", "scale"]
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "observable", "status"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "observable": { "enum": ["O1", "O2", "O3", "O4", "O5", "O6", "O7", null] },
+          "status": { "enum": ["observed", "reconstructed", "model-derived", "unavailable"] },
+          "promotable": { "type": "boolean" }
+        }
+      }
+    },
+    "rejectedIntervals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ptsStart", "ptsEnd", "reason"],
+        "properties": {
+          "ptsStart": { "type": "number" },
+          "ptsEnd": { "type": "number" },
+          "reason": { "type": "string", "minLength": 1 },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "required": ["performed", "planned"],
+      "properties": {
+        "performed": { "type": "array", "items": { "type": "string" } },
+        "planned": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["unreviewed", "approved", "rejected"] }
+      }
+    }
+  }
+}

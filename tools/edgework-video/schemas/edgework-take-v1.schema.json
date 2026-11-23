@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgework.local/schemas/edgework-take-v1.schema.json",
+  "title": "edgework-take/1",
+  "description": "Source take manifest written by edgework-video intake.",
+  "type": "object",
+  "required": [
+    "schema",
+    "takeId",
+    "authorization",
+    "subject",
+    "mirrored",
+    "playback",
+    "venue",
+    "source",
+    "video",
+    "probe",
+    "tools"
+  ],
+  "properties": {
+    "schema": { "const": "edgework-take/1" },
+    "takeId": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+    "authorization": {
+      "type": "object",
+      "required": ["basis", "by", "date", "scope"],
+      "properties": {
+        "basis": { "type": "string", "minLength": 1 },
+        "by": { "type": "string", "minLength": 1 },
+        "date": { "type": "string", "minLength": 1 },
+        "scope": { "enum": ["research-only", "shippable"] }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "required": ["id", "consent"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "consent": { "type": "string", "minLength": 1 }
+      }
+    },
+    "mirrored": { "enum": [true, false, "unknown"] },
+    "playback": { "enum": ["live", "slowmo", "mixed", "unknown"] },
+    "venue": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "required": ["filename", "sha256", "sizeBytes"],
+      "properties": {
+        "filename": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sizeBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "video": {
+      "type": "object",
+      "required": ["codec", "width", "height", "timeBase", "nominalFps", "frameCount", "vfr", "rotationDeg", "fieldOrder", "interlaced"],
+      "properties": {
+        "codec": { "type": "string" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "timeBase": { "type": "string", "pattern": "^[0-9]+/[0-9]+$" },
+        "nominalFps": { "type": "number", "exclusiveMinimum": 0 },
+        "frameCount": { "type": "integer", "minimum": 1 },
+        "vfr": { "type": "boolean" },
+        "rotationDeg": { "type": "number" },
+        "fieldOrder": { "type": "string" },
+        "interlaced": { "type": "boolean" }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "required": ["streamsFile", "streamsSha256", "framesFile", "framesSha256"],
+      "properties": {
+        "streamsFile": { "const": "probe/streams.json" },
+        "streamsSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "framesFile": { "const": "probe/frames.json" },
+        "framesSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "required": ["edgeworkVideo", "python", "ffprobe"],
+      "properties": {
+        "edgeworkVideo": { "type": "string" },
+        "python": { "type": "string" },
+        "ffprobe": { "type": "string" }
+      }
+    }
+  }
+}
