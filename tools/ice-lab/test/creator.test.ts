@@ -24,11 +24,12 @@ test("points trade one for one, inside the stat bounds and the overall band", ()
   s = tradePoint(s, "stamina", "strength");
   assert.equal(s.stats.stamina, 44); assert.equal(s.stats.strength, 51); assert.equal(sum(s), before);
   // Spring is at the ceiling of 60 after two; a third is refused, and the sheet comes back unchanged.
-  s = tradePoint(tradePoint(s, "strength", "spring"), "strength", "spring");
+  // From edge control, which weighs the same in overall since 2026-11-23, so only the ceiling can stop it.
+  s = tradePoint(tradePoint(s, "edgeControl", "spring"), "edgeControl", "spring");
   assert.equal(s.stats.spring, 60);
-  assert.match(tradeBlock(s, "strength", "spring"), /ceiling/);
-  assert.equal(tradePoint(s, "strength", "spring"), s);
-  // Edges carry the most weight in overall: moving many off them runs into the band's floor.
+  assert.match(tradeBlock(s, "edgeControl", "spring"), /ceiling/);
+  assert.equal(tradePoint(s, "edgeControl", "spring"), s);
+  // Edges outweigh stamina in overall: moving many off them runs into the band's floor.
   let t = sheetFrom(originById("late-starter")!, "Level");
   let moved = 0;
   while (!tradeBlock(t, "edgeControl", "stamina")) { t = tradePoint(t, "edgeControl", "stamina"); moved++; }

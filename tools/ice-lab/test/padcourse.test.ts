@@ -101,6 +101,11 @@ const SCRIPTS: Record<string, Script> = {
   spiral: { speed: 4.5, pad: (h, k, s) => { lean(h, s, 0.4); if (k > 120 && k < 720) { h.buttons[Y] = 1; modifier(h, s); } } },
   twizzle: { speed: 4.5, pad: (h, k, s) => { lean(h, s, 0.4); if (k > 120 && k < 240) { if (isExp(s)) { h.buttons[Y] = h.buttons[LB] = 1; } else h.buttons[X] = 1; } } },
   spinhold: { speed: 4.5, pad: (h, k, s) => { lean(h, s, 0.5); if (k > 120) h.buttons[Y] = 1; } },
+  // The "program" course: the career's own element pads (ELEMENT_PADS below, from a 4.5 m/s glide), since
+  // its steps use the career's words and the career's checks.
+  crossover: { speed: 4.5, pad: (h, k, s) => ELEMENT_PADS.crossover!(h, k, s) },
+  programjump: { speed: 4.5, pad: (h, k, s) => ELEMENT_PADS.jump!(h, k, s) },
+  spinfull: { speed: 4.5, pad: (h, k, s) => ELEMENT_PADS.spin!(h, k, s) },
   paddlefeet: { speed: 4.5, pad: (h, k, s) => {
     if (k < 2) bothFeet(h, s);
     if (k >= 4 && k < 64) h.buttons[P_TOP_RIGHT] = 1;
@@ -262,4 +267,22 @@ test("the career's words name the setup's pad, and no setup is told a button it 
     assert.doesNotMatch(words, /Space|Beginner|D-pad up/, `${id} on ${s.id}: keyboard or legacy words`);
     assert.ok(words.length > 20);
   }
+});
+
+test("the program course's own steps are the career's bar, not less", () => {
+  const saved = { ...SCRIPTS };
+  try {
+    for (const id of ["crossover", "programjump", "spinfull"]) {
+      SCRIPTS[id] = { speed: 4.5, pad: () => {} };
+      for (const setup of ["explorer", "simulation", "experimental"] as const)
+        assert.equal(play(setup, id, "dpad", 10).passed, -1, `${id} on ${setup}: hands off does not pass`);
+    }
+    // A straight hop turns no half revolution.
+    SCRIPTS.programjump = { speed: 4.5, pad: (h, k, s) => { const t = k * SIM_DT; if (isExp(s) && k >= 2 && k < 4) h.buttons[B] = 1; if (t >= 1 && t < 1.35) { h.buttons[RT] = 0.95; if (s === "simulation") h.buttons[LT] = 0.95; } } };
+    assert.equal(play("simulation", "programjump", "dpad", 8).passed, -1, "a hop is not a jump element");
+    // Y let go well inside the first rotation.
+    SCRIPTS.spinfull = { speed: 4.5, pad: (h, k, s) => { lean(h, s, 0.5); if (k > 120 && k < 150) h.buttons[Y] = 1; } };
+    assert.equal(play("simulation", "spinfull", "dpad", 8).passed, -1, "a quarter of a spin is not a spin element");
+  } finally { Object.assign(SCRIPTS, saved); }
+  assert.deepEqual(courseById("program")!.steps.map(x => x.id), ["push", "edge", "crossover", "programjump", "spinfull"]);
 });

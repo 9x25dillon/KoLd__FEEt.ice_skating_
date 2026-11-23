@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import {
   CareerState, Choreography, CAREER_EVENTS, HYPE_FLOW_BONUS_MAX, TECHNICAL_XP_PER_POINT, SPIN_LEVEL_XP,
-  STEP_LEVEL_XP, EVENT_FLOORS, SEASONS, SEASON_ONE_FINALE, seasonOf, seasonEnds, JUMP_TURN, LESSON_XP, START_WEEKS, WEEKS_PER_TIER, validPlan,
+  STEP_LEVEL_XP, EVENT_FLOORS, SEASONS, SEASON_ONE_FINALE, seasonOf, seasonEnds, JUMP_TURN, FATIGUE_JUMP_FLOOR, jumpTurnFor, LESSON_XP, START_WEEKS, WEEKS_PER_TIER, validPlan,
 } from "../game/career.ts";
 import { RUST_PER_STEP, RUST_TURN, landingFamily } from "../game/training.ts";
 import { AIR_TURN } from "../game/tutorial.ts";
@@ -403,7 +403,7 @@ test("stats gate progression independent of medals: a neutral profile holds at r
 test("training raises overall past an event floor and lifts the stat gate", () => {
   const c = new CareerState();
   c.profile = { ...c.profile, xp: 100000 };
-  // Five edge points (five weeks): 51.40, past Jump showcase's 51.35 and short of Regional's 51.9.
+  // Five edge points (five weeks): 51.20, past Jump showcase's 51.15 and short of Regional's 51.65 (weights of 2026-11-23).
   c.weeks = 5;
   for (let i = 0; i < 5; i++) c.train("edgeControl");
   assert.ok(overall(c.profile) >= EVENT_FLOORS[2] && overall(c.profile) < EVENT_FLOORS[3], `overall ${overall(c.profile)}`);
@@ -450,7 +450,7 @@ test("a closed event says why, and which gate", () => {
   assert.equal(c.lockReason(0), "");
   assert.match(c.lockReason(1), /medal/);
   c.medals = [1, 1, ...Array(CAREER_EVENTS.length - 2).fill(0)];
-  assert.match(c.lockReason(2), /Needs overall 51\.35; you are at 50\.00/);
+  assert.match(c.lockReason(2), /Needs overall 51\.15; you are at 50\.00/);
   assert.match(c.lockReason(3), /medal/);
 });
 
@@ -588,7 +588,7 @@ test("season two: five more events after season one's, its own floors, and a gal
   // Each season-two floor sits just under what silver XP buys before it (measured 2026-11-11):
   // 53.08, 53.64, 53.92, 54.48, 55.04.
   for (let i = 1; i < EVENT_FLOORS.length; i++) assert.ok(EVENT_FLOORS[i] > EVENT_FLOORS[i - 1], `floor ${i} rises`);
-  assert.deepEqual(EVENT_FLOORS.slice(5), [53.05, 53.6, 53.9, 54.45, 55.0]);
+  assert.deepEqual(EVENT_FLOORS.slice(5), [52.6, 53.1, 53.35, 53.8, 54.3]);
 });
 
 test("a save from before season two keeps its season one and gains season two, unplayed", () => {
@@ -609,4 +609,27 @@ test("a save from before season two keeps its season one and gains season two, u
   // Any other length is still a broken save.
   old.medals = [3, 2, 2];
   assert.deepEqual(CareerState.restore(JSON.stringify(old)).medals, CAREER_EVENTS.map(() => 0));
+});
+
+test("the jump bar eases with the legs a jump took off with, never below a floor (owner, 2026-11-23)", () => {
+  assert.equal(jumpTurnFor(1), JUMP_TURN, "fresh legs: the full half turn");
+  assert.ok(Math.abs(jumpTurnFor(0.88) - 0.44) < 1e-9);
+  assert.ok(Math.abs(jumpTurnFor(0.7) - FATIGUE_JUMP_FLOOR) < 1e-9);
+  assert.equal(jumpTurnFor(0.2), FATIGUE_JUMP_FLOOR, "spent legs still cannot count a hop");
+  assert.equal(jumpTurnFor(NaN), JUMP_TURN, "no stamina reading: the full bar");
+});
+
+test("a routine judges the legs from before take-off, not after the landing's cost", () => {
+  const skate = (turned: number) => {
+    const c = program("glide", "jump"), s = state();
+    c.sample(s, false, 3);
+    s.legs = 0.8; c.sample(s, false, .1);                                  // on the ice: bar 0.40
+    s.jump.phase = JUMP_PHASE.Air; s.legs = 0.75; c.sample(s, false, .1);  // take-off paid
+    s.jump.phase = JUMP_PHASE.None; s.legs = 0.6;                          // landed: bar would be 0.35
+    s.landed.tick = 1; s.landed.height = .3; s.landed.turned = turned; c.sample(s, false, .1);
+    return c.complete;
+  };
+  assert.equal(skate(0.41), true, "0.41 clears legs 0.8's 0.40");
+  assert.equal(skate(0.38), false, "0.38 does not, though the landed legs' 0.35 would let it");
+  assert.equal(skate(0.49), true);
 });

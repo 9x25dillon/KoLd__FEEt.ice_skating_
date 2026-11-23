@@ -86,8 +86,10 @@ export interface StepMemory {
   /** Travel: rad the skater has gone round the step's cone, and the bearing last seen from it. */
   swept: number;
   bearing: number | null;
+  /** SkaterState.legs on the last grounded tick, for a jump's fatigue-eased bar (career.ts jumpTurnFor). */
+  legs: number;
 }
-const freshMemory = (): StepMemory => ({ pushes: 0, stroking: false, armed: false, scraped: false, wind: 0, quiet: 0, wound: false, landedBase: null, landed: false, sides: 0, reached: 0, swept: 0, bearing: null });
+const freshMemory = (): StepMemory => ({ pushes: 0, stroking: false, armed: false, scraped: false, wind: 0, quiet: 0, wound: false, landedBase: null, landed: false, sides: 0, reached: 0, swept: 0, bearing: null, legs: 1 });
 
 /** A place on the ice a step asks for: a marker to reach, a cone to round, a checkpoint to pass; r in metres. */
 export interface TutorialTarget { x: number; y: number; r: number; kind: "marker" | "cone" | "checkpoint" }

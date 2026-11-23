@@ -245,8 +245,13 @@ export function train(p: SkaterProfile, name: StatName, xp: number = p.xp): Skat
  * speed; stamina is the second-half bonus.
  */
 export const OVERALL_WEIGHTS: Readonly<Stats> = {
-  edgeControl: 0.28, balance: 0.22, spring: 0.20, strength: 0.15, stamina: 0.15,
+  edgeControl: 0.24, spring: 0.24, stamina: 0.20, balance: 0.19, strength: 0.13,
 };
+// Re-weighted 2026-11-23 (owner): spring and stamina carry a program's later jumps
+// (docs/reports/career-difficulty-2026-11-23.md), but with edge control alone the heaviest at 0.28 the
+// career's floors steered every point there. Spring now ties it, stamina gains, and the weights still
+// sum to 1, so a neutral skater is still 50. Was edgeControl 0.28, balance 0.22, spring 0.20,
+// strength 0.15, stamina 0.15.
 export function overall(p: SkaterProfile): number {
   let sum = 0;
   for (const n of STAT_NAMES) sum += OVERALL_WEIGHTS[n] * clampStat(p.stats[n]);

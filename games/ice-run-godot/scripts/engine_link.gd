@@ -4,6 +4,7 @@ signal failed(message: String)
 var pipe: FileAccess
 var error_pipe: FileAccess
 var process_id := -1
+var node_cmd := "node"
 var serial := 0
 var pending: Dictionary = {}
 var buffer := PackedByteArray()
@@ -15,18 +16,24 @@ func _ready() -> void:
 	var node_path := OS.get_environment("ICE_RUN_NODE")
 	if node_path.is_empty():
 		node_path = "node"
-	var host := ProjectSettings.globalize_path("res://bridge/host.mjs")
-	if not OS.has_feature("editor"):
-		host = OS.get_executable_path().get_base_dir().path_join("bridge/host.mjs")
+	node_cmd = node_path
+	var is_editor := OS.has_feature("editor")
+	var base_dir := ProjectSettings.globalize_path("res://") if is_editor else OS.get_executable_path().get_base_dir()
+	var host := base_dir.path_join("bridge/host.mjs")
 	if not FileAccess.file_exists(host):
-		fail("Game runtime is missing. Run tools/prepare.mjs before starting.")
+		fail("Missing bridge file (%s). %s" % [host, "Run `node games/ice-run-godot/tools/prepare.mjs` in the repository before starting." if is_editor else "Keep bridge/, runtime/ and ice-run.pck alongside ice-run.x86_64."])
 		return
+	for rel in ["runtime/sim/solver.js", "runtime/tracks.json", "runtime/source-manifest.json"]:
+		var required := base_dir.path_join(rel)
+		if not FileAccess.file_exists(required):
+			fail("Missing simulation runtime file (%s). %s" % [required, "Run `node games/ice-run-godot/tools/prepare.mjs` before starting." if is_editor else "Keep the full runtime/ folder alongside ice-run.x86_64 and check SHA256SUMS."])
+			return
 	var save_dir := OS.get_user_data_dir()
 	if "--smoke-test" in OS.get_cmdline_user_args() or "--capture" in OS.get_cmdline_user_args():
 		save_dir = save_dir.path_join("test-runs/%d" % OS.get_process_id())
 	var task := OS.execute_with_pipe(node_path, [host, save_dir], false)
 	if task.is_empty():
-		fail("Ice Lab could not start. Install Node 26 or set ICE_RUN_NODE to its executable.")
+		fail("Could not launch Node (`%s`). Install Node.js 24.19+ or 26 on PATH, or set ICE_RUN_NODE to an absolute node executable." % node_path)
 		return
 	pipe = task.stdio
 	error_pipe = task.stderr
@@ -80,9 +87,12 @@ func _process(_dt: float) -> void:
 			received.emit(op, value.data)
 	if buffer.size() > 1048576:
 		fail("Engine response exceeded its limit.")
+	elif busy() and process_id > 0 and not OS.is_process_running(process_id):
+		var details := error_pipe.get_buffer(4096).get_string_from_utf8().strip_edges() if error_pipe != null else ""
+		fail("Ice Lab exited before answering %s (Node `%s`; Node.js 24.19+ or 26 required). %s" % [str(pending.values()), node_cmd, details.left(400)])
 	elif busy() and Time.get_ticks_msec() - last_reply > 10000:
-		var details := error_pipe.get_buffer(4096).get_string_from_utf8()
-		fail("Ice Lab did not respond to %s. %s" % [str(pending.values()), details.left(400)])
+		var details := error_pipe.get_buffer(4096).get_string_from_utf8().strip_edges() if error_pipe != null else ""
+		fail("Ice Lab did not respond to %s (Node `%s`). %s" % [str(pending.values()), node_cmd, details.left(400)])
 
 func fail(message: String) -> void:
 	faulted = true

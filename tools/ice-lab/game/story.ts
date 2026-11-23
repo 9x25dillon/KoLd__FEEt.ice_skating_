@@ -173,6 +173,8 @@ export interface CareerView {
   rust: Record<string, number>;
   wear: Record<string, number>;
   injured: Record<string, boolean>;
+  /** CareerState.outOfWeeks: no week in hand and the next medalled event stat-locked. Unset reads as false. */
+  outOfWeeks?: boolean;
 }
 
 /** AUTHORED: rust a coach would send you to drill before a program with a jump in it; wear she would rest. */
@@ -205,7 +207,8 @@ export function coachAdvice(c: CareerView): string[] {
     // Level stats have no weakest: say so rather than pick one by list order.
     const level = STAT_NAMES.every(n => c.stats[n] === c.stats[weakest]);
     const what = level ? `Your stats are level, at ${c.stats[weakest]}.` : `${STAT_TITLES[weakest]} is your weakest, at ${c.stats[weakest]}.`;
-    if (c.weeks < 1) out.push(`"No weeks left to train. Skate for a better medal: each tier buys two."`);
+    if (c.weeks < 1 && c.outOfWeeks) out.push(`"No weeks left, and you need training to go on. Skate any event you have medalled again: a finished run buys a week of practice."`);
+    else if (c.weeks < 1) out.push(`"No weeks left to train. Skate for a better medal: each tier buys two."`);
     else if (c.xp >= cost) out.push(level ? `"${what} Raise the one your next program leans on: a week and ${cost} XP."` : `"${what} Spend a week on it: ${cost} XP."`);
     else out.push(`"${what} A better medal pays the ${cost} XP to train ${level ? "one" : "it"}."`);
   }

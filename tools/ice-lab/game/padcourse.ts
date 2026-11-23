@@ -12,6 +12,7 @@
 // skater, the input or the physics.
 
 import { MOVE } from "../sim/types.ts";
+import { JUMP_PHASE } from "../sim/jump.ts";
 import type { SkaterState } from "../sim/types.ts";
 import { STEPS, LOOP_STEP, EDGE_SPEED, settled, speed } from "./tutorial.ts";
 import type { HowContext, TutorialStep } from "./tutorial.ts";
@@ -19,6 +20,7 @@ import { BUTTON_NAMES, PADDLE_BUTTONS, PADDLE_POSITIONS, bindingLabel, paddleLay
 import type { ControllerProfile, PaddleAction } from "./full-controls.ts";
 import type { Setup } from "./setups.ts";
 import type { ElementId } from "./career.ts";
+import { jumpTurnFor } from "./career.ts";
 
 /** The words' context for a setup on a controller profile. */
 export function howContext(setup: Setup | null, profile: ControllerProfile): HowContext {
@@ -149,6 +151,53 @@ const spinStep = moveStep("spinhold", "Stay in one place, turning", MOVE.Spin,
   "All that speed, and you stayed exactly where you were.",
   () => "On a curve, hold Y and keep holding. Let go to come out.");
 
+// The career's program elements as lessons (2026-11-23): the trust course teaches skating and these
+// courses each pad, but nothing walked an event's own elements. The words are elementHow's, so a
+// lesson says exactly what the event will, and each check is the career's own (game/career.ts
+// Choreography.sample), so passing here is passing there. The closing pose is not one: the career
+// reads it from the pad mapping (`cantilever`), and a lesson's check reads only solver state.
+const crossoverStep: TutorialStep = {
+  id: "crossover", stage: "travel", title: "Cross over on the curve", hold: 0.25,
+  prose: "On a curve you don't push straight back: you push under yourself, and the outside foot crosses over. Every program asks for it, and it's how speed is built where the ice bends.",
+  how: c => `${elementHow("crossover", c)} Two crossovers.`,
+  trust: "Speed out of a curve. That's the engine of every program.",
+  check: (s, m) => {
+    // Choreography's crossover: on the ice, at 2 m/s or more, a stroke flagged as a crossover. Counted as it starts.
+    const crossing = s.jump.phase === JUMP_PHASE.None && speed(s) >= 2 && s.crossover && s.strokeTime > 0;
+    if (crossing && !m.stroking) m.pushes++;
+    m.stroking = crossing;
+    return m.pushes >= 2 && !s.fallen && speed(s) >= 2;
+  },
+};
+const jumpStep: TutorialStep = {
+  id: "programjump", stage: "air", title: "Half a turn, landed", hold: 0.1, ghost: "loop",
+  prose: "An event's jump counts from half a turn in the air, landed on one clean edge with no fall and no step-out. Take off from a curve, let the arms carry the turn, and catch it on soft knees.",
+  how: c => elementHow("jump", c),
+  trust: "That's a jump a judge will count.",
+  // Choreography's jump: a landing after the step began, clean, at least 5 cm high and jumpTurnFor(legs)
+  // turned. (The career adds rust to the bar; a lesson has none.) Unlike the trust course's "Turn in the air",
+  // no glide after: the event judges the landing, and its words are what Blade Explorer and Full
+  // Repertoire are measured to land (test/padcourse.test.ts ELEMENT_PADS.jump).
+  check: (s, m) => {
+    if (m.landedBase === null) m.landedBase = s.landed.tick;
+    // The legs on the ice before take-off, as the career reads them (Choreography.groundLegs).
+    if (s.landed.tick !== m.landedBase) {
+      const L = s.landed;
+      m.landedBase = L.tick;
+      m.landed = !L.fall && !L.stepOut && L.height > 0.05 && Math.abs(L.turned) >= jumpTurnFor(m.legs);
+    } else if (s.jump.phase === JUMP_PHASE.None && !s.fallen) m.legs = s.legs ?? 1;
+    return m.landed && !s.fallen;
+  },
+};
+const spinFullStep: TutorialStep = {
+  id: "spinfull", stage: "edges", title: "One full turn, standing", hold: 0.1,
+  prose: "A program's spin is judged from the first full rotation. Come in with speed on an edge, let the curve wind into a point, and stay over the blade until you've gone all the way round.",
+  how: c => elementHow("spin", c),
+  trust: "Round once, and still standing. Now you can add more.",
+  // Choreography's spin: a full rotation (2π) swept inside one spin.
+  check: s => !s.fallen && s.move === MOVE.Spin && s.spin.swept >= Math.PI * 2,
+};
+
 const paddleName = (c: HowContext, a: PaddleAction) => c.paddle?.(a) ?? "paddle";
 const paddleFeet: TutorialStep = {
   id: "paddlefeet", stage: "scrape", title: "Your feet, without your thumbs", hold: 0.5,
@@ -199,6 +248,10 @@ export const COURSES: readonly PadCourse[] = [
   { id: "paddles", title: "Elite paddles: the lower-body layer", setups: ["experimental", "simulation"],
     blurb: "Top paddles turn the feet. The bottom two are the free leg in Experimental, the weight in Simulation. Put the Elite on its default profile, profile LEDs off, with the feet on the D-pad or modifier layout.",
     steps: [paddleFeet, paddleFreeLeg, paddleWeight] },
+  // Not the instrument: what an event asks, in its order, in the career's own words (2026-11-23).
+  { id: "program", title: "Program elements: what an event asks", setups: ["explorer", "simulation", "experimental", "diggate", "repertoire"],
+    blurb: "A career event's elements in the order it asks for them: a glide with pushes, an edge, crossovers, a jump, a spin. The words are the event's own, so passing here is passing there.",
+    steps: [from("push"), from("edge"), crossoverStep, jumpStep, spinFullStep] },
   // Not the instrument but one jump on it (the owner, 2026-11-10). A course of its own, so the Tutorial's
   // fifteen steps and their pinned times stay as they are. Each try starts at the entry (game/tutorial.ts).
   { id: "doubleloop", title: "The double loop: two turns off the edge", setups: ["experimental"],

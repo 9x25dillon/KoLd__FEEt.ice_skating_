@@ -27,6 +27,7 @@ lines.on('line',line=>{
    case 'start':data=engine.start(req.options);break;
    case 'controller':engine.configure({controllerProfile:req.profile});data={profile:engine.controllerProfile};break;
    case 'configure':engine.configure(req.options);data=engine.snapshot();break;
+   case 'ghost':data=engine.setGhost(req.enabled);break;
    case 'frame':data=engine.advance(req.controls,req.ticks,req.low);break;
    case 'train':engine.train(req.stat);data=engine.snapshot();break;
    case 'armFocus':engine.setArmFocus(req.focus);data=engine.snapshot();break;
