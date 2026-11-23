@@ -1,0 +1,70 @@
+{
+  "schema": "edgework-wireframe-parity/1",
+  "note": "Shared declarative cases for the TypeScript and Python edgework-wireframe/1 translators.",
+  "baseFrame": {
+    "t": 0,
+    "joints": {
+      "pelvis": [0, 0.9, 0],
+      "hipL": [-0.1, 0.9, 0],
+      "hipR": [0.1, 0.9, 0],
+      "kneeL": [-0.1, 0.48, 0],
+      "kneeR": [0.1, 0.48, 0],
+      "ankleL": [-0.1, 0.08, 0],
+      "ankleR": [0.1, 0.08, 0],
+      "chest": [0, 1.3, 0],
+      "neck": [0, 1.42, 0],
+      "crown": [0, 1.64, 0],
+      "shoulderL": [-0.2, 1.3, 0],
+      "shoulderR": [0.2, 1.3, 0],
+      "elbowL": [-0.48, 1.25, -0.05],
+      "elbowR": [0.48, 1.35, -0.1],
+      "wristL": [-0.68, 1.15, -0.1],
+      "wristR": [0.68, 1.45, -0.2]
+    },
+    "confidence": {
+      "pelvis": 0.9, "hipL": 0.9, "hipR": 0.9, "kneeL": 0.9, "kneeR": 0.9,
+      "ankleL": 0.9, "ankleR": 0.9, "chest": 0.9, "neck": 0.9, "crown": 0.9,
+      "shoulderL": 0.9, "shoulderR": 0.9, "elbowL": 0.9, "elbowR": 0.9,
+      "wristL": 0.9, "wristR": 0.9
+    },
+    "ext": { "pelvisHeightRatio": 1.1 }
+  },
+  "cases": [
+    {
+      "id": "strict-confidence",
+      "operation": { "omitConfidence": ["wristL"], "strictConfidence": true },
+      "expected": { "errorContains": "wristL" }
+    },
+    {
+      "id": "mirrored",
+      "operation": { "mirrorRawXAndSwapLabels": true, "mirrored": true, "mask": "arms-head" },
+      "expected": { "equalsUnmirroredPose": true }
+    },
+    {
+      "id": "heading-continuity",
+      "operation": { "frameVariants": ["base", "swapAllLRLabels", "base"] },
+      "expected": { "lrSwap": ["none", "corrected", "none"], "rejected": [null, null, null] }
+    },
+    {
+      "id": "degenerate-hold",
+      "operation": { "frameVariants": ["base", "steepBasis", "steepBasis", "steepBasis", "base"] },
+      "expected": {
+        "basis": ["hips", "held", "held", "held", "hips"],
+        "rejected": [null, null, null, "basis-degenerate", null]
+      }
+    },
+    {
+      "id": "cosmetic-mask",
+      "operation": { "mask": "arms-head" },
+      "expected": {
+        "segments": ["forearmL", "forearmR", "head", "upperArmL", "upperArmR"],
+        "absentPoseFields": ["pelvis", "pelvisRight", "pelvisUp", "twist"]
+      }
+    },
+    {
+      "id": "pelvis-ratio",
+      "operation": { "targetRig": { "thigh": 0.5, "shin": 0.4 } },
+      "expected": { "pelvis": 0.99 }
+    }
+  ]
+}
