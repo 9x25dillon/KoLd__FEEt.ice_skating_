@@ -29,6 +29,11 @@ var kiss_cry_done := false
 # game/warmup.ts: the event's field on the ice before a career program, by name.
 var warmup_skaters := {}
 var partner: Node3D
+var ghost_skater: Node3D
+var ghost_label: Label3D
+var ghost_enabled := false
+var last_ghost_id := ""
+var last_ghost_t := 999.0
 var pair_hold_pending := false
 var pair_lift_pending := false
 var camera: Camera3D
@@ -41,12 +46,22 @@ var audio_phase := 0.0
 var rng := RandomNumberGenerator.new()
 var ui: CanvasLayer
 var root: Control
+var hud_brand: Label
+var hud_edition: Label
+var top_buttons: HBoxContainer
 var overlay: ColorRect
 var menu: VBoxContainer
 var menu_scroll: ScrollContainer
+var coach_box: VBoxContainer
 var coach_title: Label
 var coach_tip: Label
 var coach_progress: Label
+var _style_btn_normal: StyleBoxFlat
+var _style_btn_hover: StyleBoxFlat
+var _style_btn_primary: StyleBoxFlat
+var _style_btn_primary_hover: StyleBoxFlat
+var _style_focus_normal: StyleBoxFlat
+var _style_focus_primary: StyleBoxFlat
 var hud_time: Label
 var hud_move: Label
 var hud_technical: Label
@@ -65,8 +80,14 @@ const PADDLE_LAYER := 3
 var lesson_course := "trust"
 ## The event the briefing page shows, and the layout being edited there.
 var focus_event := 0
-## The button a page wants focused first, if not its first one.
-var preferred_focus: Button
+## The control a page wants focused first, if not its first one.
+var preferred_focus: Control
+var controller_dirty := false
+var startup_controller_sync := false
+var paused_by_disconnect := false
+var active_joy := -1
+var session_active := false
+var benchmark_hardware: Dictionary = {}
 var blade_filter := 0.0
 var crowd_filter := 0.0
 var crowd_swell := 0.0
@@ -138,9 +159,39 @@ var settings_path := "user://preferences.json"
 # Every costume slot on Violet's model (skater.gd SKIN_SLOTS), each one surface.
 const SKIN_SURFACES := 7
 
+# --startup-probe: measures cold start (engine start -> first menu, and the longest frame on the way)
+# for docs/performance-visual-review.md, then quits. Off unless the flag is passed.
+var probe_on := false
+var probe_last_us := 0
+var probe_max_before_ms := 0.0
+var probe_max_after_ms := 0.0
+var probe_menu_ms := -1
+var probe_frames_after := 0
+var probe_max_after_at := 0
+
+func probe_tick() -> void:
+	var now := Time.get_ticks_usec()
+	if probe_last_us > 0:
+		var ms := (now - probe_last_us) / 1000.0
+		if probe_menu_ms < 0: probe_max_before_ms = maxf(probe_max_before_ms, ms)
+		elif ms > probe_max_after_ms:
+			probe_max_after_ms = ms
+			probe_max_after_at = probe_frames_after
+	probe_last_us = now
+	if probe_menu_ms >= 0:
+		probe_frames_after += 1
+		if probe_frames_after in [2, 179] and DisplayServer.get_name() != "headless":
+			get_viewport().get_texture().get_image().save_png("user://probe-frame-%d.png" % probe_frames_after)
+		if probe_frames_after >= 180:
+			print("STARTUP_PROBE menu_ms=%d max_frame_before_menu_ms=%.1f max_frame_after_menu_ms=%.1f at_frame=%d" % [probe_menu_ms, probe_max_before_ms, probe_max_after_ms, probe_max_after_at])
+			get_tree().quit()
+
 func _ready() -> void:
 	boot_test = "--smoke-test" in OS.get_cmdline_user_args()
+	probe_on = "--startup-probe" in OS.get_cmdline_user_args()
+	init_ui_font_fallback()
 	accept_with_pad()
+	cancel_with_pad()
 	if boot_test:
 		var a := InputEventJoypadButton.new()
 		a.button_index = JOY_BUTTON_A
@@ -154,7 +205,7 @@ func _ready() -> void:
 		beginner = true
 		cruise = true
 	screenshot_test = "--capture" in OS.get_cmdline_user_args()
-	if not boot_test and not screenshot_test and DisplayServer.get_name() != "headless":
+	if not boot_test and not screenshot_test and not ("--no-relaunch" in OS.get_cmdline_user_args()) and DisplayServer.get_name() != "headless":
 		# A wired Elite's paddles need SDL configured at launch: scripts/pad_map.gd. Joypads list after the first frames.
 		get_tree().create_timer(.25).timeout.connect(func():
 			if PadMap.relaunch_for_paddles(): get_tree().quit())
@@ -166,7 +217,7 @@ func _ready() -> void:
 		scheme = 3
 		if skating_setup != "repertoire":
 			beginner = false
-		if skating_setup in ["simulation","experimental"]:
+		if skating_setup in ["simulation","experimental","diggate"]:
 			cruise = false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--costume="):
@@ -184,6 +235,23 @@ func _ready() -> void:
 	partner.model_path = CHARACTERS[2].path
 	partner.visible = false
 	add_child(partner)
+	ghost_skater = Skater.new()
+	ghost_skater.model_path = CHARACTERS[0].path
+	ghost_skater.ghost_mode = true
+	ghost_skater.effects_active = false
+	ghost_skater.visible = false
+	add_child(ghost_skater)
+	ghost_skater.set_ghost_mode(true, 1.0)
+	ghost_label = Label3D.new()
+	ghost_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	ghost_label.font_size = 44
+	ghost_label.pixel_size = 0.0028
+	ghost_label.modulate = Color(0.87, 0.96, 1.0, 1.0)
+	ghost_label.outline_size = 10
+	ghost_label.outline_modulate = Color(0.03, 0.08, 0.14, 0.92)
+	ghost_label.layers = 1
+	ghost_label.visible = false
+	add_child(ghost_label)
 	camera = Camera3D.new()
 	camera.fov = 40
 	camera.near = .08
@@ -208,9 +276,7 @@ func _ready() -> void:
 		blade_audio.play()
 		generator = blade_audio.get_stream_playback()
 	build_ui()
-	Input.joy_connection_changed.connect(func(_device: int, connected: bool):
-		if not connected and playing: pause_game()
-		update_controller_status())
+	Input.joy_connection_changed.connect(on_joy_connection_changed)
 	link = EngineLink.new()
 	link.received.connect(on_engine)
 	link.failed.connect(on_error)
@@ -220,51 +286,119 @@ func _ready() -> void:
 			pause_game())
 	show_page("home")
 
+# Pre-load one local sans FontFile carrying UI arrows/bullets/symbols (→ · ● ♪ ✓)
+# onto ThemeDB.fallback_font so Linux TextServer resolves them from RAM instead of
+# rescanning fontconfig on every menu rebuild (cuts Career transition ~347 ms -> <25 ms).
+func init_ui_font_fallback() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var base: Font = ThemeDB.fallback_font
+	if base == null or not base.fallbacks.is_empty():
+		return
+	var fallbacks: Array[Font] = []
+	var has_arrow := false
+	var has_bullet := false
+	for family in ["DejaVu Sans", "Liberation Sans", "FreeSans", "Noto Sans Symbols", "Noto Sans Symbols 2"]:
+		var font_path := OS.get_system_font_path(family)
+		if font_path.is_empty() or not FileAccess.file_exists(font_path):
+			continue
+		var ff := FontFile.new()
+		if ff.load_dynamic_font(font_path) != OK:
+			continue
+		ff.allow_system_fallback = false
+		fallbacks.append(ff)
+		has_arrow = has_arrow or ff.has_char(0x2192)
+		has_bullet = has_bullet or ff.has_char(0x25cf)
+		if has_arrow and has_bullet:
+			break
+	if has_arrow and has_bullet:
+		if base is FontFile:
+			(base as FontFile).allow_system_fallback = false
+		base.fallbacks = fallbacks
+
+func _init_button_styles() -> void:
+	_style_btn_normal = StyleBoxFlat.new()
+	_style_btn_normal.bg_color = Color(.06,.10,.15,.86)
+	_style_btn_normal.content_margin_left = 17
+	_style_btn_normal.content_margin_right = 17
+	_style_btn_normal.content_margin_top = 9
+	_style_btn_normal.content_margin_bottom = 9
+	_style_btn_normal.border_width_bottom = 1
+	_style_btn_normal.border_color = Color("354653")
+	_style_btn_hover = _style_btn_normal.duplicate() as StyleBoxFlat
+	_style_btn_hover.bg_color = Color("273f52")
+	_style_btn_primary = _style_btn_normal.duplicate() as StyleBoxFlat
+	_style_btn_primary.bg_color = Color("d5c29a")
+	_style_btn_primary_hover = _style_btn_normal.duplicate() as StyleBoxFlat
+	_style_btn_primary_hover.bg_color = Color("f0dfbd")
+	_style_focus_normal = StyleBoxFlat.new()
+	_style_focus_normal.draw_center = false
+	_style_focus_normal.bg_color = Color(0,0,0,0)
+	_style_focus_normal.border_width_left = 4
+	_style_focus_normal.border_width_top = 2
+	_style_focus_normal.border_width_right = 2
+	_style_focus_normal.border_width_bottom = 2
+	_style_focus_normal.border_color = Color("f0d494")
+	_style_focus_primary = _style_focus_normal.duplicate() as StyleBoxFlat
+	_style_focus_primary.border_color = Color("ffffff")
+
 func label(text: String, size: int, color: Color = Color("e6edef")) -> Label:
 	var l := Label.new()
-	l.text = text
 	l.add_theme_font_size_override("font_size",size)
 	l.add_theme_color_override("font_color",color)
 	# Bright ice runs behind much of this type.
 	l.add_theme_color_override("font_shadow_color",Color(.02,.05,.09,.85))
 	l.add_theme_constant_override("shadow_offset_x",1)
 	l.add_theme_constant_override("shadow_offset_y",1)
+	l.text = text
 	return l
 
 func paragraph(text: String, size: int = 16) -> Label:
-	var l := label(text,size,Color("9eafb9"))
+	var l := Label.new()
+	l.add_theme_font_size_override("font_size",size)
+	l.add_theme_color_override("font_color",Color("9eafb9"))
+	l.add_theme_color_override("font_shadow_color",Color(.02,.05,.09,.85))
+	l.add_theme_constant_override("shadow_offset_x",1)
+	l.add_theme_constant_override("shadow_offset_y",1)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.text = text
 	return l
 
 func button(text: String, action: Callable, primary: bool = false) -> Button:
+	if _style_btn_normal == null:
+		_init_button_styles()
 	var b := Button.new()
-	b.text = text
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.custom_minimum_size.y = 48
 	b.add_theme_font_size_override("font_size",16)
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color("d5c29a") if primary else Color(.06,.10,.15,.86)
-	normal.content_margin_left = 17
-	normal.content_margin_right = 17
-	normal.content_margin_top = 9
-	normal.content_margin_bottom = 9
-	normal.border_width_bottom = 1
-	normal.border_color = Color("354653")
-	b.add_theme_stylebox_override("normal",normal)
-	var hover: StyleBoxFlat = normal.duplicate()
-	hover.bg_color = Color("f0dfbd") if primary else Color("273f52")
+	b.add_theme_stylebox_override("normal",_style_btn_primary if primary else _style_btn_normal)
+	var hover := _style_btn_primary_hover if primary else _style_btn_hover
 	b.add_theme_stylebox_override("hover",hover)
 	b.add_theme_stylebox_override("pressed",hover)
 	b.add_theme_color_override("font_color",Color("152430") if primary else Color("dce7e9"))
 	b.add_theme_color_override("font_hover_color",Color("152430") if primary else Color("ffffff"))
 	b.add_theme_color_override("font_focus_color",Color("152430") if primary else Color("ffffff"))
-	var focused := StyleBoxFlat.new()
-	focused.bg_color = Color(0,0,0,0)
-	focused.border_width_left = 3
-	focused.border_color = Color("d9bc84")
-	b.add_theme_stylebox_override("focus",focused)
+	apply_focus_box(b,primary)
+	b.text = text
 	b.pressed.connect(action)
 	return b
+
+func apply_focus_box(control: Control, primary: bool = false) -> void:
+	if _style_focus_normal == null:
+		_init_button_styles()
+	control.add_theme_stylebox_override("focus",_style_focus_primary if primary else _style_focus_normal)
+
+func style_picker(picker: OptionButton) -> OptionButton:
+	picker.custom_minimum_size.y = 44
+	picker.add_theme_font_size_override("font_size",15)
+	apply_focus_box(picker,false)
+	return picker
+
+func bind_slider_focus(slider: HSlider, title_label: Label) -> void:
+	slider.focus_entered.connect(func():
+		title_label.add_theme_color_override("font_color",Color("f0d494")))
+	slider.focus_exited.connect(func():
+		title_label.add_theme_color_override("font_color",Color("e6edef")))
 
 func build_ui() -> void:
 	ui = CanvasLayer.new()
@@ -286,30 +420,44 @@ func build_ui() -> void:
 	texture.fill_to = Vector2(.5,1)
 	shade.texture = texture
 	root.add_child(shade)
-	var brand := label("E D G E W O R K",19)
-	brand.position = Vector2(40,27)
-	root.add_child(brand)
-	var edition := label("GRAND PRIX     /     FIGURE SKATING",10,Color("d5c29a"))
-	edition.position = Vector2(42,57)
-	root.add_child(edition)
-	var top_buttons := HBoxContainer.new()
+	hud_brand = label("E D G E W O R K",19)
+	hud_brand.position = Vector2(40,27)
+	root.add_child(hud_brand)
+	hud_edition = label("GRAND PRIX     /     FIGURE SKATING",10,Color("d5c29a"))
+	hud_edition.position = Vector2(42,57)
+	root.add_child(hud_edition)
+	# Mouse-only HUD shortcuts; FOCUS_NONE prevents D-pad/A gameplay input from hijacking camera or pause.
+	top_buttons = HBoxContainer.new()
 	top_buttons.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	top_buttons.position = Vector2(-360,25)
 	top_buttons.size = Vector2(320,43)
 	top_buttons.add_theme_constant_override("separation",8)
-	top_buttons.add_child(button("Camera · V",cycle_camera))
-	top_buttons.add_child(button("Menu · Esc",pause_game))
+	var cam_button := button("Camera · V",cycle_camera)
+	cam_button.focus_mode = Control.FOCUS_NONE
+	var menu_button := button("Menu · Esc",pause_game)
+	menu_button.focus_mode = Control.FOCUS_NONE
+	top_buttons.add_child(cam_button)
+	top_buttons.add_child(menu_button)
 	root.add_child(top_buttons)
+	coach_box = VBoxContainer.new()
+	coach_box.position = Vector2(42,126)
+	coach_box.custom_minimum_size.x = 370
+	coach_box.size = Vector2(370,220)
+	coach_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	coach_box.add_theme_constant_override("separation",6)
+	root.add_child(coach_box)
 	coach_title = label("",23)
-	coach_title.position = Vector2(42,130)
-	root.add_child(coach_title)
+	coach_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	coach_box.add_child(coach_title)
 	coach_tip = paragraph("",14)
-	coach_tip.position = Vector2(42,170)
-	coach_tip.size = Vector2(350,95)
-	root.add_child(coach_tip)
+	coach_tip.custom_minimum_size.x = 370
+	coach_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	coach_box.add_child(coach_tip)
 	coach_progress = label("",13,Color("c5b08e"))
-	coach_progress.position = Vector2(42,275)
-	root.add_child(coach_progress)
+	coach_progress.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	coach_progress.custom_minimum_size.x = 370
+	coach_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	coach_box.add_child(coach_progress)
 	# Lessons are read while skating, over a busy crowd.
 	for coach_label in [coach_title,coach_tip,coach_progress]:
 		coach_label.add_theme_color_override("font_outline_color",Color(0.03,0.06,0.1,.9))
@@ -319,6 +467,8 @@ func build_ui() -> void:
 	hud_time.position = Vector2(-240,95)
 	hud_time.size = Vector2(200,30)
 	hud_time.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hud_time.add_theme_color_override("font_outline_color",Color(0.03,0.06,0.1,.92))
+	hud_time.add_theme_constant_override("outline_size",5)
 	root.add_child(hud_time)
 	hud_move = label("",13,Color("b5c6cf"))
 	hud_move.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
@@ -401,21 +551,106 @@ func build_ui() -> void:
 	menu.add_theme_constant_override("separation",12)
 	menu_scroll.add_child(menu)
 
+func primary_joypad() -> int:
+	var devices := Input.get_connected_joypads()
+	if devices.is_empty():
+		return -1
+	for d in devices:
+		if PadMap.wired_elite(int(d)):
+			return int(d)
+	for d in devices:
+		if Input.is_joy_known(int(d)):
+			return int(d)
+	return int(devices[0])
+
+func stop_all_vibration() -> void:
+	for d in Input.get_connected_joypads():
+		Input.stop_joy_vibration(int(d))
+
+func on_joy_connection_changed(device: int, connected: bool) -> void:
+	if not connected and playing:
+		if active_joy >= 0 and device == active_joy:
+			var remaining := primary_joypad()
+			paused_by_disconnect = true
+			pause_game()
+			if remaining >= 0:
+				active_joy = remaining
+				var fallback_name := Input.get_joy_name(remaining)
+				notice.text = "Controller disconnected — game paused. Using %s; press Continue or Menu." % (fallback_name if not fallback_name.is_empty() else "secondary gamepad")
+			else:
+				active_joy = -1
+				notice.text = "Controller disconnected — game paused. Reconnect or use keyboard to continue."
+	elif connected:
+		var pad_name := Input.get_joy_name(device)
+		if active_joy < 0 or PadMap.wired_elite(device):
+			active_joy = primary_joypad()
+		if paused_by_disconnect:
+			paused_by_disconnect = false
+			notice.text = "Controller connected (%s) — press Continue or Menu to resume." % (pad_name if not pad_name.is_empty() else "gamepad")
+		if overlay != null and overlay.visible:
+			call_deferred("focus_menu")
+	update_controller_status()
+
 func update_controller_status() -> void:
 	if controller_status == null: return
-	var devices := Input.get_connected_joypads()
-	controller_status.text = "XBOX CONTROLS  /  A select · B back · Menu pause\nD-pad navigate · View change camera" if not devices.is_empty() else "KEYBOARD  /  Enter select · Esc pause\nA / D carve · Space push · Shift load / release"
-	if not devices.is_empty() and PadMap.wired_elite(devices[0]):
-		controller_status.text += "\nElite 2  /  "+("paddles ready" if PadMap.paddles_mapped() else "paddles off until the game restarts")
+	var joy := primary_joypad()
+	if joy >= 0:
+		var pad_name := Input.get_joy_name(joy)
+		var header := ("CONTROLLER (%s)" % pad_name) if not pad_name.is_empty() else "XBOX CONTROLS"
+		controller_status.text = header+"  /  A select · B back · Menu pause\nD-pad navigate · View change camera"
+		if PadMap.wired_elite(joy):
+			controller_status.text += "\nElite 2  /  "+("paddles ready" if PadMap.paddles_mapped() else "paddles off until the game restarts")
+	else:
+		controller_status.text = "KEYBOARD  /  Enter select · Esc pause\nA / D carve · Space push · Shift load / release"
 
-func clear_menu(title: String, subtitle: String) -> void:
+func can_resume() -> bool:
+	return session_active and not frame.is_empty() and not frame.finished
+
+func clear_pending_inputs() -> void:
+	push_pending = false
+	toe_pending = false
+	trick_pending = false
+	pair_hold_pending = false
+	pair_lift_pending = false
+	previous_lt = false
+	lt_time = 0.0
+
+func setup_title(id: String) -> String:
+	for entry in catalog.get("setups",[]):
+		if str(entry.id) == id:
+			return str(entry.name)
+	return id.capitalize()
+
+func ghost_setup_supported(setup_id: String) -> bool:
+	return setup_id in ["experimental", "simulation", "diggate"]
+
+func ghost_setup_note() -> String:
+	if ghost_setup_supported(skating_setup):
+		return "Free Skate and Lessons only. Runs a second skater through the real 120 Hz physics with live pad prompts; never alters your score, save, or replay. Press / during skating to toggle."
+	var current_name := setup_title(skating_setup) if not skating_setup.is_empty() else "Legacy controls"
+	return "Unsupported on %s in Free Skate (no authored routines for this setup yet). Switch to Experimental, Simulation, or Dig Gate, or use in Lessons where a step has a demonstration." % current_name
+
+func toggle_ghost(from_menu: bool = false) -> void:
+	ghost_enabled = not ghost_enabled
+	save_preferences()
+	if link != null and link.operational:
+		link.send("ghost", {"enabled": ghost_enabled})
+	else:
+		if not ghost_enabled:
+			apply_ghost(true)
+		if from_menu and overlay != null and overlay.visible and current_page in ["home", "settings"]:
+			show_page(current_page)
+
+func clear_menu(title: String, subtitle: String, keep_scroll: bool = false) -> void:
+	preferred_focus = null
 	for child in menu.get_children():
 		menu.remove_child(child)
 		child.queue_free()
 	menu.add_child(label(title,30))
 	menu.add_child(paragraph(subtitle,14))
 	menu.add_child(HSeparator.new())
-	menu_scroll.scroll_vertical = 0
+	if not keep_scroll:
+		menu_scroll.scroll_vertical = 0
 
 # Godot 4.7's default ui_accept is Enter, Kp Enter and Space only: the D-pad moved focus
 # but A pressed nothing (found in play, 2026-11-02). A joins it, for buttons and popups alike.
@@ -427,22 +662,81 @@ static func accept_with_pad() -> void:
 	a.device = -1
 	InputMap.action_add_event("ui_accept",a)
 
+# Ensure B also acts as ui_cancel so OptionButton popups and dialogs dismiss cleanly on a pad.
+static func cancel_with_pad() -> void:
+	for e in InputMap.action_get_events("ui_cancel"):
+		if e is InputEventJoypadButton and e.button_index == JOY_BUTTON_B: return
+	var b := InputEventJoypadButton.new()
+	b.button_index = JOY_BUTTON_B
+	b.device = -1
+	InputMap.action_add_event("ui_cancel",b)
+
 func unfocus_disabled(node: Node) -> void:
 	for child in node.get_children():
+		# D4: never promote a deliberate FOCUS_NONE (mouse-only shortcuts). Only buttons this
+		# function demoted are restored when they become enabled again.
 		if child is BaseButton:
-			child.focus_mode = Control.FOCUS_NONE if child.disabled else Control.FOCUS_ALL
+			if child.disabled:
+				if child.focus_mode != Control.FOCUS_NONE:
+					child.set_meta("_auto_unfocused", true)
+					child.focus_mode = Control.FOCUS_NONE
+			elif child.has_meta("_auto_unfocused"):
+				child.remove_meta("_auto_unfocused")
+				child.focus_mode = Control.FOCUS_ALL
 		unfocus_disabled(child)
+
+func _first_focusable(node: Node) -> Control:
+	for child in node.get_children():
+		if child is BaseButton:
+			var btn := child as BaseButton
+			if btn.is_visible_in_tree() and not btn.disabled and btn.focus_mode != Control.FOCUS_NONE:
+				return btn
+		if child is Slider:
+			var sld := child as Slider
+			if sld.is_visible_in_tree() and sld.editable and sld.focus_mode != Control.FOCUS_NONE:
+				return sld
+		var nested := _first_focusable(child)
+		if nested != null:
+			return nested
+	return null
 
 func focus_menu() -> void:
 	if not overlay.visible: return
 	unfocus_disabled(menu)
-	if is_instance_valid(preferred_focus) and preferred_focus.is_inside_tree() and not preferred_focus.disabled:
-		preferred_focus.grab_focus()
-		return
-	for child in menu.get_children():
-		if child is Button and not child.disabled:
-			child.grab_focus()
+	if is_instance_valid(preferred_focus) and preferred_focus.is_inside_tree() and preferred_focus.is_visible_in_tree() and preferred_focus.focus_mode != Control.FOCUS_NONE:
+		if not (preferred_focus is BaseButton and (preferred_focus as BaseButton).disabled):
+			preferred_focus.grab_focus()
 			return
+	var first := _first_focusable(menu)
+	if first != null:
+		first.grab_focus()
+
+func _close_open_popup(node: Node = self) -> bool:
+	if node is FileDialog:
+		var dlg := node as FileDialog
+		if dlg.visible:
+			dlg.hide()
+			dlg.queue_free()
+			return true
+	if node is OptionButton:
+		var picker := node as OptionButton
+		var popup: PopupMenu = picker.get_popup()
+		if popup != null and popup.visible:
+			popup.hide()
+			picker.grab_focus()
+			return true
+	for child in node.get_children():
+		if _close_open_popup(child):
+			return true
+	return false
+
+func _has_open_file_dialog(node: Node = self) -> bool:
+	if node is FileDialog and (node as FileDialog).visible:
+		return true
+	for child in node.get_children():
+		if _has_open_file_dialog(child):
+			return true
+	return false
 
 func show_page(page: String) -> void:
 	# The demonstration's controller belongs to the ice, never over a menu.
@@ -453,17 +747,45 @@ func show_page(page: String) -> void:
 	if page != "result" and kiss_cry and kiss_cry.visible:
 		kiss_cry.clear()
 		skater.visible = true
+	var same_page := overlay.visible and current_page == page
+	var prev_scroll := menu_scroll.scroll_vertical if same_page else 0
+	if not same_page:
+		focus_key = ""
 	current_page = page
 	if page != "music" and preview: preview.stop()
+	if top_buttons: top_buttons.hide()
+	if hud_brand: hud_brand.hide()
+	if hud_edition: hud_edition.hide()
+	if ghost_skater: ghost_skater.visible = false
+	if ghost_label: ghost_label.visible = false
 	overlay.show()
 	playing = false
 	music.stream_paused = true
 	broadcast.hide()
-	get_tree().create_timer(.05).timeout.connect(focus_menu)
+	# D3 fix: focus_menu MUST flush before deferred scroll restoration so ScrollContainer.follow_focus
+	# on unsorted VBox children does not clobber prev_scroll back to 0.
+	call_deferred("focus_menu")
+	if same_page and prev_scroll > 0:
+		menu_scroll.set_deferred("scroll_vertical",prev_scroll)
+	else:
+		menu_scroll.scroll_vertical = 0
+		menu_scroll.set_deferred("scroll_vertical",0)
 	if page == "home":
 		clear_menu("Your time on the ice", "One rink. Every edge. A season to make your own.")
-		if not frame.is_empty() and not frame.finished and int(frame.state.tick)>0:
+		var resumable := can_resume()
+		if resumable:
 			menu.add_child(button("Continue skating →",resume_game,true))
+			var running_setup := str(frame.get("setup","")) if frame.get("setup") != null else ""
+			if not skating_setup.is_empty() and running_setup != skating_setup:
+				menu.add_child(button("Restart with %s →" % setup_title(skating_setup),func():start_game(active_mode,event_index)))
+			if active_mode in ["free", "lesson"]:
+				var gs = frame.get("ghostStatus")
+				var can_ghost := true if active_mode == "lesson" else ghost_setup_supported(running_setup)
+				if can_ghost:
+					menu.add_child(keyed(button("AI Ghost: " + ("On" if ghost_enabled else "Off"), func(): toggle_ghost(true)), "home-ghost"))
+				else:
+					var why := str(gs.get("reason", "")) if gs is Dictionary and not str(gs.get("reason", "")).is_empty() else "AI Ghost is unavailable on this setup (switch to Experimental, Simulation, or Dig Gate)."
+					menu.add_child(paragraph(why, 12))
 			if frame.get("tutorial") != null:
 				menu.add_child(button("Skip this step   /   earns no XP",func():link.send("skipStep")))
 			if frame.get("warmup") != null:
@@ -472,7 +794,7 @@ func show_page(page: String) -> void:
 		for m in catalog.get("modes",[{"id":"career","title":"The Season   /   Career","tagline":""}]):
 			var id := str(m.id)
 			var target := "career" if id == "career" else id
-			menu.add_child(button("%s   /   %s →" % [str(m.title),str(m.get("tagline",""))],func():show_page(target),id == "career"))
+			menu.add_child(button("%s   /   %s →" % [str(m.title),str(m.get("tagline",""))],func():show_page(target),id == "career" and not resumable))
 		menu.add_child(button("Watch a demonstration   /   the computer skates, the controls on screen",func():start_game("showcase",0,false,{"character":"career","program":["glide","crossover","edge","jump","spin","pose"]})))
 		menu.add_child(button("Learn your controls   /   A course for each setup",func():show_page("learn")))
 		menu.add_child(button("The skaters   /   Where they come from",func():show_page("cast")))
@@ -638,7 +960,9 @@ func show_page(page: String) -> void:
 			for course in catalog.courses:
 				if str(course.id) == "paddles": continue
 				var mine: bool = skating_setup in course.setups
-				menu.add_child(button("%s%s" % ["● " if mine else "",str(course.title)],func():start_lesson(str(course.id),str(course.setups[0])),mine))
+				# A course for several setups (Program elements: all five) starts on yours; otherwise on its own.
+				var course_setup: String = skating_setup if mine else str(course.setups[0])
+				menu.add_child(button("%s%s" % ["● " if mine else "",str(course.title)],func():start_lesson(str(course.id),course_setup),mine))
 				menu.add_child(paragraph(str(course.blurb),12))
 			for course in catalog.courses:
 				if str(course.id) != "paddles": continue
@@ -709,11 +1033,15 @@ func show_page(page: String) -> void:
 	elif page == "skates":
 		show_skates_page()
 	elif page == "settings":
-		clear_menu("Your skating setup", "Changes apply to your next skate. Keyboard and analog controller are supported. Face buttons request moves; the physics decides what is possible.")
+		clear_menu("Your skating setup", "Setup changes save immediately and apply to your next skate. Keyboard and analog controller are supported. Face buttons request moves; the physics decides what is possible.",same_page)
+		if can_resume():
+			var running_setup := str(frame.get("setup","")) if frame.get("setup") != null else ""
+			if not skating_setup.is_empty() and running_setup != skating_setup:
+				menu.add_child(label("Pending setup: %s  /  applies to your next skate or Restart" % setup_title(skating_setup),14,Color("d5bd96")))
 		for entry in catalog.get("setups",[]):
 			var setup_id: String = entry.id
-			menu.add_child(button(("• " if skating_setup == setup_id else "")+str(entry.name),func():
-				skating_setup=setup_id;scheme=3;beginner=setup_id=="repertoire";cruise=false;show_page("settings")))
+			menu.add_child(keyed(button(("• " if skating_setup == setup_id else "")+str(entry.name),func():
+				skating_setup=setup_id;scheme=3;beginner=setup_id=="repertoire";cruise=false;save_preferences();show_page("settings")),"setup-%s" % setup_id))
 			if skating_setup == setup_id:
 				menu.add_child(paragraph(str(entry.description),14))
 		if skating_setup == "explorer":
@@ -721,16 +1049,19 @@ func show_page(page: String) -> void:
 			menu.add_child(assist_label)
 			var assist_slider := HSlider.new()
 			assist_slider.min_value=.5;assist_slider.max_value=1;assist_slider.step=.05;assist_slider.value=assistance
-			assist_slider.value_changed.connect(func(value: float):assistance=value;assist_label.text="Balance & lean assistance: %d%%" % roundi(value*100))
-			menu.add_child(assist_slider)
+			assist_slider.value_changed.connect(func(value: float):assistance=value;assist_label.text="Balance & lean assistance: %d%%" % roundi(value*100);save_preferences())
+			bind_slider_focus(assist_slider,assist_label)
+			menu.add_child(keyed(assist_slider,"settings-assist"))
 		if skating_setup.is_empty() or skating_setup == "repertoire":
-			menu.add_child(button("Landing coach: "+("On" if beginner else "Off"),func():beginner=not beginner;show_page("settings")))
+			menu.add_child(keyed(button("Landing coach: "+("On" if beginner else "Off"),func():beginner=not beginner;save_preferences();show_page("settings")),"settings-coach"))
 		var steady_default := str(catalog.get("steady",{}).get("defaults",{}).get(skating_setup,"light"))
 		var steady_names := {"":"Setup default (%s)" % steady_default.capitalize(),"off":"Off","light":"Light","firm":"Firm"}
-		menu.add_child(button("Steadying hand: "+str(steady_names[steady_choice]),func():
+		menu.add_child(keyed(button("Steadying hand: "+str(steady_names[steady_choice]),func():
 			var order := ["","off","light","firm"]
-			steady_choice=order[(order.find(steady_choice)+1)%order.size()];save_preferences();show_page("settings")))
+			steady_choice=order[(order.find(steady_choice)+1)%order.size()];save_preferences();show_page("settings")),"settings-steady"))
 		menu.add_child(paragraph("A hand on your stick, never the physics: it keeps the lean you ask for to what your speed can carry. Off by default where a setup promises minimal assistance.",12))
+		menu.add_child(keyed(button("AI Ghost: "+("On" if ghost_enabled else "Off"),func():toggle_ghost(true)),"settings-ghost"))
+		menu.add_child(paragraph(ghost_setup_note(),12))
 		# game/motion/dance.ts: cycle the dance styles; their arms dress a run while hers are free.
 		var styles: Array = catalog.get("motion",{}).get("styles",[])
 		var style_ids: Array = [""]
@@ -738,27 +1069,35 @@ func show_page(page: String) -> void:
 		var style_name := "None"
 		for st in styles:
 			if str(st.id) == dance_style: style_name = str(st.name)
-		menu.add_child(button("Dance style: "+style_name,func():
-			dance_style = str(style_ids[(style_ids.find(dance_style)+1)%style_ids.size()]);save_preferences();show_page("settings")))
+		menu.add_child(keyed(button("Dance style: "+style_name,func():
+			dance_style = str(style_ids[(style_ids.find(dance_style)+1)%style_ids.size()]);save_preferences();show_page("settings")),"settings-dance"))
 		for st in styles:
 			if str(st.id) == dance_style:
 				menu.add_child(paragraph("%s  ·  %d–%d bpm  ·  %s" % [str(st.blurb),int(st.tempo.min),int(st.tempo.max),str(st.music)],12))
-		menu.add_child(button("Legacy override: "+["Lean & load","Assisted steering","Two-foot control","Full repertoire"][scheme],func():skating_setup="";scheme=(scheme+1)%4;show_page("settings")))
-		menu.add_child(button("Controller tuning & bindings",func():show_page("controller")))
-		if skating_setup not in ["simulation","experimental"]:
-			menu.add_child(button("Cruise: "+("On" if cruise else "Off"),func():cruise=not cruise;show_page("settings")))
-		menu.add_child(button("Music: "+("On" if music_enabled else "Off"),func():music_enabled=not music_enabled;show_page("settings")))
-		menu.add_child(button("Controller vibration: "+("On" if rumble_enabled else "Off"),func():rumble_enabled=not rumble_enabled;show_page("settings")))
-		menu.add_child(button("Elite paddles: "+["Controller's own profile","Footwork · LB / RB / A / R3","Moves · X / B / A / Y","Game layer · feet, free leg or weight"][paddle_layout],func():paddle_layout=(paddle_layout+1)%4;show_page("settings")))
+		menu.add_child(keyed(button("Legacy override: "+["Lean & load","Assisted steering","Two-foot control","Full repertoire"][scheme],func():skating_setup="";scheme=(scheme+1)%4;save_preferences();show_page("settings")),"settings-legacy"))
+		menu.add_child(keyed(button("Controller tuning & bindings",func():show_page("controller")),"settings-controller"))
+		if skating_setup not in ["simulation","experimental","diggate"]:
+			menu.add_child(keyed(button("Cruise: "+("On" if cruise else "Off"),func():cruise=not cruise;save_preferences();show_page("settings")),"settings-cruise"))
+		menu.add_child(keyed(button("Music: "+("On" if music_enabled else "Off"),func():music_enabled=not music_enabled;save_preferences();show_page("settings")),"settings-music"))
+		menu.add_child(keyed(button("Controller vibration: "+("On" if rumble_enabled else "Off"),func():
+			rumble_enabled=not rumble_enabled
+			if not rumble_enabled: stop_all_vibration()
+			save_preferences();show_page("settings")),"settings-rumble"))
+		menu.add_child(keyed(button("Elite paddles: "+["Controller's own profile","Footwork · LB / RB / A / R3","Moves · X / B / A / Y","Game layer · feet, free leg or weight"][paddle_layout],func():paddle_layout=(paddle_layout+1)%4;save_preferences();show_page("settings")),"settings-paddles"))
 		menu.add_child(paragraph("Presets and the game layer need the Elite on its default profile, profile LEDs off: a stored profile sends the paddles as ordinary buttons, which Controller's own profile uses as they are. View changes camera; Menu pauses.",12))
-		menu.add_child(button("Display: "+("Fullscreen" if DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN else "Windowed")+" · F11",toggle_fullscreen))
+		menu.add_child(keyed(button("Display: "+("Fullscreen" if DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN else "Windowed")+" · F11",func():toggle_fullscreen();show_page("settings")),"settings-display"))
 		menu.add_child(label("Skater",16))
-		var character_picker := OptionButton.new()
+		var character_picker := style_picker(OptionButton.new())
 		for entry in CHARACTERS:
 			character_picker.add_item(str(entry.name))
 		character_picker.selected = character
-		character_picker.item_selected.connect(func(index: int):character=index;show_page("settings"))
-		menu.add_child(character_picker)
+		character_picker.item_selected.connect(func(index: int):
+			character=index
+			skater.load_model(CHARACTERS[character].path)
+			skater.apply_skin(current_skin())
+			save_preferences()
+			show_page("settings"))
+		menu.add_child(keyed(character_picker,"settings-character"))
 		if not catalog.is_empty() and character != 1:
 			menu.add_child(label("Costume",16))
 			var worn := costume_skins()
@@ -767,10 +1106,10 @@ func show_page(page: String) -> void:
 			for w in worn:
 				if w != null and not groups.has(str(w.get("collection","Yours"))): groups.append(str(w.get("collection","Yours")))
 			var now_group := str(worn[costume].get("collection","Yours")) if costume >= 0 and costume < worn.size() and worn[costume] != null else str(groups[0])
-			var group_picker := OptionButton.new()
+			var group_picker := style_picker(OptionButton.new())
 			for g in groups: group_picker.add_item(g)
 			group_picker.selected = maxi(groups.find(now_group),0)
-			var costume_picker := OptionButton.new()
+			var costume_picker := style_picker(OptionButton.new())
 			for i in worn.size():
 				if worn[i] != null and str(worn[i].get("collection","Yours")) == str(groups[group_picker.selected]):
 					costume_picker.add_item("%s — %s" % [worn[i].name, worn[i].description],i)
@@ -782,28 +1121,28 @@ func show_page(page: String) -> void:
 						break
 				skater.apply_skin(current_skin());save_preferences();show_page("settings"))
 			costume_picker.item_selected.connect(func(index: int):costume=costume_picker.get_item_id(index);skater.apply_skin(current_skin());save_preferences())
-			menu.add_child(group_picker)
-			menu.add_child(costume_picker)
+			menu.add_child(keyed(group_picker,"settings-costume-group"))
+			menu.add_child(keyed(costume_picker,"settings-costume"))
 			menu.add_child(button("Atelier  /  make your own costume →",func():show_page("atelier")))
 		if not catalog.is_empty() and character != 1:
 			menu.add_child(button("Skates  /  boots, blades and laces →",func():show_page("skates")))
 		if not catalog.is_empty():
 			menu.add_child(label("Soundtrack",16))
-			var track_picker := OptionButton.new()
+			var track_picker := style_picker(OptionButton.new())
 			for song in catalog.tracks:
 				track_picker.add_item(str(song.title))
 			track_picker.selected = track
-			track_picker.item_selected.connect(func(index: int):track=index)
-			menu.add_child(track_picker)
+			track_picker.item_selected.connect(func(index: int):track=index;save_preferences())
+			menu.add_child(keyed(track_picker,"settings-track"))
 			menu.add_child(label("Free skate profile",16))
-			var profile_picker := OptionButton.new()
+			var profile_picker := style_picker(OptionButton.new())
 			for name in catalog.profiles:
 				profile_picker.add_item(str(name))
 			profile_picker.selected = profile
-			profile_picker.item_selected.connect(func(index: int):profile=index)
-			menu.add_child(profile_picker)
-		if skating_setup == "experimental":
-			menu.add_child(paragraph("Experimental: one trigger per leg. Pump to push, load and release the skating leg to jump. Sticks shape each blade. X/B shift weight; L3/R3 toe pick. A requests turns; Y requests rotation; bumpers change the move family. D-pad adjusts the feet.",14))
+			profile_picker.item_selected.connect(func(index: int):profile=index;save_preferences())
+			menu.add_child(keyed(profile_picker,"settings-profile"))
+		if skating_setup in ["experimental","diggate"]:
+			menu.add_child(paragraph("Experimental / Dig Gate: one trigger per leg. Pump to push, load and release the skating leg to jump. Sticks shape each blade. X/B shift weight; L3/R3 toe pick. A requests turns; Y requests rotation; bumpers change the move family (hold LB+RB in Dig Gate to dig). D-pad adjusts the feet.",14))
 		elif skating_setup in ["simulation","explorer"]:
 			menu.add_child(paragraph("Manual turns: tap B for three-turn; transfer foot for mohawk; hold B for loop; reverse lean for rocker. Transfer and reverse for choctaw. D-pad down requests bracket; hold and reverse lean for counter. X twizzles; Y spins; R3 plants the toe. RT loads/releases; LT brakes. LB/RB retain foot selection. Modifier + X/Y/A: Ina Bauer/spiral/cantilever. Simulation uses one stick per blade; hold the modifier for right-stick arms. Explorer uses left-stick lean and pressure, right-stick arms.",14))
 		else:
@@ -813,7 +1152,7 @@ func show_page(page: String) -> void:
 		menu.add_child(button("Export session measurements",func():link.send("metrics")))
 		menu.add_child(button("Save settings & back",func():save_preferences();show_page("home")))
 	elif page == "controller":
-		clear_menu("Controller tuning", "Sensitivity applies to all three setups. Move shortcuts apply to Full Repertoire; Simulation and Explorer use manual turn gestures.")
+		clear_menu("Controller tuning", "Sensitivity, deadzones and feet layout apply to all setups. Move shortcuts apply to Full Repertoire; Simulation, Explorer, Experimental and Dig Gate use manual turn gestures.",same_page)
 		if controller_profile.is_empty():
 			menu.add_child(paragraph("Waiting for the skating engine."))
 		else:
@@ -827,8 +1166,10 @@ func show_page(page: String) -> void:
 				slider.value = float(controller_profile[setting.key])
 				slider.value_changed.connect(func(value: float):
 					controller_profile[setting.key]=value
+					controller_dirty=true
 					title.text=str(setting.label)+": %.2f" % value)
-				menu.add_child(slider)
+				bind_slider_focus(slider,title)
+				menu.add_child(keyed(slider,"ctrl-%s" % str(setting.key)))
 			var mapping := ""
 			for action in catalog.controller.actions:
 				var binding: Dictionary = controller_profile.bindings[action.id]
@@ -837,16 +1178,16 @@ func show_page(page: String) -> void:
 			menu.add_child(paragraph("Left stick leans; RT loads/releases a jump; LT brakes. LB/RB retain a foot; both share weight. Right stick opens the arms and selects camel in a spin. RT selects sit. Turns need speed and an edge.\n\nBrowser workshop: run node tools/ice-lab/app/serve.mjs, then open localhost:8123/game/controller.html.",13))
 			var feet_now := str(controller_profile.get("feet","dpad"))
 			var feet_names := {"dpad":"D-pad","stickY":"Sticks up and down","modifier":"Modifier + left stick"}
-			menu.add_child(button("Feet layout: "+str(feet_names[feet_now]),func():
+			menu.add_child(keyed(button("Feet layout: "+str(feet_names[feet_now]),func():
 				controller_profile["feet"]={"dpad":"stickY","stickY":"modifier","modifier":"dpad"}[feet_now]
-				save_preferences()
-				show_page("controller")))
+				apply_controller_profile()),"ctrl-feet"))
 			menu.add_child(paragraph("Where the feet live in Simulation, Experimental and Dig Gate. Sticks up and down leaves the paddles nothing to turn. The lessons' words follow this.",12))
-			menu.add_child(button("Import controller profile",func():controller_file(false)))
-			menu.add_child(button("Export controller profile",func():controller_file(true)))
-			menu.add_child(button("Restore controller defaults",func():controller_profile=catalog.controller.profile.duplicate(true);show_page("controller")))
-			menu.add_child(button("Use Full repertoire & save",func():skating_setup="repertoire";scheme=3;beginner=true;cruise=false;link.send("controller",{"profile":controller_profile})))
-		menu.add_child(button("← Settings",func():show_page("settings")))
+			menu.add_child(keyed(button("Save controller tuning",func():apply_controller_profile(),true),"ctrl-save"))
+			menu.add_child(keyed(button("Switch to Full Repertoire & save",func():skating_setup="repertoire";scheme=3;beginner=true;cruise=false;apply_controller_profile()),"ctrl-repertoire"))
+			menu.add_child(keyed(button("Import controller profile",func():controller_file(false)),"ctrl-import"))
+			menu.add_child(keyed(button("Export controller profile",func():controller_file(true)),"ctrl-export"))
+			menu.add_child(keyed(button("Restore controller defaults",func():controller_profile=catalog.controller.profile.duplicate(true);apply_controller_profile()),"ctrl-defaults"))
+		menu.add_child(button("← Settings",leave_controller_page))
 	elif page == "result":
 		clear_menu(str(frame.result.title),str(frame.result.detail))
 		# game/kisscry.ts: the bench and the marks first, then (present_podium, when it has run) the podium.
@@ -968,10 +1309,25 @@ func preview_music(track_index: int, at: float) -> void:
 	if DisplayServer.get_name() != "headless":
 		preview.play(maxf(0.0,at-.5))
 
-func keyed(b: Button, key: String) -> Button:
-	if key == focus_key: preferred_focus = b
-	b.focus_entered.connect(func():focus_key=key)
-	return b
+func keyed(c: Control, key: String) -> Control:
+	if key == focus_key: preferred_focus = c
+	c.focus_entered.connect(func():focus_key=key)
+	return c
+
+func apply_controller_profile() -> void:
+	startup_controller_sync = false
+	controller_dirty = false
+	if link != null and link.operational and not controller_profile.is_empty():
+		link.send("controller",{"profile":controller_profile})
+	else:
+		save_preferences()
+		if overlay != null and overlay.visible and current_page == "controller":
+			show_page("controller")
+
+func leave_controller_page() -> void:
+	if controller_dirty and not controller_profile.is_empty():
+		apply_controller_profile()
+	show_page("settings")
 
 func timeline_strip(d: Dictionary) -> Control:
 	var strip := Control.new()
@@ -1501,8 +1857,14 @@ func show_mode_page(page: String) -> void:
 		menu.add_child(h_label)
 		var h := HSlider.new()
 		h.min_value = float(creator.height.min); h.max_value = float(creator.height.max); h.step = float(creator.height.step); h.value = float(sh.heightM)
+		var initial_height := float(sh.heightM)
 		h.value_changed.connect(func(v: float):h_label.text = "Height %.2f m" % v)
-		h.drag_ended.connect(func(_changed: bool):link.send("sheet",{"options":{"action":"set","field":"heightM","value":h.value}}))
+		h.drag_ended.connect(func(_changed: bool):initial_height = h.value; link.send("sheet",{"options":{"action":"set","field":"heightM","value":h.value}}))
+		h.focus_exited.connect(func():
+			if absf(h.value - initial_height) > 0.001:
+				initial_height = h.value
+				link.send("sheet",{"options":{"action":"set","field":"heightM","value":h.value}}))
+		bind_slider_focus(h,h_label)
 		menu.add_child(h)
 		var builds: Array = []
 		for b in creator.builds: builds.append(str(b.id))
@@ -1568,7 +1930,9 @@ func start_game(mode: String, index: int = 0, challenge: bool = false, extra: Di
 	skater.load_model(CHARACTERS[character].path)
 	skater.apply_skin(current_skin())
 	partner.visible = false
-	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile,"steady":steady_choice if not steady_choice.is_empty() else null,"danceStyle":dance_style if not dance_style.is_empty() else null}})
+	if ghost_skater: ghost_skater.visible = false
+	if ghost_label: ghost_label.visible = false
+	link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"controllerProfile":controller_profile,"steady":steady_choice if not steady_choice.is_empty() else null,"danceStyle":dance_style if not dance_style.is_empty() else null,"ghost":false if boot_test else ghost_enabled}})
 	# A career program opens with its warm-up group (game/warmup.ts); the tests skate straight in.
 	var warm := mode == "career" and not boot_test and (not screenshot_test or "--capture-warmup" in OS.get_cmdline_user_args())
 	# The moment before the music (game/motion/intro.ts): she stands at her start spot. The tests skate straight in.
@@ -1582,6 +1946,7 @@ func start_game(mode: String, index: int = 0, challenge: bool = false, extra: Di
 
 func on_engine(op: String, data: Dictionary) -> void:
 	if op == "hello":
+		session_active = false
 		catalog = data.catalog
 		frame = data.frame
 		if not skates.is_empty():
@@ -1592,10 +1957,16 @@ func on_engine(op: String, data: Dictionary) -> void:
 			get_tree().quit(1)
 		controller_profile = catalog.controller.profile.duplicate(true)
 		if not saved_controller_profile.is_empty():
+			startup_controller_sync = true
 			link.send("controller",{"profile":saved_controller_profile})
-		frame = data.frame
+		if not boot_test and not screenshot_test:
+			link.send("configure",{"options":{"setup":skating_setup if not skating_setup.is_empty() else null,"assistance":assistance,"scheme":scheme,"beginner":beginner,"cruise":cruise,"track":track,"profile":profile,"steady":steady_choice if not steady_choice.is_empty() else null,"danceStyle":dance_style if not dance_style.is_empty() else null,"ghost":ghost_enabled}})
 		skater.apply_frame(frame,true)
 		show_page(current_page)
+		if probe_on and probe_menu_ms < 0:
+			probe_menu_ms = Time.get_ticks_msec()
+		# The menu has drawn behind the overlay: this GPU's pipelines are cached (scripts/boot.gd).
+		preload("res://scripts/boot.gd").mark_pipelines_warm.call_deferred()
 		if boot_test:
 			for page in ["career","composer","settings","atelier","skates","controller","home"]:
 				show_page(page)
@@ -1606,8 +1977,12 @@ func on_engine(op: String, data: Dictionary) -> void:
 		return
 	if op == "controller":
 		controller_profile = data.profile
+		controller_dirty = false
+		if startup_controller_sync:
+			startup_controller_sync = false
+			return
 		save_preferences()
-		notice.text = "Controller profile saved. Full repertoire uses these settings."
+		notice.text = "Controller tuning saved."
 		if overlay.visible and current_page == "controller":
 			show_page("controller")
 		return
@@ -1648,6 +2023,21 @@ func on_engine(op: String, data: Dictionary) -> void:
 		return
 	if op == "configure":
 		return
+	if op == "ghost":
+		apply_ghost(true)
+		var g_setup := str(frame.get("setup","")) if frame.get("setup") != null else ""
+		broadcast.update_state(frame,g_setup if not g_setup.is_empty() else "custom",["TRACKING","BROADCAST","RINK","BLADE"][camera_mode])
+		var gs = frame.get("ghostStatus")
+		if overlay.visible and current_page in ["home", "settings"]:
+			show_page(current_page)
+		elif not ghost_enabled:
+			notice.text = "AI Ghost off."
+		elif gs is Dictionary and not bool(gs.get("active", false)):
+			var why := str(gs.get("reason", ""))
+			notice.text = why if not why.is_empty() else "AI Ghost enabled (waiting for a supported step)."
+		else:
+			notice.text = "AI Ghost on — skating beside you."
+		return
 	# game/creator.ts and game/modes.ts menus: back to the page that asked.
 	if op == "sheet":
 		show_page("create")
@@ -1664,13 +2054,15 @@ func on_engine(op: String, data: Dictionary) -> void:
 		show_page("event")
 		return
 	if op == "newCareer":
+		session_active = false
 		notice.text = "A new career begins. Your last one is kept beside the save, dated."
 		show_page("career")
 		return
 	if op == "start" or op == "replay" or op == "endWarmup" or op == "arcade":
-		push_pending = false
-		toe_pending = false
-		trick_pending = false
+		session_active = true
+		active_joy = primary_joypad()
+		clear_pending_inputs()
+		paused_by_disconnect = false
 		tick_debt = 0.0
 		reset_debt()
 		arena.clear_traces()
@@ -1679,6 +2071,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 		skater.apply_frame(frame,true)
 		apply_partner(true)
 		apply_warmup(true)
+		apply_ghost(true)
 		last_result_tick = -1
 		last_landing_tick = -1
 		music.stream = load("res://assets/generated/audio/"+str(catalog.tracks[int(frame.track)].file))
@@ -1688,6 +2081,10 @@ func on_engine(op: String, data: Dictionary) -> void:
 		music.stream_paused = not music_enabled
 		playing = true
 		overlay.hide()
+		if top_buttons: top_buttons.show()
+		if hud_brand: hud_brand.show()
+		if hud_edition: hud_edition.show()
+		get_viewport().gui_release_focus()
 		broadcast.show()
 		if not music_waiting:
 			broadcast.announce("TAKE THE ICE", "Northlight Arena  /  "+active_mode.capitalize())
@@ -1701,6 +2098,7 @@ func on_engine(op: String, data: Dictionary) -> void:
 			broadcast.announce("THE GROUP LEAVES THE ICE","Your program  /  "+str(frame.routine.title) if frame.routine != null else "Your program")
 		apply_partner(false)
 		apply_warmup(false)
+		apply_ghost(false)
 		# Out of a warm-up the program's intro begins inside a batch: the music starts again after it.
 		if frame.get("intro") != null and not music_waiting:
 			music_waiting = true
@@ -1714,7 +2112,8 @@ func on_engine(op: String, data: Dictionary) -> void:
 	arena.add_traces(frame.trace)
 	arena.update_course(frame)
 	ribbon.update_state(frame)
-	broadcast.update_state(frame,skating_setup if not skating_setup.is_empty() else "custom",["TRACKING","BROADCAST","RINK","BLADE"][camera_mode])
+	var active_setup := str(frame.get("setup","")) if frame.get("setup") != null else ""
+	broadcast.update_state(frame,active_setup if not active_setup.is_empty() else "custom",["TRACKING","BROADCAST","RINK","BLADE"][camera_mode])
 	var landed: Dictionary = frame.state.landed
 	if int(landed.tick)>last_landing_tick and int(landed.tick)>=0:
 		last_landing_tick = int(landed.tick)
@@ -1723,12 +2122,13 @@ func on_engine(op: String, data: Dictionary) -> void:
 		crowd_swell = 1.0 if clean else .35
 		arena.react(1.0 if clean else .12)
 		broadcast.announce("CLEAN LANDING" if clean else "FIND YOUR EDGE", "%.2f rotations   /   Jump TES %.2f" % [float(landed.turned),float(frame.get("technical",0))])
-		var pads := Input.get_connected_joypads()
-		if rumble_enabled and not pads.is_empty():
-			Input.start_joy_vibration(pads[0],.18 if clean else .48,.30 if clean else .7,.16 if clean else .28)
+		var joy := primary_joypad()
+		if rumble_enabled and joy >= 0:
+			Input.start_joy_vibration(joy,.18 if clean else .48,.30 if clean else .7,.16 if clean else .28)
 	update_hud()
 	pad_overlay.update_pad(null if overlay.visible else frame.get("pilotPad"))
 	if frame.finished and last_result_tick != int(frame.state.tick):
+		session_active = false
 		last_result_tick = int(frame.state.tick)
 		show_page("result")
 
@@ -1765,10 +2165,37 @@ func apply_partner(snap: bool) -> void:
 	partner.lift_height = float(pairs.lift.height)
 	partner.apply_frame(pairs,snap)
 
+func apply_ghost(snap: bool) -> void:
+	if ghost_skater == null or ghost_label == null:
+		return
+	var g = frame.get("ghost") if not frame.is_empty() else null
+	if g == null or not (g is Dictionary) or not ghost_enabled or overlay.visible or (podium != null and podium.visible) or (kiss_cry != null and kiss_cry.visible):
+		ghost_skater.visible = false
+		ghost_label.visible = false
+		last_ghost_id = ""
+		last_ghost_t = 999.0
+		return
+	var alpha := clampf(float(g.get("alpha", 1.0)), 0.0, 1.0)
+	var g_id := str(g.get("id", ""))
+	var g_t := float(g.get("t", 0.0))
+	var respawned := snap or g_id != last_ghost_id or g_t < last_ghost_t - 0.05
+	last_ghost_id = g_id
+	last_ghost_t = g_t
+	ghost_skater.visible = alpha > 0.02
+	ghost_skater.update_ghost_alpha(alpha)
+	ghost_skater.apply_frame(g, respawned)
+	ghost_label.visible = alpha > 0.05
+	ghost_label.text = "GHOST · %s" % str(g.get("name", ""))
+	ghost_label.modulate = Color(0.87, 0.96, 1.0, alpha)
+	ghost_label.outline_modulate = Color(0.03, 0.08, 0.14, 0.92 * alpha)
+	ghost_label.position = ghost_skater.position + Vector3(0.0, 2.22, 0.0)
+
 func on_error(message: String) -> void:
+	startup_controller_sync = false
 	notice.text = message
 	push_warning(message)
 	if link != null and link.faulted:
+		session_active = false
 		playing = false
 		show_page("home")
 		menu.add_child(paragraph(message))
@@ -1777,17 +2204,36 @@ func on_error(message: String) -> void:
 
 func pause_game() -> void:
 	if overlay.visible:
-		if not frame.is_empty() and not frame.finished:
+		if can_resume():
 			resume_game()
 	else:
+		stop_all_vibration()
+		clear_pending_inputs()
 		show_page("home")
 
 func resume_game() -> void:
-	if frame.is_empty() or frame.finished:
+	if not can_resume():
 		return
+	_close_open_popup()
+	if preview: preview.stop()
+	if current_page == "design":
+		skater.apply_skin(current_skin())
+	if current_page == "controller" and controller_dirty and not controller_profile.is_empty():
+		apply_controller_profile()
+	elif current_page == "settings":
+		save_preferences()
+	if link != null and link.operational:
+		link.send("configure",{"options":{"steady":steady_choice if not steady_choice.is_empty() else null,"danceStyle":dance_style if not dance_style.is_empty() else null,"ghost":ghost_enabled}})
+	clear_pending_inputs()
+	paused_by_disconnect = false
 	overlay.hide()
+	if top_buttons: top_buttons.show()
+	if hud_brand: hud_brand.show()
+	if hud_edition: hud_edition.show()
+	get_viewport().gui_release_focus()
 	playing = true
 	broadcast.show()
+	apply_ghost(true)
 	music.stream_paused = not music_enabled
 
 func cycle_camera() -> void:
@@ -1903,6 +2349,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_R:
 			if not overlay.visible:
 				start_game(active_mode,event_index)
+		KEY_SLASH:
+			if not overlay.visible:
+				toggle_ghost(false)
 		KEY_SPACE: push_pending = true
 		KEY_F: toe_pending = true
 		KEY_G: pair_hold_pending = true
@@ -1921,8 +2370,10 @@ func shaped_stick(raw: Vector2) -> Vector2:
 	return Vector2.ZERO if length<.22 else raw.normalized()*pow((length-.22)/.78,1.35)
 
 func controls(dt: float) -> Dictionary:
-	var devices := Input.get_connected_joypads()
-	var joy := int(devices[0]) if not devices.is_empty() else -1
+	var joy := primary_joypad()
+	active_joy = joy
+	if not benchmark_hardware.is_empty() and scheme == 3:
+		return {"hardware":benchmark_hardware}
 	var left := Vector2.ZERO
 	var right := Vector2.ZERO
 	var rt := 0.0
@@ -2009,18 +2460,43 @@ func controller_file(exporting: bool) -> void:
 func pad(joy: int, code: JoyButton) -> bool:
 	return joy>=0 and Input.is_joy_button_pressed(joy,code)
 
+func navigate_back() -> void:
+	if current_page == "home":
+		if can_resume(): resume_game()
+	elif current_page == "music":
+		timeline_edit({"action":"close"})
+	elif current_page == "design":
+		skater.apply_skin(current_skin())
+		show_page("atelier")
+	elif current_page == "atelier" or current_page == "skates":
+		save_preferences()
+		show_page("settings")
+	elif current_page == "controller":
+		leave_controller_page()
+	elif current_page == "settings":
+		save_preferences()
+		show_page("home")
+	elif current_page == "event":
+		show_page("career")
+	elif current_page in ["dance","showcase","create"]:
+		show_page("creation")
+	elif current_page == "newcareer":
+		show_page("create")
+	else:
+		show_page("home")
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton and event.pressed:
 		if overlay.visible:
 			if event.button_index == JOY_BUTTON_B:
-				if current_page == "home": resume_game()
-				elif current_page == "music": timeline_edit({"action":"close"})
-				elif current_page == "design": skater.apply_skin(current_skin()); show_page("atelier")
-				elif current_page == "atelier" or current_page == "skates": show_page("settings")
-				else: show_page("career" if current_page == "event" else "home")
+				if not _close_open_popup():
+					navigate_back()
 				get_viewport().set_input_as_handled()
 			elif event.button_index == JOY_BUTTON_START:
-				resume_game()
+				if _has_open_file_dialog():
+					_close_open_popup()
+				elif can_resume():
+					resume_game()
 				get_viewport().set_input_as_handled()
 			return
 		match event.button_index:
@@ -2066,8 +2542,8 @@ func _physics_process(dt: float) -> void:
 		return
 	tick_debt -= ticks
 	var c := controls(dt)
-	var devices := Input.get_connected_joypads()
-	var low := scheme != 3 and (pressed(KEY_U) or (not devices.is_empty() and pad(int(devices[0]),JOY_BUTTON_DPAD_DOWN)))
+	var joy := primary_joypad()
+	var low := scheme != 3 and (pressed(KEY_U) or (joy >= 0 and pad(joy,JOY_BUTTON_DPAD_DOWN)))
 	if boot_test and not frame.is_empty():
 		var index := int(frame.routine.index) if frame.routine != null else 0
 		if scheme == 3:
@@ -2087,6 +2563,7 @@ func _physics_process(dt: float) -> void:
 	pair_lift_pending = false
 
 func _process(dt: float) -> void:
+	if probe_on: probe_tick()
 	presentation_clock += dt
 	# The kiss-and-cry has run its sequence: off the bench, onto the podium.
 	if kiss_cry.finished:
@@ -2097,10 +2574,10 @@ func _process(dt: float) -> void:
 	if not frame.is_empty():
 		wear_venue()
 		update_camera(dt)
+		if ghost_skater != null and ghost_skater.visible and ghost_label != null and ghost_label.visible:
+			ghost_label.position = ghost_skater.position + Vector3(0.0, 2.22, 0.0)
 		fill_audio()
-		coach_title.visible = not overlay.visible
-		coach_tip.visible = not overlay.visible
-		coach_progress.visible = not overlay.visible
+		if coach_box: coach_box.visible = not overlay.visible
 		hud_time.visible = not overlay.visible
 	if boot_test:
 		test_seconds += dt
@@ -2514,6 +2991,7 @@ func fill_audio() -> void:
 		generator.push_frame(Vector2(blade+crowd+thud,blade*.92+crowd+thud))
 
 func _exit_tree() -> void:
+	stop_all_vibration()
 	if music:
 		music.stop()
 		music.stream = null
@@ -2529,7 +3007,7 @@ func load_preferences() -> void:
 	if not saved is Dictionary:
 		return
 	skating_setup = str(saved.get("setup",""))
-	if skating_setup not in ["simulation","explorer","experimental","repertoire"]:
+	if skating_setup not in ["simulation","explorer","experimental","diggate","repertoire"]:
 		skating_setup = ""
 	assistance = clampf(float(saved.get("assistance",.75)),.5,1)
 	steady_choice = str(saved.get("steady",""))
@@ -2548,6 +3026,7 @@ func load_preferences() -> void:
 	if saved.get("skates") is Dictionary:
 		skates = saved.skates
 	cruise = bool(saved.get("cruise",true))
+	ghost_enabled = bool(saved.get("ghost",false))
 	music_enabled = bool(saved.get("music",true))
 	rumble_enabled = bool(saved.get("rumble",true))
 	paddle_layout = clampi(int(saved.get("paddles",0)),0,PADDLE_LAYER)
@@ -2562,8 +3041,9 @@ func load_preferences() -> void:
 func save_preferences() -> void:
 	if boot_test or screenshot_test:
 		return
+	var persisted_profile := controller_profile if not controller_profile.is_empty() else saved_controller_profile
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"steady":steady_choice,"danceStyle":dance_style,"beginner":beginner,"scheme":scheme,"controllerProfile":controller_profile,"track":track,"profile":profile,"character":character,"costume":costume,"skates":skates,"cruise":cruise,"music":music_enabled,"rumble":rumble_enabled,"paddles":paddle_layout,"sequence":sequence}))
+		file.store_string(JSON.stringify({"setup":skating_setup,"assistance":assistance,"steady":steady_choice,"danceStyle":dance_style,"beginner":beginner,"scheme":scheme,"controllerProfile":persisted_profile,"track":track,"profile":profile,"character":character,"costume":costume,"skates":skates,"cruise":cruise,"ghost":ghost_enabled,"music":music_enabled,"rumble":rumble_enabled,"paddles":paddle_layout,"sequence":sequence}))
 	else:
 		on_error("Preferences could not be saved.")

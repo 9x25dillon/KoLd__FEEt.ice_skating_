@@ -142,13 +142,15 @@ export const ORIGIN_STAT = { min: 40, max: 60 } as const;
 /** Mastery an origin's style starts at: one week of style drill (game/styles.ts STYLE_PER_WEEK). */
 export const ORIGIN_STYLE_MASTERY = 0.25;
 
+// 2026-11-23: rink-rat (edge 56→57, stamina 50→51) and ballet (stamina 50→52) reshaped by the fewest
+// points that keep their overall in ORIGIN_OVERALL under the re-weighted OVERALL_WEIGHTS; every stat order kept.
 export const ORIGINS: readonly Origin[] = [
   {
     id: "rink-rat", origin: "Raised at the rink",
     story: "Your mother drove the ice resurfacer at the community rink, and you did your homework in the stands and your skating in the gaps between public sessions. Nobody coached you for years; you just watched the coaches coach everyone else, and copied the edges when the ice was empty.",
     shaped: "Thousands of hours of quiet edges. Nobody ever made you jump.",
     coach: "\"I've watched you on this ice for years. You already trust it. Now let's teach you to leave it.\"",
-    stats: st(44, 44, 56, 52, 50), build: "athletic", style: "technician", dance: "waltz", signature: ["edge", "step"],
+    stats: st(44, 44, 57, 52, 51), build: "athletic", style: "technician", dance: "waltz", signature: ["edge", "step"],
   },
   {
     id: "gymnast", origin: "A gymnast who switched",
@@ -162,7 +164,7 @@ export const ORIGINS: readonly Origin[] = [
     story: "Ballet since you were four: barre every morning, pointe at eleven, and a teacher who said you moved like you were already somewhere else. You found the rink on a school trip and the glide felt like the rest of a phrase you'd been dancing your whole life without an end.",
     shaped: "Line, turnout and balance from the barre. The push and the jump are what the ice will have to give you.",
     coach: "\"You already know where your arms go. On the ice, they also have to keep you standing.\"",
-    stats: st(42, 44, 54, 56, 50), build: "light", style: "finesse", dance: "classical", signature: ["spiral", "spin"],
+    stats: st(42, 44, 54, 56, 52), build: "light", style: "finesse", dance: "classical", signature: ["spiral", "spin"],
   },
   {
     id: "hockey", origin: "A hockey kid",

@@ -342,7 +342,8 @@ test('career prompts follow the setup, and every stat can be trained',()=>{
  assert.match(f.recover,/Snap a trigger/);
  e.configure({setup:'explorer'});
  assert.match(e.start({mode:'career',event:0}).routine.how,/A \/ Cross/);
- assert.deepEqual(e.snapshot().career.floors,[0,50.5,51.35,51.9,52.5,53.05,53.6,53.9,54.45,55]);
+ // Re-derived 2026-11-23 with the re-weighted overall (tools/ice-lab/game/career.ts EVENT_FLOORS).
+ assert.deepEqual(e.snapshot().career.floors,[0,50.45,51.15,51.65,52.15,52.6,53.1,53.35,53.8,54.3]);
  assert.equal(e.snapshot().career.locks[0],'');
  e.career.profile={...e.career.profile,xp:1000};
  e.train('stamina');assert.equal(e.career.profile.stats.stamina,51);

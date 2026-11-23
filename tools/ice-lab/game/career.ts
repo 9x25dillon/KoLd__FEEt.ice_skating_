@@ -37,7 +37,7 @@ export const ELEMENTS = {
   glide: { title: "Opening glide", hint: "Hold Space / A to push. Glide upright above 3 m/s for 3 seconds.", duration: 3 },
   edge: { title: "Carving phrase", hint: "Hold A / D or steer gently with the left stick. Hold a moving edge for 2 seconds.", duration: 2 },
   crossover: { title: "Crossover phrase", hint: "Carve and push with Space / A. Keep the curve through a crossover.", duration: 0.08 },
-  jump: { title: "Jump accent", hint: "Build speed on a curve, then J / D-pad up in Beginner. In Simulation, load Shift / RT and release. Turn at least half a revolution in the air and land without a fall or step-out.", duration: 0 },
+  jump: { title: "Jump accent", hint: "Build speed on a curve, then J / D-pad up in Beginner. In Simulation, load Shift / RT and release. Turn at least half a revolution in the air (a little less as your legs tire) and land without a fall or step-out.", duration: 0 },
   spin: { title: "Spin phrase", hint: "Carve at speed, then hold Y for one new full rotation. Release to exit.", duration: 0 },
   step: { title: "Step sequence", hint: "Chain different footwork: three-turns, mohawks, brackets, loops and rockers (hold B through the cusp), counters (hold N), twizzles, crossovers, edge changes. Five distinct types, both feet, inside a rolling stretch of skating.", duration: 2 },
   spiral: { title: "Spiral", hint: "Carve with weight fully on one foot, then hold I / LB+RB. The free leg extends; works backward too. Hold for 2 seconds.", duration: 2 },
@@ -136,10 +136,23 @@ export const PCS_XP_PER_POINT = 3;
  * all cleared after two events. Measured, the most overall silver XP buys before
  * each event is 50, 50.56, 51.40, 51.96, 52.52; each floor sits just under it, so
  * every event asks for the XP of the ones before it spent on training. Owner's call.
+ *
+ * Re-derived 2026-11-23 for the re-weighted OVERALL_WEIGHTS (spring ties edge control at 0.24): what
+ * silver XP buys into edge control alone is now 50.48, 51.20, 51.68, 52.16, 52.64, 53.12, 53.36, 53.84,
+ * 54.32, and each floor sits just under it (rounded down to 0.05), as before. Splitting the same XP
+ * between edge control and spring buys more by the finale (52.40 there, 54.80 by the gala), so training
+ * the jump is no longer a cost against the gates. Were 0, 50.5, 51.35, 51.9, 52.5, 53.05, 53.6, 53.9, 54.45, 55.0.
  */
-export const EVENT_FLOORS = [0, 50.5, 51.35, 51.9, 52.5, 53.05, 53.6, 53.9, 54.45, 55.0] as const;
+export const EVENT_FLOORS = [0, 50.45, 51.15, 51.65, 52.15, 52.6, 53.1, 53.35, 53.8, 54.3] as const;
 /** Training weeks a new career starts with, and what each improved medal tier adds. Authored. */
 export const START_WEEKS = 4, WEEKS_PER_TIER = 2;
+/**
+ * Weeks a finished, medalled run earns a career that is stuck: no week in hand and the next event
+ * stat-locked. Weeks otherwise come only from improving a medal, so a skater with golds on every
+ * open event who had spent their weeks on drills, style or rest could never train again (found
+ * 2026-11-23, test/career-weeks-lock.test.ts). One week, one stat point: the way out is earned run by run. Authored.
+ */
+export const PRACTICE_WEEKS = 1;
 /** Elements a planned program may add past its event's own. Authored. */
 export const PLAN_EXTRA = 2;
 /**
@@ -148,6 +161,19 @@ export const PLAN_EXTRA = 2;
  * on straight hops that scored no jump at all.
  */
 export const JUMP_TURN = 0.5;
+/**
+ * The jump's bar eases as the legs tire (owner, 2026-11-23, docs/reports/career-difficulty-2026-11-23.md):
+ * rotation follows SkaterState.legs. The course's own technique turns 0.57–0.64 rev fresh, 0.48–0.54 at
+ * legs 0.88 and 0.38–0.43 at 0.7, and legs barely recover inside a program, so every event with a second
+ * jump was a wall. The bar is JUMP_TURN scaled by the legs at take-off, never under FATIGUE_JUMP_FLOOR:
+ * fresh legs still need the full half turn, and spent ones (under 0.7) still cannot count a hop. Rust adds
+ * on top, as before. Setups without stamina keep legs at 1, so their bar is unchanged. AUTHORED.
+ */
+export const FATIGUE_JUMP_FLOOR = 0.35;
+/** The turn a jump element needs from legs `legs` (0..1) at take-off, before rust. */
+export function jumpTurnFor(legs: number): number {
+  return Math.max(FATIGUE_JUMP_FLOOR, JUMP_TURN * Math.min(1, Math.max(0, Number.isFinite(legs) ? legs : 1)));
+}
 /**
  * Whether a program can be skated at this event: every element the event asks for,
  * in any order, and up to PLAN_EXTRA more of any kind. Null is the event's own layout.
@@ -250,7 +276,9 @@ export class Choreography {
   /** game/training.ts: the career's rust, which raises how far a jump must turn. Null skates sharp. */
   rust: Rust | null = null;
   /** Revolutions a landing of this call must have turned to count as a jump element. */
-  jumpBar(kind: number): number { return JUMP_TURN + (this.rust ? RUST_TURN * this.rust[landingFamily(kind)] : 0); }
+  jumpBar(kind: number, legs = 1): number { return jumpTurnFor(legs) + (this.rust ? RUST_TURN * this.rust[landingFamily(kind)] : 0); }
+  /** SkaterState.legs on the last grounded tick: the legs a jump took off with (jumpTurnFor). */
+  private groundLegs = 1;
   cueResults: (CueResult | null)[] = [];
   /** Lays the program on its music. The cues must name the routine's elements in its order. */
   setCues(cues: readonly CueTime[]): boolean {
@@ -286,6 +314,10 @@ export class Choreography {
     this.sessionMeter.sample(s, NEUTRAL_INPUT, events as EdgeEvent[], dt);
     this.pcsMeter.sample(s);
     const freshLanding = s.landed.tick >= 0 && s.landed.tick !== this.lastLanding;
+    // The legs a jump takes off with: the last grounded tick before it, never the landing's own (which
+    // has already paid the landing's cost); the landing is judged with the value from before it.
+    const takeoffLegs = this.groundLegs;
+    if (s.jump.phase === JUMP_PHASE.None && !s.fallen && !freshLanding) this.groundLegs = s.legs ?? 1;
     this.lastLanding = s.landed.tick;
     // The protocol sheet (sim/sheet.ts) scores each landing and applies the
     // repetition rule across the whole program, so a later combination can
@@ -356,7 +388,7 @@ export class Choreography {
       glide: grounded && s.move === MOVE.None && speed >= 3,
       edge: grounded && s.move === MOVE.None && speed >= 2 && Math.abs(s.lean) > 0.12,
       crossover: grounded && speed >= 2 && s.crossover && s.strokeTime > 0,
-      jump: freshLanding && !s.landed.fall && !s.landed.stepOut && s.landed.height > 0.05 && Math.abs(s.landed.turned) >= this.jumpBar(s.landed.kind),
+      jump: freshLanding && !s.landed.fall && !s.landed.stepOut && s.landed.height > 0.05 && Math.abs(s.landed.turned) >= this.jumpBar(s.landed.kind, takeoffLegs),
       spin: this.spinProgress >= Math.PI * 2,
       step: (stepWindow?.level ?? 0) >= 1,
       spiral: s.move === MOVE.Spiral,
@@ -480,6 +512,8 @@ export class CareerState {
     for (let i = 0; i < EVENT_FLOORS.length; i++) if (o >= EVENT_FLOORS[i]) cap = i;
     return cap;
   }
+  /** No week to train with while the next medalled event is stat-locked: only a repeat run (PRACTICE_WEEKS) moves it. */
+  get outOfWeeks(): boolean { return this.weeks < 1 && this.statCap < this.medalCap; }
   /** The lower of the two: a clean program does not skip the training it needs. */
   get unlocked(): number { return Math.min(this.medalCap, this.statCap); }
 
@@ -488,6 +522,7 @@ export class CareerState {
     const i = CAREER_EVENTS.findIndex(e => e.id === routine.event.id);
     if (i < 0 || i > this.unlocked || !routine.done) return 0;
     const improved = Math.max(0, routine.medal - this.medals[i]);
+    const stuck = improved === 0 && routine.medal > 0 && this.outOfWeeks;
     // Every bonus only pays out alongside a genuine medal improvement — the
     // same anti-farming gate the medal XP itself already has, so a repeat of
     // an already-earned medal cannot be replayed purely for the bonus.
@@ -498,6 +533,7 @@ export class CareerState {
       : 0;
     const earned = improved * 150 + bonus;
     if (improved > 0) this.weeks += improved * WEEKS_PER_TIER;
+    if (stuck) this.weeks += PRACTICE_WEEKS;
     if (this.medals[i] === 0 && routine.medal > 0) this.seasonStep();
     // The first season's journal: every finished run, until the finale's medal forges the custom style.
     if (!this.customLeanings) {
@@ -527,6 +563,8 @@ export class CareerState {
     if (i <= this.unlocked) return "";
     if (i > this.medalCap) return "Earn a medal at the event before it.";
     const need = EVENT_FLOORS[i], have = overall(this.profile);
+    if (this.outOfWeeks)
+      return `Needs overall ${need.toFixed(2)}; you are at ${have.toFixed(2)}. No training weeks left: skate any event you have medalled again for a week of practice.`;
     return `Needs overall ${need.toFixed(2)}; you are at ${have.toFixed(2)}. Train below, or better a medal for more XP.`;
   }
   /** Raises a stat by one, for its XP and a week. Does nothing unless both are in hand. */

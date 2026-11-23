@@ -19,9 +19,11 @@ var card: Dictionary = {}
 var card_key := ""
 var card_time := 99.0
 const INK := Color(.035,.065,.10,.9)
+const GHOST_INK := Color(.035,.085,.135,.88)
 const WHITE := Color("e5edf0")
 const MUTED := Color("9fb6c3")
 const GOLD := Color("d9bc84")
+const GHOST_CYAN := Color("8fd0ff")
 var font: Font
 
 func _ready() -> void:
@@ -128,6 +130,14 @@ func _draw() -> void:
 		var points := PackedVector2Array()
 		for p in rink_path: points.append(map_pos+p*2.12)
 		draw_polyline(points,Color(.6,.77,.83,.4),1,true)
+	var ghost_data = data.get("ghost")
+	if ghost_data is Dictionary and ghost_data.has("state"):
+		var ga := clampf(float(ghost_data.get("alpha",1.0)),0.0,1.0)
+		if ga > 0.02:
+			var gs: Dictionary = ghost_data.state
+			var gp := map_pos+plan(gs.pos)*2.12
+			draw_circle(gp,3.0,Color(GHOST_CYAN,0.88*ga))
+			draw_line(gp,gp+Vector2(float(gs.heading.x),-float(gs.heading.y))*8.0,Color("dff4ff",0.88*ga),1.3,true)
 	var current := map_pos+plan(s.pos)*2.12
 	draw_circle(current,3,GOLD)
 	draw_line(current,current+Vector2(s.heading.x,-float(s.heading.y))*9,WHITE,1.5,true)
@@ -149,7 +159,60 @@ func _draw() -> void:
 		plate(Rect2(x,105,380,77),true)
 		text(Vector2(x+20,135),announcement,22,GOLD)
 		text(Vector2(x+20,163),announcement_detail,13)
+	draw_ghost_plate()
 	draw_element_card()
+
+func _wrap_lines(value: String, max_w: float, height: int, max_lines: int) -> PackedStringArray:
+	var lines := PackedStringArray()
+	var current := ""
+	var words := value.split(" ", false)
+	for i in words.size():
+		var word := words[i]
+		var candidate := word if current.is_empty() else current + " " + word
+		if not current.is_empty() and font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1, height).x > max_w:
+			if lines.size() + 1 >= max_lines:
+				lines.append(current + "…")
+				return lines
+			lines.append(current)
+			current = word
+		else:
+			current = candidate
+	if not current.is_empty():
+		lines.append(current)
+	return lines
+
+func draw_ghost_plate() -> void:
+	var g = data.get("ghost")
+	var w := 520.0
+	var x := size.x * 0.5 - w * 0.5
+	var y := 20.0
+	if g is Dictionary:
+		var ga := clampf(float(g.get("alpha", 1.0)), 0.0, 1.0)
+		var pressing := str(g.get("pressing", ""))
+		var how_lines := _wrap_lines(str(g.get("how", "")), w - 28.0, 11, 3)
+		var h := 54.0 + how_lines.size() * 14.0
+		var fade := 0.55 + 0.45 * ga
+		draw_rect(Rect2(x, y, w, h), Color(GHOST_INK.r, GHOST_INK.g, GHOST_INK.b, GHOST_INK.a * fade))
+		draw_line(Vector2(x, y), Vector2(x + w, y), Color(GHOST_CYAN, fade), 2.0)
+		var header := "AI GHOST  /  %s  ·  %s" % [str(g.get("name", "")).to_upper(), str(g.get("setup", "")).to_upper()]
+		text(Vector2(x + 14, y + 18), header, 10, Color(GHOST_CYAN, fade))
+		text(Vector2(x + 14, y + 38), pressing if not pressing.is_empty() else "Gliding / settling", 14, Color(WHITE, fade))
+		var ly := y + 54.0
+		for line in how_lines:
+			text(Vector2(x + 14, ly), line, 11, Color(MUTED, fade))
+			ly += 14.0
+		return
+	var gs = data.get("ghostStatus")
+	if gs is Dictionary and bool(gs.get("enabled", false)) and str(data.get("mode", "")) == "free" and not bool(gs.get("setupSupported", true)):
+		var reason_lines := _wrap_lines(str(gs.get("reason", "")), w - 28.0, 11, 3)
+		var h := 34.0 + reason_lines.size() * 14.0
+		draw_rect(Rect2(x, y, w, h), GHOST_INK)
+		draw_line(Vector2(x, y), Vector2(x + w, y), Color(MUTED, 0.7), 2.0)
+		text(Vector2(x + 14, y + 18), "AI GHOST  /  UNSUPPORTED SETUP", 10, GHOST_CYAN)
+		var ly := y + 34.0
+		for line in reason_lines:
+			text(Vector2(x + 14, ly), line, 11, MUTED)
+			ly += 14.0
 
 # Slides in from the right edge, holds, slides out. Display only: it never touches a score.
 func draw_element_card() -> void:

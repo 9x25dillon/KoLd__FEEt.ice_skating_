@@ -165,6 +165,8 @@ var contact_slide: Array[Vector3] = [Vector3.ZERO,Vector3.ZERO]
 var free_feet: Array[Vector3] = [Vector3(-.15,.16,.22),Vector3(.15,.16,.22)]
 var arm_targets: Array[Vector3] = [Vector3(-.25,-.14,-.05),Vector3(-.43,-.19,-.12),Vector3(.25,-.14,-.05),Vector3(.43,-.19,-.12)]
 var effects_active := true
+var ghost_mode := false
+var _ghost_material: StandardMaterial3D
 # The face. Eyes reach a new target first and the head catches up, so how far they lead
 # comes from the head's own lag. Fixations and blink timing are presentation, not sim.
 const EYE_DOME := .0156 # m, the eye's radius in build_athlete.py
@@ -283,8 +285,12 @@ func load_model(path: String) -> void:
 	# Align before solving bones, so the blade rocker is not rotated upside down.
 	model.rotation.y = PI
 	add_child(model)
-	recolour(model)
-	reflect_in_ice(model)
+	if ghost_mode:
+		_ensure_ghost_material()
+		_apply_ghost_materials(model)
+	else:
+		recolour(model)
+		reflect_in_ice(model)
 	skeleton = find_skeleton(model)
 	if skeleton:
 		for i in skeleton.get_bone_count():
@@ -426,9 +432,64 @@ func swing_skirt(dt: float, hip: Vector3, spine: Vector3, legs: Array[Vector3]) 
 
 func reflect_in_ice(node: Node) -> void:
 	if node is MeshInstance3D:
-		node.layers = REFLECTED_LAYERS
+		node.layers = 1 if ghost_mode else REFLECTED_LAYERS
 	for child in node.get_children():
 		reflect_in_ice(child)
+
+func _ensure_ghost_material() -> void:
+	if _ghost_material != null:
+		return
+	_ghost_material = StandardMaterial3D.new()
+	_ghost_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_ghost_material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
+	_ghost_material.albedo_color = Color(0.76, 0.93, 1.0, 0.52)
+	_ghost_material.emission_enabled = true
+	_ghost_material.emission = Color(0.45, 0.80, 1.0)
+	_ghost_material.emission_energy_multiplier = 0.55
+	_ghost_material.rim_enabled = true
+	_ghost_material.rim = 0.75
+	_ghost_material.rim_tint = 0.85
+	_ghost_material.roughness = 0.35
+	_ghost_material.metallic = 0.0
+
+func _apply_ghost_materials(node: Node) -> void:
+	if node == null:
+		return
+	if node is MeshInstance3D:
+		var mesh_inst := node as MeshInstance3D
+		mesh_inst.layers = 1
+		mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if mesh_inst.mesh:
+			for i in mesh_inst.mesh.get_surface_count():
+				mesh_inst.set_surface_override_material(i, null)
+		mesh_inst.material_override = _ghost_material if ghost_mode else null
+	for child in node.get_children():
+		_apply_ghost_materials(child)
+
+func set_ghost_mode(enabled: bool, alpha: float = 1.0) -> void:
+	ghost_mode = enabled
+	if enabled:
+		effects_active = false
+		_ensure_ghost_material()
+		update_ghost_alpha(alpha)
+		if contact_shadow:
+			contact_shadow.visible = false
+	else:
+		if contact_shadow:
+			contact_shadow.visible = true
+	if model:
+		_apply_ghost_materials(model)
+		if not enabled:
+			recolour(model)
+			reflect_in_ice(model)
+
+func update_ghost_alpha(alpha: float) -> void:
+	if not ghost_mode:
+		return
+	_ensure_ghost_material()
+	var a := clampf(alpha, 0.0, 1.0)
+	_ghost_material.albedo_color = Color(0.76, 0.93, 1.0, clampf(a * 0.52, 0.0, 0.55))
+	_ghost_material.emission_energy_multiplier = 0.55 * a
 
 func apply_skin(next: Dictionary) -> int:
 	skin = next
@@ -719,6 +780,7 @@ func _process(dt: float) -> void:
 	var truth := SimSpace.point(state.pos.x,state.pos.y,maxf(0,float(state.jump.z)+rise*frame_age)+lift_height)+velocity*frame_age
 	position = (position+(velocity+Vector3.UP*rise)*dt).lerp(truth,1.0-exp(-18*dt)) if initialized else truth
 	initialized = true
+	contact_shadow.visible = not ghost_mode
 	contact_shadow.position.y = .022-position.y
 	contact_shadow.scale = Vector3.ONE*(1+position.y*.3)
 	contact_shadow.transparency = clampf(position.y*.25,0,.8)
