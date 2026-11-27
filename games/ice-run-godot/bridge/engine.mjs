@@ -127,6 +127,9 @@ export class IceEngine {
   const laid=mode==='career'?this.career.timelines[index]:null,timeline=laid&&tracks[laid.track]?laid:null;
   this.runTrack=timeline?timeline.track:dance&&mode!=='arcade'?dance.track:this.track;this.draft=null;
   const t=tracks[this.runTrack]; Object.assign(this.params,{musicBpm:t.bpm,musicOffset:t.offset,musicBeatsPerBar:t.beatsPerBar,musicBarsPerPhrase:t.barsPerPhrase});
+  // game/rink.ts boardsAssist: the learner's boards in Beginner mode and the tutorial lessons (the owner,
+  // 2026-11-27). In Params so the recorder carries it and playback answers the boards the same way.
+  this.params.boardsAssistMode=(this.beginner&&mode!=='showcase')||mode==='lesson'?1:0;
   this.state=createState(this.params,4.5);
   this.pairs=mode==='pairs'?new PairsSession(this.state,this.params,options.pairsChallenge??false):null;
   this.pairFrames=[];this.pairPlayback=null;this.pairMismatch=false;this.partnerTrace=[];
@@ -362,7 +365,7 @@ export class IceEngine {
    if(this.intro){this.intro.tick(SIM_DT,(c.hardware?.buttons?.[0]??0)>.5||c.push);if(this.intro.done)this.intro=null;continue;}
    if(this.player) {
     this.player.advance();this.state=this.player.state;this.params=this.player.params;this.events=this.player.events;
-    resolveRinkCollision(this.state,this.events);
+    resolveRinkCollision(this.state,this.events,this.params);
     if(this.pairs&&this.player.input){
      const recorded=this.pairPlayback[this.player.index-1];
      this.pairs.tick(this.state,this.player.input,recorded.actions);
@@ -402,7 +405,7 @@ export class IceEngine {
   if(!this.unrecorded)this.recorder.capture(input,this.params,this.state,events,['A','B','C','D'][this.scheme]);
   this.meter.sample(this.state,input,events,SIM_DT);
   this.elements.sample(this.state,events,supportSignal(this.state),SIM_DT);
-  resolveRinkCollision(this.state,events);this.events.push(...events);
+  resolveRinkCollision(this.state,events,this.params);this.events.push(...events);
   // Taken as it happens, so walking out of a program does not undo a fall.
   const hit=this.fallWatch?.sample(this.state);
   if(hit){const hurt=this.career.takeFall(hit);if(hurt)this.newInjuries.push(BODY_REGIONS.find(r=>r.id===hurt).injury);}

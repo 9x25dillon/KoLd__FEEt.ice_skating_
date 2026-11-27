@@ -100,6 +100,18 @@ const legKnees = (input: SkatingInput, floor = 0): [number, number] => {
 const supportKnee = ([l, r]: [number, number], weightR: number): number => l + weightR * (r - l);
 
 /**
+ * Which way the current stroke drives: -1 backward (a C-cut), 1 forward. The
+ * travel decides once it is past dirSpeedEps; below it, a stroke that began
+ * from a stop with pushBack drives backward (SkatingInput.pushBack), and any
+ * other forward, as a push from rest always has.
+ */
+function strokeDir(s: SkaterState, p: Params): -1 | 1 {
+  const along = dot(s.vel, s.heading);
+  if (along < -p.dirSpeedEps) return -1;
+  return along <= p.dirSpeedEps && s.strokeBack === true ? -1 : 1;
+}
+
+/**
  * THE WEIGHT TRANSFER (weightTransferMode). How far the load sits toward the
  * right blade from an even split (loadBias: the right's share less one half,
  * -0.5 all left .. 0.5 all right), moved toward the asked bias as a critically
@@ -1070,6 +1082,11 @@ export function step(
     s.strokeFoot = (input.pushFoot === 0 || input.pushFoot === 1 ? input.pushFoot : 1 - s.strokeFoot) as Foot;
     s.strokeScale = input.pushPower === undefined ? undefined : clamp(axis(input.pushPower, 1), 0, 1);
     s.strokeKnee = input.pushKnee === undefined ? undefined : clamp(axis(input.pushKnee, 0), 0, 1);
+    // pushBack: from a stop the travel cannot say which way the push drives, so
+    // the push says (SkatingInput.pushBack). Present only on such a stroke, so
+    // every run that never asks for it keeps its digests.
+    if (input.pushBack === true && Math.abs(dot(s.vel, s.heading)) < p.dirSpeedEps) s.strokeBack = true;
+    else if (s.strokeBack !== undefined) delete s.strokeBack;
     // Legs, once per push rather than per tick: SkateSolver.cpp's own
     // S.LegPool -= 0.011f * Knee, at the moment the push begins.
     if (staminaOn) s.legs = clamp(s.legs - p.staminaLegsPerPush * pushKnee(), 0, 1);
@@ -1260,7 +1277,7 @@ export function step(
       if (crossLoad > 0) {
         pushMass = bladeMass(pb, p);
         if (s.crossover) {
-          const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? p.backPushScale : 1;
+          const back = strokeDir(s, p) < 0 ? p.backPushScale : 1;
           crossLat = cos(p.strokeBeta) * Math.min(p.strokePower * pushKnee() * p.mass * back * (s.strokeScale ?? 1),
             biteCapacity(pb.normalLoad, s.crossSide * p.strokeEdge, p, condAt(pb.contact)));
         }
@@ -1594,16 +1611,25 @@ export function step(
       // Skating backward, the splay mirrors across the blade's normal and the
       // push drives backward: a C-cut rather than a stroke, and with the moves
       // on a slightly weaker one (backPushScale).
-      const back = dot(s.vel, s.heading) < -p.dirSpeedEps ? -1 : 1;
+      const back = strokeDir(s, p);
+      // startPushMode: from rest a running start, blending into the cruising stroke by startPushSpeed.
+      const start = p.startPushMode === 1 ? Math.max(0, 1 - len(s.vel) / p.startPushSpeed) : 0;
+      const beta = p.strokeBeta + (p.startPushBeta - p.strokeBeta) * start;
+      // The start's extra force goes forward: its sideways reaction is held to the cruising
+      // stroke's (cos strokeBeta of the force). Measured: uncapped, a scripted novice's falls
+      // stopped answering the steadying hand on Explorer (Light 27 = Off 27); capped, the hand
+      // helps at every step again, at the same start (docs/stroke-start-2026-11-27.md).
+      const sideways = cos(beta) > 1e-9 ? cos(p.strokeBeta) / cos(beta) : Infinity;
+      const startGain = Math.min(1 + (p.startPushGain - 1) * start, Math.max(1, sideways));
       const wanted = p.strokePower * pushKnee() * p.mass * s.strokeMusicScale * (s.strokeScale ?? 1)
-        * (back < 0 && p.movesMode >= 1 ? p.backPushScale : 1);
+        * (back < 0 && p.movesMode >= 1 ? p.backPushScale : 1) * startGain;
       const force = Math.min(wanted, push.biteCapacity);
       if (s.crossover && crossLat > 0) {
         // Forward only: the inward half was centripetal, shared with the
         // carving blades in section 3, and a centripetal force does no work.
         s.vel = add(s.vel, mul(s.heading, back * (force / p.mass) * sin(p.strokeBeta) * dt));
       } else {
-        const dirv = mul(rotate(perpLeft(s.heading), outward * back * p.strokeBeta), -outward);
+        const dirv = mul(rotate(perpLeft(s.heading), outward * back * beta), -outward);
         s.vel = add(s.vel, mul(dirv, (force / p.mass) * dt));
       }
     }

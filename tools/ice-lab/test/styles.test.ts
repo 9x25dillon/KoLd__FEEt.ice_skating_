@@ -93,7 +93,9 @@ test("the trade-offs are the physics': speed, legs, the hard carve and the serpe
   assert.ok(endu.legs > none.legs + 0.1, `${endu.legs} vs ${none.legs}`);
   // Pinned, so a re-tune says what it moved.
   assert.deepEqual([none.serpentineTicks, power.serpentineTicks, endu.serpentineTicks], [495, SERPENTINE_TICKS, 495]);
-  assert.ok(Math.abs(power.topSpeed - 13.18) < 0.01 && Math.abs(finesse.topSpeed - 11.99) < 0.01);
+  // Re-pinned 2026-11-27 for the standing start (startPushMode): the stroke run starts from rest, so
+  // both get going sooner: 13.18 -> 13.37 and 11.99 -> 12.23. Every relation above is unchanged.
+  assert.ok(Math.abs(power.topSpeed - 13.37) < 0.01 && Math.abs(finesse.topSpeed - 12.23) < 0.01, `${power.topSpeed} / ${finesse.topSpeed}`);
 });
 
 test("Finesse's free leg: the spiral highest and cheapest, and only drilled Finesse reaches the standing split", () => {

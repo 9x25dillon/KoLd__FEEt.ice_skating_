@@ -582,6 +582,8 @@ export interface SkaterState {
   strokeScale?: number;
   /** The current stroke's pushKnee, when its push gave one (absent otherwise). */
   strokeKnee?: number;
+  /** The current stroke began from a stop with `pushBack`: it drives backward (absent otherwise). */
+  strokeBack?: boolean;
   /** The jump in progress, if any. sim/jump.ts owns every field. */
   jump: JumpState;
   /** The last jump that came down, as the technical panel would read it. */
@@ -852,6 +854,15 @@ export interface SkatingInput {
    * stroke reads the pushing leg's knee as it always has.
    */
   pushKnee?: number;
+  /**
+   * With `push`, from a stop only: the push drives backward, a C-cut start
+   * (the owner, 2026-11-27: "backwards skating from a stopped position").
+   * Below `dirSpeedEps` the travel has no direction for the push to read, so
+   * this names it; once she is moving, the travel decides as it always has and
+   * this is ignored, so it cannot flip direction mid-skate. Optional; absent,
+   * a push from a stop drives forward exactly as before.
+   */
+  pushBack?: boolean;
   /**
    * 0..1, the free leg's swing (freeLegMode): 0 behind, 1 forward and round.
    * Optional; absent the leg rests midway.
