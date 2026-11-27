@@ -197,6 +197,8 @@ function start() {
   if (careerMode || armDrill) params = armParams(params, career.armFocus, career.armBest[career.armFocus]);
   // The career skater's style (game/styles.ts): career only, like the arms' trade.
   if (careerMode && career.activeStyle) params = styleParams(params, career.activeStyle, career.styleMastery[career.style] ?? 0);
+  // game/rink.ts boardsAssist: the learner's boards in Beginner mode and the tutorial (the owner, 2026-11-27).
+  params = { ...params, boardsAssistMode: beginner || tutorialMode ? 1 : 0 };
   el("result-standings").hidden = true;
   fallWatch = careerMode || armDrill ? new FallWatch() : null; newInjuries = [];
   applyTrack(params);
@@ -538,7 +540,7 @@ function frame(now: number) {
     while (accumulator >= SIM_DT && mode === "playing") {
       if(playback) {
         playback.advance(); skater = playback.state; params = playback.params;
-        resolveRinkCollision(skater, playback.events);
+        resolveRinkCollision(skater, playback.events, params);
         elapsedSkate += SIM_DT; scene.update(skater, SIM_DT);
         traceBlades();
         if(tables && skater.landed.tick >= 0 && scoredTick !== skater.landed.tick) {
@@ -621,7 +623,7 @@ function frame(now: number) {
       scene.update(skater, SIM_DT);
       if (!unrecorded) recorder.capture(input, params, skater, events, (["A","B","C","D"] as const)[scheme]);
       const wasUp = !skater.fallen;
-      resolveRinkCollision(skater, events);
+      resolveRinkCollision(skater, events, params);
       if (sound && wasUp && skater.fallReason === FALL.Collision) audio.crash();
       if(tables && skater.landed.tick >= 0 && scoredTick !== skater.landed.tick) {
         scoredTick = skater.landed.tick; technical += scoreJump(tables, skater.landed)?.score ?? 0;

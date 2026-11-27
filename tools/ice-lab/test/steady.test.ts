@@ -67,7 +67,8 @@ export function novice(setup: Setup, seed: number, strength: number, seconds = 6
     held += hand.held;
     const events: Parameters<typeof step>[4] = [];
     step(s, input, p, SIM_DT, events, ice);
-    resolveRinkCollision(s, events);
+    // The run's own params, as the game passes them since 2026-11-27 (boardsUnstickMode).
+    resolveRinkCollision(s, events, p);
     if (s.fallen && !was) { falls++; reasons.push(s.fallReason); }
     was = s.fallen;
   }
@@ -142,16 +143,24 @@ test("the defaults are the owner's pick: off where the setup promises minimal as
 // MEASURED 2026-11-05: falls in three novice minutes (seeds 1-3, 60 s each), Off / Light / Firm.
 // The hand cuts them where the cause is too much lean for the speed; Experimental's
 // falls come at a standstill, where no lean limit reaches, and it barely moves them.
+// Re-measured 2026-11-27 with the standing start (startPushMode) and the boards' unstick
+// (boardsUnstickMode), the owner's ask ("so it doesn't take 3 seconds to get the skater up to
+// momentum, and she doesn't get stuck on the walls anymore"), and the boards now given the run's
+// params as the game gives them. Hand off, six novice minutes: pinned at the boards 25 / 122 / 14 s
+// (Simulation / Experimental / Repertoire) -> 0; skated 0.26 / 0.26 / 0.34 km -> 0.44 / 0.63 / 0.47;
+// falls per km 117 / 183 / 87 -> 143 / 141 / 122. More falls in all: a pinned novice never fell,
+// a skating one does. The hand still cuts them at every step. Before: [20,4,4]/[10,3,2],
+// [10,8,5]/[11,6,6], [16,5,3]/[14,4,3], [25,20,14]/[23,16,17].
 const FALLS: Record<string, { jerky: number[]; calm: number[] }> = {
   // Re-measured 2026-11-14 with the legs moving the load over time (weightTransferMode),
   // on in Simulation and Experimental: [19, 5, 3] / [10, 4, 1] and [29, 21, 14] / [24, 24, 16] before.
-  simulation: { jerky: [20, 4, 4], calm: [10, 3, 2] },
+  simulation: { jerky: [35, 13, 8], calm: [28, 14, 12] },
   // Re-measured 2026-11-14 with Explorer's default push knee (game/setups.ts EXPLORER_PUSH_KNEE),
   // the owner's pick: [7, 4, 2] and [6, 2, 0] before. Harder pushes, more falls past the lean
   // limit; 0.5 measured no better ([11, 9, 6], [6, 4, 3]).
-  explorer: { jerky: [10, 8, 5], calm: [11, 6, 6] },
-  repertoire: { jerky: [16, 5, 3], calm: [14, 4, 3] },
-  experimental: { jerky: [25, 20, 14], calm: [23, 16, 17] },
+  explorer: { jerky: [14, 13, 5], calm: [14, 9, 5] },
+  repertoire: { jerky: [30, 13, 6], calm: [28, 11, 4] },
+  experimental: { jerky: [49, 16, 10], calm: [40, 14, 15] },
 };
 for (const setup of Object.keys(FALLS) as Setup[]) test(`${setup}: a novice falls less with the hand`, () => {
   for (const style of ["jerky", "calm"] as const) {

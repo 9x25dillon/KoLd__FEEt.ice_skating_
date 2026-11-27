@@ -135,7 +135,7 @@ export class PairsSession {
       if (hit) { target.x -= hit.nx * (hit.penetration + .5); target.y -= hit.ny * (hit.penetration + .5); }
       const command = this.follow(lead, input, target);
       step(s, command, this.params, dt, this.events, this.ice);
-      resolveRinkCollision(s, this.events);
+      resolveRinkCollision(s, this.events, this.params);
     }
     this.distance = Math.hypot(s.pos.x - lead.pos.x, s.pos.y - lead.pos.y);
     this.measure(lead);

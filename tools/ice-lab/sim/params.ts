@@ -964,6 +964,43 @@ export interface Params {
    */
   beatCrossoverHoldSuppress: number;
   /**
+   * The boards assist (game/rink.ts; the owner, 2026-11-27: Beginner mode and
+   * the tutorial lessons only, so a learner cannot get hung up on the walls).
+   * 0: the boards as they are, a bounce or a crash. 1: no bounce and no crash;
+   * she is put back on the ice, keeps her speed along the boards, and slow
+   * against them she pushes off with her hands (BOARDS_PUSH_OFF). Game-only:
+   * the solver never reads it; it rides in Params so a replay plays it back.
+   */
+  boardsAssistMode: number;
+  /**
+   * Getting unstuck from the boards, every mode (game/rink.ts; the owner, 2026-11-27: "she doesn't
+   * get stuck on the walls anymore"). 0: as before. 1: slow against the boards (under
+   * BOARDS_PUSH_OFF), she pushes off with her hands along her blade, away from them; the bounce and
+   * the crash are unchanged (boardsAssistMode removes those, for learners only). Game-only.
+   */
+  boardsUnstickMode: number;
+  /**
+   * THE STANDING START (the owner, 2026-11-27: "so it doesn't take 3 seconds to get the skater up
+   * to momentum"). 0: a push from rest is the cruising stroke. 1: from rest a push is a running
+   * start, blending back into the cruising stroke by startPushSpeed:
+   *  - the pushing blade turns out to startPushBeta (90°, the T-start: the push straight back, all of
+   *    it forward), where the cruising stroke's strokeBeta (37°) sends only sin 37° = 0.6 forward;
+   *  - the leg pushes startPushGain times harder (a muscle is strongest slowest).
+   * Measured (docs/stroke-start-2026-11-27.md): a tap reaches 2 m/s in 1.31 s (was 3.48), RT full
+   * 3 m/s in 1.71 s (was 3.52); cruising is untouched above startPushSpeed.
+   */
+  startPushMode: number;
+  /** rad, the pushing blade's turn-out at rest. AUTHORED: 90°, the geometric limit (a push straight back). */
+  startPushBeta: number;
+  /**
+   * The push's force at rest over the cruising stroke's. AUTHORED: 2, the most the pushing blade's
+   * grip carries (biteCapacity, ~400 N): at 2 it clips 12 of 910 stroke ticks, at 5 it clips 43,
+   * so more buys almost nothing (docs/stroke-start-2026-11-27.md).
+   */
+  startPushGain: number;
+  /** m/s by which the start has blended back into the cruising stroke. AUTHORED: 3 m/s, an easy glide. */
+  startPushSpeed: number;
+  /**
    * Crossed placement on a crossover (owner's choice, 2026-11-19). 0: contacts
    * stay on their own sides of the body (unchanged from main). 1: during a
    * crossover's under-push the outside blade is placed past the skating blade's
@@ -1300,6 +1337,12 @@ export const DEFAULT_PARAMS: Params = {
   weightTransferMode: 0,
   weightTransferTime: 0.25,
   beatCrossoverHoldSuppress: 0,
+  boardsAssistMode: 0,
+  boardsUnstickMode: 0,
+  startPushMode: 0,
+  startPushBeta: Math.PI / 2,
+  startPushGain: 2,
+  startPushSpeed: 3,
   crossPlaceMode: 0,
   comSwayMode: 0,
   comSwayTransferTime: 0.35,
@@ -1508,6 +1551,12 @@ export function validate(p: Params): string[] {
   if (!(p.pitchAnkleTau >= 0)) errs.push("pitchAnkleTau is a time constant in seconds, or 0 (the ankle takes the whole demand)");
   if (![0, 1].includes(p.weightTransferMode)) errs.push("weightTransferMode is 0 (the weight input sets each blade's load at once) or 1 (the legs move the load over time)");
   if (!(p.weightTransferTime >= 0.05 && p.weightTransferTime <= 1)) errs.push("weightTransferTime is s for a whole transfer, 0.05 to 1");
+  if (![0, 1].includes(p.boardsUnstickMode)) errs.push("boardsUnstickMode is 0 (the boards as they were) or 1 (slow against them, she pushes off)");
+  if (![0, 1].includes(p.startPushMode)) errs.push("startPushMode is 0 (a push from rest is the cruising stroke) or 1 (a running start that blends into it)");
+  if (!(p.startPushBeta > 0 && p.startPushBeta <= Math.PI / 2)) errs.push("startPushBeta is the push's turn-out at rest, in (0, pi/2]");
+  if (!(p.startPushGain >= 1 && p.startPushGain <= 5)) errs.push("startPushGain is 1 to 5 times the cruising push at rest");
+  if (!(p.startPushSpeed > 0 && p.startPushSpeed <= 10)) errs.push("startPushSpeed is the m/s by which the start becomes the cruising stroke, (0, 10]");
+  if (![0, 1].includes(p.boardsAssistMode)) errs.push("boardsAssistMode is 0 (the boards bounce, or crash above CRASH_SPEED) or 1 (the learner's boards: no crash, back on the ice, a push off when slow)");
   if (![0, 1].includes(p.beatCrossoverHoldSuppress)) errs.push("beatCrossoverHoldSuppress is 0 (the beat's crossovers run until a jump loads) or 1 (the standing trigger held toward a load stops them)");
   if (!(p.comSwayTransferTime >= 0.1 && p.comSwayTransferTime <= 1)) errs.push("comSwayTransferTime is s for a whole load change under comSwayMode, 0.1 to 1");
   if (![0, 1].includes(p.comSwayMode)) errs.push("comSwayMode is 0 (the stance slides under the body in a weight shift) or 1 (the body sways over planted blades)");

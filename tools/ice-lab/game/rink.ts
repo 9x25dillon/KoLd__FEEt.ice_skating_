@@ -37,6 +37,52 @@ export function rinkHit(x: number, y: number): RinkHit | null {
   return { nx: dx / d, ny: dy / d, penetration: d - corner };
 }
 
+/** m/s inward a learner pushes herself off the boards with, hands on them. AUTHORED: an easy walking pace, slower than any push. */
+export const BOARDS_PUSH_OFF = 0.5;
+/** |cos| below which her blade lies along the boards and needs no push-off. AUTHORED: within ~3° of parallel. */
+export const PARALLEL_BOARDS = 0.05;
+/** m inside the boards the assist leaves her, so the next tick starts on the ice. AUTHORED: 1 mm. */
+export const BOARDS_CLEARANCE = 1e-3;
+
+/**
+ * The learner's boards (Params.boardsAssistMode 1: Beginner mode and the tutorial lessons). The
+ * hard boards answer a hit with a bounce, or a fall above CRASH_SPEED; a learner who skates into
+ * them, or stands against them pushing, gets stuck there (the owner's First ice: 52.8 s within
+ * 2 mm of the boards at under 0.1 m/s, docs/boardsgap-2026-11.md). Here, instead:
+ *  - she is put back on the ice, BOARDS_CLEARANCE inside, heading in or out;
+ *  - her speed into the boards is taken away, with no bounce and no crash; her speed along them
+ *    is kept, so she slides along the boards rather than stopping on them;
+ *  - slower than BOARDS_PUSH_OFF against them, she pushes off with her hands along her blade,
+ *    whichever way leads away from the boards, so standing against them always leaves them.
+ * No event: nothing here is a fall or an edge. The sim's own step is untouched.
+ */
+function assistBoards(s: SkaterState, hit: RinkHit): void {
+  s.pos.x -= hit.nx * (hit.penetration + BOARDS_CLEARANCE);
+  s.pos.y -= hit.ny * (hit.penetration + BOARDS_CLEARANCE);
+  const into = s.vel.x * hit.nx + s.vel.y * hit.ny;
+  if (into > 0) { s.vel.x -= hit.nx * into; s.vel.y -= hit.ny * into; }
+  pushOffBoards(s, hit);
+}
+
+/**
+ * Slow against the boards, she pushes off them with her hands. Moving, she slides: her speed along
+ * the boards is hers. Only slow does she push off, and along her blade, never across it: a blade
+ * slides along itself, and a sideways shove only skids it (measured: a sideways push-off while
+ * carving along the boards at 3 m/s put her down in 4.8 s). Whichever way along the blade leads away
+ * from the boards is the way she goes: backward when she faces them, forward when she backs onto them.
+ */
+function pushOffBoards(s: SkaterState, hit: RinkHit): void {
+  if (Math.hypot(s.vel.x, s.vel.y) >= BOARDS_PUSH_OFF) return;
+  const facing = s.heading.x * hit.nx + s.heading.y * hit.ny;
+  if (Math.abs(facing) < PARALLEL_BOARDS) return;   // square along them: her own push goes along
+  const away = -Math.sign(facing);
+  const off = (s.vel.x * s.heading.x + s.vel.y * s.heading.y) * away;
+  if (off < BOARDS_PUSH_OFF) {
+    s.vel.x += s.heading.x * away * (BOARDS_PUSH_OFF - off);
+    s.vel.y += s.heading.y * away * (BOARDS_PUSH_OFF - off);
+  }
+}
+
 /**
  * Push the skater back inside the boards and answer their velocity into the
  * wall: a bounce below `CRASH_SPEED`, a fall onto the ice above it. Mutates
@@ -45,10 +91,20 @@ export function rinkHit(x: number, y: number): RinkHit | null {
  * game reads it the same way it reads any other fall.
  */
 export function resolveRinkCollision(s: SkaterState, events: EdgeEvent[],
-  options: Pick<Params, "boardsSnapInbound"> = { boardsSnapInbound: 0 }): void {
+  options: Partial<Pick<Params, "boardsSnapInbound" | "boardsAssistMode" | "boardsUnstickMode">> = { boardsSnapInbound: 0 }): void {
   if (s.fallen) return;
   const hit = rinkHit(s.pos.x, s.pos.y);
   if (!hit) return;
+  if (options.boardsAssistMode === 1) return assistBoards(s, hit);
+  hardBoards(s, events, hit, options);
+  // boardsUnstickMode: slow against the boards, she pushes off them (every mode; the bounce and
+  // the crash above are unchanged).
+  if (options.boardsUnstickMode === 1 && !s.fallen) pushOffBoards(s, hit);
+}
+
+/** The boards as they were: a bounce, or a fall above CRASH_SPEED. */
+function hardBoards(s: SkaterState, events: EdgeEvent[], hit: RinkHit,
+  options: Partial<Pick<Params, "boardsSnapInbound">>): void {
   // Positive: still heading further out, along the outward normal.
   const into = s.vel.x * hit.nx + s.vel.y * hit.ny;
   if (into <= 0) {

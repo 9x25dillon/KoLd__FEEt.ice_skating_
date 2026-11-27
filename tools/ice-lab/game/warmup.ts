@@ -100,7 +100,7 @@ export class WarmupGroup {
       const events: never[] = [];
       const wasFallen = k.state.fallen;
       step(k.state, mapped.input, k.params, SIM_DT, events, this.ice);
-      resolveRinkCollision(k.state, events);
+      resolveRinkCollision(k.state, events, k.params);
       if (k.state.fallen && !wasFallen) k.falls++;
     }
     this.elapsed += SIM_DT;

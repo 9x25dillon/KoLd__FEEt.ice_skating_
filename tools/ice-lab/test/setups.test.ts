@@ -259,7 +259,10 @@ test("from a standstill, A pushes from the standing leg and the weight goes acro
   // m/s at 4 s (Repertoire 1.12); knees at 0.65: 2.53 (2.54); pushes
   // alternating right, left…; standing; never a jump. Explorer, knees straight,
   // since its default push knee (EXPLORER_PUSH_KNEE, 2026-11-14): 1.749, was 1.089.
-  for (const setup of ["simulation", "explorer", "repertoire"] as const) for (const [knee, at4] of [[0, setup === "repertoire" ? 1.121 : setup === "explorer" ? 1.749 : 1.094], [0.65, setup === "simulation" ? 2.53 : 2.54]] as const) {
+  // Since the standing start (startPushMode, the owner's ask 2026-11-27, "so it doesn't take 3
+  // seconds to get the skater up to momentum"): knees straight 2.624 / 3.229 / 2.625 (Simulation /
+  // Explorer / Repertoire; were 1.094 / 1.749 / 1.121), knees at 0.65 3.950 / 3.959 / 3.946 (were 2.53 / 2.54).
+  for (const setup of ["simulation", "explorer", "repertoire"] as const) for (const [knee, at4] of [[0, setup === "repertoire" ? 2.625 : setup === "explorer" ? 3.229 : 2.624], [0.65, setup === "simulation" ? 3.950 : setup === "explorer" ? 3.959 : 3.946]] as const) {
     const r = rig(setup, 0); const feet: string[] = [];
     for (let i = 0; i < 480 && !r.s.fallen; i++) {
       r.h.buttons.fill(0); r.h.axes = [0, 0, 0, 0]; r.h.buttons[7] = knee; if (setup === "simulation") r.h.buttons[6] = knee;
@@ -353,11 +356,13 @@ test("experimental: thumb strokes get the skater going from a standstill as trig
     assert.ok(strokes.knees.every(k => k === 1), `${setup}: each from a full bend`);
     // 1.994 since a push at a crawl lands on both feet (ONE_FOOT_SPEED); 1.977 on one foot; 0.509 before the full bend.
     // 1.981 since the legs move the load over time (2026-11-14).
-    assert.ok(near(strokes.v, 1.981), `${setup}: ${strokes.v.toFixed(3)} m/s at 4 s (was 1.994, 1.977, and 0.509)`);
+    // 3.377 since the standing start (2026-11-27); 1.981 before it.
+    assert.ok(near(strokes.v, 3.377), `${setup}: ${strokes.v.toFixed(3)} m/s at 4 s (was 1.981, 1.994, 1.977, and 0.509)`);
   }
   let n = 0;
   const snaps = standstill("diggate", (k, h) => { if (k === 0) n++; h.buttons[n % 2 ? 6 : 7] = k < 8 ? 1 : 0; });
-  assert.ok(near(snaps.v, 1.966), `alternating snaps ${snaps.v.toFixed(3)} (1.978 before a push at a crawl landed on both feet)`);
+  // 3.341 since the standing start (2026-11-27); 1.966 before it.
+  assert.ok(near(snaps.v, 3.341), `alternating snaps ${snaps.v.toFixed(3)} (1.966 before the standing start, 1.978 before a push at a crawl landed on both feet)`);
 });
 
 test("experimental: pumping the legs in turn builds real speed, and never reads as a jump; loading both and letting go does", () => {
@@ -525,7 +530,8 @@ test("experimental: from a standstill a snap of either trigger is a push — RT 
       assert.equal(r.fallen, false, `${setup}, ${name}: standing`);
       assert.equal(r.feet, "10101010", `${setup}, ${name}: the standing leg pushes, then the other`);
     }
-    assert.ok(near(rt.v, 1.961) && near(lt.v, 1.956), `${setup}: ${rt.v.toFixed(3)} / ${lt.v.toFixed(3)} m/s at 4 s`);
+    // 3.339 / 3.341 since the standing start (2026-11-27); 1.961 / 1.956 before it.
+    assert.ok(near(rt.v, 3.339) && near(lt.v, 3.341), `${setup}: ${rt.v.toFixed(3)} / ${lt.v.toFixed(3)} m/s at 4 s`);
     const held = fromRest(setup, (i, h) => { h.buttons[7] = i >= 10 && i < 70 ? 1 : 0; }, 200);
     assert.equal(held.took, true, `${setup}: RT held from rest is the jump`);
     assert.equal(held.feet, "", `${setup}: and not a push`);

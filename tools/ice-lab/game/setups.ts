@@ -1,4 +1,5 @@
 import { PRESETS } from "../sim/params.ts";
+import { withBackStart } from "./backstart.ts";
 import type { Params } from "../sim/params.ts";
 import type { Controls } from "../app/pad.ts";
 import type { SkaterState, SkatingInput } from "../sim/types.ts";
@@ -29,6 +30,10 @@ export function setupParams(setup: Setup, assistance = 0.75): Params {
       p[key] += (PRESETS.assisted[key] - p[key]) * (setup === "repertoire" ? 1 : assistance);
   }
   if (setup === "repertoire") p.jumpAssist = PRESETS.assisted.jumpAssist;
+  // The owner, 2026-11-27, every setup: a quick standing start (startPushMode) and never stuck on
+  // the boards (boardsUnstickMode). Set here, not only in GAME_PARAMS: the preset spread above
+  // carries every default key and would put them back to 0.
+  p.startPushMode = 1; p.boardsUnstickMode = 1;
   // Stages B/C. Simulation: everything through the blades — slip and the dig,
   // the trunk, the feet in the hips. Explorer: the same with the blades kept
   // parallel. Repertoire keeps its dedicated moves on the carve as it was.
@@ -109,5 +114,5 @@ export function setupInput(c: Controls, s: SkaterState, setup: Setup, st: GameCo
     paddles: setup === "experimental" || setup === "simulation" ? setup : undefined,
   });
   if (setup === "explorer") explorerPushKnee(mapped.input, s, p);
-  return mapped;
+  return withBackStart(mapped, s, p);
 }

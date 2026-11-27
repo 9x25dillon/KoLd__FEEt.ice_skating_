@@ -291,6 +291,14 @@ export const REPLAY_SCHEMA = "edgework-replay/1";
 //       2026-11-18, also unbumped: Params beatCrossoverHoldSuppress (0 by
 //       default), a mapping-only guard (game/full-controls.ts) — the solver
 //       never reads it. Fixture rebased, every digest unchanged.
+//       2026-11-27, also unbumped: SkatingInput optional pushBack (a push
+//       from a stop that drives backward) and SkaterState optional
+//       strokeBack, present only on such a stroke; Params boardsAssistMode
+//       and boardsUnstickMode (0 by default; game/rink.ts reads them, the
+//       solver never does), and the standing start startPushMode (0 by
+//       default, 1 in GAME_PARAMS) with startPushBeta/Gain/Speed. A clip
+//       recorded before them lacks them and loads with them off
+//       (LATE_PARAMS), so it plays back exactly; every digest unchanged.
 //       2026-11-19, also unbumped: Params crossPlaceMode (0 everywhere);
 //       SkaterState optional crossed, present only at 1. Fixture rebased, every
 //       digest unchanged.
@@ -400,8 +408,20 @@ function number(value: unknown, path: string, min: number, max: number): number 
   return value;
 }
 
+/**
+ * Params keys a clip recorded before them may lack, read as the value every such run used. Added
+ * without breaking older /39 clips (the earlier additions stopped them loading): a missing key here
+ * is exactly how the recorded run behaved.
+ */
+const LATE_PARAMS: Partial<Record<keyof Params, number>> = {
+  boardsAssistMode: 0, boardsUnstickMode: 0,
+  startPushMode: 0, startPushBeta: Math.PI / 2, startPushGain: 2, startPushSpeed: 3,
+};
+
 function params(value: unknown, path: string): Params {
-  const obj = object(value, path, Object.keys(DEFAULT_PARAMS));
+  const late = Object.keys(LATE_PARAMS);
+  const obj = object(value, path, Object.keys(DEFAULT_PARAMS).filter((k) => !late.includes(k)), late);
+  for (const [key, was] of Object.entries(LATE_PARAMS)) if (!Object.hasOwn(obj, key)) obj[key] = was;
   // Keep tunings the panel warns about: reproducing a BAD tuning is a reason
   // to record it. No substitution of current defaults or assist presets.
   for (const key of Object.keys(DEFAULT_PARAMS)) {
@@ -435,12 +455,14 @@ export function parseReplay(json: string): Replay {
     const frame = object(root.frames[i], path, ["input", "scheme", "digest"], ["params"]);
     const input = object(frame.input, `${path}.input`,
       ["lean", "knee", "weight", "pitch", "leanSplit", "push", "brake", "carriage", "windup", "toe", "turn", "bracket", "twizzle", "spin", "inaBauer"],
-      ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit", "pushFoot", "pushPower", "pushKnee", "freeLeg"]);
+      ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit", "pushFoot", "pushPower", "pushKnee", "pushBack", "freeLeg"]);
     if (Object.hasOwn(input, "pushFoot") && input.pushFoot !== 0 && input.pushFoot !== 1)
       throw new Error(`${path}.input.pushFoot: expected 0 or 1`);
     if (Object.hasOwn(input, "pushPower")) number(input.pushPower, `${path}.input.pushPower`, 0, 1);
     if (Object.hasOwn(input, "pushKnee")) number(input.pushKnee, `${path}.input.pushKnee`, 0, 1);
     if (Object.hasOwn(input, "freeLeg")) number(input.freeLeg, `${path}.input.freeLeg`, 0, 1);
+    if (Object.hasOwn(input, "pushBack") && typeof input.pushBack !== "boolean")
+      throw new Error(`${path}.input.pushBack: expected a boolean`);
     for (const key of ["pitchSplit", "kneeSplit", "toeOut", "toeOutSplit"])
       if (Object.hasOwn(input, key)) number(input[key], `${path}.input.${key}`, -1, 1);
     for (const key of ["lean", "pitch", "leanSplit", "windup"]) number(input[key], `${path}.input.${key}`, -1, 1);

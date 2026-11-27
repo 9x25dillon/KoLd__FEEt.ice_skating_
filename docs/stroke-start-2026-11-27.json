@@ -1,0 +1,334 @@
+{
+ "target": {
+  "seconds": 1.53,
+  "sd": 0.19,
+  "metres": 6.1,
+  "source": "Rice et al. 2024, Front. Sports Act. Living 6:1418713, Table 3"
+ },
+ "rows": [
+  {
+   "setup": "simulation",
+   "row": "baseline",
+   "tapSplit": 4.608333333333333,
+   "fullSplit": 3.7416666666666667,
+   "v2sFull": 1.774,
+   "fellStart": false,
+   "cruise10": 9.07,
+   "cruise20": 11.29,
+   "fellCruise": false,
+   "gainAt6": 0.28
+  },
+  {
+   "setup": "simulation",
+   "row": "A power x1.5",
+   "k": 1.5,
+   "tapSplit": 3.6999999999999997,
+   "fullSplit": 3.0083333333333333,
+   "v2sFull": 2.725,
+   "fellStart": false,
+   "cruise10": 11.98,
+   "cruise20": 14.43,
+   "fellCruise": false,
+   "gainAt6": 0.427
+  },
+  {
+   "setup": "simulation",
+   "row": "A power x2",
+   "k": 2,
+   "tapSplit": 3.183333333333333,
+   "fullSplit": 2.6166666666666667,
+   "v2sFull": 3.59,
+   "fellStart": false,
+   "cruise10": 14.56,
+   "cruise20": 17.02,
+   "fellCruise": false,
+   "gainAt6": 0.521
+  },
+  {
+   "setup": "simulation",
+   "row": "A power x3",
+   "k": 3,
+   "tapSplit": 2.5833333333333335,
+   "fullSplit": 2.275,
+   "v2sFull": 4.737,
+   "fellStart": false,
+   "cruise10": 17.62,
+   "cruise20": 19.94,
+   "fellCruise": false,
+   "gainAt6": 0.639
+  },
+  {
+   "setup": "simulation",
+   "row": "A power x4",
+   "k": 4,
+   "tapSplit": 2.2333333333333334,
+   "fullSplit": 2.15,
+   "v2sFull": 5.289,
+   "fellStart": false,
+   "cruise10": 19,
+   "cruise20": 21.26,
+   "fellCruise": false,
+   "gainAt6": 0.731
+  },
+  {
+   "setup": "simulation",
+   "row": "B low-speed v1=2",
+   "v1": 2,
+   "g0": null
+  },
+  {
+   "setup": "simulation",
+   "row": "B low-speed v1=3",
+   "v1": 3,
+   "g0": null
+  },
+  {
+   "setup": "simulation",
+   "row": "B low-speed v1=4",
+   "v1": 4,
+   "g0": null
+  },
+  {
+   "setup": "simulation",
+   "row": "C duration 0.2s",
+   "duration": 0.2,
+   "tapSplit": 4.541666666666667,
+   "fullSplit": 3.8249999999999997,
+   "v2sFull": 1.693,
+   "fellStart": false,
+   "cruise10": 8.84,
+   "cruise20": 11.08,
+   "fellCruise": false,
+   "gainAt6": 0.181
+  },
+  {
+   "setup": "simulation",
+   "row": "C duration 0.15s",
+   "duration": 0.15,
+   "tapSplit": 4.541666666666667,
+   "fullSplit": 3.8916666666666666,
+   "v2sFull": 1.631,
+   "fellStart": false,
+   "cruise10": 8.7,
+   "cruise20": 10.93,
+   "fellCruise": false,
+   "gainAt6": 0.133
+  },
+  {
+   "setup": "explorer",
+   "row": "baseline",
+   "tapSplit": 4.616666666666666,
+   "fullSplit": 3.75,
+   "v2sFull": 1.78,
+   "fellStart": false,
+   "cruise10": 9.07,
+   "cruise20": 11.29,
+   "fellCruise": false,
+   "gainAt6": 0.28
+  },
+  {
+   "setup": "explorer",
+   "row": "A power x1.5",
+   "k": 1.5,
+   "tapSplit": 3.6999999999999997,
+   "fullSplit": 3.0083333333333333,
+   "v2sFull": 2.72,
+   "fellStart": false,
+   "cruise10": 11.98,
+   "cruise20": 14.43,
+   "fellCruise": false,
+   "gainAt6": 0.427
+  },
+  {
+   "setup": "explorer",
+   "row": "A power x2",
+   "k": 2,
+   "tapSplit": 3.183333333333333,
+   "fullSplit": 2.6166666666666667,
+   "v2sFull": 3.589,
+   "fellStart": false,
+   "cruise10": 14.57,
+   "cruise20": 17.02,
+   "fellCruise": false,
+   "gainAt6": 0.521
+  },
+  {
+   "setup": "explorer",
+   "row": "A power x3",
+   "k": 3,
+   "tapSplit": 2.5833333333333335,
+   "fullSplit": 2.275,
+   "v2sFull": 4.738,
+   "fellStart": false,
+   "cruise10": 17.62,
+   "cruise20": 19.94,
+   "fellCruise": false,
+   "gainAt6": 0.639
+  },
+  {
+   "setup": "explorer",
+   "row": "A power x4",
+   "k": 4,
+   "tapSplit": 2.2333333333333334,
+   "fullSplit": 2.15,
+   "v2sFull": 5.291,
+   "fellStart": false,
+   "cruise10": 19,
+   "cruise20": 21.26,
+   "fellCruise": false,
+   "gainAt6": 0.731
+  },
+  {
+   "setup": "explorer",
+   "row": "B low-speed v1=2",
+   "v1": 2,
+   "g0": null
+  },
+  {
+   "setup": "explorer",
+   "row": "B low-speed v1=3",
+   "v1": 3,
+   "g0": null
+  },
+  {
+   "setup": "explorer",
+   "row": "B low-speed v1=4",
+   "v1": 4,
+   "g0": null
+  },
+  {
+   "setup": "explorer",
+   "row": "C duration 0.2s",
+   "duration": 0.2,
+   "tapSplit": 4.541666666666667,
+   "fullSplit": 3.8249999999999997,
+   "v2sFull": 1.692,
+   "fellStart": false,
+   "cruise10": 8.84,
+   "cruise20": 11.08,
+   "fellCruise": false,
+   "gainAt6": 0.181
+  },
+  {
+   "setup": "explorer",
+   "row": "C duration 0.15s",
+   "duration": 0.15,
+   "tapSplit": 4.541666666666667,
+   "fullSplit": 3.8916666666666666,
+   "v2sFull": 1.629,
+   "fellStart": false,
+   "cruise10": 8.7,
+   "cruise20": 10.93,
+   "fellCruise": false,
+   "gainAt6": 0.133
+  },
+  {
+   "setup": "experimental",
+   "row": "baseline",
+   "tapSplit": 4.608333333333333,
+   "fullSplit": 3.7416666666666667,
+   "v2sFull": 1.774,
+   "fellStart": false,
+   "cruise10": 9.07,
+   "cruise20": 11.29,
+   "fellCruise": false,
+   "gainAt6": 0.28
+  },
+  {
+   "setup": "experimental",
+   "row": "A power x1.5",
+   "k": 1.5,
+   "tapSplit": 3.6999999999999997,
+   "fullSplit": 3.0083333333333333,
+   "v2sFull": 2.725,
+   "fellStart": false,
+   "cruise10": 11.98,
+   "cruise20": 14.43,
+   "fellCruise": false,
+   "gainAt6": 0.427
+  },
+  {
+   "setup": "experimental",
+   "row": "A power x2",
+   "k": 2,
+   "tapSplit": 3.183333333333333,
+   "fullSplit": 2.6166666666666667,
+   "v2sFull": 3.59,
+   "fellStart": false,
+   "cruise10": 14.56,
+   "cruise20": 17.02,
+   "fellCruise": false,
+   "gainAt6": 0.521
+  },
+  {
+   "setup": "experimental",
+   "row": "A power x3",
+   "k": 3,
+   "tapSplit": 2.5833333333333335,
+   "fullSplit": 2.275,
+   "v2sFull": 4.737,
+   "fellStart": false,
+   "cruise10": 17.62,
+   "cruise20": 19.94,
+   "fellCruise": false,
+   "gainAt6": 0.639
+  },
+  {
+   "setup": "experimental",
+   "row": "A power x4",
+   "k": 4,
+   "tapSplit": 2.2333333333333334,
+   "fullSplit": 2.15,
+   "v2sFull": 5.289,
+   "fellStart": false,
+   "cruise10": 19,
+   "cruise20": 21.26,
+   "fellCruise": false,
+   "gainAt6": 0.731
+  },
+  {
+   "setup": "experimental",
+   "row": "B low-speed v1=2",
+   "v1": 2,
+   "g0": null
+  },
+  {
+   "setup": "experimental",
+   "row": "B low-speed v1=3",
+   "v1": 3,
+   "g0": null
+  },
+  {
+   "setup": "experimental",
+   "row": "B low-speed v1=4",
+   "v1": 4,
+   "g0": null
+  },
+  {
+   "setup": "experimental",
+   "row": "C duration 0.2s",
+   "duration": 0.2,
+   "tapSplit": 4.541666666666667,
+   "fullSplit": 3.8249999999999997,
+   "v2sFull": 1.693,
+   "fellStart": false,
+   "cruise10": 8.84,
+   "cruise20": 11.08,
+   "fellCruise": false,
+   "gainAt6": 0.181
+  },
+  {
+   "setup": "experimental",
+   "row": "C duration 0.15s",
+   "duration": 0.15,
+   "tapSplit": 4.541666666666667,
+   "fullSplit": 3.8916666666666666,
+   "v2sFull": 1.631,
+   "fellStart": false,
+   "cruise10": 8.7,
+   "cruise20": 10.93,
+   "fellCruise": false,
+   "gainAt6": 0.133
+  }
+ ]
+}

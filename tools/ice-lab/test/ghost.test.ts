@@ -92,7 +92,9 @@ test("strokes: from the player's speed, LT, RT… for 3 s, standing — every he
   // -> 2.447 m/s after 3 s of strokes; 3 -> 4.276; 5 -> 5.984; 7 -> 7.582.
   // (2.475 and 4.280 before a push at a crawl landed on both feet.) Since the
   // legs move the load over time (2026-11-14): 2.465, 4.275, 5.984, 7.582.
-  for (const angle of ANGLES) for (const [v0, v3] of [[0, 2.465], [3, 4.275], [5, 5.984], [7, 7.582]]) {
+  // Since the standing start (startPushMode, the owner's ask 2026-11-27): from a standstill 3.224;
+  // from 3 m/s up it has blended into the cruising stroke, so the rest stand.
+  for (const angle of ANGLES) for (const [v0, v3] of [[0, 3.224], [3, 4.275], [5, 5.984], [7, 7.582]]) {
     const r = perform("strokes", angle, v0);
     assert.equal(r.s.fallen, false);
     assert.equal(r.respawned, false);
@@ -106,8 +108,9 @@ test("dig: strokes, a three-turn to skate backward, then the gate's dig winds th
   // standstill), -0.41 (3 m/s), -0.55 (5), -0.12 (7: the curve is shallow
   // that fast); backward and standing after, 3.1-5.3 m/s. Since the legs move
   // the load over time (2026-11-14): -0.415, -0.424, -0.500, and -0.503 at 7 m/s,
-  // where the dig now winds as fully as it does slower.
-  for (const angle of ANGLES) for (const [v0, w] of [[0, -0.415], [3, -0.424], [5, -0.500], [7, -0.503]]) {
+  // where the dig now winds as fully as it does slower. Since the standing start (2026-11-27):
+  // from a standstill -0.373 (she reaches the dig faster); 3 m/s and up unchanged.
+  for (const angle of ANGLES) for (const [v0, w] of [[0, -0.373], [3, -0.424], [5, -0.500], [7, -0.503]]) {
     const r = perform("dig", angle, v0);
     assert.equal(r.s.fallen, false);
     assert.equal(r.g.failed, 0);
@@ -149,8 +152,9 @@ test("loop: the spawn is the entry, not the player's stride", () => {
 test("snowplow: pushed up to speed if slow, then toes in and inside edges — it stops, standing", () => {
   // MEASURED: from a standstill and 3 m/s the Simulation pushes reach 3.8 /
   // 3.5 m/s and the snowplow brings the skater to rest; from 5 m/s 2.438
-  // after 3.5 s of plow (the source test: 5 -> 2.79 in 3 s), from 7 4.013.
-  for (const angle of ANGLES) for (const [v0, vOver] of [[0, 1.217], [3, 0.991], [5, 2.438], [7, 4.013]]) {
+  // after 3.5 s of plow (the source test: 5 -> 2.79 in 3 s), from 7 4.013. Since the standing
+  // start (2026-11-27): from a standstill 1.126; 3 m/s and up unchanged.
+  for (const angle of ANGLES) for (const [v0, vOver] of [[0, 1.126], [3, 0.991], [5, 2.438], [7, 4.013]]) {
     const r = perform("snowplow", angle, v0);
     assert.equal(r.s.fallen, false);
     assert.ok(near(r.vOver, vOver), `snowplow from ${v0}: ${r.vOver.toFixed(3)}`);
@@ -163,8 +167,9 @@ test("spin (new): strokes, onto the left forward outside edge, Y held 3 s — a 
   // MEASURED: LFO into the spin, 3 s on the button (360 ticks spinning):
   // 8.61 revolutions from a standstill, 9.34 from 3 m/s, 10.42 from 5, 13.77
   // from 7 (a faster entry, more angular momentum); out backward on RBO at
-  // 2.0 m/s, standing.
-  for (const angle of ANGLES) for (const [v0, rev] of [[0, 8.61], [3, 9.34], [5, 10.42], [7, 13.77]]) {
+  // 2.0 m/s, standing. Since the standing start (2026-11-27): 8.83 from a standstill (more
+  // entry speed, more angular momentum, as the faster rows show); 3 m/s and up unchanged.
+  for (const angle of ANGLES) for (const [v0, rev] of [[0, 8.83], [3, 9.34], [5, 10.42], [7, 13.77]]) {
     const r = perform("spin", angle, v0);
     assert.equal(r.s.fallen, false);
     assert.equal(r.spinTicks, 360);

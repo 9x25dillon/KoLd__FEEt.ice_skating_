@@ -8,10 +8,13 @@ import { applyScheme, SCHEME } from "../app/schemes.ts";
 import type { Scheme, SchemeState } from "../app/schemes.ts";
 import { fullInput, FULL_SCHEME, defaultControllerProfile } from "./full-controls.ts";
 import type { ControllerProfile } from "./full-controls.ts";
+import { withBackStart } from "./backstart.ts";
 
 export const GAME_PARAMS = {
   ...PRESETS.assisted, movesMode: 1, jumpMode: 2, musicMode: 1,
   staminaMode: 1, hypeMode: 1, flowMode: 1, iceGridMode: 1,
+  // The owner, 2026-11-27: a quick standing start, and never stuck on the boards, in the whole game.
+  startPushMode: 1, boardsUnstickMode: 1,
 };
 export type GameScheme = Scheme | 3;
 export const CONTROL_NAMES = ["Lean & load", "Assisted steering", "Two-foot control", "Full repertoire"];
@@ -19,7 +22,7 @@ const DEFAULT_CONTROLLER_PROFILE = defaultControllerProfile();
 
 /** Game-only mapping; the lab's blind control schemes and replay contract stay intact. */
 export function gameInput(c: Controls, s: SkaterState, scheme: GameScheme, st: SchemeState, lowPose = false, params: Params = GAME_PARAMS, profile: ControllerProfile = DEFAULT_CONTROLLER_PROFILE) {
-  if (scheme === FULL_SCHEME) return fullInput(c, s, st, params, profile);
+  if (scheme === FULL_SCHEME) return withBackStart(fullInput(c, s, st, params, profile), s, params);
   const backward = s.vel.x * s.heading.x + s.vel.y * s.heading.y < -0.1;
   const heading = scheme === SCHEME.B && backward ? { x: -s.heading.x, y: -s.heading.y } : s.heading;
   // Digital direct-lean controls need a manageable shallow edge. Analog retains full range.
@@ -39,5 +42,5 @@ export function gameInput(c: Controls, s: SkaterState, scheme: GameScheme, st: S
     input.knee = 0.65; input.weight = 0.5; input.pitch = -0.25;
     input.push = false; input.toe = false; input.carriage = 1;
   }
-  return { input, cantilever };
+  return withBackStart({ input, cantilever }, s, params);
 }
